@@ -1,0 +1,31 @@
+{
+  "presets": [
+    {
+      "id": "tickets-default",
+      "name": "Tickets (стандарт)",
+      "emoji": "📋",
+      "kind": "tickets",
+      "applicable_table_ids": [1708],
+      "mapping": {
+        "displayColumn": "what",
+        "descriptionColumn": "why",
+        "statusColumn": "state",
+        "priorityColumn": "priority"
+      }
+    },
+    {
+      "id": "documents-default",
+      "name": "Документы (стандарт)",
+      "emoji": "📄",
+      "kind": "documents",
+      "applicable_table_ids": null,
+      "mapping": {
+        "iconColumn": "$find:emoji|icon",
+        "displayColumn": "$find:name|title|displayName",
+        "descriptionColumn": "$find:description|summary|preview",
+        "statusColumn": "$find:status_id|status|state",
+        "categoryColumn": "$find:category_id|category|tags|type"
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+# LiveKit SFU for GOD CRM — single-node, host networking.
+#
+# Start (keys come from the CRM .env at the repo root):
+#   docker compose --env-file ../../.env -f docker-compose.yml up -d
+#
+# host networking is used so the RTC UDP media range (50000-50100) and the
+# auto-detected external IP work without per-port docker proxies. ufw is off on
+# this box; if you enable it, open 7881/tcp and 50000-50100/udp.
+name: livekit
+
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    network_mode: host
+    command: --config /etc/livekit.yaml
+    environment:
+      # "<api_key>: <api_secret>" — LiveKit's env format for a single key pair.
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro

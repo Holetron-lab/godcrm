@@ -1,0 +1,93 @@
+# Penpot self-hosted — GOD CRM design instance (new prod box .128).
+# Self-contained (own postgres + redis), no host-pg coupling.
+#
+# Serves TWO design domains off this single instance:
+#   - design.godcrm.ai   -> .128 nginx -> 127.0.0.1:9011 (direct)
+#   - design.hltrn.cc    -> .72  nginx -> proxy to .128 (Host rewritten to design.godcrm.ai)
+#
+# SSO: "Login with GOD CRM" via the CRM OIDC provider (oidc_clients.client_id=penpot),
+# same pattern as WorkAdventure. All OIDC endpoints are explicit so penpot skips
+# discovery and never touches the (previously stale) crm.hltrn.cc cert.
+#
+# Secrets are injected from ./penpot.env (gitignored). Copy penpot.env.example -> penpot.env
+# and fill real values. NEVER commit real secrets here (private repo or not).
+volumes:
+  penpot_assets:
+  penpot_postgres:
+
+services:
+  penpot-frontend:
+    image: penpotapp/frontend:latest
+    restart: always
+    ports:
+      - "127.0.0.1:9011:8080"
+    volumes:
+      - penpot_assets:/opt/data/assets
+    depends_on:
+      - penpot-backend
+      - penpot-exporter
+    environment:
+      - PENPOT_FLAGS=enable-login-with-password enable-login-with-oidc disable-registration disable-email-verification
+      - PENPOT_OIDC_NAME=GOD CRM
+
+  penpot-backend:
+    image: penpotapp/backend:latest
+    restart: always
+    volumes:
+      - penpot_assets:/opt/data/assets
+    depends_on:
+      penpot-postgres:
+        condition: service_healthy
+      penpot-redis:
+        condition: service_started
+    environment:
+      - PENPOT_FLAGS=enable-login-with-password enable-login-with-oidc enable-oidc-registration disable-registration disable-email-verification enable-prepl-server
+      - PENPOT_SECRET_KEY=${PENPOT_SECRET_KEY}
+      - PENPOT_PUBLIC_URI=https://design.hltrn.cc
+      # --- SSO via GOD CRM OIDC provider (ADR-063 pattern, same as WorkAdventure) ---
+      # All endpoints explicit -> penpot skips discovery (never hits stale crm.hltrn.cc cert).
+      - PENPOT_OIDC_CLIENT_ID=penpot
+      - PENPOT_OIDC_CLIENT_SECRET=${PENPOT_OIDC_CLIENT_SECRET}
+      - PENPOT_OIDC_BASE_URI=https://godcrm.ai
+      - PENPOT_OIDC_AUTH_URI=https://godcrm.ai/oauth/authorize
+      - PENPOT_OIDC_TOKEN_URI=https://godcrm.ai/oauth/token
+      - PENPOT_OIDC_USER_URI=https://godcrm.ai/oauth/userinfo
+      - PENPOT_OIDC_JWKS_URI=https://godcrm.ai/oauth/jwks
+      - PENPOT_OIDC_SCOPES=openid profile email
+      - PENPOT_OIDC_NAME_ATTR=name
+      - PENPOT_OIDC_EMAIL_ATTR=email
+      - PENPOT_DATABASE_URI=postgresql://penpot-postgres:5432/penpot
+      - PENPOT_DATABASE_USERNAME=penpot
+      - PENPOT_DATABASE_PASSWORD=${PENPOT_DB_PASSWORD}
+      - PENPOT_REDIS_URI=redis://penpot-redis/0
+      - PENPOT_ASSETS_STORAGE_BACKEND=assets-fs
+      - PENPOT_STORAGE_ASSETS_FS_DIRECTORY=/opt/data/assets
+      - PENPOT_TELEMETRY_ENABLED=false
+
+  penpot-exporter:
+    image: penpotapp/exporter:latest
+    restart: always
+    environment:
+      - PENPOT_SECRET_KEY=${PENPOT_SECRET_KEY}
+      - PENPOT_PUBLIC_URI=http://penpot-frontend:8080
+      - PENPOT_REDIS_URI=redis://penpot-redis/0
+
+  penpot-postgres:
+    image: postgres:15
+    restart: always
+    stop_signal: SIGINT
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penpot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - penpot_postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=penpot
+      - POSTGRES_USER=penpot
+      - POSTGRES_PASSWORD=${PENPOT_DB_PASSWORD}
+
+  penpot-redis:
+    image: redis:7-alpine
+    restart: always

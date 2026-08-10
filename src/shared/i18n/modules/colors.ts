@@ -1,0 +1,26 @@
+export const colors = {
+  en: {
+    gray: 'Gray',
+    red: 'Red',
+    orange: 'Orange',
+    yellow: 'Yellow',
+    green: 'Green',
+    blue: 'Blue',
+    purple: 'Purple',
+    pink: 'Pink',
+    noColor: 'No color',
+    color: 'Color',
+  },
+  ru: {
+    gray: 'Серый',
+    red: 'Красный',
+    orange: 'Оранжевый',
+    yellow: 'Жёлтый',
+    green: 'Зелёный',
+    blue: 'Синий',
+    purple: 'Фиолетовый',
+    pink: 'Розовый',
+    noColor: 'Без цвета',
+    color: 'Цвет',
+  },
+} as const;

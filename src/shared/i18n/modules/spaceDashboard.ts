@@ -1,0 +1,28 @@
+export const spaceDashboard = {
+  en: {
+    notFoundTitle: 'Oops! The space vanished',
+    accessDeniedTitle: 'Stop! Access denied',
+    errorTitle: 'Something went wrong',
+    notFoundDesc: 'This space was deleted or never existed 🌌',
+    accessDeniedDesc: 'You don\'t have permission to view this space 🛡️',
+    errorDesc: 'An unexpected error occurred',
+    backToSpaces: 'Back to spaces',
+    retry: 'Try again',
+    tipNotFound: 'Tip: check your recent notifications',
+    tipAccessDenied: 'Tip: contact the space owner to request access',
+    tipError: 'Tip: try refreshing the page',
+  },
+  ru: {
+    notFoundTitle: 'Упс! Пространство испарилось',
+    accessDeniedTitle: 'Стоп! Доступ запрещён',
+    errorTitle: 'Что-то пошло не так',
+    notFoundDesc: 'Это пространство было удалено или никогда не существовало 🌌',
+    accessDeniedDesc: 'У вас нет прав для просмотра этого пространства 🛡️',
+    errorDesc: 'Произошла неожиданная ошибка',
+    backToSpaces: 'Вернуться к пространствам',
+    retry: 'Попробовать снова',
+    tipNotFound: 'Совет: проверьте свои недавние уведомления',
+    tipAccessDenied: 'Совет: свяжитесь с владельцем пространства для получения доступа',
+    tipError: 'Совет: попробуйте обновить страницу',
+  },
+} as const;

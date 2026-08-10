@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Session - GOD CRM</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 400px;
+            text-align: center;
+        }
+        h1 {
+            margin: 0 0 20px;
+            color: #1f2937;
+        }
+        p {
+            color: #6b7280;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+        .success {
+            color: #10b981;
+            font-weight: 600;
+            margin-top: 20px;
+            display: none;
+        }
+        .success.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔄 Clear Session</h1>
+        <p>This will clear all stored data including:<br>
+        • LocalStorage<br>
+        • SessionStorage<br>
+        • IndexedDB<br>
+        • Cookies<br>
+        • Cache</p>
+        <button onclick="clearAll()">Clear Everything & Reload</button>
+        <p class="success" id="success">✅ Cleared! Redirecting...</p>
+    </div>
+
+    <script>
+        async function clearAll() {
+            // Clear localStorage
+            localStorage.clear();
+            
+            // Clear sessionStorage
+            sessionStorage.clear();
+            
+            // Clear cookies
+            document.cookie.split(";").forEach(c => {
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+            });
+            
+            // Clear IndexedDB
+            if (window.indexedDB) {
+                const databases = await indexedDB.databases();
+                databases.forEach(db => {
+                    if (db.name) indexedDB.deleteDatabase(db.name);
+                });
+            }
+            
+            // Clear cache
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                await Promise.all(cacheNames.map(name => caches.delete(name)));
+            }
+            
+            // Show success
+            document.getElementById('success').classList.add('show');
+            
+            // Redirect to login after 1 second
+            setTimeout(() => {
+                window.location.href = '/auth/login';
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

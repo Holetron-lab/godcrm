@@ -1,0 +1,4 @@
+# Real secrets — never commit.
+penpot.env
+*.env
+!*.env.example

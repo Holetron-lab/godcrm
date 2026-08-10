@@ -1,0 +1,100 @@
+{
+  "name": "ai-core",
+  "version": "1.0.0",
+  "description": "Core AI infrastructure: Agents, Operators, Models, API Keys",
+  "source_space": "Development",
+  "source_space_id": 11,
+  "deploy_order": 1,
+  "dependencies": [],
+  "tables": [
+    {
+      "ref": "ai_operators",
+      "source_id": 1783,
+      "name": "AI Operators",
+      "icon": "plug",
+      "description": "AI provider connections registry",
+      "columns": [
+        { "column_name": "name", "display_name": "name", "type": "text" },
+        { "column_name": "provider", "display_name": "provider", "type": "select", "config": { "options": [{"value": "openai", "label": "OpenAI"}, {"value": "anthropic", "label": "Anthropic"}, {"value": "google", "label": "Google AI"}, {"value": "groq", "label": "Groq"}, {"value": "local", "label": "Local (Ollama)"}] } },
+        { "column_name": "api_key", "display_name": "api_key", "type": "text" },
+        { "column_name": "api_url", "display_name": "api_url", "type": "text" },
+        { "column_name": "status", "display_name": "status", "type": "select", "config": { "options": [{"value": "active"}, {"value": "inactive"}] } },
+        { "column_name": "description", "display_name": "description", "type": "long_text" }
+      ]
+    },
+    {
+      "ref": "ai_models",
+      "source_id": 1787,
+      "name": "AI Models",
+      "icon": "brain",
+      "description": "LLM model registry with pricing",
+      "depends_on": ["ai_operators"],
+      "columns": [
+        { "column_name": "name", "display_name": "name", "type": "text" },
+        { "column_name": "model_id", "display_name": "model_id", "type": "text" },
+        { "column_name": "operator_id", "display_name": "operator_id", "type": "select", "config": { "relation": { "enabled": true, "tableRef": "ai_operators", "valueColumn": "id", "labelColumn": "name" } } },
+        { "column_name": "max_tokens", "display_name": "max_tokens", "type": "number" },
+        { "column_name": "context_window", "display_name": "context_window", "type": "number" },
+        { "column_name": "input_price", "display_name": "input_price", "type": "number", "config": { "number": { "decimals": 2 } } },
+        { "column_name": "output_price", "display_name": "output_price", "type": "number" },
+        { "column_name": "description", "display_name": "Description", "type": "text" },
+        { "column_name": "model_type", "display_name": "Type", "type": "select" },
+        { "column_name": "example_input", "display_name": "Example Input", "type": "text" },
+        { "column_name": "cover_image", "display_name": "Cover", "type": "url" }
+      ]
+    },
+    {
+      "ref": "ai_agents",
+      "source_id": 1784,
+      "name": "AI Agents",
+      "icon": "robot",
+      "description": "Central AI agent configuration registry",
+      "depends_on": ["ai_operators", "ai_models"],
+      "columns": [
+        { "column_name": "name", "display_name": "name", "type": "text" },
+        { "column_name": "description", "display_name": "description", "type": "long_text" },
+        { "column_name": "icon", "display_name": "icon", "type": "text" },
+        { "column_name": "color", "display_name": "color", "type": "color" },
+        { "column_name": "operator_id", "display_name": "operator_id", "type": "select", "config": { "relation": { "enabled": true, "tableRef": "ai_operators", "valueColumn": "id", "labelColumn": "name" } } },
+        { "column_name": "model", "display_name": "model", "type": "select", "config": { "relation": { "enabled": true, "tableRef": "ai_models", "valueColumn": "id", "labelColumn": "name" } } },
+        { "column_name": "system_prompt", "display_name": "system_prompt", "type": "text", "config": { "cellFormat": { "mode": "markdown" } } },
+        { "column_name": "crm_instructions", "display_name": "CRM Instructions", "type": "textarea" },
+        { "column_name": "main_instructions", "display_name": "Main Instructions", "type": "textarea" },
+        { "column_name": "temperature", "display_name": "temperature", "type": "number", "config": { "min": 0, "max": 2, "step": 0.1 } },
+        { "column_name": "max_tokens", "display_name": "max_tokens", "type": "number" },
+        { "column_name": "context_settings", "display_name": "context_settings", "type": "long_text" },
+        { "column_name": "status", "display_name": "status", "type": "select", "config": { "options": [{"value": "active", "label": "active"}, {"value": "inactive", "label": "inactive"}, {"value": "template", "label": "template"}] } },
+        { "column_name": "max_iterations", "display_name": "Max Tool Iterations", "type": "number" },
+        { "column_name": "response_mode", "display_name": "Response Mode", "type": "select", "config": { "options": [{"value": "always", "label": "Always respond", "color": "#22c55e"}, {"value": "topic_only", "label": "Topic-relevant only", "color": "#f59e0b"}, {"value": "mention_only", "label": "Only when mentioned", "color": "#3b82f6"}], "default_value": "mention_only" } }
+      ]
+    },
+    {
+      "ref": "ai_api_keys",
+      "source_id": 1793,
+      "name": "AI API Keys",
+      "icon": "key",
+      "description": "API key management for AI providers",
+      "depends_on": ["ai_operators"],
+      "columns": [
+        { "column_name": "name", "display_name": "name", "type": "text" },
+        { "column_name": "api_key", "display_name": "api_key", "type": "text", "config": { "isSecret": true } },
+        { "column_name": "operator_id", "display_name": "operator_id", "type": "number" },
+        { "column_name": "description", "display_name": "description", "type": "text" },
+        { "column_name": "status", "display_name": "status", "type": "select", "config": { "options": [{"value": "active", "label": "Active", "color": "#22c55e"}, {"value": "inactive", "label": "Inactive", "color": "#6b7280"}, {"value": "expired", "label": "Expired", "color": "#ef4444"}] } },
+        { "column_name": "expires_at", "display_name": "expires_at", "type": "date" },
+        { "column_name": "usage_limit", "display_name": "usage_limit", "type": "number" },
+        { "column_name": "current_usage", "display_name": "current_usage", "type": "number" }
+      ]
+    }
+  ],
+  "seed_data": {
+    "ai_operators": {
+      "copy_from_source": true,
+      "note": "Copy all active operators from source space"
+    },
+    "ai_models": {
+      "copy_from_source": true,
+      "note": "Copy all 42 model definitions with pricing"
+    }
+  }
+}

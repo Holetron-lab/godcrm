@@ -1,0 +1,456 @@
+@import './variables.css';
+@import './themes/light.css';
+@import './themes/dark.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+/* Radio and checkbox accent color - use primary instead of default purple */
+input[type="radio"],
+input[type="checkbox"] {
+  accent-color: var(--color-primary-500);
+}
+
+html, body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Chat panel "glued" state — main is squeezed to 0 px and its overflow:auto
+   scrollbars become a thin scroll-strip wedged between sidebar and chat.
+   Hide it entirely so the chat panel reads as full-width. Toggled from
+   useResizeHandlers when panelWidth reaches fitMax. */
+body[data-chat-glued] main {
+  display: none !important;
+}
+
+/* Mobile: prevent body scroll when chat overlay is open */
+@media (max-width: 767px) {
+  html, body {
+    overscroll-behavior: none;
+  }
+  /* When chat panel is open, lock body scroll
+     IMPORTANT: Do NOT use position:fixed here — it breaks inner scroll
+     containers on iOS/Android (fixed body = fixed children lose viewport reference).
+     overflow:hidden is sufficient to lock background scroll.
+     NOTE: Do NOT use touch-action:none — it propagates to ALL children on mobile
+     and kills inner scroll containers (overflow-y-auto) touch gestures.
+     Instead, use touch-action:pan-y on individual scroll containers. */
+  body.chat-open {
+    overflow: hidden;
+    /* Use 100% height — dvh changes dynamically when keyboard opens/closes
+       causing layout reflow and visible bounce. 100% refers to the initial
+       containing block which stays stable.
+       Do NOT use position:fixed — it breaks inner scroll containers on
+       iOS/Android (fixed body = fixed children lose viewport reference).
+       overflow:hidden alone is sufficient to lock background scroll. */
+    height: 100%;
+  }
+
+  /* Prevent ALL overscroll/pull-to-refresh on mobile when chat is open.
+     Without this, pulling up/down on fixed-positioned chat panels reveals
+     the dark page background behind the panel. */
+  #root {
+    overscroll-behavior: none;
+  }
+
+  /* Chat panel: ensure input is above safe area (notch/gesture bar) */
+  [data-chat-input-area] {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Chat panel header and toolbar stay fixed — never scroll away */
+  [data-panel-container] {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  [data-panel-container] > [data-chat-header],
+  [data-panel-container] > [data-chat-toolbar] {
+    flex-shrink: 0;
+  }
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+[data-theme='dark'] body {
+  background-color: var(--bg-primary);
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-tertiary);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  opacity: 0.3;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-500);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Sidebar-specific thin overlay scrollbar */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+}
+
+/* Hidden scrollbar utility */
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, Opera */
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
+}
+
+/* Subtle bounce animation for load more button */
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-4px);
+  }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 1.5s ease-in-out infinite;
+}
+
+/* Slide up animation for floating button */
+@keyframes slide-up {
+  0% {
+    transform: translateX(-50%) translateY(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out forwards;
+}
+
+/* React Grid Layout - full width fix */
+.react-grid-layout {
+  position: relative;
+  width: 100% !important;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top;
+}
+
+.react-grid-item.cssTransforms {
+  transition-property: transform;
+}
+
+.react-grid-item.resizing {
+  z-index: 1;
+  will-change: width, height;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+  will-change: transform;
+}
+
+/* Schema Editor - Flowing Dash Animation */
+@keyframes dash-flow {
+  0% {
+    stroke-dashoffset: 40;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-dash-flow {
+  animation: dash-flow 1s linear infinite;
+}
+
+/* Schema Editor - Tech Scan Animation (for tech style) */
+@keyframes tech-scan {
+  0% {
+    stroke-dashoffset: 88;
+    stroke-opacity: 0.3;
+  }
+  50% {
+    stroke-opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0.3;
+  }
+}
+
+.animate-tech-scan {
+  animation: tech-scan 2s ease-in-out infinite;
+}
+
+/* Schema Editor - Circuit Pulse Animation (for circuit style) */
+@keyframes circuit-pulse {
+  0% {
+    stroke-dashoffset: 46;
+    stroke-opacity: 0.5;
+  }
+  50% {
+    stroke-opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0.5;
+  }
+}
+
+.animate-circuit-pulse {
+  animation: circuit-pulse 1.5s linear infinite;
+}
+
+/* React Flow - dark theme tweaks */
+[data-theme='dark'] .react-flow__attribution {
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+}
+
+[data-theme='dark'] .react-flow__attribution a {
+  color: inherit;
+}
+
+/* Schema Editor - Pulse Flow Animation (slow pulsating glow) */
+@keyframes pulse-flow {
+  0% {
+    stroke-dashoffset: 100;
+    stroke-opacity: 0.4;
+  }
+  25% {
+    stroke-opacity: 0.9;
+  }
+  50% {
+    stroke-opacity: 0.5;
+  }
+  75% {
+    stroke-opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0.4;
+  }
+}
+
+.animate-pulse-flow {
+  animation: pulse-flow 3s ease-in-out infinite;
+}
+
+/* Schema Editor - Slow Dash Animation (legacy, kept for compatibility) */
+@keyframes dash-slow {
+  0% {
+    stroke-dashoffset: 120;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-dash-slow {
+  animation: dash-slow 3s linear infinite;
+}
+
+/* Schema Editor - Shimmer Effect */
+@keyframes shimmer {
+  0% {
+    stroke-dashoffset: 128;
+    stroke-opacity: 0.1;
+  }
+  50% {
+    stroke-opacity: 0.6;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0.1;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 4s ease-in-out infinite;
+}
+
+/* Schema Editor - Matrix Rain Effect */
+@keyframes matrix-rain {
+  0% {
+    stroke-dashoffset: 40;
+    stroke-opacity: 0.8;
+  }
+  50% {
+    stroke-opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0.8;
+  }
+}
+
+.animate-matrix-rain {
+  animation: matrix-rain 0.8s linear infinite;
+}
+
+@keyframes matrix-rain-fast {
+  0% {
+    stroke-dashoffset: 26;
+    stroke-opacity: 0.4;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0.4;
+  }
+}
+
+.animate-matrix-rain-fast {
+  animation: matrix-rain-fast 0.4s linear infinite;
+}
+
+/* Schema Editor - Pulse Glow Effect */
+@keyframes pulse-glow {
+  0%, 100% {
+    stroke-opacity: 0.2;
+    stroke-width: 4;
+  }
+  50% {
+    stroke-opacity: 0.6;
+    stroke-width: 8;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Schema Editor - Neon Hue Shift */
+@keyframes neon-hue {
+  0% {
+    filter: hue-rotate(0deg) brightness(1.2);
+  }
+  33% {
+    filter: hue-rotate(60deg) brightness(1.4);
+  }
+  66% {
+    filter: hue-rotate(-60deg) brightness(1.3);
+  }
+  100% {
+    filter: hue-rotate(0deg) brightness(1.2);
+  }
+}
+
+.animate-neon-hue {
+  animation: neon-hue 3s ease-in-out infinite;
+}
+
+/* Neon hue for blue (pending edges) */
+@keyframes neon-hue-blue {
+  0% {
+    filter: hue-rotate(0deg) brightness(1.2);
+  }
+  50% {
+    filter: hue-rotate(30deg) brightness(1.5);
+  }
+  100% {
+    filter: hue-rotate(0deg) brightness(1.2);
+  }
+}
+
+.animate-neon-hue-blue {
+  animation: neon-hue-blue 2s ease-in-out infinite;
+}
+
+/* Kanban date inputs — picker icon on the left, compact */
+.kanban-date-input::-webkit-calendar-picker-indicator {
+  order: -1;
+  margin-right: 2px;
+  margin-left: 0;
+  cursor: pointer;
+  opacity: 0.5;
+}
+.kanban-date-input:hover::-webkit-calendar-picker-indicator {
+  opacity: 1;
+}
+.kanban-date-input {
+  direction: ltr;
+}
+
+/* Chat search highlight animation */
+@keyframes search-flash {
+  0% { background-color: rgba(250, 204, 21, 0.3); }
+  100% { background-color: transparent; }
+}
+.search-highlight {
+  animation: search-flash 2s ease-out;
+  border-radius: 4px;
+}
+
+/* ADR-0068 WP-D: Jump-to-message pulse (Telegram-style). */
+@keyframes jump-flash {
+  0%   { box-shadow: 0 0 0 4px rgba(var(--color-primary-500-rgb, 59, 130, 246), 0); background-color: transparent; }
+  20%  { box-shadow: 0 0 0 4px rgba(var(--color-primary-500-rgb, 59, 130, 246), 0.35); background-color: rgba(var(--color-primary-500-rgb, 59, 130, 246), 0.12); }
+  100% { box-shadow: 0 0 0 4px rgba(var(--color-primary-500-rgb, 59, 130, 246), 0); background-color: transparent; }
+}
+[data-flash="1"] {
+  animation: jump-flash 1.5s ease-out;
+  border-radius: 8px;
+}

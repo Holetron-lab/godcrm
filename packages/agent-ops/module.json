@@ -1,0 +1,77 @@
+{
+  "name": "agent-ops",
+  "version": "1.0.0",
+  "description": "Agent operations: Activity logging, Quality Reports, ADR Projects, DORA Metrics",
+  "source_space": "Development",
+  "source_space_id": 11,
+  "deploy_order": 4,
+  "dependencies": ["ai-core"],
+  "tables": [
+    {
+      "ref": "adr_projects",
+      "source_id": 1699,
+      "name": "ADR Projects",
+      "icon": "clipboard",
+      "description": "Architecture Decision Record tracking",
+      "columns": [
+        { "column_name": "adr_number", "display_name": "ADR Number", "type": "text", "config": { "placeholder": "ADR-XXX" } },
+        { "column_name": "title", "display_name": "Title", "type": "text" },
+        { "column_name": "status", "display_name": "Status", "type": "select", "config": { "options": ["proposed", "in_progress", "completed", "rejected"] } },
+        { "column_name": "priority", "display_name": "Priority", "type": "select", "config": { "options": ["low", "medium", "high", "critical"] } },
+        { "column_name": "assigned_orchestrator", "display_name": "Assigned Orchestrator", "type": "text" },
+        { "column_name": "start_date", "display_name": "Start Date", "type": "date" },
+        { "column_name": "end_date", "display_name": "End Date", "type": "date" },
+        { "column_name": "completion_percentage", "display_name": "Completion %", "type": "number", "config": { "min": 0, "max": 100 } },
+        { "column_name": "notes", "display_name": "Notes", "type": "longtext" }
+      ]
+    },
+    {
+      "ref": "agent_activity",
+      "source_id": 1701,
+      "name": "Agent Activity",
+      "icon": "bar_chart",
+      "description": "Agent orchestration event log",
+      "depends_on": ["ai_agents"],
+      "columns": [
+        { "column_name": "agent_id", "display_name": "Agent", "type": "select", "config": { "options": ["orchestrator", "developer-ralph", "developer", "frontend", "frontend-qa", "test-runner", "architect", "table-architect", "widget-developer"] } },
+        { "column_name": "task_id", "display_name": "Task ID", "type": "number" },
+        { "column_name": "action", "display_name": "Action", "type": "select", "config": { "options": ["task_created", "task_assigned", "task_started", "task_completed", "task_failed", "quality_check_passed", "quality_check_failed", "message_sent", "agent_mentioned", "error_occurred", "retry_attempted"] } },
+        { "column_name": "timestamp", "display_name": "Timestamp", "type": "datetime" },
+        { "column_name": "details", "display_name": "Details", "type": "longtext" },
+        { "column_name": "success", "display_name": "Success", "type": "checkbox" },
+        { "column_name": "duration_ms", "display_name": "Duration (ms)", "type": "number" },
+        { "column_name": "tokens_used", "display_name": "Tokens Used", "type": "number" },
+        { "column_name": "cost_usd", "display_name": "Cost (USD)", "type": "number", "config": { "precision": 4 } },
+        { "column_name": "error_message", "display_name": "Error Message", "type": "text" }
+      ]
+    },
+    {
+      "ref": "quality_reports",
+      "source_id": 1702,
+      "name": "Quality Reports",
+      "icon": "shield",
+      "description": "Quality gate execution reports",
+      "columns": [
+        { "column_name": "task_id", "display_name": "Task ID", "type": "number" },
+        { "column_name": "report_type", "display_name": "Report Type", "type": "select", "config": { "options": ["unit_tests", "typecheck", "lint", "security", "e2e", "full"] } },
+        { "column_name": "status", "display_name": "Status", "type": "select", "config": { "options": [{"value": "pass", "color": "#22c55e"}, {"value": "fail", "color": "#ef4444"}, {"value": "warning", "color": "#f59e0b"}] } },
+        { "column_name": "details", "display_name": "Details", "type": "longtext" },
+        { "column_name": "timestamp", "display_name": "Timestamp", "type": "datetime" }
+      ]
+    },
+    {
+      "ref": "dora_metrics",
+      "source_id": 1703,
+      "name": "DORA Metrics",
+      "icon": "rocket",
+      "description": "Deployment frequency, lead time, MTTR, change failure rate",
+      "columns": [
+        { "column_name": "date", "display_name": "Date", "type": "date" },
+        { "column_name": "deployment_frequency", "display_name": "Deployment Frequency", "type": "number" },
+        { "column_name": "lead_time_hours", "display_name": "Lead Time (hours)", "type": "number" },
+        { "column_name": "mttr_hours", "display_name": "MTTR (hours)", "type": "number" },
+        { "column_name": "change_failure_rate", "display_name": "Change Failure Rate %", "type": "number", "config": { "min": 0, "max": 100 } }
+      ]
+    }
+  ]
+}

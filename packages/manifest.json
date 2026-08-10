@@ -1,0 +1,24 @@
+{
+  "name": "godcrm-ai-infrastructure",
+  "version": "1.0.0",
+  "description": "Modular AI infrastructure package for GOD CRM spaces",
+  "modules": [
+    { "name": "ai-core", "path": "./ai-core/module.json", "required": true },
+    { "name": "ai-observability", "path": "./ai-observability/module.json", "required": false },
+    { "name": "project-mgmt", "path": "./project-mgmt/module.json", "required": false },
+    { "name": "agent-ops", "path": "./agent-ops/module.json", "required": false },
+    { "name": "infra", "path": "./infra/module.json", "required": false }
+  ],
+  "deploy_order": ["ai-core", "ai-observability", "project-mgmt", "agent-ops", "infra"],
+  "presets": {
+    "minimal": ["ai-core"],
+    "standard": ["ai-core", "ai-observability", "project-mgmt"],
+    "full": ["ai-core", "ai-observability", "project-mgmt", "agent-ops", "infra"],
+    "personal": ["ai-core", "project-mgmt"]
+  },
+  "source_reference": {
+    "space": "Development",
+    "space_id": 11,
+    "api_base": "https://crm.hltrn.cc/api/v3"
+  }
+}

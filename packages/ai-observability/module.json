@@ -1,0 +1,109 @@
+{
+  "name": "ai-observability",
+  "version": "1.0.0",
+  "description": "AI runtime monitoring: Chat History, Run Logs, Feedback, Usage Analytics, Tools",
+  "source_space": "Development",
+  "source_space_id": 11,
+  "deploy_order": 2,
+  "dependencies": ["ai-core"],
+  "tables": [
+    {
+      "ref": "ai_chat_history",
+      "source_id": 1785,
+      "name": "AI Chat History",
+      "icon": "speech_balloon",
+      "depends_on": ["ai_agents"],
+      "columns": [
+        { "column_name": "agent_id", "display_name": "agent_id", "type": "number" },
+        { "column_name": "user_id", "display_name": "user_id", "type": "number" },
+        { "column_name": "title", "display_name": "title", "type": "text" },
+        { "column_name": "messages", "display_name": "messages", "type": "long_text" },
+        { "column_name": "created_at", "display_name": "created_at", "type": "datetime" }
+      ]
+    },
+    {
+      "ref": "ai_run_logs",
+      "source_id": 1786,
+      "name": "AI Run Logs",
+      "icon": "memo",
+      "depends_on": ["ai_agents"],
+      "columns": [
+        { "column_name": "run_id", "display_name": "run_id", "type": "text" },
+        { "column_name": "agent_id", "display_name": "agent_id", "type": "number" },
+        { "column_name": "timestamp", "display_name": "timestamp", "type": "datetime" },
+        { "column_name": "type", "display_name": "type", "type": "select", "config": { "options": [{"value": "llm"}, {"value": "agent"}, {"value": "tool"}] } },
+        { "column_name": "model", "display_name": "model", "type": "text" },
+        { "column_name": "provider", "display_name": "provider", "type": "text" },
+        { "column_name": "input_preview", "display_name": "input_preview", "type": "text" },
+        { "column_name": "output_preview", "display_name": "output_preview", "type": "text" },
+        { "column_name": "tokens", "display_name": "tokens", "type": "number" },
+        { "column_name": "latency_ms", "display_name": "latency_ms", "type": "number" },
+        { "column_name": "status", "display_name": "status", "type": "select", "config": { "options": [{"value": "success"}, {"value": "error"}] } }
+      ]
+    },
+    {
+      "ref": "ai_feedback",
+      "source_id": 1792,
+      "name": "AI Feedback",
+      "icon": "star",
+      "depends_on": ["ai_agents"],
+      "columns": [
+        { "column_name": "chat_id", "display_name": "chat_id", "type": "number" },
+        { "column_name": "agent_id", "display_name": "agent_id", "type": "number" },
+        { "column_name": "user_id", "display_name": "user_id", "type": "number" },
+        { "column_name": "rating", "display_name": "rating", "type": "select", "config": { "options": [{"value": "positive"}, {"value": "negative"}, {"value": "neutral"}] } },
+        { "column_name": "score", "display_name": "score", "type": "number", "config": { "min": 1, "max": 5 } },
+        { "column_name": "comment", "display_name": "comment", "type": "text" },
+        { "column_name": "created_at", "display_name": "created_at", "type": "datetime" }
+      ]
+    },
+    {
+      "ref": "ai_usage_analytics",
+      "source_id": 1791,
+      "name": "AI Usage Analytics",
+      "icon": "chart_increasing",
+      "depends_on": ["ai_agents"],
+      "columns": [
+        { "column_name": "date", "display_name": "date", "type": "date" },
+        { "column_name": "agent_id", "display_name": "agent_id", "type": "number" },
+        { "column_name": "total_requests", "display_name": "total_requests", "type": "number" },
+        { "column_name": "tokens_in", "display_name": "tokens_in", "type": "number" },
+        { "column_name": "tokens_out", "display_name": "tokens_out", "type": "number" },
+        { "column_name": "total_cost", "display_name": "total_cost", "type": "number" },
+        { "column_name": "avg_latency_ms", "display_name": "avg_latency_ms", "type": "number" },
+        { "column_name": "error_count", "display_name": "error_count", "type": "number" },
+        { "column_name": "unique_users", "display_name": "unique_users", "type": "number" }
+      ]
+    },
+    {
+      "ref": "ai_tools",
+      "source_id": 1790,
+      "name": "AI Tools",
+      "icon": "wrench",
+      "description": "Tool registry for AI agents",
+      "columns": [
+        { "column_name": "name", "display_name": "name", "type": "text" },
+        { "column_name": "display_name", "display_name": "display_name", "type": "text" },
+        { "column_name": "description", "display_name": "description", "type": "long_text" },
+        { "column_name": "category", "display_name": "category", "type": "select", "config": { "options": [{"value": "data", "label": "Data Operations", "color": "#3B82F6"}, {"value": "tables", "label": "Tables", "color": "#10B981"}, {"value": "workspace", "label": "Workspace", "color": "#8B5CF6"}, {"value": "widgets", "label": "Widgets", "color": "#F59E0B"}, {"value": "analysis", "label": "Analysis", "color": "#EC4899"}, {"value": "system", "label": "System", "color": "#6B7280"}, {"value": "architecture", "label": "Architecture", "color": "#06B6D4"}, {"value": "security", "label": "Security", "color": "#EF4444"}, {"value": "testing", "label": "Testing", "color": "#14B8A6"}, {"value": "devops", "label": "DevOps", "color": "#F97316"}, {"value": "frontend", "label": "Frontend", "color": "#0EA5E9"}, {"value": "backend", "label": "Backend", "color": "#8B5CF6"}, {"value": "ai-ml", "label": "AI/ML", "color": "#D946EF"}] } },
+        { "column_name": "endpoint", "display_name": "endpoint", "type": "text" },
+        { "column_name": "method", "display_name": "method", "type": "select", "config": { "options": [{"value": "GET", "color": "#10B981"}, {"value": "POST", "color": "#3B82F6"}, {"value": "PUT", "color": "#F59E0B"}, {"value": "DELETE", "color": "#EF4444"}] } },
+        { "column_name": "parameters_schema", "display_name": "parameters_schema", "type": "long_text" },
+        { "column_name": "required_scopes", "display_name": "required_scopes", "type": "multi-select", "config": { "options": [{"value": "tables:read"}, {"value": "tables:write"}, {"value": "rows:read"}, {"value": "rows:write"}, {"value": "widgets:read"}, {"value": "widgets:write"}] } },
+        { "column_name": "is_active", "display_name": "is_active", "type": "checkbox" },
+        { "column_name": "usage_count", "display_name": "usage_count", "type": "number" },
+        { "column_name": "avg_execution_ms", "display_name": "avg_execution_ms", "type": "number" },
+        { "column_name": "source", "display_name": "source", "type": "select", "config": { "options": [{"value": "internal"}, {"value": "community"}, {"value": "antigravity"}] } },
+        { "column_name": "source_url", "display_name": "source_url", "type": "text" },
+        { "column_name": "platform", "display_name": "platform", "type": "multi-select", "config": { "options": [{"value": "claude-code"}, {"value": "cursor"}, {"value": "windsurf"}, {"value": "god-crm"}, {"value": "copilot"}] } },
+        { "column_name": "tags", "display_name": "tags", "type": "multi-select" },
+        { "column_name": "rating", "display_name": "rating", "type": "number" },
+        { "column_name": "risk_level", "display_name": "risk_level", "type": "select", "config": { "options": [{"value": "low", "color": "#10B981"}, {"value": "medium", "color": "#F59E0B"}, {"value": "high", "color": "#EF4444"}, {"value": "unknown", "color": "#6B7280"}] } }
+      ],
+      "seed_data": {
+        "copy_from_source": true,
+        "note": "Copy all 887 tool definitions"
+      }
+    }
+  ]
+}

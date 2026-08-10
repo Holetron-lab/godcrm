@@ -1,0 +1,33 @@
+# Hindsight MemPalace — EMBEDDED topology.
+# The MemPalace API points at the `hindsight` SCHEMA inside the main godcrm_prod
+# DB (same Postgres the CRM uses) — matching deploy/selfhost/schema.sql, the
+# version baked into the godcrm installer. No separate memory DB.
+#
+# host networking → reaches host Postgres on 127.0.0.1:5432; API binds 127.0.0.1:5100
+# (loopback only, unexposed). The native CRM reaches it at http://127.0.0.1:5100.
+# RUN_MIGRATIONS=false → never touches the live schema.
+name: hindsight
+
+services:
+  hindsight:
+    image: ${HINDSIGHT_IMAGE:-ghcr.io/holetron/hindsight-mempalace:latest}
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      HINDSIGHT_API_DATABASE_URL: ${HINDSIGHT_DB_URL}
+      HINDSIGHT_API_MIGRATION_DATABASE_URL: ${HINDSIGHT_DB_URL_PSYCOPG}
+      # Embedded topology, clean rebuild: fresh namespace next to the legacy
+      # `hindsight` schema (kept as backup). Image's own alembic lineage builds
+      # memory_units + pgvector here from its base migration.
+      HINDSIGHT_API_DATABASE_SCHEMA: ${HINDSIGHT_SCHEMA:-hindsight_v2}
+      HINDSIGHT_API_HOST: "127.0.0.1"
+      HINDSIGHT_API_PORT: "5100"
+      HINDSIGHT_API_LLM_PROVIDER: ${LLM_PROVIDER:-none}
+      HINDSIGHT_API_LLM_API_KEY: ${LLM_API_KEY:-}
+      HINDSIGHT_API_LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      HINDSIGHT_API_EMBEDDINGS_PROVIDER: local
+      HINDSIGHT_API_EMBEDDINGS_LOCAL_FORCE_CPU: "true"
+      HINDSIGHT_API_RERANKER_PROVIDER: local
+      HINDSIGHT_API_RERANKER_LOCAL_FORCE_CPU: "true"
+      HINDSIGHT_API_RUN_MIGRATIONS_ON_STARTUP: ${RUN_MIGRATIONS:-false}
+      HINDSIGHT_API_WORKERS: "1"

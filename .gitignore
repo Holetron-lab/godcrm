@@ -1,0 +1,154 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+.next/
+*.tsbuildinfo
+
+# Electron desktop (ADR-0023)
+dist-electron/
+release/
+
+# Environment (ADR-064: secrets cleanup)
+.env
+.env.prod
+.env.prod-real
+.env.local
+.env.*.local
+.env.bak*
+.env.live-backup*
+backend/.env
+backend/.env.prod
+backend/smtp-config.json
+backend/google-oauth-config.json
+google-oauth-config.json
+backend/google-calendar-config.json
+google-calendar-config.json
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/settings.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+test-results/
+playwright-report/
+coverage/
+
+# Temp & Backup files (ADR-041)
+*.tmp
+*.bak
+*.old
+*.new
+*.original
+*.backup
+backups/
+temp/
+
+# Credentials
+**/credentials*.json
+**/secrets*.json
+**/*-config.json
+!**/config.example.json
+backend/config/keys/*.pem
+
+# OrangePi / WireGuard provisioning secrets (ADR-0040: vault, never commit)
+scripts/opi-setup/awg-keys/*.key
+scripts/opi-setup/setup-opi*.sh
+scripts/opi-setup/setup-node.sh
+scripts/opi-setup/setup-orangepi.sh
+backend/public/setup-opi*.txt
+
+# Flutter / GOD Frame
+god_frame/build/
+god_frame/.dart_tool/
+god_frame/.packages
+god_frame/.flutter-plugins
+god_frame/.flutter-plugins-dependencies
+god_frame/pubspec.lock
+god_frame/.idea/
+god_frame/*.iml
+god_frame/android/.gradle/
+god_frame/releases/
+
+# Binary builds (APK, IPA, etc.)
+*.apk
+*.ipa
+*.aab
+
+# Public downloads & uploads
+public/downloads/
+public/uploads/
+backend/public/downloads/
+backend/public/uploads/
+uploads/
+
+# Google Calendar tokens (secrets)
+backend/google-calendar-tokens.json
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Data directory (runtime data, not code)
+data/
+# But Flutter Dart data layer IS code — keep tracked
+!god_frame/lib/**/data/
+!god_frame/lib/**/data/**
+
+# Generated snapshots (adr-garbage CSV dumps, doc-status backfills)
+# Tracked cleanup-* directories remain tracked; only new untracked garbage ignored
+scripts/snapshots/adr-garbage-*
+scripts/snapshots/doc-statuses-per-project-*/
+
+# Documentation — lives in CRM Documents (devcrm.hltrn.cc/widgets/124)
+# Agent prompts live in ai_agents table (table 1784)
+# Only README.md stays in git
+docs/
+.gitnexus
+scripts/snapshots/
+
+# Claude Code agent worktrees (parallel-agent isolation; never committed)
+.claude/worktrees/
+
+# One-off landing/screenshot tools (root-level shot_*.mjs playwright scripts)
+/shot_*.mjs
+
+# Local file backups (.backups/20260604_* etc) — never commit
+.backups/
+
+# Dev credentials doc — contains a plaintext dev password (keep out of history)
+DEV-CREDENTIALS.md
+
+# Backend static serve = built frontend bundles (generated, like dist/)
+backend/public/assets/
+
+# Local deploy overrides — real infra IPs (DEV_HOST etc.). Never commit.
+scripts/deploy.local.env
+
+# edit-lane env (secrets — Constitution v4.0 §12 variant A)
+.env.edit
+scripts/vibe-kz/out/
+.env
+node_modules/
+dist/
+*.log

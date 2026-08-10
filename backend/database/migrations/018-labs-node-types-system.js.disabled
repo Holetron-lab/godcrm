@@ -1,0 +1,86 @@
+/**
+ * Migration 018: Labs Node Types System Catalog
+ * Creates system-wide node types catalog for Labs v4
+ */
+import { isPostgres } from '../connection.js';
+
+export async function runMigration(db) {
+  console.log('📦 Running Migration 018: Labs Node Types System Catalog...');
+  
+  try {
+    if (isPostgres()) {
+      // PostgreSQL version
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS labs_node_types (
+          id SERIAL PRIMARY KEY,
+          type_key VARCHAR(100) UNIQUE NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          icon VARCHAR(10),
+          category VARCHAR(100),
+          config_schema JSONB DEFAULT '{}',
+          default_config JSONB DEFAULT '{}',
+          is_system BOOLEAN DEFAULT true,
+          created_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      
+      // Seed default node types
+      await db.query(`
+        INSERT INTO labs_node_types (type_key, name, description, icon, category, is_system)
+        VALUES 
+          ('text', 'Text', 'Simple text content block', '📝', 'basic', true),
+          ('ai_agent', 'AI Agent', 'AI-powered processing node', '🤖', 'ai', true),
+          ('image', 'Image', 'Image display node', '🖼️', 'media', true),
+          ('file', 'File', 'File attachment node', '📁', 'media', true),
+          ('input', 'Input', 'Data input point', '📥', 'io', true),
+          ('output', 'Output', 'Data output point', '📤', 'io', true),
+          ('code', 'Code', 'Code block with syntax highlighting', '💻', 'dev', true),
+          ('note', 'Note', 'Sticky note for comments', '📌', 'basic', true)
+        ON CONFLICT (type_key) DO NOTHING
+      `);
+    } else {
+      // SQLite version
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS labs_node_types (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          type_key TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          icon TEXT,
+          category TEXT,
+          config_schema TEXT DEFAULT '{}',
+          default_config TEXT DEFAULT '{}',
+          is_system INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      
+      // Seed default node types
+      const types = [
+        ['text', 'Text', 'Simple text content block', '📝', 'basic', 1],
+        ['ai_agent', 'AI Agent', 'AI-powered processing node', '🤖', 'ai', 1],
+        ['image', 'Image', 'Image display node', '🖼️', 'media', 1],
+        ['file', 'File', 'File attachment node', '📁', 'media', 1],
+        ['input', 'Input', 'Data input point', '📥', 'io', 1],
+        ['output', 'Output', 'Data output point', '📤', 'io', 1],
+        ['code', 'Code', 'Code block with syntax highlighting', '💻', 'dev', 1],
+        ['note', 'Note', 'Sticky note for comments', '📌', 'basic', 1]
+      ];
+      
+      const stmt = db.prepare(`
+        INSERT OR IGNORE INTO labs_node_types (type_key, name, description, icon, category, is_system)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `);
+      
+      for (const type of types) {
+        stmt.run(...type);
+      }
+    }
+    
+    console.log('✅ Migration 018 completed successfully!');
+  } catch (error) {
+    console.error('❌ Migration 018 failed:', error);
+    throw error;
+  }
+}

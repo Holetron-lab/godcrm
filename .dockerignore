@@ -1,0 +1,45 @@
+# --- Self-host Docker build context excludes ---
+# Keep the image lean and free of secrets / local cruft.
+
+# Dependencies & build output (rebuilt inside the image)
+node_modules
+dist
+dist-electron
+.next
+dist.bak-*
+release
+
+# VCS / CI / editor
+.git
+.github
+.gitnexus
+.claude
+*.log
+
+# Secrets & local env (NEVER bake into an image)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+DEV-CREDENTIALS.md
+
+# Local databases & uploads (runtime volumes, not build inputs)
+*.db
+uploads
+data
+.scratch-coins
+.exports-manual-*
+.backups
+.cleanup-snapshots
+
+# Docs snapshots (huge, redundant with DB) & misc docs
+docs/.snapshots
+*.docx
+
+# Desktop / mobile artifacts not needed by the server image
+god_frame
+electron
+test-results
+tests
+playwright-report

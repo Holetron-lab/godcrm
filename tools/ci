@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# ci — Code Intelligence CLI shortcut
+# Usage: ./tools/ci refs createRow --project client
+exec node --max-old-space-size=2048 "$(dirname "$0")/code-intel.mjs" "$@"

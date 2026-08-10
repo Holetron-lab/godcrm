@@ -1,0 +1,118 @@
+# GOD CRM — self-host stack.
+#
+#   docker compose up -d                      → CRM + Postgres (everything you need)
+#   docker compose --profile memory up -d     → also start Hindsight MemPalace
+#
+# The `install.sh` helper in this folder asks whether to enable the memory
+# profile and generates secrets for you. You can also run compose directly.
+
+name: godcrm
+
+services:
+  # ---- PostgreSQL: the CRM's own database ----
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-godcrm}
+      POSTGRES_USER: ${POSTGRES_USER:-godcrm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - godcrm-db:/var/lib/postgresql/data
+    # Not published to the host by default — the app reaches it over the
+    # compose network. Uncomment to inspect from the host.
+    # ports:
+    #   - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-godcrm} -d ${POSTGRES_DB:-godcrm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---- GOD CRM application (Express API + built React frontend) ----
+  app:
+    build:
+      context: ../..
+      dockerfile: deploy/selfhost/Dockerfile
+    image: godcrm:selfhost
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      # Connection string → the app's pg adapter skips SSL for a local DB.
+      POSTGRES_URL: postgresql://${POSTGRES_USER:-godcrm}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-godcrm}
+      # Individual vars → used by the migration runner (run-migrations.mjs).
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-godcrm}
+      POSTGRES_USER: ${POSTGRES_USER:-godcrm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_SSL: "false"
+      # Secrets (generate with `openssl rand`; install.sh does this for you).
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:-}
+      SECRETS_MASTER_KEY: ${SECRETS_MASTER_KEY:-}
+      CRM_CREDENTIAL_KEY: ${CRM_CREDENTIAL_KEY:-}
+      # Browser origin(s) allowed by CORS — set to how you reach the app.
+      # Missing origins serve a white screen (CORS gates static assets).
+      CORS_ORIGINS: ${PUBLIC_URL:-http://localhost:${APP_PORT:-5000}}
+      UPLOAD_PATH: /app/uploads
+      # Hindsight memory backend. Only reachable when the `memory` profile is up.
+      HINDSIGHT_URL: ${HINDSIGHT_URL:-http://hindsight:5100}
+    ports:
+      - "${APP_PORT:-5000}:5000"
+    volumes:
+      - godcrm-uploads:/app/uploads
+
+  # ---- Hindsight MemPalace (optional): `--profile memory` ----
+  # Our own MemPalace fork (rooms/halls/layers — see ADR-148), published to
+  # GHCR so it pulls with no build step. Requires an LLM key for memory
+  # classification; embeddings/reranker run locally on CPU.
+  hindsight:
+    image: ${HINDSIGHT_IMAGE:-ghcr.io/holetron/hindsight-mempalace:latest}
+    profiles: ["memory"]
+    restart: unless-stopped
+    depends_on:
+      hindsight-db:
+        condition: service_healthy
+    environment:
+      HINDSIGHT_API_DATABASE_URL: postgresql://hindsight:${HINDSIGHT_DB_PASSWORD:-hindsight_dev}@hindsight-db:5432/hindsight
+      HINDSIGHT_API_MIGRATION_DATABASE_URL: postgresql+psycopg2://hindsight:${HINDSIGHT_DB_PASSWORD:-hindsight_dev}@hindsight-db:5432/hindsight
+      HINDSIGHT_API_HOST: "0.0.0.0"
+      HINDSIGHT_API_PORT: "5100"
+      HINDSIGHT_API_LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      HINDSIGHT_API_LLM_API_KEY: ${LLM_API_KEY:-}
+      HINDSIGHT_API_LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      HINDSIGHT_API_EMBEDDINGS_PROVIDER: local
+      HINDSIGHT_API_EMBEDDINGS_LOCAL_FORCE_CPU: "true"
+      HINDSIGHT_API_RERANKER_PROVIDER: local
+      HINDSIGHT_API_RERANKER_LOCAL_FORCE_CPU: "true"
+      HINDSIGHT_API_RUN_MIGRATIONS: "true"
+      HINDSIGHT_API_WORKERS: "1"
+    # Internal only — the CRM reaches it at http://hindsight:5100.
+
+  hindsight-db:
+    image: pgvector/pgvector:pg16
+    profiles: ["memory"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hindsight
+      POSTGRES_USER: hindsight
+      POSTGRES_PASSWORD: ${HINDSIGHT_DB_PASSWORD:-hindsight_dev}
+    volumes:
+      - hindsight-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hindsight -d hindsight"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  godcrm-db:
+  godcrm-uploads:
+  hindsight-db:

@@ -1,0 +1,43 @@
+{
+  "name": "infra",
+  "version": "1.0.0",
+  "description": "Infrastructure: Command Queue, Variables",
+  "source_space": "Development",
+  "source_space_id": 11,
+  "deploy_order": 5,
+  "dependencies": ["ai-core"],
+  "tables": [
+    {
+      "ref": "command_queue",
+      "source_id": 2079,
+      "name": "Command Queue",
+      "icon": "computer",
+      "description": "Agent command approval queue",
+      "columns": [
+        { "column_name": "command", "display_name": "command", "type": "text" },
+        { "column_name": "risk_level", "display_name": "risk_level", "type": "select", "config": { "options": [{"value": "safe", "label": "Safe", "color": "#22c55e"}, {"value": "medium", "label": "Medium", "color": "#f59e0b"}, {"value": "dangerous", "label": "Dangerous", "color": "#ef4444"}] } },
+        { "column_name": "status", "display_name": "status", "type": "select", "config": { "options": [{"value": "pending", "label": "Pending", "color": "#6366f1"}, {"value": "approved", "label": "Approved", "color": "#22c55e"}, {"value": "rejected", "label": "Rejected", "color": "#ef4444"}, {"value": "executed", "label": "Executed", "color": "#3b82f6"}] } },
+        { "column_name": "source", "display_name": "source", "type": "select", "config": { "options": [{"value": "user", "label": "User", "color": "#3b82f6"}, {"value": "agent", "label": "Agent", "color": "#a855f7"}] } },
+        { "column_name": "agent_name", "display_name": "agent_name", "type": "text" },
+        { "column_name": "session_id", "display_name": "session_id", "type": "number" },
+        { "column_name": "output_preview", "display_name": "output_preview", "type": "text" },
+        { "column_name": "exit_code", "display_name": "exit_code", "type": "number" },
+        { "column_name": "execution_time_ms", "display_name": "execution_time_ms", "type": "number" },
+        { "column_name": "approved_by", "display_name": "approved_by", "type": "text" }
+      ]
+    },
+    {
+      "ref": "variables",
+      "source_id": 1808,
+      "name": "Variables",
+      "icon": "gear",
+      "description": "Space-level configuration variables",
+      "columns": [
+        { "column_name": "key", "display_name": "Key", "type": "text" },
+        { "column_name": "value", "display_name": "Value", "type": "text" },
+        { "column_name": "scope", "display_name": "Scope", "type": "select", "config": { "options": ["space", "table", "dashboard"] } },
+        { "column_name": "description", "display_name": "Description", "type": "text" }
+      ]
+    }
+  ]
+}

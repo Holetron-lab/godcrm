@@ -1,0 +1,19 @@
+# =============================================================
+# .claudeignore — Hide outdated files from AI agents
+# All current documentation lives in CRM Documents/Tables
+# =============================================================
+
+# Architecture docs — migrated to CRM Documents (widgets/124)
+docs/architecture/
+
+# Migration docs — historical, not needed by AI
+docs/migrations/
+
+# Performance docs — historical
+docs/performance/
+
+# Legacy agent prompt files (prompts now in ai_agents table)
+docs/ai-agents/
+
+# Scripts snapshots — generated CSV dumps, pollute code search
+scripts/snapshots/

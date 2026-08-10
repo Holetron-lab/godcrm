@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>GOD CRM — Stream Preview (RU / EN)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; padding: 0; background: #0b0b0c; color: #e7e7e9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; height: 100%; }
+  .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; height: calc(100vh - 16px); box-sizing: border-box; }
+  .pane { display: flex; flex-direction: column; background: #18181a; border-radius: 10px; overflow: hidden; min-height: 0; }
+  .head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #222; font-size: 13px; }
+  .head .tag { padding: 2px 8px; border-radius: 999px; background: #333; font-weight: 600; letter-spacing: 0.04em; }
+  .pane.ru .tag { background: #4a3a14; color: #ffd577; }
+  .pane.en .tag { background: #143a4a; color: #77d5ff; }
+  .head .status { font-size: 11px; opacity: 0.7; }
+  video { width: 100%; height: 100%; background: #000; object-fit: contain; }
+  @media (max-width: 720px) { .wrap { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="pane ru">
+    <div class="head"><span class="tag">RU · original</span><span class="status" id="s-ru">loading…</span></div>
+    <video id="v-ru" controls autoplay muted playsinline></video>
+  </div>
+  <div class="pane en">
+    <div class="head"><span class="tag">EN · Rachel</span><span class="status" id="s-en">loading…</span></div>
+    <video id="v-en" controls autoplay playsinline></video>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+<script>
+  function attach(videoId, statusId, url) {
+    const video = document.getElementById(videoId);
+    const status = document.getElementById(statusId);
+    const setStatus = (txt) => { status.textContent = txt; };
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.addEventListener('loadedmetadata', () => setStatus('native HLS · playing'));
+      video.addEventListener('error', () => setStatus('error'));
+      return;
+    }
+    if (!window.Hls || !Hls.isSupported()) { setStatus('HLS not supported'); return; }
+    const hls = new Hls({ liveSyncDuration: 6, liveMaxLatencyDuration: 12, lowLatencyMode: true });
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => setStatus('playing'));
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (data.fatal) {
+        setStatus('error: ' + data.details + ' · retrying');
+        setTimeout(() => { hls.destroy(); attach(videoId, statusId, url); }, 3000);
+      }
+    });
+  }
+  attach('v-ru', 's-ru', '/stream/ru/index.m3u8');
+  attach('v-en', 's-en', '/stream/en/index.m3u8');
+</script>
+</body>
+</html>
