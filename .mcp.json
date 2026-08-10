@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "godcrm": {
+      "command": "node",
+      "args": [
+        "backend/mcp-server.js"
+      ],
+      "env": {
+        "MCP_SPACE_ID": "11"
+      }
+    },
+    "gitnexus": {
+      "type": "stdio",
+      "command": "gitnexus",
+      "args": [
+        "mcp"
+      ],
+      "env": {}
+    },
+    "figma": {
+      "type": "http",
+      "url": "https://mcp.figma.com/mcp"
+    }
+  }
+}

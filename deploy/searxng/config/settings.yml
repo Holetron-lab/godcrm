@@ -1,0 +1,39 @@
+# SearXNG settings for the CRM web_search backend.
+# Key point: `search.formats` MUST include `json` — web-tools.js queries
+# ?format=json and errors "is JSON format enabled in settings.yml?" otherwise.
+use_default_settings: true
+
+general:
+  instance_name: "godcrm-search"
+  debug: false
+
+server:
+  # Overridden by SEARXNG_SECRET env at runtime; placeholder for standalone use.
+  secret_key: "change_me_via_env"
+  limiter: false
+  image_proxy: true
+  method: "GET"
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  # Pin locale to en-US. Without this, engines (esp. bing) geo-localize to the
+  # Amsterdam server IP and, when they're the sole survivor of a slow-engine
+  # drop, return Dutch/generic noise (rfc2017.nl, nl.wikipedia) instead of the
+  # actual result. See web-tools.js searxngSearch — it sends no `language` param.
+  default_lang: "en-US"
+  formats:
+    - html
+    - json
+
+ui:
+  static_use_hash: true
+
+# Loopback-only, single consumer (godcrm) — no bot/rate limiting needed.
+outgoing:
+  # Was 6.0 — mojeek (our best result engine) intermittently exceeded it and got
+  # dropped, collapsing results to bing-only. 10s keeps slow engines alive.
+  request_timeout: 10.0
+  max_request_timeout: 12.0
+  pool_connections: 100
+  pool_maxsize: 20

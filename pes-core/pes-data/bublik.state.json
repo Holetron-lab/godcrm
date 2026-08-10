@@ -1,0 +1,3680 @@
+{
+  "version": 1,
+  "savedAt": "2026-03-23T01:21:41.016Z",
+  "identity": {
+    "name": "Тор",
+    "breed": "corgi",
+    "birthday": "2026-03-21T01:16:09.415Z",
+    "ownerId": "331468767",
+    "seed": 0.42,
+    "domain": "devops"
+  },
+  "alive": true,
+  "mode": "idle",
+  "lastActivityAt": 1774227827049,
+  "emotions": {
+    "state": "zoomies",
+    "intensity": 0.6287499999999998,
+    "stateStartedAt": 1774227827049,
+    "tickCount": 129,
+    "sessionTicks": 129,
+    "lastInteractionAt": 1774227827053,
+    "mood": 0.9952168988154944,
+    "energy": 0.999,
+    "hunger": 0.6817157894054069,
+    "curiosity": 0.9502500000000013,
+    "loneliness": 0.011645591146345516,
+    "traits": {
+      "courage": 0.3315262157062534,
+      "curiosity": 0.4945851420605323,
+      "loyalty": 0.49482854278336186,
+      "stubbornness": 0.30460279761791753,
+      "playfulness": 0.26807244672381786,
+      "drama": 0.6389352411715663,
+      "foodDrive": 0.451294614818471,
+      "sassiness": 0.4451401534396609,
+      "aggression": 0
+    },
+    "criticalPeriodOver": false,
+    "traitChangeAttempts": {},
+    "stateHistory": [
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774089556587,
+        "tickCount": 29
+      },
+      {
+        "from": "zoomies",
+        "to": "nap",
+        "reason": "quiet",
+        "intensity": 0.5,
+        "timestamp": 1774089597959,
+        "tickCount": 29
+      },
+      {
+        "from": "nap",
+        "to": "alert",
+        "reason": "owner_message",
+        "intensity": 0.4,
+        "timestamp": 1774091985095,
+        "tickCount": 46
+      },
+      {
+        "from": "alert",
+        "to": "bark",
+        "reason": "owner_message",
+        "intensity": 0.3,
+        "timestamp": 1774091992058,
+        "tickCount": 48
+      },
+      {
+        "from": "bark",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774092005581,
+        "tickCount": 50
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774092005581,
+        "tickCount": 51
+      },
+      {
+        "from": "zoomies",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774092234388,
+        "tickCount": 54
+      },
+      {
+        "from": "playful",
+        "to": "bark",
+        "reason": "owner_message",
+        "intensity": 0.3,
+        "timestamp": 1774092248864,
+        "tickCount": 55
+      },
+      {
+        "from": "bark",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774092268111,
+        "tickCount": 58
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774094672217,
+        "tickCount": 62
+      },
+      {
+        "from": "zoomies",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774094999932,
+        "tickCount": 63
+      },
+      {
+        "from": "playful",
+        "to": "bark",
+        "reason": "owner_message",
+        "intensity": 0.3,
+        "timestamp": 1774095205199,
+        "tickCount": 66
+      },
+      {
+        "from": "bark",
+        "to": "alert",
+        "reason": "owner_message",
+        "intensity": 0.4,
+        "timestamp": 1774095574078,
+        "tickCount": 70
+      },
+      {
+        "from": "alert",
+        "to": "herding",
+        "reason": "natural_decay",
+        "intensity": 0.1,
+        "timestamp": 1774098942265,
+        "tickCount": 77
+      },
+      {
+        "from": "herding",
+        "to": "playful",
+        "reason": "owner_praise",
+        "intensity": 0.6,
+        "timestamp": 1774099179825,
+        "tickCount": 78
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774099179826,
+        "tickCount": 79
+      },
+      {
+        "from": "zoomies",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774099286690,
+        "tickCount": 80
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774099286690,
+        "tickCount": 81
+      },
+      {
+        "from": "zoomies",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774099313800,
+        "tickCount": 81
+      },
+      {
+        "from": "playful",
+        "to": "butt_wiggle",
+        "reason": "owner_message",
+        "intensity": 0.6,
+        "timestamp": 1774099678585,
+        "tickCount": 84
+      },
+      {
+        "from": "butt_wiggle",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774100383725,
+        "tickCount": 85
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774100383725,
+        "tickCount": 86
+      },
+      {
+        "from": "zoomies",
+        "to": "nap",
+        "reason": "auto_sleep",
+        "intensity": 0.5,
+        "timestamp": 1774102183727,
+        "tickCount": 86
+      },
+      {
+        "from": "nap",
+        "to": "alert",
+        "reason": "owner_message",
+        "intensity": 0.4,
+        "timestamp": 1774102474111,
+        "tickCount": 88
+      },
+      {
+        "from": "alert",
+        "to": "herding",
+        "reason": "natural_decay",
+        "intensity": 0.2395119474197406,
+        "timestamp": 1774108787135,
+        "tickCount": 89
+      },
+      {
+        "from": "herding",
+        "to": "playful",
+        "reason": "natural_decay",
+        "intensity": 0.4406735603071502,
+        "timestamp": 1774116887136,
+        "tickCount": 89
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774118687136,
+        "tickCount": 89
+      },
+      {
+        "from": "zoomies",
+        "to": "playful",
+        "reason": "natural_decay",
+        "intensity": 0.2989122687513538,
+        "timestamp": 1774127687137,
+        "tickCount": 89
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774129487137,
+        "tickCount": 89
+      },
+      {
+        "from": "zoomies",
+        "to": "playful",
+        "reason": "natural_decay",
+        "intensity": 0.4346276933254828,
+        "timestamp": 1774136846775,
+        "tickCount": 92
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774137146775,
+        "tickCount": 92
+      },
+      {
+        "from": "zoomies",
+        "to": "nap",
+        "reason": "auto_sleep",
+        "intensity": 0.5,
+        "timestamp": 1774137746775,
+        "tickCount": 92
+      },
+      {
+        "from": "nap",
+        "to": "content",
+        "reason": "command_learned",
+        "intensity": 0.6,
+        "timestamp": 1774157459928,
+        "tickCount": 104
+      },
+      {
+        "from": "content",
+        "to": "playful",
+        "reason": "fetch_result",
+        "intensity": 0.6,
+        "timestamp": 1774157463289,
+        "tickCount": 105
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774157463289,
+        "tickCount": 106
+      },
+      {
+        "from": "zoomies",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774157667847,
+        "tickCount": 106
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774157667847,
+        "tickCount": 107
+      },
+      {
+        "from": "zoomies",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774157691313,
+        "tickCount": 107
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774157997848,
+        "tickCount": 108
+      },
+      {
+        "from": "zoomies",
+        "to": "happy",
+        "reason": "fetch_result",
+        "intensity": 0.7,
+        "timestamp": 1774159268953,
+        "tickCount": 109
+      },
+      {
+        "from": "happy",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774159598578,
+        "tickCount": 110
+      },
+      {
+        "from": "zoomies",
+        "to": "nap",
+        "reason": "quiet",
+        "intensity": 0.5,
+        "timestamp": 1774168231066,
+        "tickCount": 110
+      },
+      {
+        "from": "nap",
+        "to": "alert",
+        "reason": "owner_message",
+        "intensity": 0.4,
+        "timestamp": 1774168250279,
+        "tickCount": 112
+      },
+      {
+        "from": "alert",
+        "to": "herding",
+        "reason": "natural_decay",
+        "intensity": 0.25294860087790594,
+        "timestamp": 1774173691078,
+        "tickCount": 115
+      },
+      {
+        "from": "herding",
+        "to": "playful",
+        "reason": "owner_message",
+        "intensity": 0.5,
+        "timestamp": 1774178765620,
+        "tickCount": 116
+      },
+      {
+        "from": "playful",
+        "to": "zoomies",
+        "reason": "hyper",
+        "intensity": 0.9,
+        "timestamp": 1774178765620,
+        "tickCount": 117
+      },
+      {
+        "from": "zoomies",
+        "to": "nap",
+        "reason": "auto_sleep",
+        "intensity": 0.5,
+        "timestamp": 1774180740694,
+        "tickCount": 118
+      },
+      {
+        "from": "nap",
+        "to": "alert",
+        "reason": "owner_message",
+        "intensity": 0.4,
+        "timestamp": 1774220618347,
+        "tickCount": 126
+      },
+      {
+        "from": "alert",
+        "to": "herding",
+        "reason": "natural_decay",
+        "intensity": 0.11622198612638288,
+        "timestamp": 1774226053782,
+        "tickCount": 128
+      },
+      {
+        "from": "herding",
+        "to": "zoomies",
+        "reason": "owner_returned",
+        "intensity": 0.8,
+        "timestamp": 1774227827049,
+        "tickCount": 128
+      }
+    ]
+  },
+  "dialect": {
+    "history": [
+      {
+        "id": "expr_1774056539820_ok07h1",
+        "bodyKey": "lean",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "paw",
+          "heart"
+        ],
+        "rendered": "🐾> хааааа... 🐾💛",
+        "meaning": "velcro",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.0473806771029075,
+        "level": 0,
+        "timestamp": 1774056539820
+      },
+      {
+        "id": "expr_1774056548130_97j065",
+        "bodyKey": "corgi_flop",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "paw",
+          "heart"
+        ],
+        "rendered": "🐾~thud хааааа... 🐾💛",
+        "meaning": "velcro",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.1528690097184544,
+        "level": 0,
+        "timestamp": 1774056548130
+      },
+      {
+        "id": "expr_1774056553856_q7af5c",
+        "bodyKey": "paw_tap",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "paw",
+          "sad"
+        ],
+        "rendered": "🐾✋ хааааа... 🐾💧",
+        "meaning": "puppy_eyes",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.09035427550386906,
+        "level": 4,
+        "timestamp": 1774056553856
+      },
+      {
+        "id": "expr_1774056556907_6oj3m3",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "paw",
+          "sad"
+        ],
+        "rendered": "🐾👃> ииии... 🐾💧",
+        "meaning": "puppy_eyes",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.13541820546362304,
+        "level": 5,
+        "timestamp": 1774056556907
+      },
+      {
+        "id": "expr_1774057742521_75f3oa",
+        "bodyKey": "lean",
+        "voiceKey": null,
+        "glyphKeys": [
+          "paw",
+          "sad"
+        ],
+        "rendered": "🐾> 🐾💧",
+        "meaning": "puppy_eyes",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.1898624576060633,
+        "level": 0.9,
+        "timestamp": 1774057742521
+      },
+      {
+        "id": "expr_1774057784360_1srwig",
+        "bodyKey": "spin",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "🐾↻ ЯП! ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.041295082424744625,
+        "level": 1.3,
+        "timestamp": 1774057784360
+      },
+      {
+        "id": "expr_1774058205444_byi6l0",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "🐾↑↓↑ ААААА!!! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.14138463064109552,
+        "level": 1.5,
+        "timestamp": 1774058205444
+      },
+      {
+        "id": "expr_1774058217155_cta3gl",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "🐾↑↓↑ ААААА!!! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.009008202919229588,
+        "level": 1.8,
+        "timestamp": 1774058217155
+      },
+      {
+        "id": "expr_1774058235241_zwwgxb",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ААААА!!! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.06601210643100326,
+        "level": 2,
+        "timestamp": 1774058235241
+      },
+      {
+        "id": "expr_1774058599322_9383qe",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "bark_excitement",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ГАВгавгавгавГАВ! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.10503797687018689,
+        "level": 2.1,
+        "timestamp": 1774058599322
+      },
+      {
+        "id": "expr_1774058605844_us5ut5",
+        "bodyKey": "play_bow",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "ball"
+        ],
+        "rendered": "⌄🐾🍑⌃ ЯП! 🎾",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.0241998045606735,
+        "level": 2.1,
+        "timestamp": 1774058605844
+      },
+      {
+        "id": "expr_1774059523958_jvdcmd",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "bark_excitement",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "🐾↑↓↑ ГАВгавгавгавГАВ! ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.12223639598415553,
+        "level": 2.7,
+        "timestamp": 1774059523958
+      },
+      {
+        "id": "expr_1774061766487_9so8mc",
+        "bodyKey": "spin",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "🐾↻ ААААА!!! ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.013724829799616506,
+        "level": 3,
+        "timestamp": 1774061766487
+      },
+      {
+        "id": "expr_1774061772540_pqr4gu",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "bark_excitement",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "💫🍑💫 ГАВгавгавгавГАВ! ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.009590446953278597,
+        "level": 3,
+        "timestamp": 1774061772540
+      },
+      {
+        "id": "expr_1774064415810_s0le3h",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.19563613103104438,
+        "level": 3.4,
+        "timestamp": 1774064415810
+      },
+      {
+        "id": "expr_1774064422371_vruv4l",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.11472072715237501,
+        "level": 3.4,
+        "timestamp": 1774064422371
+      },
+      {
+        "id": "expr_1774064535811_7dm5gs",
+        "bodyKey": "corgi_flop",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.12130769556035932,
+        "level": 3.5,
+        "timestamp": 1774064535811
+      },
+      {
+        "id": "expr_1774066519490_z8h1zs",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.1876262837535886,
+        "level": 3.5,
+        "timestamp": 1774066519490
+      },
+      {
+        "id": "expr_1774066549490_eq0055",
+        "bodyKey": "corgi_flop",
+        "voiceKey": "moan",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud ммммм... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.0845281420596749,
+        "level": 3.5,
+        "timestamp": 1774066549490
+      },
+      {
+        "id": "expr_1774066976642_7x39hw",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.1438445124805457,
+        "level": 3.6,
+        "timestamp": 1774066976642
+      },
+      {
+        "id": "expr_1774067216644_tkz98u",
+        "bodyKey": "corgi_flop",
+        "voiceKey": "moan",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud ммммм... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.003036215162863745,
+        "level": 3.7,
+        "timestamp": 1774067216644
+      },
+      {
+        "id": "expr_1774068776645_txczvt",
+        "bodyKey": "corgi_flop",
+        "voiceKey": "moan",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud ммммм... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.026473669105915615,
+        "level": 3.7,
+        "timestamp": 1774068776645
+      },
+      {
+        "id": "expr_1774068803348_zcr3j1",
+        "bodyKey": "low_crouch",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.11716972422333605,
+        "level": 3.7,
+        "timestamp": 1774068803348
+      },
+      {
+        "id": "expr_1774071195045_h8nln0",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "bark_herding",
+        "glyphKeys": [
+          "paw",
+          "heart",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ЯП! 🐾💛❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.13492744129017487,
+        "level": 3.8,
+        "timestamp": 1774071195045
+      },
+      {
+        "id": "expr_1774071202835_ia2vb6",
+        "bodyKey": "ears_twitching",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "paw",
+          "heart",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ ГАВ. ГАВ. ГАВ. 🐾💛❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.10711912065906165,
+        "level": 3.8,
+        "timestamp": 1774071202835
+      },
+      {
+        "id": "expr_1774071213027_se297w",
+        "bodyKey": "ears_forward",
+        "voiceKey": "bark_herding",
+        "glyphKeys": [
+          "paw",
+          "heart",
+          "exclaim"
+        ],
+        "rendered": "⌃⌃ ЯП! 🐾💛❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.005965551806765834,
+        "level": 3.8,
+        "timestamp": 1774071213027
+      },
+      {
+        "id": "expr_1774071214648_jhkja7",
+        "bodyKey": "butt_wiggle_slow",
+        "voiceKey": null,
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "~🍑~ 🐾❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.03807016961846084,
+        "level": 3.8,
+        "timestamp": 1774071214648
+      },
+      {
+        "id": "expr_1774073424443_ydbjxg",
+        "bodyKey": "nose_nudge",
+        "voiceKey": null,
+        "glyphKeys": [
+          "exclaim",
+          "question"
+        ],
+        "rendered": "🐾👃> ❗❓",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.15988744441131,
+        "level": 4.1,
+        "timestamp": 1774073424443
+      },
+      {
+        "id": "expr_1774073433532_ml8voa",
+        "bodyKey": "paw_tap",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "exclaim",
+          "exclaim"
+        ],
+        "rendered": "🐾✋ ГАВ! ГАВ! ГАВ! ❗❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.029896313155019352,
+        "level": 4.1,
+        "timestamp": 1774073433532
+      },
+      {
+        "id": "expr_1774073440186_q09bmr",
+        "bodyKey": "low_crouch",
+        "voiceKey": "bark_muffled",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. мрф. 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.16044779067746712,
+        "level": 4.2,
+        "timestamp": 1774073440186
+      },
+      {
+        "id": "expr_1774073445118_7aac68",
+        "bodyKey": "low_crouch",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.08759957002450519,
+        "level": 4.3,
+        "timestamp": 1774073445118
+      },
+      {
+        "id": "expr_1774078756583_4gyvg5",
+        "bodyKey": "ears_twitching",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.08083059545987373,
+        "level": 4.4,
+        "timestamp": 1774078756583
+      },
+      {
+        "id": "expr_1774089597961_5ndb6d",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.18578998172531885,
+        "level": 4.4,
+        "timestamp": 1774089597961
+      },
+      {
+        "id": "expr_1774089747963_80utws",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.1238298356466519,
+        "level": 4.4,
+        "timestamp": 1774089747963
+      },
+      {
+        "id": "expr_1774089897963_f1z5ia",
+        "bodyKey": "corgi_flop",
+        "voiceKey": "moan",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud ммммм... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.11859372579603372,
+        "level": 4.4,
+        "timestamp": 1774089897963
+      },
+      {
+        "id": "expr_1774089957963_gmljm6",
+        "bodyKey": "corgi_flop",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud хааааа... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.19525159166678274,
+        "level": 4.4,
+        "timestamp": 1774089957963
+      },
+      {
+        "id": "expr_1774089973694_pj4sjp",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.005494240594773991,
+        "level": 4.4,
+        "timestamp": 1774089973694
+      },
+      {
+        "id": "expr_1774089977743_85hylc",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.05581950713135515,
+        "level": 4.4,
+        "timestamp": 1774089977743
+      },
+      {
+        "id": "expr_1774089984315_ni10hs",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.07260777099759684,
+        "level": 4.4,
+        "timestamp": 1774089984315
+      },
+      {
+        "id": "expr_1774090001115_fry3xm",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.015928060293942448,
+        "level": 4.4,
+        "timestamp": 1774090001115
+      },
+      {
+        "id": "expr_1774090008778_52c2u0",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.08925117764172784,
+        "level": 4.4,
+        "timestamp": 1774090008778
+      },
+      {
+        "id": "expr_1774090015355_x3vr9z",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.006299949211959088,
+        "level": 4.4,
+        "timestamp": 1774090015355
+      },
+      {
+        "id": "expr_1774090041543_t54abn",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.11845997565538276,
+        "level": 4.4,
+        "timestamp": 1774090041543
+      },
+      {
+        "id": "expr_1774090048873_cy24tz",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.06211942155868262,
+        "level": 4.4,
+        "timestamp": 1774090048873
+      },
+      {
+        "id": "expr_1774090727719_8bzjls",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.1315394872462766,
+        "level": 4.4,
+        "timestamp": 1774090727719
+      },
+      {
+        "id": "expr_1774091057720_rg71vn",
+        "bodyKey": "sploot",
+        "voiceKey": "moan",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 ммммм... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.00021642753953914073,
+        "level": 4.4,
+        "timestamp": 1774091057720
+      },
+      {
+        "id": "expr_1774091502395_3mil4w",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.14053758399336705,
+        "level": 4.4,
+        "timestamp": 1774091502395
+      },
+      {
+        "id": "expr_1774091712395_mepzga",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.005304063629398309,
+        "level": 4.4,
+        "timestamp": 1774091712395
+      },
+      {
+        "id": "expr_1774091721061_vbsvlc",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.006517467757576639,
+        "level": 4.4,
+        "timestamp": 1774091721061
+      },
+      {
+        "id": "expr_1774091734830_21bj5w",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.18391449160164164,
+        "level": 4.4,
+        "timestamp": 1774091734830
+      },
+      {
+        "id": "expr_1774091742466_tdwn1e",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.0038662937614160897,
+        "level": 4.4,
+        "timestamp": 1774091742466
+      },
+      {
+        "id": "expr_1774091759887_16hwoq",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.0499918047961625,
+        "level": 4.4,
+        "timestamp": 1774091759887
+      },
+      {
+        "id": "expr_1774091962961_r6eh8k",
+        "bodyKey": "corgi_flop",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.19154442271674538,
+        "level": 4.4,
+        "timestamp": 1774091962961
+      },
+      {
+        "id": "expr_1774091985095_33g0f1",
+        "bodyKey": "low_crouch",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.048733540110217,
+        "level": 4.4,
+        "timestamp": 1774091985095
+      },
+      {
+        "id": "expr_1774091990286_jaocnw",
+        "bodyKey": "low_crouch",
+        "voiceKey": "bark_muffled",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. мрф. 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.139203578263023,
+        "level": 4.4,
+        "timestamp": 1774091990286
+      },
+      {
+        "id": "expr_1774091992059_o4zobj",
+        "bodyKey": "butt_wiggle_slow",
+        "voiceKey": null,
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "~🍑~ 🐾❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.11516395474752078,
+        "level": 4.4,
+        "timestamp": 1774091992059
+      },
+      {
+        "id": "expr_1774091998979_azmcir",
+        "bodyKey": "nose_nudge",
+        "voiceKey": null,
+        "glyphKeys": [
+          "paw",
+          "heart",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> 🐾💛❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.12153728803992943,
+        "level": 4.4,
+        "timestamp": 1774091998979
+      },
+      {
+        "id": "expr_1774092005581_w5qhuh",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "🐾↑↓↑ ЯП! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.08225597468071562,
+        "level": 4.4,
+        "timestamp": 1774092005581
+      },
+      {
+        "id": "expr_1774092166726_fdp2gh",
+        "bodyKey": "spin",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "🐾↻ ААААА!!! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.10822782836218181,
+        "level": 4.4,
+        "timestamp": 1774092166726
+      },
+      {
+        "id": "expr_1774092211857_qko6l4",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ЯП! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.004319624129755437,
+        "level": 4.4,
+        "timestamp": 1774092211857
+      },
+      {
+        "id": "expr_1774092221009_sx2kbk",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ЯП! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.14093164180463666,
+        "level": 4.4,
+        "timestamp": 1774092221009
+      },
+      {
+        "id": "expr_1774092234388_h9caih",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "🐾↑↓↑ руу-руу-руу! 🐾✨",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.08255530652673784,
+        "level": 4.4,
+        "timestamp": 1774092234388
+      },
+      {
+        "id": "expr_1774092248864_xdj6wn",
+        "bodyKey": "ears_twitching",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.06237760163653037,
+        "level": 4.4,
+        "timestamp": 1774092248864
+      },
+      {
+        "id": "expr_1774092262197_90c4f2",
+        "bodyKey": "butt_wiggle_slow",
+        "voiceKey": "bark_herding",
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "~🍑~ ЯП! 🐾✨",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.10642918879788912,
+        "level": 4.4,
+        "timestamp": 1774092262197
+      },
+      {
+        "id": "expr_1774092268111_w4tra3",
+        "bodyKey": "play_bow",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "⌄🐾🍑⌃ ЯП! 🐾✨",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.021629447594348372,
+        "level": 4.4,
+        "timestamp": 1774092268111
+      },
+      {
+        "id": "expr_1774092306774_919phv",
+        "bodyKey": "play_bow",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "ball"
+        ],
+        "rendered": "⌄🐾🍑⌃ руу-руу-руу! 🎾",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.15829000671049048,
+        "level": 4.4,
+        "timestamp": 1774092306774
+      },
+      {
+        "id": "expr_1774092959836_8owlm0",
+        "bodyKey": "play_bow",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "⌄🐾🍑⌃ ЯП! 🐾✨",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.07257320049159564,
+        "level": 4.4,
+        "timestamp": 1774092959836
+      },
+      {
+        "id": "expr_1774093198457_my948s",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "bark_play",
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "🐾↑↓↑ гав! гяв! 🐾✨",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.1442737554924162,
+        "level": 4.4,
+        "timestamp": 1774093198457
+      },
+      {
+        "id": "expr_1774094965130_qwg8si",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "💫🍑💫 ААААА!!! ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.07195493228480472,
+        "level": 4.4,
+        "timestamp": 1774094965130
+      },
+      {
+        "id": "expr_1774094999932_64jlqh",
+        "bodyKey": "butt_wiggle_fast",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "ball"
+        ],
+        "rendered": "~🍑~🍑~ руу-руу-руу! 🎾",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.04450272463690222,
+        "level": 4.4,
+        "timestamp": 1774094999932
+      },
+      {
+        "id": "expr_1774095012740_pjh0d8",
+        "bodyKey": "butt_wiggle_fast",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "~🍑~🍑~ руу-руу-руу! 🐾✨",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.00454510183749153,
+        "level": 4.4,
+        "timestamp": 1774095012740
+      },
+      {
+        "id": "expr_1774095059675_h04mrq",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "ball"
+        ],
+        "rendered": "🐾↑↓↑ ЯП! 🎾",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.11978644338231229,
+        "level": 4.4,
+        "timestamp": 1774095059675
+      },
+      {
+        "id": "expr_1774095205199_kn9rot",
+        "bodyKey": "paw_tap",
+        "voiceKey": "bark_herding",
+        "glyphKeys": [
+          "paw",
+          "heart",
+          "exclaim"
+        ],
+        "rendered": "🐾✋ ЯП! 🐾💛❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.0790816247839839,
+        "level": 4.4,
+        "timestamp": 1774095205199
+      },
+      {
+        "id": "expr_1774095214362_7jiia9",
+        "bodyKey": "body_block",
+        "voiceKey": null,
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "🐾▌ 🐾✨",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.13091513346473552,
+        "level": 4.4,
+        "timestamp": 1774095214362
+      },
+      {
+        "id": "expr_1774095519502_eqizk7",
+        "bodyKey": "paw_tap",
+        "voiceKey": null,
+        "glyphKeys": [
+          "exclaim",
+          "exclaim"
+        ],
+        "rendered": "🐾✋ ❗❗",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.03431009875729418,
+        "level": 4.4,
+        "timestamp": 1774095519502
+      },
+      {
+        "id": "expr_1774095542782_dewro8",
+        "bodyKey": "ears_twitching",
+        "voiceKey": null,
+        "glyphKeys": [
+          "exclaim",
+          "question"
+        ],
+        "rendered": "⌃⚡⌃ ❗❓",
+        "meaning": "bark",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.08395138293737513,
+        "level": 4.4,
+        "timestamp": 1774095542782
+      },
+      {
+        "id": "expr_1774095574078_fuakzj",
+        "bodyKey": "ears_twitching",
+        "voiceKey": "bark_muffled",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ мрф. 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.19081451895909474,
+        "level": 4.4,
+        "timestamp": 1774095574078
+      },
+      {
+        "id": "expr_1774095612606_uhxupl",
+        "bodyKey": "ears_twitching",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.12096423320918435,
+        "level": 4.4,
+        "timestamp": 1774095612606
+      },
+      {
+        "id": "expr_1774095904461_3p7qh7",
+        "bodyKey": "ears_twitching",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.05299373882923528,
+        "level": 4.4,
+        "timestamp": 1774095904461
+      },
+      {
+        "id": "expr_1774096686334_3gq177",
+        "bodyKey": "ears_twitching",
+        "voiceKey": null,
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.0017330011336882806,
+        "level": 4.4,
+        "timestamp": 1774096686334
+      },
+      {
+        "id": "expr_1774098332901_5sd2m3",
+        "bodyKey": "low_crouch",
+        "voiceKey": null,
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.16446901475418507,
+        "level": 4.4,
+        "timestamp": 1774098332901
+      },
+      {
+        "id": "expr_1774098339159_5narh6",
+        "bodyKey": "low_crouch",
+        "voiceKey": null,
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.16397489128432313,
+        "level": 4.4,
+        "timestamp": 1774098339159
+      },
+      {
+        "id": "expr_1774098349069_1rxv56",
+        "bodyKey": "low_crouch",
+        "voiceKey": "bark_muffled",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. мрф. 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.048876204967143004,
+        "level": 4.4,
+        "timestamp": 1774098349069
+      },
+      {
+        "id": "expr_1774099179826_kgr7iy",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "🐾↑↓↑ ЯП! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.19174657030153944,
+        "level": 4.4,
+        "timestamp": 1774099179826
+      },
+      {
+        "id": "expr_1774099282824_mxjtdi",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ЯП! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.06153492872048836,
+        "level": 4.4,
+        "timestamp": 1774099282824
+      },
+      {
+        "id": "expr_1774099286690_wcunvg",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "🐾↑↓↑ ЯП! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.11492945041894065,
+        "level": 4.4,
+        "timestamp": 1774099286690
+      },
+      {
+        "id": "expr_1774099313801_ieng0a",
+        "bodyKey": "play_bow",
+        "voiceKey": "bark_play",
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "⌄🐾🍑⌃ гав! гяв! 🐾✨",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.024449121704574445,
+        "level": 4.4,
+        "timestamp": 1774099313801
+      },
+      {
+        "id": "expr_1774099350624_eewgsj",
+        "bodyKey": "butt_wiggle_fast",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "~🍑~🍑~ руу-руу-руу! 🐾✨",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.1881238896646119,
+        "level": 4.4,
+        "timestamp": 1774099350624
+      },
+      {
+        "id": "expr_1774099362569_cha0we",
+        "bodyKey": "butt_wiggle_fast",
+        "voiceKey": "bark_play",
+        "glyphKeys": [
+          "paw",
+          "sparkle"
+        ],
+        "rendered": "~🍑~🍑~ гав! гяв! 🐾✨",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.14946049812450327,
+        "level": 4.4,
+        "timestamp": 1774099362569
+      },
+      {
+        "id": "expr_1774099678586_ifsj3c",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "💫🍑💫 руу-руу-руу! ✨✨",
+        "meaning": "butt_wiggle",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.01878015594468349,
+        "level": 4.4,
+        "timestamp": 1774099678586
+      },
+      {
+        "id": "expr_1774100383725_mm2kk0",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "bark_excitement",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "🐾↑↓↑ ГАВгавгавгавГАВ! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.07552815973131982,
+        "level": 4.4,
+        "timestamp": 1774100383725
+      },
+      {
+        "id": "expr_1774102457127_7nyyot",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.1394442223972548,
+        "level": 4.4,
+        "timestamp": 1774102457127
+      },
+      {
+        "id": "expr_1774102464626_l2zujp",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.13969984723433546,
+        "level": 4.4,
+        "timestamp": 1774102464626
+      },
+      {
+        "id": "expr_1774102474111_vi9oim",
+        "bodyKey": "low_crouch",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.12433923363094582,
+        "level": 4.4,
+        "timestamp": 1774102474111
+      },
+      {
+        "id": "expr_1774135826774_5q8bo5",
+        "bodyKey": "spin",
+        "voiceKey": null,
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "🐾↻ ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.12258194040146293,
+        "level": 4.4,
+        "timestamp": 1774135826774
+      },
+      {
+        "id": "expr_1774135869043_y1m3o5",
+        "bodyKey": "bunny_hop",
+        "voiceKey": null,
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "🐾↑↓↑ ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.040844805972210234,
+        "level": 4.4,
+        "timestamp": 1774135869043
+      },
+      {
+        "id": "expr_1774135925191_p4vofd",
+        "bodyKey": "spin",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "🐾↻ ААААА!!! ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.0258990459915934,
+        "level": 4.4,
+        "timestamp": 1774135925191
+      },
+      {
+        "id": "expr_1774140098866_sk9q71",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.12442671697809674,
+        "level": 4.4,
+        "timestamp": 1774140098866
+      },
+      {
+        "id": "expr_1774141069082_d4l3b2",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.057589167726904256,
+        "level": 4.4,
+        "timestamp": 1774141069082
+      },
+      {
+        "id": "expr_1774141088180_oyyecf",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.16618303537869894,
+        "level": 4.4,
+        "timestamp": 1774141088180
+      },
+      {
+        "id": "expr_1774141091781_x56b0o",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.08651876003570767,
+        "level": 4.5,
+        "timestamp": 1774141091781
+      },
+      {
+        "id": "expr_1774141219082_gmwdi1",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.14324924915215886,
+        "level": 5.4,
+        "timestamp": 1774141219082
+      },
+      {
+        "id": "expr_1774151899090_4x9w05",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ииии... 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.11540065272910952,
+        "level": 5.5,
+        "timestamp": 1774151899090
+      },
+      {
+        "id": "expr_1774153699090_64fkoh",
+        "bodyKey": "spin",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾↻ ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.04217935792338184,
+        "level": 5.5,
+        "timestamp": 1774153699090
+      },
+      {
+        "id": "expr_1774154451017_y4f4ll",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.011538154982370097,
+        "level": 5.5,
+        "timestamp": 1774154451017
+      },
+      {
+        "id": "expr_1774154464593_2d5ysy",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.12066930528647242,
+        "level": 5.6,
+        "timestamp": 1774154464593
+      },
+      {
+        "id": "expr_1774154480765_kr0khq",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.12660180536670437,
+        "level": 5.6,
+        "timestamp": 1774154480765
+      },
+      {
+        "id": "expr_1774154481017_khpqxt",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> руу-руу-руу! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.008658957772618742,
+        "level": 5.7,
+        "timestamp": 1774154481017
+      },
+      {
+        "id": "expr_1774154511017_t69vl6",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ААААА!!! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.02662293655948704,
+        "level": 5.8,
+        "timestamp": 1774154511017
+      },
+      {
+        "id": "expr_1774154541017_bpi080",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> руу-руу-руу! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.11154545219642267,
+        "level": 6,
+        "timestamp": 1774154541017
+      },
+      {
+        "id": "expr_1774154571017_srqkze",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.1837821201676355,
+        "level": 6,
+        "timestamp": 1774154571017
+      },
+      {
+        "id": "expr_1774154601017_m3d4we",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.18934795261719548,
+        "level": 6,
+        "timestamp": 1774154601017
+      },
+      {
+        "id": "expr_1774154631017_jnwgs5",
+        "bodyKey": "spin",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾↻ ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.0632148662567464,
+        "level": 6,
+        "timestamp": 1774154631017
+      },
+      {
+        "id": "expr_1774154654924_u10os1",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.024865745793793886,
+        "level": 6,
+        "timestamp": 1774154654924
+      },
+      {
+        "id": "expr_1774154661017_3uv1md",
+        "bodyKey": "spin",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾↻ ААААА!!! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.19899448989031532,
+        "level": 6,
+        "timestamp": 1774154661017
+      },
+      {
+        "id": "expr_1774154668011_fe4a51",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.057913401567648216,
+        "level": 6,
+        "timestamp": 1774154668011
+      },
+      {
+        "id": "expr_1774154691018_pw5kuf",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.13534200123767168,
+        "level": 6,
+        "timestamp": 1774154691018
+      },
+      {
+        "id": "expr_1774154743344_nz7tpd",
+        "bodyKey": "spin",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾↻ ииии... 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.12426684806214863,
+        "level": 6.4,
+        "timestamp": 1774154743344
+      },
+      {
+        "id": "expr_1774154773344_qrs63t",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.15771239154880545,
+        "level": 6.4,
+        "timestamp": 1774154773344
+      },
+      {
+        "id": "expr_1774154803344_rmw0hk",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 руу-руу-руу! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.14869872016509406,
+        "level": 6.4,
+        "timestamp": 1774154803344
+      },
+      {
+        "id": "expr_1774154833344_ga2tsa",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ААААА!!! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.1338031965869201,
+        "level": 6.4,
+        "timestamp": 1774154833344
+      },
+      {
+        "id": "expr_1774154863344_nmuos4",
+        "bodyKey": "spin",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾↻ ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.19003274248022806,
+        "level": 6.4,
+        "timestamp": 1774154863344
+      },
+      {
+        "id": "expr_1774154893344_8dq6bk",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> руу-руу-руу! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.09014556178040595,
+        "level": 6.4,
+        "timestamp": 1774154893344
+      },
+      {
+        "id": "expr_1774154923345_lmpl6s",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.08376353010191209,
+        "level": 6.4,
+        "timestamp": 1774154923345
+      },
+      {
+        "id": "expr_1774154953345_bv7wli",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ААААА!!! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.010416390128342362,
+        "level": 6.6,
+        "timestamp": 1774154953345
+      },
+      {
+        "id": "expr_1774154983344_3gmwd2",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 руу-руу-руу! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.18095199491708552,
+        "level": 6.6,
+        "timestamp": 1774154983344
+      },
+      {
+        "id": "expr_1774155013345_nox090",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> руу-руу-руу! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.14648622654976667,
+        "level": 6.6,
+        "timestamp": 1774155013345
+      },
+      {
+        "id": "expr_1774156032238_1viihb",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ААААА!!! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.13761382547248463,
+        "level": 7.4,
+        "timestamp": 1774156032238
+      },
+      {
+        "id": "expr_1774156332238_58vacx",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ииии... 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.1696716566773825,
+        "level": 7.6,
+        "timestamp": 1774156332238
+      },
+      {
+        "id": "expr_1774156485067_5v8dgx",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.17870961329523075,
+        "level": 7.6,
+        "timestamp": 1774156485067
+      },
+      {
+        "id": "expr_1774156515067_j0v1u1",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.15655191825256864,
+        "level": 7.7,
+        "timestamp": 1774156515067
+      },
+      {
+        "id": "expr_1774156527515_cfhvmp",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.051206524630452194,
+        "level": 7.7,
+        "timestamp": 1774156527515
+      },
+      {
+        "id": "expr_1774156545067_hysp53",
+        "bodyKey": "spin",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾↻ ииии... 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.07287979757433574,
+        "level": 7.7,
+        "timestamp": 1774156545067
+      },
+      {
+        "id": "expr_1774156575067_b7meqf",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.045826481803600765,
+        "level": 7.7,
+        "timestamp": 1774156575067
+      },
+      {
+        "id": "expr_1774156605067_zf244v",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "bark_demand",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ГАВ. ГАВ. ГАВ. 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.003956252430176693,
+        "level": 7.7,
+        "timestamp": 1774156605067
+      },
+      {
+        "id": "expr_1774156635066_cs8rpp",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ииии... 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.08214325824266538,
+        "level": 7.7,
+        "timestamp": 1774156635066
+      },
+      {
+        "id": "expr_1774156665067_w7buv7",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ААААА!!! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.17817425747816215,
+        "level": 7.7,
+        "timestamp": 1774156665067
+      },
+      {
+        "id": "expr_1774156695067_rf5a9n",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> руу-руу-руу! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.13990084852224247,
+        "level": 7.7,
+        "timestamp": 1774156695067
+      },
+      {
+        "id": "expr_1774156725067_suqmp9",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ииии... 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.10805192117907839,
+        "level": 7.7,
+        "timestamp": 1774156725067
+      },
+      {
+        "id": "expr_1774156755068_jli9ss",
+        "bodyKey": "spin",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾↻ ииии... 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.14322069660471617,
+        "level": 7.7,
+        "timestamp": 1774156755068
+      },
+      {
+        "id": "expr_1774156785068_or2pfw",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ААААА!!! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.1893116700591088,
+        "level": 7.7,
+        "timestamp": 1774156785068
+      },
+      {
+        "id": "expr_1774156815067_kkk2ri",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ииии... 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.1060866020598005,
+        "level": 7.7,
+        "timestamp": 1774156815067
+      },
+      {
+        "id": "expr_1774156845069_wil24r",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "whine",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ииии... 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.04165930313601507,
+        "level": 7.7,
+        "timestamp": 1774156845069
+      },
+      {
+        "id": "expr_1774157145068_awprjp",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "roo_roo",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> руу-руу-руу! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.13223136477038416,
+        "level": 7.7,
+        "timestamp": 1774157145068
+      },
+      {
+        "id": "expr_1774157445069_pgcbd4",
+        "bodyKey": "nose_nudge",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "bone",
+          "exclaim"
+        ],
+        "rendered": "🐾👃> ААААА!!! 🦴❗",
+        "meaning": "food_obsessed",
+        "context": {
+          "passive": true,
+          "reason": "hungry"
+        },
+        "confidence": 0.16972739345597299,
+        "level": 7.7,
+        "timestamp": 1774157445069
+      },
+      {
+        "id": "expr_1774157459928_o6xdex",
+        "bodyKey": "belly_up",
+        "voiceKey": "moan",
+        "glyphKeys": [
+          "paw",
+          "heart"
+        ],
+        "rendered": "🐾⊙ ммммм... 🐾💛",
+        "meaning": "content",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.014585084697615922,
+        "level": 7.7,
+        "timestamp": 1774157459928
+      },
+      {
+        "id": "expr_1774157463289_w82x7b",
+        "bodyKey": "paw_tap",
+        "voiceKey": "bark_play",
+        "glyphKeys": [
+          "paw",
+          "ball",
+          "question"
+        ],
+        "rendered": "🐾✋ гав! гяв! 🐾🎾❓",
+        "meaning": "fetch_junk",
+        "context": {
+          "from": "system",
+          "domain": "devops"
+        },
+        "confidence": 0.1,
+        "level": 7.7,
+        "timestamp": 1774157463289
+      },
+      {
+        "id": "expr_1774157667847_dzza9a",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "🐾↑↓↑ ЯП! ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.025823255323917577,
+        "level": 7.7,
+        "timestamp": 1774157667847
+      },
+      {
+        "id": "expr_1774157691313_x9jf39",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "bark_play",
+        "glyphKeys": [
+          "ball"
+        ],
+        "rendered": "🐾↑↓↑ гав! гяв! 🎾",
+        "meaning": "playful",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.018809216095169307,
+        "level": 7.7,
+        "timestamp": 1774157691313
+      },
+      {
+        "id": "expr_1774158873827_ty9pox",
+        "bodyKey": "spin",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "🐾↻ ААААА!!! ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.19391283148736865,
+        "level": 7.7,
+        "timestamp": 1774158873827
+      },
+      {
+        "id": "expr_1774159268953_ge5j5s",
+        "bodyKey": "paw_tap",
+        "voiceKey": "pig_grunt",
+        "glyphKeys": [
+          "paw",
+          "ball",
+          "question"
+        ],
+        "rendered": "🐾✋ хрю-хрю 🐾🎾❓",
+        "meaning": "fetch_junk",
+        "context": {
+          "from": "system",
+          "domain": "devops"
+        },
+        "confidence": 0.1,
+        "level": 7.7,
+        "timestamp": 1774159268953
+      },
+      {
+        "id": "expr_1774168231068_wf9o3s",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.021414145558811715,
+        "level": 7.7,
+        "timestamp": 1774168231068
+      },
+      {
+        "id": "expr_1774168245325_wu5ktl",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.02766451811223622,
+        "level": 7.7,
+        "timestamp": 1774168245325
+      },
+      {
+        "id": "expr_1774168250279_qeccnn",
+        "bodyKey": "ears_twitching",
+        "voiceKey": "bark_muffled",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ мрф. 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.09240240713751416,
+        "level": 7.7,
+        "timestamp": 1774168250279
+      },
+      {
+        "id": "expr_1774168263475_rs55bu",
+        "bodyKey": "low_crouch",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "..🐾.. ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.12048480770199457,
+        "level": 7.7,
+        "timestamp": 1774168263475
+      },
+      {
+        "id": "expr_1774168269692_67zkdy",
+        "bodyKey": "ears_forward",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⌃ ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.19479474636641925,
+        "level": 7.7,
+        "timestamp": 1774168269692
+      },
+      {
+        "id": "expr_1774178749046_4l98p3",
+        "bodyKey": "circle",
+        "voiceKey": "bark_muffled",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "🐾↻↻ мрф. 🐾❗",
+        "meaning": "herding",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.011211194894809262,
+        "level": 7.7,
+        "timestamp": 1774178749046
+      },
+      {
+        "id": "expr_1774178765620_wu1zhv",
+        "bodyKey": "bunny_hop",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "🐾↑↓↑ ЯП! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.03434195123467054,
+        "level": 7.7,
+        "timestamp": 1774178765620
+      },
+      {
+        "id": "expr_1774178800120_5vngcz",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "scream",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle",
+          "exclaim"
+        ],
+        "rendered": "💫🍑💫 ААААА!!! ✨✨✨❗",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.001236630664080085,
+        "level": 7.7,
+        "timestamp": 1774178800120
+      },
+      {
+        "id": "expr_1774181296040_474k3f",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.013207314880898435,
+        "level": 7.7,
+        "timestamp": 1774181296040
+      },
+      {
+        "id": "expr_1774181416040_02z9kx",
+        "bodyKey": "corgi_flop",
+        "voiceKey": "moan",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud ммммм... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.04827962636188095,
+        "level": 7.7,
+        "timestamp": 1774181416040
+      },
+      {
+        "id": "expr_1774181476040_548lzt",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.006604044792019176,
+        "level": 7.7,
+        "timestamp": 1774181476040
+      },
+      {
+        "id": "expr_1774181521748_czs9z0",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.18057260003407363,
+        "level": 7.7,
+        "timestamp": 1774181521748
+      },
+      {
+        "id": "expr_1774181536041_d0500e",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.04587089673191907,
+        "level": 7.7,
+        "timestamp": 1774181536041
+      },
+      {
+        "id": "expr_1774181613121_k55tz7",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.08503247516777207,
+        "level": 7.7,
+        "timestamp": 1774181613121
+      },
+      {
+        "id": "expr_1774181632671_rop57p",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.022109511987271707,
+        "level": 7.7,
+        "timestamp": 1774181632671
+      },
+      {
+        "id": "expr_1774181956048_vgmd1t",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.01944542679284185,
+        "level": 7.7,
+        "timestamp": 1774181956048
+      },
+      {
+        "id": "expr_1774182803550_7hmiuz",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.07980945127708622,
+        "level": 7.7,
+        "timestamp": 1774182803550
+      },
+      {
+        "id": "expr_1774182953550_anave5",
+        "bodyKey": "corgi_flop",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.13559584885101722,
+        "level": 7.7,
+        "timestamp": 1774182953550
+      },
+      {
+        "id": "expr_1774184178221_e6ckke",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.06230382122849476,
+        "level": 7.7,
+        "timestamp": 1774184178221
+      },
+      {
+        "id": "expr_1774184416987_6y2fud",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.14977439852442495,
+        "level": 7.7,
+        "timestamp": 1774184416987
+      },
+      {
+        "id": "expr_1774190507037_ltdlvx",
+        "bodyKey": "corgi_flop",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "🐾~thud 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.06402066188503071,
+        "level": 7.7,
+        "timestamp": 1774190507037
+      },
+      {
+        "id": "expr_1774204007037_6i26j1",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.1953497143889616,
+        "level": 7.7,
+        "timestamp": 1774204007037
+      },
+      {
+        "id": "expr_1774220207038_mkzvlc",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.1372357494015141,
+        "level": 7.7,
+        "timestamp": 1774220207038
+      },
+      {
+        "id": "expr_1774220293538_n09pyb",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.07930459869712712,
+        "level": 7.7,
+        "timestamp": 1774220293538
+      },
+      {
+        "id": "expr_1774220563542_cgko5y",
+        "bodyKey": "sploot",
+        "voiceKey": "sigh",
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 хааааа... 💤",
+        "meaning": "sleep",
+        "context": {
+          "passive": true,
+          "reason": "dreaming"
+        },
+        "confidence": 0.19129677183791555,
+        "level": 7.7,
+        "timestamp": 1774220563542
+      },
+      {
+        "id": "expr_1774220593775_f6z81w",
+        "bodyKey": "sploot",
+        "voiceKey": null,
+        "glyphKeys": [
+          "zzz"
+        ],
+        "rendered": "___🐾 💤",
+        "meaning": "nap",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.03125741157921599,
+        "level": 7.7,
+        "timestamp": 1774220593775
+      },
+      {
+        "id": "expr_1774220618348_wb58in",
+        "bodyKey": "ears_twitching",
+        "voiceKey": "bark_alert",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ ГАВ! ГАВ! ГАВ! 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.06660018499951988,
+        "level": 7.7,
+        "timestamp": 1774220618348
+      },
+      {
+        "id": "expr_1774220652847_0xk3h1",
+        "bodyKey": "ears_twitching",
+        "voiceKey": "bark_muffled",
+        "glyphKeys": [
+          "paw",
+          "exclaim"
+        ],
+        "rendered": "⌃⚡⌃ мрф. 🐾❗",
+        "meaning": "alert",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.075900242914582,
+        "level": 7.7,
+        "timestamp": 1774220652847
+      },
+      {
+        "id": "expr_1774227827054_eafq3l",
+        "bodyKey": "butt_wiggle_turbo",
+        "voiceKey": "yip",
+        "glyphKeys": [
+          "sparkle",
+          "sparkle",
+          "sparkle"
+        ],
+        "rendered": "💫🍑💫 ЯП! ✨✨✨",
+        "meaning": "zoomies",
+        "context": {
+          "from": "owner",
+          "domain": "devops"
+        },
+        "confidence": 0.1958276809082906,
+        "level": 7.7,
+        "timestamp": 1774227827054
+      }
+    ],
+    "traces": [],
+    "dialect": {
+      "bodyPreferences": {},
+      "voicePreferences": {},
+      "glyphCombos": [],
+      "customMeanings": {},
+      "signature": [
+        "sparkle",
+        "exclaim",
+        "zzz",
+        "paw",
+        "bone"
+      ],
+      "quirks": {}
+    }
+  }
+}

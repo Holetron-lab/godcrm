@@ -1,0 +1,93 @@
+{
+  "name": "project-mgmt",
+  "version": "1.0.0",
+  "description": "Project management: Tickets with dictionaries (Types, States, Priorities)",
+  "source_space": "Development",
+  "source_space_id": 11,
+  "deploy_order": 3,
+  "dependencies": [],
+  "tables": [
+    {
+      "ref": "ticket_types",
+      "source_id": 1704,
+      "name": "Ticket Types",
+      "icon": "label",
+      "description": "Dictionary of ticket types",
+      "columns": [
+        { "column_name": "name", "display_name": "name", "type": "text" },
+        { "column_name": "icon", "display_name": "icon", "type": "text" },
+        { "column_name": "color", "display_name": "color", "type": "text" }
+      ],
+      "seed_data": [
+        { "name": "Bug", "icon": "bug", "color": "#ef4444" },
+        { "name": "Feature", "icon": "sparkles", "color": "#3b82f6" },
+        { "name": "Task", "icon": "check_mark", "color": "#22c55e" },
+        { "name": "Improvement", "icon": "up_arrow", "color": "#f59e0b" },
+        { "name": "Research", "icon": "magnifying_glass", "color": "#8b5cf6" }
+      ]
+    },
+    {
+      "ref": "ticket_states",
+      "source_id": 1706,
+      "name": "Ticket States",
+      "icon": "traffic_light",
+      "description": "Dictionary of ticket workflow states",
+      "columns": [
+        { "column_name": "name", "display_name": "name", "type": "text" },
+        { "column_name": "color", "display_name": "color", "type": "text" },
+        { "column_name": "order_index", "display_name": "order_index", "type": "number" }
+      ],
+      "seed_data": [
+        { "name": "Backlog", "color": "#6b7280", "order_index": 0 },
+        { "name": "To Do", "color": "#3b82f6", "order_index": 1 },
+        { "name": "In Progress", "color": "#f59e0b", "order_index": 2 },
+        { "name": "Review", "color": "#8b5cf6", "order_index": 3 },
+        { "name": "Done", "color": "#22c55e", "order_index": 4 }
+      ]
+    },
+    {
+      "ref": "ticket_priorities",
+      "source_id": 1705,
+      "name": "Ticket Priorities",
+      "icon": "exclamation",
+      "description": "Dictionary of ticket priorities",
+      "columns": [
+        { "column_name": "name", "display_name": "name", "type": "text" },
+        { "column_name": "color", "display_name": "color", "type": "text" },
+        { "column_name": "order_index", "display_name": "order_index", "type": "number" }
+      ],
+      "seed_data": [
+        { "name": "Critical", "color": "#ef4444", "order_index": 0 },
+        { "name": "High", "color": "#f59e0b", "order_index": 1 },
+        { "name": "Medium", "color": "#3b82f6", "order_index": 2 },
+        { "name": "Low", "color": "#6b7280", "order_index": 3 }
+      ]
+    },
+    {
+      "ref": "tickets",
+      "source_id": 1708,
+      "name": "Tickets",
+      "icon": "ticket",
+      "description": "Main task/ticket tracker",
+      "depends_on": ["ticket_types", "ticket_states", "ticket_priorities"],
+      "columns": [
+        { "column_name": "type", "display_name": "Type", "type": "select", "config": { "relation": { "enabled": true, "tableRef": "ticket_types", "valueColumn": "id", "labelColumn": "name" } } },
+        { "column_name": "priority", "display_name": "Priority", "type": "select", "config": { "relation": { "enabled": true, "tableRef": "ticket_priorities", "valueColumn": "id", "labelColumn": "name" } } },
+        { "column_name": "state", "display_name": "State", "type": "select", "config": { "relation": { "enabled": true, "tableRef": "ticket_states", "valueColumn": "id", "labelColumn": "name" } } },
+        { "column_name": "assigned_to", "display_name": "Assigned To", "type": "text" },
+        { "column_name": "what", "display_name": "What", "type": "text" },
+        { "column_name": "why", "display_name": "Why", "type": "text", "config": { "cellFormat": { "mode": "markdown" } } },
+        { "column_name": "acceptance_criteria", "display_name": "Acceptance Criteria", "type": "textarea" },
+        { "column_name": "test_steps", "display_name": "Test Steps", "type": "textarea" },
+        { "column_name": "created_date", "display_name": "Created", "type": "datetime" },
+        { "column_name": "completed_date", "display_name": "Completed", "type": "datetime" },
+        { "column_name": "phase", "display_name": "Phase", "type": "select", "config": { "options": [{"label": "Phase 0", "color": "#ef4444"}, {"label": "Phase 1", "color": "#f59e0b"}, {"label": "Phase 2", "color": "#3b82f6"}, {"label": "Phase 3", "color": "#22c55e"}] } },
+        { "column_name": "scheduled_date", "display_name": "Scheduled Date", "type": "date" },
+        { "column_name": "due_date", "display_name": "Due Date", "type": "date" },
+        { "column_name": "progress", "display_name": "Progress", "type": "number", "config": { "min": 0, "max": 100 } },
+        { "column_name": "depends_on", "display_name": "Depends On", "type": "text" },
+        { "column_name": "cycle", "display_name": "Cycle", "type": "select", "config": { "options": [{"label": "Sprint 1", "color": "#3b82f6"}, {"label": "Sprint 2", "color": "#8b5cf6"}, {"label": "Sprint 3", "color": "#ec4899"}, {"label": "Sprint 4", "color": "#14b8a6"}] } }
+      ]
+    }
+  ]
+}

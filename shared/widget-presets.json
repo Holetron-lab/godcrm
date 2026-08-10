@@ -1,0 +1,1488 @@
+{
+  "table_view": {
+    "id": "table_view",
+    "name": "Table View",
+    "description": "Display filtered table data with customizable columns",
+    "emoji": "📊",
+    "color": "#3b82f6",
+    "category": "display",
+    "defaultSize": {
+      "w": 12,
+      "h": 6
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "data",
+        "name": "Data Table",
+        "description": "Main table for display",
+        "required": true,
+        "canCreate": false,
+        "requiredColumns": []
+      }
+    ]
+  },
+  "kanban_board": {
+    "id": "kanban_board",
+    "name": "Kanban Board",
+    "description": "Organize data in kanban-style columns",
+    "emoji": "📋",
+    "color": "#8b5cf6",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "data",
+        "name": "Tasks Table",
+        "description": "Table with tasks to display on board",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Tickets",
+        "defaultColumns": [
+          {
+            "name": "title",
+            "displayName": "Title",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "status",
+            "displayName": "Status",
+            "type": "select",
+            "required": true,
+            "options": ["Backlog", "In Progress", "In Review", "Done"]
+          },
+          {
+            "name": "description",
+            "displayName": "Description",
+            "type": "rich_text",
+            "required": false
+          },
+          {
+            "name": "priority",
+            "displayName": "Priority",
+            "type": "select",
+            "required": false,
+            "options": ["Low", "Medium", "High", "Critical"]
+          },
+          {
+            "name": "assignee",
+            "displayName": "Assignee",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "due_date",
+            "displayName": "Due Date",
+            "type": "date",
+            "required": false
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "statusColumn",
+            "name": "Status",
+            "description": "Status column (for board columns)",
+            "types": [
+              "select"
+            ],
+            "required": true
+          },
+          {
+            "key": "titleColumn",
+            "name": "Title",
+            "description": "Card title",
+            "types": [
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "descriptionColumn",
+            "name": "Description",
+            "description": "Card description",
+            "types": [
+              "text",
+              "rich_text"
+            ],
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  "calendar_widget": {
+    "id": "calendar_widget",
+    "name": "Calendar",
+    "description": "Display events and tasks in calendar format",
+    "emoji": "📅",
+    "color": "#10b981",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "events",
+        "name": "Events Table",
+        "description": "Table with events for calendar",
+        "required": true,
+        "canCreate": false,
+        "requiredColumns": [
+          {
+            "key": "dateColumn",
+            "name": "Date",
+            "description": "Event date",
+            "types": [
+              "date",
+              "datetime"
+            ],
+            "required": true
+          },
+          {
+            "key": "titleColumn",
+            "name": "Title",
+            "description": "Event title",
+            "types": [
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "endDateColumn",
+            "name": "End Date",
+            "description": "Event end date",
+            "types": [
+              "date",
+              "datetime"
+            ],
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  "timeline_widget": {
+    "id": "timeline_widget",
+    "name": "Timeline",
+    "description": "Display events in chronological timeline",
+    "emoji": "📈",
+    "color": "#f59e0b",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 12,
+      "h": 6
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "events",
+        "name": "Events Table",
+        "description": "Table with events for timeline",
+        "required": true,
+        "canCreate": false,
+        "requiredColumns": [
+          {
+            "key": "startDateColumn",
+            "name": "Start Date",
+            "description": "Event start date",
+            "types": [
+              "date",
+              "datetime"
+            ],
+            "required": true
+          },
+          {
+            "key": "endDateColumn",
+            "name": "End Date",
+            "description": "Event end date",
+            "types": [
+              "date",
+              "datetime"
+            ],
+            "required": true
+          },
+          {
+            "key": "titleColumn",
+            "name": "Title",
+            "description": "Task title",
+            "types": [
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "groupByColumn",
+            "name": "Group By",
+            "description": "Group by rows",
+            "types": [
+              "text",
+              "select"
+            ],
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  "gallery_widget": {
+    "id": "gallery_widget",
+    "name": "Gallery",
+    "description": "Display images in a grid layout",
+    "emoji": "🖼️",
+    "color": "#ec4899",
+    "category": "display",
+    "defaultSize": {
+      "w": 12,
+      "h": 6
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "images",
+        "name": "Images Table",
+        "description": "Table with images for gallery",
+        "required": true,
+        "canCreate": false,
+        "requiredColumns": [
+          {
+            "key": "imageColumn",
+            "name": "Image",
+            "description": "Image column",
+            "types": [
+              "file",
+              "image",
+              "url"
+            ],
+            "required": true
+          },
+          {
+            "key": "titleColumn",
+            "name": "Title",
+            "description": "Image title",
+            "types": [
+              "text"
+            ],
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  "chart_widget": {
+    "id": "chart_widget",
+    "name": "Chart",
+    "description": "Visualize table data as interactive charts",
+    "emoji": "📊",
+    "color": "#ec4899",
+    "category": "analytics",
+    "defaultSize": {
+      "w": 6,
+      "h": 4
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "data",
+        "name": "Data Table",
+        "description": "Table with data for chart",
+        "required": true,
+        "canCreate": false,
+        "requiredColumns": [
+          {
+            "key": "xColumn",
+            "name": "X Axis",
+            "description": "X Axis (categories)",
+            "types": [
+              "text",
+              "select",
+              "date"
+            ],
+            "required": true
+          },
+          {
+            "key": "yColumn",
+            "name": "Y Axis",
+            "description": "Y Axis (values)",
+            "types": [
+              "number"
+            ],
+            "required": true
+          }
+        ]
+      }
+    ]
+  },
+  "number_widget": {
+    "id": "number_widget",
+    "name": "Metric Card",
+    "description": "Display single KPI metric with trend indicator",
+    "emoji": "🔢",
+    "color": "#6366f1",
+    "category": "analytics",
+    "defaultSize": {
+      "w": 3,
+      "h": 2
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "data",
+        "name": "Data Table",
+        "description": "Table with data for metric",
+        "required": true,
+        "canCreate": false,
+        "requiredColumns": [
+          {
+            "key": "valueColumn",
+            "name": "Value",
+            "description": "Value column",
+            "types": [
+              "number"
+            ],
+            "required": true
+          }
+        ]
+      }
+    ]
+  },
+  "project_stats": {
+    "id": "project_stats",
+    "name": "Project Statistics",
+    "description": "Display project metrics and statistics",
+    "emoji": "📈",
+    "color": "#14b8a6",
+    "category": "analytics",
+    "defaultSize": {
+      "w": 6,
+      "h": 4
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "task_list": {
+    "id": "task_list",
+    "name": "Task List",
+    "description": "Simple checklist for tasks",
+    "emoji": "✅",
+    "color": "#06b6d4",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 6,
+      "h": 6
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "tasks",
+        "name": "Tasks Table",
+        "description": "Table with tasks",
+        "required": true,
+        "canCreate": false,
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Title",
+            "description": "Task title",
+            "types": [
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "completedColumn",
+            "name": "Completed",
+            "description": "Completion status",
+            "types": [
+              "checkbox"
+            ],
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  "recent_activity": {
+    "id": "recent_activity",
+    "name": "Recent Activity",
+    "description": "Display recent changes and activity",
+    "emoji": "📝",
+    "color": "#6366f1",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 6,
+      "h": 4
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "activity",
+        "name": "Activity Table",
+        "description": "Table with event history",
+        "required": true,
+        "canCreate": false,
+        "requiredColumns": [
+          {
+            "key": "dateColumn",
+            "name": "Date",
+            "description": "Event date",
+            "types": [
+              "date",
+              "datetime"
+            ],
+            "required": true
+          },
+          {
+            "key": "titleColumn",
+            "name": "Description",
+            "description": "Event description",
+            "types": [
+              "text"
+            ],
+            "required": true
+          }
+        ]
+      }
+    ]
+  },
+  "quick_links": {
+    "id": "quick_links",
+    "name": "Quick Links",
+    "description": "Quick navigation to tables and dashboards",
+    "emoji": "🔗",
+    "color": "#8b5cf6",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 4,
+      "h": 3
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "ai_agents": {
+    "id": "ai_agents",
+    "name": "AI Agents",
+    "description": "Chat with AI agents in expandable card interfaces",
+    "emoji": "🤖",
+    "color": "#8b5cf6",
+    "category": "system",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "data_sources": {
+    "id": "data_sources",
+    "name": "Data Sources",
+    "description": "Manage and test external database connections",
+    "emoji": "🗄️",
+    "color": "#059669",
+    "category": "system",
+    "defaultSize": {
+      "w": 12,
+      "h": 6
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "documents_legacy": {
+    "id": "documents_legacy",
+    "name": "Documents (Legacy)",
+    "description": "Browse and view documents with hierarchical navigation",
+    "emoji": "📄",
+    "color": "#2563eb",
+    "category": "documents",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": true,
+    "tables": [
+      {
+        "key": "documents",
+        "name": "Documents",
+        "description": "Documents table",
+        "required": true,
+        "canCreate": true,
+        "requiredColumns": []
+      },
+      {
+        "key": "sections",
+        "name": "Sections",
+        "description": "Document sections table",
+        "required": true,
+        "canCreate": true,
+        "requiredColumns": []
+      }
+    ]
+  },
+  "wellness": {
+    "id": "wellness",
+    "name": "Wellness",
+    "description": "Track fitness, health vitals, gamification with levels and achievements",
+    "emoji": "💪",
+    "color": "#10b981",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "workouts",
+        "name": "Workouts",
+        "description": "Training sessions with dates and notes",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Wellness Workouts",
+        "defaultColumns": [
+          {
+            "name": "title",
+            "displayName": "Title",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "started_at",
+            "displayName": "Start",
+            "type": "datetime",
+            "required": true
+          },
+          {
+            "name": "ended_at",
+            "displayName": "End",
+            "type": "datetime",
+            "required": false
+          },
+          {
+            "name": "notes",
+            "displayName": "Notes",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "source",
+            "displayName": "Source",
+            "type": "select",
+            "required": false,
+            "options": [
+              "manual",
+              "csv_hevy",
+              "csv_strong"
+            ]
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "startDateColumn",
+            "name": "Start Date",
+            "description": "When workout started",
+            "types": [
+              "datetime",
+              "date"
+            ],
+            "required": true
+          },
+          {
+            "key": "titleColumn",
+            "name": "Title",
+            "description": "Workout title",
+            "types": [
+              "text"
+            ],
+            "required": false
+          }
+        ]
+      },
+      {
+        "key": "sets",
+        "name": "Sets",
+        "description": "Exercise sets (weight, reps, RPE)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Wellness Sets",
+        "defaultColumns": [
+          {
+            "name": "workout_id",
+            "displayName": "Workout",
+            "type": "relation",
+            "required": true
+          },
+          {
+            "name": "exercise_name",
+            "displayName": "Exercise",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "set_index",
+            "displayName": "Set Number",
+            "type": "number",
+            "required": true
+          },
+          {
+            "name": "weight_kg",
+            "displayName": "Weight (kg)",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "reps",
+            "displayName": "Reps",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "rpe",
+            "displayName": "RPE",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "set_type",
+            "displayName": "Set Type",
+            "type": "select",
+            "required": false,
+            "options": [
+              "warmup",
+              "normal",
+              "dropset",
+              "failure"
+            ]
+          },
+          {
+            "name": "is_pr",
+            "displayName": "Personal Record",
+            "type": "checkbox",
+            "required": false
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "workoutColumn",
+            "name": "Workout",
+            "description": "Workout relation",
+            "types": [
+              "relation",
+              "number"
+            ],
+            "required": true
+          },
+          {
+            "key": "exerciseColumn",
+            "name": "Exercise",
+            "description": "Exercise name",
+            "types": [
+              "text",
+              "select"
+            ],
+            "required": true
+          },
+          {
+            "key": "weightColumn",
+            "name": "Weight",
+            "description": "Weight in kg",
+            "types": [
+              "number"
+            ],
+            "required": false
+          },
+          {
+            "key": "repsColumn",
+            "name": "Reps",
+            "description": "Number of repetitions",
+            "types": [
+              "number"
+            ],
+            "required": false
+          }
+        ]
+      },
+      {
+        "key": "exercises",
+        "name": "Exercise Catalog",
+        "description": "Exercise catalog with muscle groups",
+        "required": false,
+        "canCreate": true,
+        "defaultTableName": "Exercises Catalog",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Name",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "equipment",
+            "displayName": "Equipment",
+            "type": "select",
+            "required": false,
+            "options": [
+              "barbell",
+              "dumbbell",
+              "machine",
+              "bodyweight",
+              "cable",
+              "kettlebell"
+            ]
+          },
+          {
+            "name": "primary_muscle",
+            "displayName": "Primary Muscle",
+            "type": "select",
+            "required": false,
+            "options": [
+              "Chest",
+              "Back",
+              "Shoulders",
+              "Biceps",
+              "Triceps",
+              "Forearms",
+              "Core",
+              "Quads",
+              "Hamstrings",
+              "Glutes",
+              "Calves"
+            ]
+          },
+          {
+            "name": "category",
+            "displayName": "Category",
+            "type": "select",
+            "required": false,
+            "options": [
+              "compound",
+              "isolation",
+              "cardio"
+            ]
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "nameColumn",
+            "name": "Name",
+            "description": "Exercise name",
+            "types": [
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "muscleColumn",
+            "name": "Muscle Group",
+            "description": "Primary muscle group",
+            "types": [
+              "select",
+              "text"
+            ],
+            "required": false
+          }
+        ]
+      },
+      {
+        "key": "profile",
+        "name": "Health Profile",
+        "description": "Physical parameters, goals, BMR/TDEE",
+        "required": false,
+        "canCreate": true,
+        "defaultTableName": "Wellness Profile",
+        "defaultColumns": [
+          {
+            "name": "height_cm",
+            "displayName": "Height (cm)",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "current_weight_kg",
+            "displayName": "Current Weight (kg)",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "target_weight_kg",
+            "displayName": "Target Weight (kg)",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "birth_date",
+            "displayName": "Birth Date",
+            "type": "date",
+            "required": false
+          },
+          {
+            "name": "gender",
+            "displayName": "Gender",
+            "type": "select",
+            "required": false,
+            "options": [
+              "male",
+              "female",
+              "other"
+            ]
+          },
+          {
+            "name": "activity_level",
+            "displayName": "Activity Level",
+            "type": "select",
+            "required": false,
+            "options": [
+              "sedentary",
+              "light",
+              "moderate",
+              "active",
+              "very_active"
+            ]
+          },
+          {
+            "name": "bmr_kcal",
+            "displayName": "BMR (kcal)",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "tdee_kcal",
+            "displayName": "TDEE (kcal)",
+            "type": "number",
+            "required": false
+          }
+        ],
+        "requiredColumns": []
+      },
+      {
+        "key": "vitals",
+        "name": "Health Vitals",
+        "description": "Weight, heart rate, blood pressure, SpO2 and other measurements",
+        "required": false,
+        "canCreate": true,
+        "defaultTableName": "Wellness Vitals",
+        "defaultColumns": [
+          {
+            "name": "vital_type",
+            "displayName": "Type",
+            "type": "select",
+            "required": true,
+            "options": [
+              "weight",
+              "heart_rate",
+              "blood_pressure_sys",
+              "blood_pressure_dia",
+              "temperature",
+              "spo2",
+              "blood_glucose",
+              "body_fat_pct",
+              "body_battery"
+            ]
+          },
+          {
+            "name": "value",
+            "displayName": "Value",
+            "type": "number",
+            "required": true
+          },
+          {
+            "name": "unit",
+            "displayName": "Unit",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "recorded_at",
+            "displayName": "Recorded At",
+            "type": "datetime",
+            "required": true
+          },
+          {
+            "name": "notes",
+            "displayName": "Notes",
+            "type": "text",
+            "required": false
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "typeColumn",
+            "name": "Measurement Type",
+            "description": "Vital type",
+            "types": [
+              "select",
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "valueColumn",
+            "name": "Value",
+            "description": "Numeric value",
+            "types": [
+              "number"
+            ],
+            "required": true
+          },
+          {
+            "key": "dateColumn",
+            "name": "Date",
+            "description": "Measurement date and time",
+            "types": [
+              "datetime",
+              "date"
+            ],
+            "required": true
+          }
+        ]
+      },
+      {
+        "key": "levels",
+        "name": "Level & Points",
+        "description": "Gamification: level, XP, points balance",
+        "required": false,
+        "canCreate": true,
+        "defaultTableName": "Wellness Levels",
+        "defaultColumns": [
+          {
+            "name": "level",
+            "displayName": "Level",
+            "type": "number",
+            "required": true
+          },
+          {
+            "name": "current_xp",
+            "displayName": "Current XP",
+            "type": "number",
+            "required": true
+          },
+          {
+            "name": "total_points",
+            "displayName": "Total Points",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "total_spent",
+            "displayName": "Total Spent",
+            "type": "number",
+            "required": false
+          }
+        ],
+        "requiredColumns": []
+      },
+      {
+        "key": "achievements",
+        "name": "Achievements",
+        "description": "Unlocked achievements and progress",
+        "required": false,
+        "canCreate": true,
+        "defaultTableName": "Wellness Achievements",
+        "defaultColumns": [
+          {
+            "name": "code",
+            "displayName": "Code",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "name",
+            "displayName": "Name",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "description",
+            "displayName": "Description",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "icon",
+            "displayName": "Icon",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "points_reward",
+            "displayName": "Points Reward",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "xp_reward",
+            "displayName": "XP Reward",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "category",
+            "displayName": "Category",
+            "type": "select",
+            "required": false,
+            "options": [
+              "workout",
+              "vitals",
+              "streak",
+              "milestone"
+            ]
+          }
+        ],
+        "requiredColumns": []
+      },
+      {
+        "key": "streaks",
+        "name": "Streaks",
+        "description": "Activity streak tracking",
+        "required": false,
+        "canCreate": true,
+        "defaultTableName": "Wellness Streaks",
+        "defaultColumns": [
+          {
+            "name": "streak_type",
+            "displayName": "Type",
+            "type": "select",
+            "required": true,
+            "options": [
+              "workout",
+              "vitals_logged",
+              "nutrition_logged"
+            ]
+          },
+          {
+            "name": "current_streak",
+            "displayName": "Current Streak",
+            "type": "number",
+            "required": true
+          },
+          {
+            "name": "longest_streak",
+            "displayName": "Record",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "last_activity_at",
+            "displayName": "Last Activity",
+            "type": "datetime",
+            "required": false
+          }
+        ],
+        "requiredColumns": []
+      }
+    ]
+  },
+  "documents": {
+    "id": "documents",
+    "name": "Documents",
+    "description": "Browse and view documents with hierarchical navigation",
+    "emoji": "📄",
+    "color": "#2563eb",
+    "category": "documents",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "documents",
+        "name": "Documents",
+        "description": "Documents table (hierarchy, metadata)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Documents",
+        "defaultColumns": [
+          {
+            "name": "title",
+            "displayName": "Title",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "parent_id",
+            "displayName": "Parent Document",
+            "type": "relation",
+            "required": false
+          },
+          {
+            "name": "icon",
+            "displayName": "Icon",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "status",
+            "displayName": "Status",
+            "type": "select",
+            "required": false,
+            "options": [
+              "draft",
+              "published",
+              "archived"
+            ]
+          },
+          {
+            "name": "order",
+            "displayName": "Order",
+            "type": "number",
+            "required": false
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Title",
+            "description": "Document title",
+            "types": [
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "parentColumn",
+            "name": "Parent",
+            "description": "Parent document",
+            "types": [
+              "relation",
+              "number"
+            ],
+            "required": false
+          }
+        ]
+      },
+      {
+        "key": "atoms",
+        "name": "Content Atoms",
+        "description": "Content blocks (headings, paragraphs, lists)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Document Atoms",
+        "defaultColumns": [
+          {
+            "name": "document_id",
+            "displayName": "Document",
+            "type": "relation",
+            "required": true
+          },
+          {
+            "name": "type",
+            "displayName": "Type",
+            "type": "select",
+            "required": true,
+            "options": [
+              "heading",
+              "paragraph",
+              "list",
+              "code",
+              "image",
+              "table"
+            ]
+          },
+          {
+            "name": "content",
+            "displayName": "Content",
+            "type": "rich_text",
+            "required": true
+          },
+          {
+            "name": "order",
+            "displayName": "Order",
+            "type": "number",
+            "required": true
+          },
+          {
+            "name": "metadata",
+            "displayName": "Metadata",
+            "type": "json",
+            "required": false
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "documentColumn",
+            "name": "Document",
+            "description": "Document relation",
+            "types": [
+              "relation",
+              "number"
+            ],
+            "required": true
+          },
+          {
+            "key": "typeColumn",
+            "name": "Block Type",
+            "description": "Content type",
+            "types": [
+              "select",
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "contentColumn",
+            "name": "Content",
+            "description": "Block content",
+            "types": [
+              "rich_text",
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "orderColumn",
+            "name": "Order",
+            "description": "Sort order",
+            "types": [
+              "number"
+            ],
+            "required": true
+          }
+        ]
+      }
+    ]
+  },
+  "labs": {
+    "id": "labs",
+    "name": "Labs",
+    "description": "Interactive laboratory workspace with visual node connections",
+    "emoji": "🧪",
+    "color": "#8b5cf6",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "labs",
+        "name": "Labs Registry",
+        "description": "Registry of laboratory projects",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Labs",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Name",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "description",
+            "displayName": "Description",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "slug",
+            "displayName": "Slug",
+            "type": "text",
+            "required": true
+          },
+          {
+            "name": "table_id",
+            "displayName": "Table ID",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "icon",
+            "displayName": "Icon",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "status",
+            "displayName": "Status",
+            "type": "select",
+            "required": false,
+            "options": [
+              "draft",
+              "active",
+              "archived"
+            ]
+          },
+          {
+            "name": "created_at",
+            "displayName": "Created",
+            "type": "date",
+            "required": false
+          },
+          {
+            "name": "updated_at",
+            "displayName": "Updated",
+            "type": "date",
+            "required": false
+          },
+          {
+            "name": "created_by",
+            "displayName": "Created By",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "node_count",
+            "displayName": "Nodes",
+            "type": "number",
+            "required": false
+          },
+          {
+            "name": "thumbnail",
+            "displayName": "Thumbnail",
+            "type": "text",
+            "required": false
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "nameColumn",
+            "name": "Name",
+            "description": "Lab name",
+            "types": [
+              "text"
+            ],
+            "required": true
+          },
+          {
+            "key": "tableIdColumn",
+            "name": "Table ID",
+            "description": "ID of nodes table",
+            "types": [
+              "number"
+            ],
+            "required": true
+          }
+        ]
+      }
+    ],
+    "autoInit": false
+  },
+  "virtual_office": {
+    "id": "virtual_office",
+    "name": "Virtual Office",
+    "description": "WorkAdventure virtual office status - online users, rooms, join button",
+    "emoji": "🏢",
+    "color": "#6366f1",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 4,
+      "h": 4
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "terminal": {
+    "id": "terminal",
+    "name": "Terminal",
+    "description": "Shell terminal with command approval system for dangerous operations",
+    "emoji": "💻",
+    "color": "#22c55e",
+    "category": "system",
+    "defaultSize": {
+      "w": 12,
+      "h": 6
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "autopilot_dashboard": {
+    "id": "autopilot_dashboard",
+    "name": "Autopilot Dashboard",
+    "description": "Real-time agent status, task pipeline, throughput metrics, and manual override controls",
+    "emoji": "🛩️",
+    "color": "#0ea5e9",
+    "category": "system",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "pes_dashboard": {
+    "id": "pes_dashboard",
+    "name": "PES Dashboard",
+    "description": "Pocket pet status — emotions, traits, evolution, interaction history",
+    "emoji": "🐕",
+    "color": "#ec4899",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 6,
+      "h": 6
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "token_usage": {
+    "id": "token_usage",
+    "name": "Token Usage",
+    "description": "Track AI token consumption per conversation and per agent with cost estimates",
+    "emoji": "📊",
+    "color": "#f59e0b",
+    "category": "analytics",
+    "defaultSize": {
+      "w": 12,
+      "h": 6
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "16neo": {
+    "id": "16neo",
+    "name": "16Neo",
+    "description": "16-bit pixel art virtual office — WASD movement, proximity chat, multiplayer, pet companion",
+    "emoji": "🎮",
+    "color": "#6366f1",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "tickets_list": {
+    "id": "tickets_list",
+    "name": "Tickets List",
+    "description": "Standalone tickets list resolved server-side (doc-scoped / widgets-in-tree / all). ADR-0012",
+    "emoji": "🎫",
+    "color": "#2563eb",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "tickets",
+        "name": "Tickets",
+        "description": "Tickets table (auto-discovered as 'Tickets' or 'Tasks' in the project if ticket_binding is not set)",
+        "required": false,
+        "canCreate": false,
+        "requiredColumns": []
+      }
+    ]
+  },
+  "welcome_dashboard": {
+    "id": "welcome_dashboard",
+    "name": "Welcome Dashboard",
+    "description": "First-paint welcome surface for new personal Spaces — Hero + 3 next-action cards + Tip ribbon. Pinned by /auth/register provisioning hook (ADR-0079).",
+    "emoji": "🏠",
+    "color": "#f59e0b",
+    "category": "system",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": []
+  }
+}

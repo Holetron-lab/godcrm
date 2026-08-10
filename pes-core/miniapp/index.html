@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PES</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  --bg: #0a0a0f;
+  --bg2: #12121a;
+  --bg3: #1a1a28;
+  --accent: #7b5cff;
+  --accent2: #5cffb4;
+  --text: #e0e0e8;
+  --text2: #8888a0;
+  --danger: #ff5c6e;
+  --warn: #ffc75c;
+  --radius: 16px;
+  --pixel: 6px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Loading ── */
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 16px;
+}
+.loading .dot-pulse {
+  display: flex; gap: 8px;
+}
+.loading .dot-pulse span {
+  width: 10px; height: 10px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.loading .dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+.loading .dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ── App ── */
+.app { display: none; padding: 16px; padding-bottom: 100px; }
+.app.visible { display: block; }
+
+/* ── Pet Container ── */
+.pet-zone {
+  text-align: center;
+  padding: 24px 0 16px;
+  position: relative;
+}
+.pet-canvas-wrap {
+  display: inline-block;
+  position: relative;
+}
+#petCanvas {
+  image-rendering: pixelated;
+  border-radius: 12px;
+}
+.pet-glow {
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(123,92,255,0.15) 0%, transparent 70%);
+  pointer-events: none;
+  animation: glow-breathe 4s ease-in-out infinite;
+}
+@keyframes glow-breathe {
+  0%, 100% { opacity: 0.5; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+.pet-name {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 12px 0 4px;
+  letter-spacing: 1px;
+}
+.pet-breed {
+  font-size: 14px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.pet-emotion {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 14px;
+  background: var(--bg3);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--accent2);
+}
+
+/* ── Stats bars ── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 16px 0;
+}
+.stat-card {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.stat-label {
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+.stat-bar {
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.stat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.8s ease;
+}
+.stat-fill.mood { background: linear-gradient(90deg, var(--danger), var(--warn), var(--accent2)); }
+.stat-fill.energy { background: linear-gradient(90deg, #ff5c6e, #ffc75c, #5cffb4); }
+.stat-fill.hunger { background: linear-gradient(90deg, #5cffb4, #ffc75c, #ff5c6e); }
+.stat-fill.curiosity { background: var(--accent); }
+.stat-value {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 4px;
+  text-align: right;
+}
+
+/* ── Level card ── */
+.level-card {
+  background: linear-gradient(135deg, var(--bg2), var(--bg3));
+  border-radius: var(--radius);
+  padding: 18px;
+  margin: 12px 0;
+  border: 1px solid rgba(123,92,255,0.2);
+}
+.level-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.level-num {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.level-phase {
+  font-size: 12px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  background: var(--bg);
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+.xp-bar {
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.xp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #b05cff);
+  border-radius: 4px;
+  transition: width 1s ease;
+}
+.xp-text {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 6px;
+  text-align: right;
+}
+
+/* ── Traits radar ── */
+.traits-section {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin: 12px 0;
+}
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+.trait-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.trait-icon { font-size: 16px; width: 24px; text-align: center; }
+.trait-name { font-size: 13px; color: var(--text2); width: 100px; }
+.trait-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.trait-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.8s ease;
+}
+.trait-val { font-size: 12px; color: var(--text); width: 36px; text-align: right; }
+
+/* ── Notes section ── */
+.notes-section {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin: 12px 0;
+}
+.note-item {
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid var(--accent);
+}
+.note-item.pinned { border-left-color: var(--warn); }
+.note-text { font-size: 14px; line-height: 1.4; }
+.note-meta {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.note-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.note-tag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(123,92,255,0.15);
+  color: var(--accent);
+}
+.note-empty {
+  text-align: center;
+  color: var(--text2);
+  font-size: 13px;
+  padding: 20px;
+}
+
+/* ── Memory sub-tabs ── */
+.mem-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  background: var(--bg2);
+  border-radius: 10px;
+  padding: 3px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.mem-tab {
+  flex: 1;
+  padding: 8px 4px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  min-width: 0;
+}
+.mem-tab.active {
+  background: var(--bg3);
+  color: var(--text);
+}
+.mem-panel { display: none; }
+.mem-panel.visible { display: block; }
+
+/* ── Search ── */
+.search-wrap {
+  position: relative;
+  margin-bottom: 12px;
+}
+.search-input {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  border: 1px solid var(--bg3);
+  border-radius: 10px;
+  background: var(--bg2);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border 0.2s;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--text2); }
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--text2);
+  pointer-events: none;
+}
+
+/* ── Contact card ── */
+.contact-item {
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid var(--accent2);
+}
+.contact-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.contact-detail {
+  font-size: 12px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+.contact-rel {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(92,255,180,0.12);
+  color: var(--accent2);
+  margin-top: 6px;
+}
+
+/* ── File card ── */
+.file-item {
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid #ffc75c;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.file-icon { font-size: 24px; flex-shrink: 0; }
+.file-info { flex: 1; min-width: 0; }
+.file-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-desc { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+/* ── Search results ── */
+.search-results { display: none; }
+.search-results.visible { display: block; }
+.search-group-title {
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 12px 0 6px;
+}
+.search-count {
+  font-size: 11px;
+  color: var(--text2);
+  text-align: center;
+  padding: 8px;
+}
+
+/* ── Timeline ── */
+.timeline-section {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin: 12px 0;
+}
+.timeline-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg3);
+}
+.timeline-item:last-child { border-bottom: none; }
+.timeline-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+.timeline-content { flex: 1; }
+.timeline-action { font-size: 13px; }
+.timeline-time { font-size: 11px; color: var(--text2); margin-top: 2px; }
+
+/* ── Quick actions ── */
+.actions-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg2);
+  border-top: 1px solid var(--bg3);
+  padding: 12px 16px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  display: flex;
+  gap: 10px;
+  z-index: 100;
+}
+.action-btn {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 12px;
+  background: var(--bg3);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+.action-btn:active {
+  transform: scale(0.95);
+  background: var(--accent);
+}
+.action-btn .icon { font-size: 20px; }
+
+/* ── Tabs ── */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  background: var(--bg2);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 16px;
+}
+.tab {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tab.active {
+  background: var(--accent);
+  color: white;
+}
+
+/* ── Tab content ── */
+.tab-content { display: none; }
+.tab-content.visible { display: block; }
+
+/* ── Unlocks ── */
+.unlock-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.unlock-item {
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+  opacity: 0.4;
+  transition: opacity 0.3s;
+}
+.unlock-item.unlocked {
+  opacity: 1;
+  border: 1px solid rgba(92,255,180,0.3);
+}
+.unlock-icon { font-size: 24px; margin-bottom: 6px; }
+.unlock-name { font-size: 12px; font-weight: 600; }
+.unlock-level { font-size: 10px; color: var(--text2); margin-top: 2px; }
+
+/* ── Reminders ── */
+.reminder-item {
+  background: var(--bg3);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid var(--warn);
+}
+.reminder-text { font-size: 14px; }
+.reminder-time { font-size: 11px; color: var(--warn); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading" id="loadingScreen">
+  <div style="font-size: 48px;">🐾</div>
+  <div style="font-size: 14px; color: var(--text2);">Загрузка...</div>
+  <div class="dot-pulse">
+    <span></span><span></span><span></span>
+  </div>
+</div>
+
+<!-- App -->
+<div class="app" id="app">
+  <!-- Pet zone -->
+  <div class="pet-zone">
+    <div class="pet-canvas-wrap">
+      <div class="pet-glow"></div>
+      <canvas id="petCanvas" width="160" height="160"></canvas>
+    </div>
+    <div class="pet-name" id="petName">—</div>
+    <div class="pet-breed" id="petBreed">—</div>
+    <div class="pet-emotion" id="petEmotion">—</div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tab-bar">
+    <button class="tab active" data-tab="home">Дом</button>
+    <button class="tab" data-tab="memory">Память</button>
+    <button class="tab" data-tab="growth">Рост</button>
+  </div>
+
+  <!-- Home tab -->
+  <div class="tab-content visible" id="tab-home">
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Настроение</div>
+        <div class="stat-bar"><div class="stat-fill mood" id="moodBar"></div></div>
+        <div class="stat-value" id="moodVal">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Энергия</div>
+        <div class="stat-bar"><div class="stat-fill energy" id="energyBar"></div></div>
+        <div class="stat-value" id="energyVal">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Голод</div>
+        <div class="stat-bar"><div class="stat-fill hunger" id="hungerBar"></div></div>
+        <div class="stat-value" id="hungerVal">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Любопытство</div>
+        <div class="stat-bar"><div class="stat-fill curiosity" id="curiosityBar"></div></div>
+        <div class="stat-value" id="curiosityVal">—</div>
+      </div>
+    </div>
+
+    <!-- Level -->
+    <div class="level-card">
+      <div class="level-top">
+        <div class="level-num" id="levelNum">0</div>
+        <div class="level-phase" id="phaseLabel">PUPPY</div>
+      </div>
+      <div class="xp-bar"><div class="xp-fill" id="xpBar"></div></div>
+      <div class="xp-text" id="xpText">0 XP</div>
+    </div>
+
+    <!-- Traits -->
+    <div class="traits-section">
+      <div class="section-title">Характер</div>
+      <div id="traitsContainer"></div>
+    </div>
+  </div>
+
+  <!-- Memory tab -->
+  <div class="tab-content" id="tab-memory">
+    <!-- Search -->
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="memorySearch" type="text" placeholder="Поиск по памяти..." autocomplete="off">
+    </div>
+
+    <!-- Search results (shown when searching) -->
+    <div class="search-results" id="searchResults"></div>
+
+    <!-- Sub-tabs (hidden when searching) -->
+    <div id="memoryContent">
+      <div class="mem-tabs">
+        <button class="mem-tab active" data-mem="notes">📝 Заметки</button>
+        <button class="mem-tab" data-mem="reminders">⏰ Напом.</button>
+        <button class="mem-tab" data-mem="contacts">👤 Контакты</button>
+        <button class="mem-tab" data-mem="files">📎 Файлы</button>
+        <button class="mem-tab" data-mem="timeline">📅 Лог</button>
+      </div>
+
+      <!-- Notes panel -->
+      <div class="mem-panel visible" id="mem-notes">
+        <div id="notesContainer">
+          <div class="note-empty">Заметок пока нет. Скажи питомцу «запомни...» в Telegram</div>
+        </div>
+      </div>
+
+      <!-- Reminders panel -->
+      <div class="mem-panel" id="mem-reminders">
+        <div id="remindersContainer">
+          <div class="note-empty">Нет активных напоминаний</div>
+        </div>
+      </div>
+
+      <!-- Contacts panel -->
+      <div class="mem-panel" id="mem-contacts">
+        <div id="contactsContainer">
+          <div class="note-empty">Нет контактов. Скажи «добавь контакт...» в Telegram</div>
+        </div>
+      </div>
+
+      <!-- Files panel -->
+      <div class="mem-panel" id="mem-files">
+        <div id="filesContainer">
+          <div class="note-empty">Нет файлов. Отправь файл питомцу в Telegram</div>
+        </div>
+      </div>
+
+      <!-- Timeline panel -->
+      <div class="mem-panel" id="mem-timeline">
+        <div id="timelineContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Growth tab -->
+  <div class="tab-content" id="tab-growth">
+    <div class="notes-section">
+      <div class="section-title">🔥 Streak</div>
+      <div id="streakContainer" style="display:flex;gap:12px;flex-wrap:wrap;"></div>
+    </div>
+
+    <div class="notes-section">
+      <div class="section-title">🏆 Достижения</div>
+      <div id="achievementsContainer" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <div class="notes-section">
+      <div class="section-title">🔓 Способности</div>
+      <div class="unlock-grid" id="unlocksContainer"></div>
+    </div>
+
+    <div class="notes-section">
+      <div class="section-title">📊 Статистика</div>
+      <div id="statsContainer"></div>
+    </div>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="actions-bar">
+    <button class="action-btn" onclick="action('pet')">
+      <span class="icon">🐾</span>
+      Погладить
+    </button>
+    <button class="action-btn" onclick="action('feed')">
+      <span class="icon">🍖</span>
+      Покормить
+    </button>
+    <button class="action-btn" onclick="action('play')">
+      <span class="icon">🎾</span>
+      Играть
+    </button>
+    <button class="action-btn" onclick="action('talk')">
+      <span class="icon">💬</span>
+      Чат
+    </button>
+    <button class="action-btn" onclick="shareArtifact()" style="background: var(--accent); color: #fff;">
+      <span class="icon">📤</span>
+      Поделиться
+    </button>
+  </div>
+</div>
+
+<script>
+// ── Telegram WebApp ──
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.setHeaderColor('#0a0a0f');
+  tg.setBackgroundColor('#0a0a0f');
+}
+
+// ── Config ──
+const API_BASE = window.location.origin + '/api/v3/pes/app';
+const POLL_INTERVAL = 10000;
+
+// ── State ──
+let state = null;
+let notes = [];
+let reminders = [];
+let contacts = [];
+let files = [];
+let unlocks = [];
+let timeline = [];
+let searchTimeout = null;
+
+// ── Init ──
+async function init() {
+  try {
+    await fetchAll();
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    renderAll();
+    setInterval(fetchStatus, POLL_INTERVAL);
+  } catch (err) {
+    console.error('Init failed:', err);
+    document.querySelector('.loading div:nth-child(2)').textContent = 'Ошибка загрузки...';
+  }
+}
+
+// ── Fetch ──
+async function fetchAll() {
+  const [statusRes, notesRes, remindersRes, contactsRes, filesRes, unlocksRes, timelineRes] = await Promise.all([
+    fetch(API_BASE + '/status'),
+    fetch(API_BASE + '/notes'),
+    fetch(API_BASE + '/reminders'),
+    fetch(API_BASE + '/contacts'),
+    fetch(API_BASE + '/files'),
+    fetch(API_BASE + '/unlocks'),
+    fetch(API_BASE + '/timeline'),
+  ]);
+  state = await statusRes.json();
+  notes = await notesRes.json();
+  reminders = await remindersRes.json();
+  contacts = await contactsRes.json();
+  files = await filesRes.json();
+  unlocks = await unlocksRes.json();
+  timeline = await timelineRes.json();
+}
+
+async function fetchStatus() {
+  try {
+    const res = await fetch(API_BASE + '/status');
+    state = await res.json();
+    renderPet();
+    renderStats();
+    renderLevel();
+  } catch (e) { /* silent */ }
+}
+
+// ── Render all ──
+function renderAll() {
+  renderPet();
+  renderStats();
+  renderLevel();
+  renderTraits();
+  renderNotes();
+  renderReminders();
+  renderContacts();
+  renderFiles();
+  renderTimeline();
+  renderUnlocks();
+  renderStatsTab();
+  renderStreak();
+  renderAchievements();
+  setupMemoryTabs();
+  setupSearch();
+}
+
+// ── Pixel Pet ──
+function renderPet() {
+  if (!state) return;
+  const { identity, emotions } = state;
+
+  document.getElementById('petName').textContent = identity?.name || 'PES';
+  document.getElementById('petBreed').textContent = identity?.breed || '—';
+  document.getElementById('petEmotion').textContent = emotionLabel(emotions?.state);
+
+  drawPixelPet(identity?.seed || '0.42', emotions);
+}
+
+function drawPixelPet(seed, emotions) {
+  const canvas = document.getElementById('petCanvas');
+  const ctx = canvas.getContext('2d');
+  const s = 8; // pixel size
+  const w = canvas.width / s;
+  const h = canvas.height / s;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Seed-based RNG
+  let seedNum = parseFloat(seed) || 0.42;
+  function rng() {
+    seedNum = (seedNum * 9301 + 49297) % 233280;
+    return seedNum / 233280;
+  }
+
+  // Colors from mood
+  const mood = emotions?.mood || 0.5;
+  const energy = emotions?.energy || 0.5;
+  const hue = Math.floor(mood * 60 + 200); // blue-purple-green range
+  const sat = Math.floor(50 + energy * 40);
+  const mainColor = `hsl(${hue}, ${sat}%, 55%)`;
+  const darkColor = `hsl(${hue}, ${sat}%, 35%)`;
+  const lightColor = `hsl(${hue}, ${sat}%, 70%)`;
+  const eyeColor = '#ffffff';
+  const pupilColor = '#1a1a28';
+  const noseColor = '#ff6b8a';
+
+  // Body shape (symmetrical, 10x8 area centered)
+  const cx = Math.floor(w / 2);
+  const cy = Math.floor(h / 2) + 1;
+
+  // Draw body (rounded blob)
+  const bodyPixels = [];
+  for (let dy = -4; dy <= 3; dy++) {
+    const rowWidth = dy <= -3 ? 3 : dy <= -2 ? 4 : dy <= 1 ? 5 : dy <= 2 ? 4 : 3;
+    for (let dx = -rowWidth; dx <= rowWidth; dx++) {
+      bodyPixels.push([cx + dx, cy + dy]);
+    }
+  }
+
+  // Draw body
+  bodyPixels.forEach(([x, y]) => {
+    ctx.fillStyle = mainColor;
+    ctx.fillRect(x * s, y * s, s, s);
+  });
+
+  // Belly (lighter)
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -2; dx <= 2; dx++) {
+      ctx.fillStyle = lightColor;
+      ctx.fillRect((cx + dx) * s, (cy + dy) * s, s, s);
+    }
+  }
+
+  // Ears
+  const earStyle = rng() > 0.5 ? 'pointed' : 'floppy';
+  ctx.fillStyle = darkColor;
+  if (earStyle === 'pointed') {
+    // Pointed ears
+    ctx.fillRect((cx - 4) * s, (cy - 6) * s, s, s);
+    ctx.fillRect((cx - 3) * s, (cy - 6) * s, s, s);
+    ctx.fillRect((cx - 4) * s, (cy - 5) * s, s, s);
+    ctx.fillRect((cx + 3) * s, (cy - 6) * s, s, s);
+    ctx.fillRect((cx + 4) * s, (cy - 6) * s, s, s);
+    ctx.fillRect((cx + 4) * s, (cy - 5) * s, s, s);
+  } else {
+    // Floppy ears
+    ctx.fillRect((cx - 5) * s, (cy - 3) * s, s, s);
+    ctx.fillRect((cx - 5) * s, (cy - 2) * s, s, s);
+    ctx.fillRect((cx - 6) * s, (cy - 2) * s, s, s);
+    ctx.fillRect((cx + 5) * s, (cy - 3) * s, s, s);
+    ctx.fillRect((cx + 5) * s, (cy - 2) * s, s, s);
+    ctx.fillRect((cx + 6) * s, (cy - 2) * s, s, s);
+  }
+
+  // Eyes (react to emotion)
+  const eyeY = cy - 2;
+  const blinking = emotions?.state === 'sleep' || emotions?.state === 'nap';
+
+  ctx.fillStyle = eyeColor;
+  if (blinking) {
+    // Closed eyes
+    ctx.fillRect((cx - 2) * s, eyeY * s, s * 2, s / 2);
+    ctx.fillRect((cx + 1) * s, eyeY * s, s * 2, s / 2);
+  } else {
+    // Open eyes
+    ctx.fillRect((cx - 2) * s, eyeY * s, s, s);
+    ctx.fillRect((cx + 2) * s, eyeY * s, s, s);
+    // Pupils
+    ctx.fillStyle = pupilColor;
+    const pupilOffset = emotions?.state === 'curious' ? -1 : 0;
+    ctx.fillRect((cx - 2) * s + s/2, (eyeY) * s + s/2 + pupilOffset, s/2, s/2);
+    ctx.fillRect((cx + 2) * s + s/2, (eyeY) * s + s/2 + pupilOffset, s/2, s/2);
+  }
+
+  // Happy sparkle eyes
+  if (emotions?.state === 'happy' || emotions?.state === 'excited' || emotions?.state === 'zoomies') {
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect((cx - 3) * s, (eyeY - 1) * s, s/2, s/2);
+    ctx.fillRect((cx + 3) * s, (eyeY - 1) * s, s/2, s/2);
+  }
+
+  // Nose
+  ctx.fillStyle = noseColor;
+  ctx.fillRect(cx * s, (cy - 1) * s, s, s);
+
+  // Mouth (changes with emotion)
+  ctx.fillStyle = darkColor;
+  if (emotions?.state === 'happy' || emotions?.state === 'playful' || emotions?.state === 'excited') {
+    // Smile
+    ctx.fillRect((cx - 1) * s, cy * s, s, s/2);
+    ctx.fillRect(cx * s, cy * s + s/2, s, s/2);
+    ctx.fillRect((cx + 1) * s, cy * s, s, s/2);
+  } else if (emotions?.state === 'sad' || emotions?.state === 'lonely') {
+    // Frown
+    ctx.fillRect((cx - 1) * s, cy * s + s/2, s, s/2);
+    ctx.fillRect(cx * s, cy * s, s, s/2);
+    ctx.fillRect((cx + 1) * s, cy * s + s/2, s, s/2);
+  }
+
+  // Tail
+  ctx.fillStyle = mainColor;
+  const tailUp = emotions?.state === 'happy' || emotions?.state === 'excited' || emotions?.state === 'zoomies';
+  if (tailUp) {
+    ctx.fillRect((cx + 5) * s, (cy + 1) * s, s, s);
+    ctx.fillRect((cx + 6) * s, cy * s, s, s);
+    ctx.fillRect((cx + 6) * s, (cy - 1) * s, s, s);
+  } else {
+    ctx.fillRect((cx + 5) * s, (cy + 2) * s, s, s);
+    ctx.fillRect((cx + 6) * s, (cy + 3) * s, s, s);
+  }
+
+  // Legs
+  ctx.fillStyle = darkColor;
+  ctx.fillRect((cx - 3) * s, (cy + 4) * s, s, s * 2);
+  ctx.fillRect((cx - 2) * s, (cy + 4) * s, s, s * 2);
+  ctx.fillRect((cx + 2) * s, (cy + 4) * s, s, s * 2);
+  ctx.fillRect((cx + 3) * s, (cy + 4) * s, s, s * 2);
+
+  // Breathing animation
+  const breathe = Math.sin(Date.now() / 1500) * 0.5;
+  if (breathe > 0.3) {
+    ctx.fillStyle = lightColor;
+    ctx.fillRect((cx - 1) * s, (cy + 1) * s, s * 3, s / 2);
+  }
+}
+
+// Animate pet breathing
+function animatePet() {
+  if (state) drawPixelPet(state.identity?.seed || '0.42', state.emotions);
+  requestAnimationFrame(animatePet);
+}
+
+// ── Stats ──
+function renderStats() {
+  if (!state?.emotions) return;
+  const e = state.emotions;
+
+  setBar('moodBar', 'moodVal', e.mood, '%');
+  setBar('energyBar', 'energyVal', e.energy, '%');
+  setBar('hungerBar', 'hungerVal', e.hunger, '%');
+  setBar('curiosityBar', 'curiosityVal', e.curiosity, '%');
+}
+
+function setBar(barId, valId, value, suffix) {
+  const pct = Math.round((value || 0) * 100);
+  document.getElementById(barId).style.width = pct + '%';
+  document.getElementById(valId).textContent = pct + suffix;
+}
+
+// ── Level ──
+function renderLevel() {
+  if (!state) return;
+  const level = state.level || 0;
+  const xp = state.xp || 0;
+  const phase = state.phase || 'puppy';
+
+  document.getElementById('levelNum').textContent = Math.floor(level);
+  document.getElementById('phaseLabel').textContent = phase.toUpperCase();
+
+  const frac = level % 1;
+  document.getElementById('xpBar').style.width = (frac * 100) + '%';
+  document.getElementById('xpText').textContent = xp + ' XP';
+}
+
+// ── Traits ──
+function renderTraits() {
+  if (!state?.traits) return;
+  const container = document.getElementById('traitsContainer');
+
+  const traitDefs = [
+    { key: 'courage', icon: '🦁', name: 'Храбрость' },
+    { key: 'curiosity_trait', icon: '🔍', name: 'Любопытство' },
+    { key: 'loyalty', icon: '🤝', name: 'Верность' },
+    { key: 'stubbornness', icon: '🐂', name: 'Упрямство' },
+    { key: 'playfulness', icon: '🎈', name: 'Игривость' },
+    { key: 'drama', icon: '🎭', name: 'Драма' },
+    { key: 'food_obsession', icon: '🍗', name: 'Обжорство' },
+    { key: 'sass', icon: '😏', name: 'Дерзость' },
+    { key: 'aggression', icon: '🔥', name: 'Агрессия' },
+  ];
+
+  container.innerHTML = traitDefs.map(t => {
+    const val = state.traits[t.key] || 0;
+    const pct = Math.round(val * 100);
+    return `
+      <div class="trait-row">
+        <span class="trait-icon">${t.icon}</span>
+        <span class="trait-name">${t.name}</span>
+        <div class="trait-bar-wrap">
+          <div class="trait-bar-fill" style="width: ${pct}%"></div>
+        </div>
+        <span class="trait-val">${pct}%</span>
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Notes ──
+function renderNotes() {
+  const container = document.getElementById('notesContainer');
+  if (!notes.length) {
+    container.innerHTML = '<div class="note-empty">Заметок пока нет. Скажи питомцу «запомни...» в Telegram</div>';
+    return;
+  }
+  container.innerHTML = notes.slice(0, 30).map(n => {
+    const tags = parseTags(n.tags);
+    return `
+    <div class="note-item${n.pinned ? ' pinned' : ''}">
+      <div class="note-text">${escHtml(n.text)}</div>
+      ${tags.length ? `<div class="note-tags">${tags.map(t => `<span class="note-tag">${escHtml(t)}</span>`).join('')}</div>` : ''}
+      <div class="note-meta">
+        <span>${formatDate(n.created_at)}${n.category ? ' · ' + escHtml(n.category) : ''}</span>
+        <span>
+          <span onclick="shareNote('${escHtml(n.text.slice(0, 50).replace(/'/g, ''))}')" style="cursor:pointer;opacity:0.6;">📤</span>
+          ${n.pinned ? '📌' : ''}${n.remind_at ? ' ⏰' : ''}
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Reminders ──
+function renderReminders() {
+  const container = document.getElementById('remindersContainer');
+  if (!reminders.length) {
+    container.innerHTML = '<div class="note-empty">Нет активных напоминаний</div>';
+    return;
+  }
+  container.innerHTML = reminders.map(r => {
+    const dt = new Date(r.remind_at);
+    const isOverdue = dt < new Date();
+    return `
+    <div class="reminder-item" style="${isOverdue ? 'border-left-color: var(--danger)' : ''}">
+      <div class="reminder-text">${escHtml(r.text)}</div>
+      <div class="reminder-time" style="${isOverdue ? 'color: var(--danger)' : ''}">${isOverdue ? '⚠️ Просрочено: ' : '⏰ '}${formatDateTime(r.remind_at)}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Contacts ──
+function renderContacts() {
+  const container = document.getElementById('contactsContainer');
+  if (!contacts.length) {
+    container.innerHTML = '<div class="note-empty">Нет контактов. Скажи «добавь контакт...» в Telegram</div>';
+    return;
+  }
+  container.innerHTML = contacts.map(c => `
+    <div class="contact-item">
+      <div class="contact-name">${escHtml(c.name)}</div>
+      ${c.phone ? `<div class="contact-detail">📱 ${escHtml(c.phone)}</div>` : ''}
+      ${c.email ? `<div class="contact-detail">✉️ ${escHtml(c.email)}</div>` : ''}
+      ${c.birthday ? `<div class="contact-detail">🎂 ${escHtml(c.birthday)}</div>` : ''}
+      ${c.notes ? `<div class="contact-detail" style="margin-top:4px;color:var(--text)">${escHtml(c.notes)}</div>` : ''}
+      ${c.relationship ? `<span class="contact-rel">${escHtml(c.relationship)}</span>` : ''}
+    </div>
+  `).join('');
+}
+
+// ── Files ──
+function renderFiles() {
+  const container = document.getElementById('filesContainer');
+  if (!files.length) {
+    container.innerHTML = '<div class="note-empty">Нет файлов. Отправь файл питомцу в Telegram</div>';
+    return;
+  }
+  const typeIcons = { photo: '🖼', document: '📄', video: '🎬', audio: '🎵', voice: '🎤', sticker: '🎨' };
+  container.innerHTML = files.map(f => `
+    <div class="file-item">
+      <span class="file-icon">${typeIcons[f.file_type] || '📎'}</span>
+      <div class="file-info">
+        <div class="file-name">${escHtml(f.file_name || f.file_type)}</div>
+        ${f.description ? `<div class="file-desc">${escHtml(f.description)}</div>` : ''}
+        <div class="file-desc">${formatDate(f.created_at)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Memory sub-tabs ──
+function setupMemoryTabs() {
+  document.querySelectorAll('.mem-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.mem-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.mem-panel').forEach(p => p.classList.remove('visible'));
+      tab.classList.add('active');
+      document.getElementById('mem-' + tab.dataset.mem).classList.add('visible');
+    });
+  });
+}
+
+// ── Search ──
+function setupSearch() {
+  const input = document.getElementById('memorySearch');
+  input.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    const q = input.value.trim();
+    if (!q) {
+      document.getElementById('searchResults').classList.remove('visible');
+      document.getElementById('searchResults').innerHTML = '';
+      document.getElementById('memoryContent').style.display = '';
+      return;
+    }
+    searchTimeout = setTimeout(() => doSearch(q), 300);
+  });
+}
+
+async function doSearch(q) {
+  try {
+    const res = await fetch(API_BASE + '/search?q=' + encodeURIComponent(q));
+    const data = await res.json();
+    const resultsEl = document.getElementById('searchResults');
+    document.getElementById('memoryContent').style.display = 'none';
+    resultsEl.classList.add('visible');
+
+    let html = '';
+    const total = (data.notes?.length || 0) + (data.contacts?.length || 0) + (data.files?.length || 0);
+
+    if (!total) {
+      html = '<div class="note-empty">Ничего не найдено</div>';
+    } else {
+      html += `<div class="search-count">Найдено: ${total}</div>`;
+      if (data.notes?.length) {
+        html += '<div class="search-group-title">📝 Заметки</div>';
+        html += data.notes.map(n => `<div class="note-item"><div class="note-text">${escHtml(n.text)}</div><div class="note-meta"><span>${formatDate(n.created_at)}</span></div></div>`).join('');
+      }
+      if (data.contacts?.length) {
+        html += '<div class="search-group-title">👤 Контакты</div>';
+        html += data.contacts.map(c => `<div class="contact-item"><div class="contact-name">${escHtml(c.name)}</div>${c.phone ? `<div class="contact-detail">📱 ${escHtml(c.phone)}</div>` : ''}</div>`).join('');
+      }
+      if (data.files?.length) {
+        html += '<div class="search-group-title">📎 Файлы</div>';
+        html += data.files.map(f => `<div class="file-item"><span class="file-icon">📎</span><div class="file-info"><div class="file-name">${escHtml(f.file_name || f.file_type)}</div></div></div>`).join('');
+      }
+    }
+    resultsEl.innerHTML = html;
+  } catch { /* silent */ }
+}
+
+// ── Timeline ──
+function renderTimeline() {
+  const container = document.getElementById('timelineContainer');
+  if (!timeline.length) {
+    container.innerHTML = '<div class="note-empty">Нет данных</div>';
+    return;
+  }
+  container.innerHTML = timeline.slice(0, 15).map(t => `
+    <div class="timeline-item">
+      <div class="timeline-dot"></div>
+      <div class="timeline-content">
+        <div class="timeline-action">${escHtml(t.action_type || t.actionType || '—')} ${t.xp_gained || t.xpGained ? '+' + (t.xp_gained || t.xpGained) + ' XP' : ''}</div>
+        <div class="timeline-time">${formatDate(t.timestamp)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Unlocks ──
+function renderUnlocks() {
+  const container = document.getElementById('unlocksContainer');
+  if (!unlocks.length) {
+    container.innerHTML = '<div class="note-empty">Нет данных</div>';
+    return;
+  }
+
+  const icons = {
+    core: '⚙️', emotion: '💜', sound: '🎵', ability: '✨', crm: '📊', social: '👥'
+  };
+
+  container.innerHTML = unlocks.map(u => `
+    <div class="unlock-item ${u.unlocked ? 'unlocked' : ''}">
+      <div class="unlock-icon">${u.unlocked ? icons[u.category] || '✨' : '🔒'}</div>
+      <div class="unlock-name">${escHtml(u.feature)}</div>
+      <div class="unlock-level">Level ${u.level_req}</div>
+    </div>
+  `).join('');
+}
+
+// ── Stats tab ──
+function renderStatsTab() {
+  if (!state?.stats) return;
+  const container = document.getElementById('statsContainer');
+  const s = state.stats;
+
+  const items = [
+    ['🐛', 'Баги найдены', s.bugsFound || 0],
+    ['✅', 'Баги решены', s.bugsSolved || 0],
+    ['🎾', 'Fetch\'ей', s.fetchesTotal || 0],
+    ['📚', 'Команд изучено', s.commandsLearned || 0],
+    ['🤝', 'Отношений', s.relationships || 0],
+    ['💬', 'Всего взаимодействий', s.totalInteractions || 0],
+  ];
+
+  container.innerHTML = items.map(([icon, label, val]) => `
+    <div class="trait-row">
+      <span class="trait-icon">${icon}</span>
+      <span class="trait-name" style="width: 160px">${label}</span>
+      <span class="trait-val" style="color: var(--accent2)">${val}</span>
+    </div>
+  `).join('');
+}
+
+// ── Streak ──
+function renderStreak() {
+  const container = document.getElementById('streakContainer');
+  if (!container) return;
+  const streak = state?.status?.streak || { current: 0, longest: 0, total: 0 };
+  const fire = streak.current > 0 ? '🔥'.repeat(Math.min(streak.current, 7)) : '❄️';
+  container.innerHTML = `
+    <div style="background:var(--bg3);border-radius:var(--radius);padding:12px 16px;flex:1;min-width:100px;text-align:center;">
+      <div style="font-size:24px;">${fire}</div>
+      <div style="font-size:20px;font-weight:700;color:var(--accent2);">${streak.current}</div>
+      <div style="font-size:11px;color:var(--text2);">текущий</div>
+    </div>
+    <div style="background:var(--bg3);border-radius:var(--radius);padding:12px 16px;flex:1;min-width:100px;text-align:center;">
+      <div style="font-size:24px;">💎</div>
+      <div style="font-size:20px;font-weight:700;color:var(--accent);">${streak.longest}</div>
+      <div style="font-size:11px;color:var(--text2);">рекорд</div>
+    </div>
+    <div style="background:var(--bg3);border-radius:var(--radius);padding:12px 16px;flex:1;min-width:100px;text-align:center;">
+      <div style="font-size:24px;">📅</div>
+      <div style="font-size:20px;font-weight:700;color:var(--text);">${streak.total}</div>
+      <div style="font-size:11px;color:var(--text2);">всего дней</div>
+    </div>
+  `;
+}
+
+// ── Achievements ──
+function renderAchievements() {
+  const container = document.getElementById('achievementsContainer');
+  if (!container) return;
+  const data = state?.status?.achievements || { achievements: [] };
+  if (!data.achievements?.length) {
+    container.innerHTML = '<div style="color:var(--text2);font-size:13px;">Пока нет достижений</div>';
+    return;
+  }
+  container.innerHTML = data.achievements.map(a => {
+    const pct = a.unlocked ? 100 : Math.min(100, Math.round((a.progress / a.threshold) * 100));
+    const opacity = a.unlocked ? 1 : 0.5;
+    return `
+      <div style="background:var(--bg3);border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px;opacity:${opacity};">
+        <span style="font-size:22px;">${a.emoji}</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;">${a.name}${a.unlocked ? ' ✅' : ''}</div>
+          <div style="font-size:11px;color:var(--text2);">${a.description}</div>
+          ${!a.unlocked ? `<div style="background:var(--bg);border-radius:4px;height:4px;margin-top:4px;overflow:hidden;">
+            <div style="background:var(--accent);height:100%;width:${pct}%;border-radius:4px;"></div>
+          </div>` : ''}
+        </div>
+        ${!a.unlocked ? `<span style="font-size:11px;color:var(--text2);">${a.progress}/${a.threshold}</span>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Tabs ──
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('visible'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('visible');
+  });
+});
+
+// ── Actions ──
+async function action(type) {
+  try {
+    const res = await fetch(API_BASE + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: type }),
+    });
+    const result = await res.json();
+    if (result.ok) {
+      // Haptic feedback
+      if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+      await fetchStatus();
+    }
+  } catch (e) {
+    console.error('Action failed:', e);
+  }
+}
+
+// ── Sharing ──
+function shareNote(noteText) {
+  if (tg?.switchInlineQuery) {
+    tg.switchInlineQuery('note:' + noteText, ['users', 'groups', 'channels']);
+    return;
+  }
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText('📝 ' + noteText).then(() => {
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    });
+  }
+}
+
+function shareArtifact() {
+  if (!petData) return;
+  const name = petData.identity?.name || 'ПЕС';
+  const species = petData.identity?.species || '???';
+  const level = petData.level?.current || 0;
+  const mood = Math.round((petData.emotions?.mood || 0) * 100);
+  const emotion = petData.emotions?.current || 'idle';
+
+  // Use Telegram WebApp switchInlineQuery if available
+  if (tg?.switchInlineQuery) {
+    tg.switchInlineQuery('status', ['users', 'groups', 'channels']);
+    return;
+  }
+
+  // Fallback: copy to clipboard
+  const text = `🐾 ${name} — ${species}\nLevel ${level} · ${emotion} · ${mood}% mood`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+      if (tg?.showAlert) tg.showAlert('Скопировано! Вставь в чат 📤');
+    });
+  }
+}
+
+// ── Utils ──
+function escHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function formatDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now - d;
+    if (diff < 60000) return 'только что';
+    if (diff < 3600000) return Math.floor(diff / 60000) + ' мин назад';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + ' ч назад';
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  } catch { return iso; }
+}
+
+function formatDateTime(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function parseTags(tags) {
+  if (!tags) return [];
+  if (Array.isArray(tags)) return tags;
+  try { return JSON.parse(tags); } catch { return []; }
+}
+
+function emotionLabel(state) {
+  const labels = {
+    happy: '😊 Счастлив', playful: '🎈 Игривый', excited: '🤩 В восторге',
+    greeting_frenzy: '🐕 Радостная встреча', butt_wiggle: '🍑 Виляет попой',
+    zoomies: '💨 Зумис!', idle: '😌 Спокоен', content: '☺️ Доволен',
+    nap: '😴 Дремлет', sleep: '💤 Спит', sad: '😢 Грустный',
+    lonely: '🥺 Одинокий', scared: '😨 Напуган', anxious: '😰 Тревожный',
+    food_obsessed: '🤤 Думает о еде', hungry: '🍖 Голодный',
+    alert: '⚡ Насторожен', angry: '😠 Злой', bark: '🗣 Лает',
+    curious: '🧐 Любопытный', puzzle_solving: '🧩 Решает задачу',
+    dramatic_tantrum: '😤 Истерика', sulking: '😒 Дуется',
+    stubborn_refuse: '🙅 Упрямится',
+  };
+  return labels[state] || state || '—';
+}
+
+// ── Start ──
+init();
+animatePet();
+</script>
+</body>
+</html>

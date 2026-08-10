@@ -1,0 +1,75 @@
+# electron-builder config — ADR-0023 Phase 3 (+ Phase 4 icons)
+# Linux AppImage (Phase 2), Windows NSIS+portable, macOS DMG/ZIP (ad-hoc-signed) all wired here.
+# Real cross-build of Windows artifacts requires wine + mono on .72 (Phase 7 preflight).
+# Real macOS DMG requires a macOS host (D8 = skip-if-absent in v1).
+# Icons rendered from public/favicon.svg: icon.png (Linux/mac fallback), icon.ico (Windows multi-res).
+# .icns deferred — electron-builder falls back to icon.png on macOS when .icns is absent.
+
+appId: cc.hltrn.crm
+productName: GOD CRM
+copyright: Copyright (c) 2026 hltrn
+
+directories:
+  output: release
+  buildResources: electron/assets
+
+files:
+  - "dist-electron/**/*"
+  - "dist/**/*"
+  - "package.json"
+  - "!**/*.map"
+
+asarUnpack: []
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Office
+  icon: electron/assets/icon.png
+  desktop:
+    StartupWMClass: god-crm
+    Comment: GOD CRM Universal Workspace
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: electron/assets/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: GOD CRM
+  menuCategory: GOD CRM
+  uninstallDisplayName: GOD CRM ${version}
+  artifactName: ${productName}-${version}-Setup.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-Portable.${ext}
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - universal
+    - target: zip
+      arch:
+        - universal
+  icon: electron/assets/icon.png  # .icns deferred; electron-builder uses .png fallback
+  category: public.app-category.business
+  identity: null  # ad-hoc per ADR-0023 §6 (no Apple Developer ID in v1, D9)
+
+# Auto-update publish config — ADR-0023 Phase 6 (D1 = B: reuse main repo Releases).
+publish:
+  provider: github
+  owner: holetron
+  repo: God_crm
+  releaseType: release

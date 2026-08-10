@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>$(DEVELOPMENT_LANGUAGE)</string>
+  <key>CFBundleDisplayName</key><string>GOD Frame</string>
+  <key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string>
+  <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>god_frame</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>$(FLUTTER_BUILD_NAME)</string>
+  <key>CFBundleVersion</key><string>$(FLUTTER_BUILD_NUMBER)</string>
+  <key>LSRequiresIPhoneOS</key><true/>
+  <key>UILaunchStoryboardName</key><string>LaunchScreen</string>
+  <key>UIMainStoryboardFile</key><string>Main</string>
+  <key>UIApplicationSupportsIndirectInputEvents</key><true/>
+  <key>CADisableMinimumFrameDurationOnPhone</key><true/>
+
+  <!-- Permissions (RU+EN combined; iOS shows the host-language string) -->
+  <key>NSCameraUsageDescription</key>
+  <string>Камера нужна для фото в чате и видеозвонков. Camera is used for chat photos and video calls.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Микрофон нужен для голосовых сообщений и звонков. Microphone is used for voice messages and calls.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Распознавание речи преобразует голос в текст. Speech recognition converts voice to text.</string>
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>Доступ к фото нужен для отправки изображений. Photo access is used to send images.</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Местоположение используется для геометок. Location is used for tagging.</string>
+  <key>NSFaceIDUsageDescription</key>
+  <string>Face ID разблокирует приложение. Face ID unlocks the app.</string>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>Bluetooth нужен для подключения очков Frame. Bluetooth is used to connect Frame glasses.</string>
+  <key>NSBluetoothPeripheralUsageDescription</key>
+  <string>Bluetooth нужен для подключения очков Frame.</string>
+
+  <!-- Background -->
+  <key>UIBackgroundModes</key>
+  <array>
+    <string>audio</string>
+    <string>processing</string>
+  </array>
+
+  <!-- Deep links + OAuth callback -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>CFBundleURLName</key><string>cc.hltrn.godframe.deeplink</string>
+      <key>CFBundleURLSchemes</key>
+      <array><string>godframe</string></array>
+    </dict>
+    <dict>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>CFBundleURLName</key><string>cc.hltrn.godframe.googlesignin</string>
+      <key>CFBundleURLSchemes</key>
+      <!-- Replace with REVERSED_CLIENT_ID from GoogleService-Info.plist -->
+      <array><string>com.googleusercontent.apps.283285480969-fqgech03sp3ocj5n9imm0phej500ipeo</string></array>
+    </dict>
+  </array>
+
+  <!-- Google Sign-In iOS client ID (matches REVERSED_CLIENT_ID above). Required by GoogleSignIn SDK at startup. -->
+  <key>GIDClientID</key>
+  <string>283285480969-fqgech03sp3ocj5n9imm0phej500ipeo.apps.googleusercontent.com</string>
+
+  <key>LSApplicationQueriesSchemes</key>
+  <array>
+    <string>https</string>
+    <string>mailto</string>
+    <string>tel</string>
+    <string>sms</string>
+  </array>
+
+  <!-- Orientation -->
+  <key>UISupportedInterfaceOrientations</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+  <key>UISupportedInterfaceOrientations~ipad</key>
+  <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+  </array>
+</dict>
+</plist>

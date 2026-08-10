@@ -1,0 +1,14 @@
+# LiveKit SFU — single-node config for GOD CRM voice/video calls.
+# Signaling (7880) is reached only via nginx: wss://crm.hltrn.cc/livekit -> 127.0.0.1:7880.
+# Media uses TCP 7881 (fallback) + UDP 50000-50100 directly to the box's public IP.
+# API keys are injected at runtime via the LIVEKIT_KEYS env var (see docker-compose.yml),
+# sourced from the CRM .env (LIVEKIT_API_KEY / LIVEKIT_API_SECRET) — never committed here.
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true
+logging:
+  level: info
+  pion_level: error

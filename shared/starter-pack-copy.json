@@ -1,0 +1,55 @@
+{
+  "_meta": {
+    "adr": "ADR-0079",
+    "version": 1,
+    "locale": "ru",
+    "owners": "frontend renders hero/cards/tip; backend reads tor_first_message for the auto-posted welcome chat",
+    "substitution": "{{name}} → user's first name (derived from auth user.name, fallback 'друг')"
+  },
+  "hero": {
+    "greeting": "Привет, {{name}}. Это твой Space.",
+    "subtitle": "Тёплый, пустой, твой. Тор покажет дом за 5 минут — что где живёт, как с кем говорить.",
+    "cta_label": "👋 Поздороваться с Тором",
+    "cta_agent_slug": "tor"
+  },
+  "cards": [
+    {
+      "key": "journal",
+      "icon": "📔",
+      "title": "Записать первый день",
+      "body": "«Сегодня было…» — пара строк в Daily Log. Просто отметить, что было важно.",
+      "cta": "Открыть журнал",
+      "table_slug": "daily-log",
+      "open_with": "new-row-form"
+    },
+    {
+      "key": "goal",
+      "icon": "🎯",
+      "title": "Поставить цель",
+      "body": "Одна цель — лучше десяти. Что ты хочешь сделать в этом месяце?",
+      "cta": "Добавить цель",
+      "table_slug": "goals-and-projects",
+      "open_with": "new-row-form"
+    },
+    {
+      "key": "researcher",
+      "icon": "💡",
+      "title": "Спросить Researcher'а",
+      "body": "Что-то интересное в голове? Researcher поищет в вебе и сохранит в Ideas.",
+      "cta": "Спросить",
+      "agent_slug": "researcher"
+    }
+  ],
+  "tip_ribbon": {
+    "lead": "Хочешь больше? Добавь агентов через ",
+    "settings_label": "Settings → Add Agent",
+    "settings_anchor": "/settings#add-agent",
+    "mid": " или открой ",
+    "marketplace_label": "Marketplace",
+    "marketplace_anchor": "/marketplace",
+    "marketplace_tooltip": "Готовится к июлю",
+    "marketplace_enabled": false,
+    "trail": "."
+  },
+  "tor_first_message": "Привет 👋 Я Тор.\n\nПокажу тебе дом за 5 минут. Здесь шесть полочек —\nжурнал дня, цели, привычки, люди, идеи, желания.\nВсе пустые — ты сам решишь, что туда положить.\n\nС чего начнём — с журнала или сразу с целью?\nА если ещё не понимаешь, зачем тебе вообще CRM, —\nпросто скажи, расскажу честно."
+}

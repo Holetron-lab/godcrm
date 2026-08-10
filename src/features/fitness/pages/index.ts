@@ -1,0 +1,1 @@
+export { FitnessPage } from './FitnessPage';

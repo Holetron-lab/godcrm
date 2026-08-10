@@ -1,0 +1,35 @@
+{
+  "enabled": true,
+  "rules": [
+    {
+      "id": "rule_personal_events",
+      "name": "Personal Calendar → Tickets",
+      "calendar_id": null,
+      "calendar_name": "geramonnn@gmail.com",
+      "keyword_filter": null,
+      "exclude_filter": "праздник|holiday|birthday",
+      "priority": 24272,
+      "type": 24269,
+      "state": 24275,
+      "assigned_to": null,
+      "tickets_table_id": 1708,
+      "enabled": false
+    },
+    {
+      "id": "rule_family_tasks",
+      "name": "Family Calendar → Tickets",
+      "calendar_id": null,
+      "calendar_name": "Семейная группа",
+      "keyword_filter": null,
+      "exclude_filter": null,
+      "priority": 24272,
+      "type": 24269,
+      "state": 24275,
+      "assigned_to": null,
+      "tickets_table_id": 1708,
+      "enabled": false
+    }
+  ],
+  "updated_at": "2026-02-23T15:00:00.000Z",
+  "updated_by": 1
+}

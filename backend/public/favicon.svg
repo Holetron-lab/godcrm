@@ -1,0 +1,29 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="haloGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:1" />
+      <stop offset="40%" style="stop-color:#3b82f6;stop-opacity:0.8" />
+      <stop offset="70%" style="stop-color:#2563eb;stop-opacity:0.4" />
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:0" />
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Outer glow -->
+  <ellipse cx="32" cy="32" rx="28" ry="12" fill="url(#haloGlow)" opacity="0.6" filter="url(#glow)" />
+  
+  <!-- Main halo -->
+  <ellipse cx="32" cy="32" rx="24" ry="10" fill="#3b82f6" opacity="0.3" />
+  <ellipse cx="32" cy="32" rx="20" ry="8" fill="#60a5fa" opacity="0.5" />
+  <ellipse cx="32" cy="32" rx="16" ry="6" fill="#93c5fd" opacity="0.7" />
+  
+  <!-- Bright center -->
+  <ellipse cx="32" cy="32" rx="12" ry="4" fill="#dbeafe" opacity="0.9" />
+  <ellipse cx="32" cy="32" rx="8" ry="2.5" fill="#f0f9ff" />
+</svg>

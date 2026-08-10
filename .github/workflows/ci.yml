@@ -1,0 +1,115 @@
+# GOD CRM — CI/CD Pipeline
+# ADR-064 Phase 3, Task 14
+#
+# Runs lint, typecheck, unit tests (SQLite), and build on every push/PR.
+# A separate PostgreSQL integration test job runs independently.
+
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+# Cancel in-progress runs on the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: Lint, Typecheck, Unit Tests, Build
+  # ──────────────────────────────────────────────
+  ci:
+    name: Lint / Typecheck / Test / Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: File line limit check (max 800)
+        run: bash scripts/check-file-lines.sh --max 800 --path src
+
+      - name: ESLint
+        run: npm run lint --if-present
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Unit tests (SQLite mode)
+        run: npm test -- --run
+        env:
+          DATABASE_TYPE: sqlite
+          TEST_MODE: "true"
+          JWT_SECRET: ci-test-secret
+          MASTER_ENCRYPTION_KEY: ci-test-master-key-32-characters!
+
+      - name: Build (Vite)
+        run: npm run build
+
+  # ──────────────────────────────────────────────
+  # Job 2: PostgreSQL Integration Tests
+  # Runs independently — failure does not block CI
+  # ──────────────────────────────────────────────
+  test-postgres:
+    name: PostgreSQL Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: godcrm
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: godcrm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U godcrm"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run PostgreSQL tests
+        run: npm test -- --run
+        env:
+          TEST_POSTGRES: "true"
+          DATABASE_TYPE: postgres
+          DATABASE_URL: postgres://godcrm:test@localhost:5432/godcrm_test
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          DB_NAME: godcrm_test
+          DB_USER: godcrm
+          DB_PASSWORD: test
+          JWT_SECRET: ci-test-secret
+          MASTER_ENCRYPTION_KEY: ci-test-master-key-32-characters!

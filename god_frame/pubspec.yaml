@@ -1,0 +1,123 @@
+name: god_frame
+description: GOD CRM companion app for Brilliant Frame AR glasses
+publish_to: 'none'
+version: 1.42.0+42
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+  flutter: '>=3.16.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Routing
+  go_router: ^14.0.0
+
+  # Networking
+  dio: ^5.4.0
+
+  # Storage
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.2.3
+
+  # BLE / Frame SDK
+  flutter_blue_plus: ^1.34.5
+  # frame_ble: ^3.0.0   # Uncomment when building with Frame hardware
+  # frame_msg: ^2.0.0   # Uncomment when building with Frame hardware
+
+  # Audio
+  record: ^5.2.1
+  just_audio: ^0.9.37
+  audio_session: ^0.1.19
+
+  # Local on-device speech recognition
+  speech_to_text: ^7.0.0
+
+  # Text-to-speech (read AI responses aloud)
+  flutter_tts: ^4.2.0
+
+  # Location
+  geolocator: ^12.0.0
+  geocoding: ^3.0.0
+
+  # Biometric / App Lock
+  local_auth: ^2.3.0
+
+  # Permissions
+  permission_handler: ^11.3.1
+
+  # Background execution
+  flutter_foreground_task: ^8.12.0
+
+  # UI
+  google_fonts: ^8.1.0
+  flutter_markdown: ^0.7.3
+  cached_network_image: ^3.4.1
+  image_picker: ^1.0.7
+  file_picker: ^8.0.0
+
+  # Deep links (for Google OAuth callback)
+  app_links: ^6.3.2
+
+  # Native Google Sign-In (no browser redirect needed)
+  google_sign_in: ^6.2.1
+
+  # OAuth browser flow (Chrome Custom Tab — captures redirect automatically)
+  flutter_web_auth_2: ^4.0.1
+
+  # WebSocket (for Gemini Live real-time voice)
+  web_socket_channel: ^3.0.1
+
+  # LiveKit (audio calls)
+  livekit_client: ^2.3.1+hotfix.1
+
+  # Utils
+  intl: ^0.20.2
+  uuid: ^4.4.2
+  path_provider: ^2.1.3
+  mime: ^1.0.5
+  url_launcher: ^6.2.6
+  connectivity_plus: ^6.0.3
+  device_info_plus: ^10.1.0
+  package_info_plus: ^8.0.0
+
+  # Icons
+  cupertino_icons: ^1.0.8
+  material_design_icons_flutter: ^7.0.7296
+
+dependency_overrides:
+  record_linux: ^1.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  riverpod_generator: ^2.4.0
+  build_runner: ^2.4.8
+  mockito: ^5.4.4
+  flutter_native_splash: ^2.4.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/lua_scripts/
+    - assets/splash/
+
+flutter_native_splash:
+  color: "#1a1a2e"
+  image: assets/splash/splash.png
+  android: true
+  ios: true
+  web: false
+  fullscreen: true
+  android_12:
+    color: "#1a1a2e"
+    image: assets/splash/splash.png

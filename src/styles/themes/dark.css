@@ -1,0 +1,52 @@
+[data-theme="dark"] {
+  /* Neutral colors for dark theme */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-900: #171717;
+
+  --text-primary: var(--color-neutral-0);
+  --text-secondary: var(--color-neutral-400);
+  --text-tertiary: var(--color-neutral-500);
+
+  --bg-primary: #141414;
+  --bg-secondary: #1c1c1c;
+  --bg-tertiary: #262626;
+
+  --border-primary: #333333;
+  --border-secondary: #252525;
+
+  --color-error: #f87171;
+  
+  /* Primary color overrides for dark theme (blue default) */
+  /* These will be dynamically updated by useTheme for other colors */
+  --color-primary-50: rgba(59, 130, 246, 0.08);
+  --color-primary-100: rgba(59, 130, 246, 0.12);
+  --color-primary-200: rgba(59, 130, 246, 0.16);
+  --color-primary-300: rgba(59, 130, 246, 0.24);
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #60a5fa;
+  --color-primary-700: #93c5fd;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+  --color-primary-950: #172554;
+  
+  /* Accent color aliases - these map to primary for consistent theming */
+  --accent-primary: var(--color-primary-500);
+  --accent-primary-hover: var(--color-primary-400);
+  --accent-secondary: var(--color-primary-400);
+  
+  /* Sidebar glass effect - dark smoky glass */
+  --sidebar-glass-bg: rgba(20, 20, 20, 0.8);
+  --sidebar-glass-border: rgba(60, 60, 60, 0.5);
+  --sidebar-card-bg: rgba(30, 30, 30, 0.6);
+  --sidebar-card-header: rgba(40, 40, 40, 0.8);
+}

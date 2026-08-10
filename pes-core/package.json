@@ -1,0 +1,11 @@
+{
+  "name": "pes-core",
+  "version": "0.1.0",
+  "description": "PES — Digital Corgi Agent Core",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "sharp": "^0.34.5"
+  }
+}
