@@ -48,6 +48,27 @@ router.get('/tables/:tableId/rows', async (req, res) => {
     // If system table, fetch from real database tables
     if (table && table.is_system && table.sync_target) {
       apiLogger.debug({ syncTarget: table.sync_target, projectId: table.project_id }, 'Reading from system table');
+
+      // ADR-175 P1 — mail is the only system table at business scale (100k+/account),
+      // so it uses a SQL push-down path (WHERE/ORDER/LIMIT/OFFSET in the DB) instead of
+      // the in-memory search/filter/slice() below used by the small system tables.
+      // Same response shape; correct totals + fast pages at scale.
+      if (table.sync_target === 'mail_messages') {
+        const { getMailMessagesPage } = await import('../../../services/SystemTableService.js');
+        const { rows, total } = await getMailMessagesPage(table.project_id, {
+          search, searchColumns, filter: filterObj, page, limit
+        });
+        return success(res, {
+          rows,
+          pagination: {
+            page: Number(page),
+            limit: Number(limit),
+            total,
+            pages: Math.ceil(total / Number(limit))
+          }
+        });
+      }
+
       const { getSystemTableData } = await import('../../../services/SystemTableService.js');
       let systemRowsResult = await getSystemTableData(table.sync_target, table.project_id);
 

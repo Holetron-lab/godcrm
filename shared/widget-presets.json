@@ -54,7 +54,12 @@
             "displayName": "Status",
             "type": "select",
             "required": true,
-            "options": ["Backlog", "In Progress", "In Review", "Done"]
+            "options": [
+              "Backlog",
+              "In Progress",
+              "In Review",
+              "Done"
+            ]
           },
           {
             "name": "description",
@@ -67,7 +72,12 @@
             "displayName": "Priority",
             "type": "select",
             "required": false,
-            "options": ["Low", "Medium", "High", "Critical"]
+            "options": [
+              "Low",
+              "Medium",
+              "High",
+              "Critical"
+            ]
           },
           {
             "name": "assignee",

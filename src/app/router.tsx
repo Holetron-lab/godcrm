@@ -19,6 +19,9 @@ const InvitationAcceptPage = lazy(() => import('@/features/public/InvitationAcce
 const LandingPage = lazy(() => import('@/pages/landing/LandingPage'));
 // Holetron umbrella hero (hltrn.cc) — Marketer TZ v2 2026-05-30
 const HoletronLanding = lazy(() => import('@/pages/landing/HoletronLanding'));
+// Building in Public — public blog index + single post (posts open in /blog/:slug)
+const BlogIndexPage = lazy(() => import('@/pages/blog/BlogIndexPage').then(m => ({ default: m.BlogIndexPage })));
+const BlogPostPage = lazy(() => import('@/pages/blog/BlogPostPage').then(m => ({ default: m.BlogPostPage })));
 
 const SpacesPage = lazy(() => import('@/pages/spaces/SpacesPage'));
 const SpaceDashboardPage = lazy(() => import('@/pages/spaces/SpaceDashboardPage').then(m => ({ default: m.SpaceDashboardPage })));
@@ -146,6 +149,18 @@ const routes = [
   {
     path: '/hltrn',
     element: <HoletronLanding />,
+    errorElement: <ErrorBoundaryPage />
+  },
+  // Building in Public — public blog index (no auth required)
+  {
+    path: '/blog',
+    element: <BlogIndexPage />,
+    errorElement: <ErrorBoundaryPage />
+  },
+  // Building in Public — single post (no auth required)
+  {
+    path: '/blog/:slug',
+    element: <BlogPostPage />,
     errorElement: <ErrorBoundaryPage />
   },
   // Public space pages - no auth required (ADR-105)

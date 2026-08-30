@@ -6,7 +6,7 @@
 import { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  Settings, HelpCircle, Cloud, Wifi, WifiOff, Database, Bug,
+  Settings, HelpCircle, Mail, Cloud, Wifi, WifiOff, Database, Bug,
   Link as LinkIcon, Plus, X, ChevronLeft, ChevronRight, Pencil,
   Bell, BrainCircuit, Loader2, Send, CheckCircle2,
   MessageSquare, ChevronDown,
@@ -478,6 +478,17 @@ export const StatusBar = () => {
     <footer className="flex-shrink-0 h-6 flex items-center px-2 bg-[var(--bg-secondary)] border-t border-[var(--border-primary)] text-[var(--text-secondary)] text-xs select-none">
       {/* ═══ LEFT: Settings, Help | Connection, Server, User ═══ */}
       <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Mail (ADR-159/160) — only entry point to the /mail module */}
+        <NavLink
+          to="/mail"
+          className={({ isActive }) =>
+            `flex items-center px-1.5 py-0.5 rounded transition-colors ${isActive ? 'bg-white/20' : 'hover:bg-white/10'}`
+          }
+          title={t('nav.mail')}
+        >
+          <Mail className="w-3 h-3" />
+        </NavLink>
+
         {/* Settings */}
         <NavLink
           to="/settings"

@@ -1,7 +1,18 @@
-# Hindsight MemPalace — EMBEDDED topology.
-# The MemPalace API points at the `hindsight` SCHEMA inside the main godcrm_prod
-# DB (same Postgres the CRM uses) — matching deploy/selfhost/schema.sql, the
-# version baked into the godcrm installer. No separate memory DB.
+# Hindsight / Warren — EMBEDDED topology.
+# The API points at a SCHEMA inside the main godcrm_prod DB (same Postgres the
+# CRM uses). No separate memory DB.
+#
+# ⛔ LIVE SCHEMA IS `hindsight_v2` — verified on .128 2026-08-23 (W0):
+#   hindsight_v2 : 16 tables, LIVE. 906 documents, 7742 memory_units,
+#                  179524 links. Written continuously since 2026-06-29.
+#   hindsight    : 14 tables, FROZEN legacy pre-v2 archive. 51 documents,
+#                  last write 2026-05-30. No memory_units/mental_models/closets.
+# Pointing HINDSIGHT_SCHEMA back at `hindsight` does NOT "restore" anything —
+# it rolls the fleet's memory back ~3 months and hides 855 documents.
+# `hindsight` is owned by role godcrm; `hindsight_v2` by role hindsight_api,
+# and role hindsight_api has search_path=hindsight_v2,public. Because
+# information_schema filters by privilege, querying as `godcrm` makes
+# hindsight_v2 look like it has 0 tables. It does not — query as postgres.
 #
 # host networking → reaches host Postgres on 127.0.0.1:5432; API binds 127.0.0.1:5100
 # (loopback only, unexposed). The native CRM reaches it at http://127.0.0.1:5100.
@@ -10,15 +21,22 @@ name: hindsight
 
 services:
   hindsight:
-    image: ${HINDSIGHT_IMAGE:-ghcr.io/holetron/hindsight-mempalace:latest}
+    # Renamed 2026-08-24 (twice): first off someone else's taxonomy, then onto
+    # the artifact name from the product/artifact split — RCLL is the product,
+    # fleet-memory is the repository, the npm package and this image.
+    # Retag only — same digest sha256:9808a9cf. The legacy tag still exists locally
+    # so an older HINDSIGHT_IMAGE pin keeps resolving; nothing is pushed to a
+    # registry (that mint is still gated).
+    image: ${HINDSIGHT_IMAGE:-ghcr.io/holetron-lab/fleet-memory:latest}
     restart: unless-stopped
     network_mode: host
     environment:
       HINDSIGHT_API_DATABASE_URL: ${HINDSIGHT_DB_URL}
       HINDSIGHT_API_MIGRATION_DATABASE_URL: ${HINDSIGHT_DB_URL_PSYCOPG}
-      # Embedded topology, clean rebuild: fresh namespace next to the legacy
-      # `hindsight` schema (kept as backup). Image's own alembic lineage builds
-      # memory_units + pgvector here from its base migration.
+      # The 2026-06-29 clean rebuild DID land: hindsight_v2 is the live
+      # namespace, built by the image's own alembic lineage (memory_units +
+      # pgvector), and `hindsight` is the frozen pre-rebuild archive.
+      # Set explicitly in hindsight.env too — do not rely on this default alone.
       HINDSIGHT_API_DATABASE_SCHEMA: ${HINDSIGHT_SCHEMA:-hindsight_v2}
       HINDSIGHT_API_HOST: "127.0.0.1"
       HINDSIGHT_API_PORT: "5100"

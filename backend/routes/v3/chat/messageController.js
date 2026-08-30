@@ -24,6 +24,9 @@ import { getAutoRespondAgents, shouldAutoRespondWithAI, getDefaultAgentForConver
 // ADR-0057-A WP-B — UNION _inflight_runs ∪ agent_jobs for the presence array.
 // Adds reason/resume_at/paused_at; older agent_jobs-only fields stay populated.
 import { queryActiveInflight } from '../../../services/inflight/queryActive.js';
+// ADR-185 — backend-authoritative language detection + per-message translation.
+import { detectLanguage } from '../../../utils/detectLanguage.js';
+import { translateMessageText, isSupportedTargetLang } from '../../../services/translate/translateMessage.js';
 
 // ADR-0031 WP-20+21 (T-141237): content_type whitelist for POST /messages.
 // Adds 'widget_embed' so agents/users can embed live mini-widgets in chat.
@@ -191,15 +194,21 @@ export default function registerMessageRoutes(router) {
       if (replyToCheck.value) metadata.reply_to = replyToCheck.value;
       const metadataJson = Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : '{}';
 
+      // ADR-185 — detect the original language backend-side (authoritative,
+      // cannot be spoofed by a client). Written to `detected_lang`; the
+      // matching content_<lang> slot is left empty (the original already
+      // carries it in `content`).
+      const detectedLang = detectLanguage(content);
+
       // ADR-0068 WP-B4 — sender_id ALWAYS the real user (audit trail). Persona
       // ships via sender_kind + sender_space_id, never by overwriting sender_id.
       let result;
       if (isPostgres()) {
-        result = await dbRun(`INSERT INTO messages (conversation_id, sender_id, role, content, content_type, mentions, attachments, parent_id, metadata, sender_kind, sender_space_id, created_at) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9::jsonb, $10, $11, NOW())`,
-          [id, userId, role, content, content_type, mentionsJson, attachmentsJson, parent_id || null, metadataJson, senderKind, senderSpaceId]);
+        result = await dbRun(`INSERT INTO messages (conversation_id, sender_id, role, content, content_type, mentions, attachments, parent_id, metadata, sender_kind, sender_space_id, detected_lang, created_at) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9::jsonb, $10, $11, $12, NOW())`,
+          [id, userId, role, content, content_type, mentionsJson, attachmentsJson, parent_id || null, metadataJson, senderKind, senderSpaceId, detectedLang]);
       } else {
-        result = await dbRun(`INSERT INTO messages (conversation_id, sender_id, role, content, content_type, mentions, attachments, parent_id, metadata, sender_kind, sender_space_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-          [id, userId, role, content, content_type, mentionsJson, attachmentsJson, parent_id || null, metadataJson, senderKind, senderSpaceId]);
+        result = await dbRun(`INSERT INTO messages (conversation_id, sender_id, role, content, content_type, mentions, attachments, parent_id, metadata, sender_kind, sender_space_id, detected_lang, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+          [id, userId, role, content, content_type, mentionsJson, attachmentsJson, parent_id || null, metadataJson, senderKind, senderSpaceId, detectedLang]);
       }
 
       const messageId = result.lastInsertRowid;
@@ -842,6 +851,108 @@ export default function registerMessageRoutes(router) {
     } catch (err) {
       apiLogger.error({ err }, 'Error getting full message');
       return error(res, 'GET_FULL_MESSAGE_ERROR', err.message, 500);
+    }
+  });
+
+  // ADR-185 — POST /messages/:messageId/translate { target_lang, force? }
+  // Translate one message into target_lang via the conversation's agent and
+  // persist it on the message row (content_<lang> + translation_meta). Shared:
+  // "one user translates, everyone on that language reads it" — the result
+  // lives on the message, so any client with myLang === target_lang reads it.
+  // Idempotent: an existing translation is returned without re-calling the
+  // agent unless `force` is passed.
+  router.post('/messages/:messageId/translate', requireAuth, async (req, res) => {
+    try {
+      const { messageId } = req.params;
+      const { target_lang, force = false } = req.body || {};
+
+      // Whitelist the target: this also makes the `content_<lang>` column name
+      // safe to interpolate (only the 15 known codes ever reach the SQL).
+      if (!isSupportedTargetLang(target_lang)) {
+        return badRequest(res, `invalid target_lang "${target_lang}" — must be one of the supported language codes`);
+      }
+      const col = `content_${target_lang}`;
+
+      const message = await dbGet(
+        isPostgres()
+          ? `SELECT id, conversation_id, content, detected_lang, translation_meta, ${col} AS existing FROM messages WHERE id = $1`
+          : `SELECT id, conversation_id, content, detected_lang, translation_meta, ${col} AS existing FROM messages WHERE id = ?`,
+        [messageId]
+      );
+      if (!message) return notFound(res, 'Message not found');
+
+      const priorMeta = (typeof message.translation_meta === 'string'
+        ? safeJsonParse(message.translation_meta, {})
+        : (message.translation_meta || {})) || {};
+
+      // Idempotent short-circuit — someone already translated this into target_lang.
+      if (message.existing && !force) {
+        return success(res, {
+          id: message.id,
+          conversation_id: message.conversation_id,
+          target_lang,
+          detected_lang: message.detected_lang || null,
+          [col]: message.existing,
+          translation_meta: priorMeta,
+          cached: true,
+        });
+      }
+
+      // No point translating into the language the original is already in.
+      if (message.detected_lang && message.detected_lang === target_lang) {
+        return badRequest(res, `message is already in "${target_lang}" (its original language)`);
+      }
+
+      const result = await translateMessageText({
+        conversationId: message.conversation_id,
+        sourceText: message.content,
+        targetLang: target_lang,
+      });
+
+      if (!result.success) {
+        // no_agent → 422 (configuration gap the caller must fix); everything
+        // else is an upstream/model failure → 502.
+        const status = result.error === 'no_agent' ? 422 : (result.error === 'empty_source' ? 400 : 502);
+        return error(res, `TRANSLATE_${(result.error || 'ERROR').toUpperCase()}`, result.message, status);
+      }
+
+      const nextMeta = {
+        ...priorMeta,
+        [target_lang]: {
+          by: result.agent.row_id || null,
+          actor_type: 'agent',
+          agent_id: result.agent.row_id || null,
+          agent_name: result.agent.name || null,
+          requested_by: req.user.userId,
+          at: new Date().toISOString(),
+        },
+      };
+      const nextMetaJson = JSON.stringify(nextMeta);
+
+      if (isPostgres()) {
+        await dbRun(
+          `UPDATE messages SET ${col} = $1, translation_meta = $2::jsonb, updated_at = NOW() WHERE id = $3`,
+          [result.text, nextMetaJson, messageId]
+        );
+      } else {
+        await dbRun(
+          `UPDATE messages SET ${col} = ?, translation_meta = ?, updated_at = datetime('now') WHERE id = ?`,
+          [result.text, nextMetaJson, messageId]
+        );
+      }
+
+      return success(res, {
+        id: message.id,
+        conversation_id: message.conversation_id,
+        target_lang,
+        detected_lang: message.detected_lang || null,
+        [col]: result.text,
+        translation_meta: nextMeta,
+        cached: false,
+      });
+    } catch (err) {
+      apiLogger.error({ err, messageId: req.params.messageId }, 'ADR-185: translate message failed');
+      return error(res, 'TRANSLATE_MESSAGE_ERROR', err.message, 500);
     }
   });
 

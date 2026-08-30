@@ -19,6 +19,21 @@ export async function up(knex) {
     return;
   }
 
+  // From-scratch guard (ADR-187 Finding #2). The legacy plaintext `token`
+  // column was never created by a migration — it exists only on master A via
+  // manual DDL drift (011 creates webhooks without it). On a fresh DB there is
+  // nothing to backfill; the table is empty, so enforce the target NOT NULL
+  // shape directly and return.
+  if (!(await knex.schema.hasColumn('webhooks', 'token'))) {
+    await knex.raw(`ALTER TABLE webhooks ALTER COLUMN token_prefix SET NOT NULL`);
+    await knex.raw(`ALTER TABLE webhooks ALTER COLUMN token_hash   SET NOT NULL`);
+    console.log(
+      '[Migration 070] webhooks.token absent (fresh DB) — no legacy tokens to ' +
+        'backfill; enforced NOT NULL on empty table (no-op backfill).',
+    );
+    return;
+  }
+
   const rows = await knex.raw(`SELECT id, token FROM webhooks`).then(r => r.rows);
 
   let backfilled = 0;

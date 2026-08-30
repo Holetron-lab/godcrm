@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { logger } from '@/shared/utils/logger';
+import { showToast } from '@/shared/hooks/useToast';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
@@ -286,8 +287,15 @@ export function WidgetViewPage() {
       await tablesApi.deleteRow(String(widget.config.table_id), cardId);
       await queryClient.invalidateQueries({ queryKey: ['widget-data', widgetId] });
       await refetchData();
+      showToast('Тикет удалён', 'success');
     } catch (error) {
       logger.error('Failed to delete card:', error);
+      const msg = error instanceof Error ? error.message : '';
+      const forbidden = /\b403\b|forbidden|permission|прав/i.test(msg);
+      showToast(
+        forbidden ? 'Нет прав на удаление этого тикета' : 'Не удалось удалить тикет',
+        'error',
+      );
     }
   };
 
@@ -422,7 +430,9 @@ export function WidgetViewPage() {
       case 'chart_widget':
         return <ChartWidget {...props} />;
       case 'gallery_widget':
-        return <GalleryWidget {...props} onCardClick={(card) => handleCardDoubleClick(card, 'details')} />;
+        // columnsInfo is what lets the gallery find the state column on its own —
+        // without it archived cards never sink and never go grey.
+        return <GalleryWidget {...props} columnsInfo={columnsInfo} onCardClick={(card) => handleCardDoubleClick(card, 'details')} />;
       case 'number_widget':
         return <NumberWidget {...props} />;
       case 'task_list':

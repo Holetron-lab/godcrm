@@ -107,12 +107,31 @@ export function SettingsPanelContent(d: PanelContentDeps) {
 
         <div className="pt-2 border-t border-[var(--border-secondary)]">
           <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Агент по умолчанию</h4>
-          <select value={d.defaultAgentId || ''} onChange={(e) => d.saveDefaultAgent(e.target.value ? Number(e.target.value) : null)} disabled={d.isSavingDefaultAgent || !d.isAdminOrOwner}
-            className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50">
-            <option value="">— Не выбран —</option>
-            {d.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.icon || '🤖'} {agent.name}</option>)}
-          </select>
+          <p className="text-[10px] text-[var(--text-tertiary)] mb-2">Отвечает на сообщения по умолчанию</p>
+          <div className="flex items-center gap-2">
+            <select value={d.defaultAgentId || ''} onChange={(e) => d.saveDefaultAgent(e.target.value ? Number(e.target.value) : null)} disabled={d.isSavingDefaultAgent || !d.isAdminOrOwner}
+              className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50">
+              <option value="">— Не выбран —</option>
+              {d.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.icon || '🤖'} {agent.name}</option>)}
+            </select>
+            {d.isSavingDefaultAgent && <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)] flex-shrink-0" />}
+          </div>
         </div>
+
+        {d.onTranslationAgentChange && (
+        <div className="pt-2 border-t border-[var(--border-secondary)]">
+          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Агент перевода</h4>
+          <p className="text-[10px] text-[var(--text-tertiary)] mb-2">Переводит сообщения чата между языками</p>
+          <div className="flex items-center gap-2">
+            <select value={d.translationAgentId || ''} onChange={(e) => d.onTranslationAgentChange!(e.target.value ? Number(e.target.value) : null)} disabled={d.isSavingTranslationAgent || !d.isAdminOrOwner}
+              className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50">
+              <option value="">— Не выбран —</option>
+              {d.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.icon || '🤖'} {agent.name}</option>)}
+            </select>
+            {d.isSavingTranslationAgent && <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)] flex-shrink-0" />}
+          </div>
+        </div>
+        )}
 
         {d.onSummaryAgentChange && (
         <div className="pt-2 border-t border-[var(--border-secondary)]">

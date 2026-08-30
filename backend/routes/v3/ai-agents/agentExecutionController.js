@@ -104,11 +104,19 @@ router.post('/run', async (req, res) => {
         model, messages, systemPrompt: fullSystemPrompt, maxTokens: resolvedMaxTokens
       });
       responseText = cliResult.content;
-      usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+      // Real numbers from the CLI's --usage-output-file, not zeros; and the
+      // model the CLI reported running, not the one we requested.
+      usage = {
+        prompt_tokens: cliResult.usage?.promptTokens || 0,
+        completion_tokens: cliResult.usage?.completionTokens || 0,
+        total_tokens: cliResult.usage?.totalTokens || 0
+      };
+      const copilotModelUsed = cliResult.model || model;
       if (conversationId && responseText) {
         await saveStepMessage(conversationId, {
           content: responseText, contentType: 'text', role: 'assistant',
-          senderType: 'agent', agentId, modelUsed: model
+          senderType: 'agent', agentId, modelUsed: copilotModelUsed,
+          tokensIn: usage.prompt_tokens, tokensOut: usage.completion_tokens
         });
       }
     } else if (isClaudeCode) {

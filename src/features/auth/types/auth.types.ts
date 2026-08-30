@@ -5,7 +5,13 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
-  role: 'owner' | 'admin' | 'member';
+  role: 'owner' | 'admin' | 'member' | 'viewer';
+  /**
+   * ADR-188 Block F4 — the user's own referral code, surfaced by `GET /auth/me`.
+   * Optional: absent on stale persisted sessions from before F4 shipped; the
+   * Settings referral section refetches `/auth/me` to stay correct.
+   */
+  referral_code?: string | null;
 }
 
 export interface AuthState {
@@ -32,6 +38,16 @@ export const registerSchema = z.object({
     .toLowerCase()
     .email('invalid email'),
   password: z.string().min(8, 'minimum 8 characters'),
+  // ADR-183-A — inviter's referral code. Named format `slug-suffix` (lowercase),
+  // usually autofilled from the `?ref=<code>` deep-link but editable.
+  referralCode: z
+    .string()
+    .trim()
+    .max(48, 'referral code is too long')
+    .optional()
+    .or(z.literal('')),
+  // Shared campaign / Tier-B unlock code (uppercase). Rendered only when the
+  // owner-controlled `promo_enabled` flag is on (ADR-183-A D6).
   promoCode: z
     .string()
     .trim()
@@ -57,6 +73,13 @@ export interface RegisterPayload {
   signup_source: string;
   signup_referrer: string | null;
   user_agent: string;
+  /**
+   * ADR-183 Block C / ADR-183-A — inviter's referral code. Prefilled from the
+   * `?ref=<code>` deep-link into the visible field, editable before submit.
+   * Best-effort: unknown or absent codes resolve to `referred_by = NULL`
+   * server-side, never blocking the sign-up.
+   */
+  referral_code?: string | null;
 }
 
 export type AuthResponse = ApiResponse<{ accessToken: string; user: AuthUser }>;

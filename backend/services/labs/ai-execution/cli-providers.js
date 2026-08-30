@@ -14,6 +14,8 @@ import { killProcessTree, trackChildProcess, untrackChildProcess } from './proce
 // Computed once at module load (cli-providers.js → ../../../../scripts/).
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const AGENT_PERMISSION_HOOK = resolvePath(__dirname, '../../../../scripts/agent-permission-hook.js');
+// ADR-0181 — Stop hook that frees this loop's write-reservations at turn end.
+const AGENT_RESERVATION_RELEASE_HOOK = resolvePath(__dirname, '../../../../scripts/agent-reservation-release-hook.js');
 
 /**
  * Execute AI request using Claude Code CLI
@@ -85,11 +87,18 @@ export async function executeClaudeCode(params) {
     if (agentPermsMode === 'bypass') {
       args.push('--dangerously-skip-permissions');
     } else {
+      // ADR-0181: the Stop hook releases the reservations this worker took.
+      // Each turn is a fresh `claude -p` with a NEW session UUID, so without it
+      // the lock outlives the turn and the same agent's next turn is denied by
+      // its own reservation for the full TTL.
       const hookSettings = {
         hooks: {
           PreToolUse: [{
             matcher: '*',
             hooks: [{ type: 'command', command: `node ${AGENT_PERMISSION_HOOK}` }],
+          }],
+          Stop: [{
+            hooks: [{ type: 'command', command: `node ${AGENT_RESERVATION_RELEASE_HOOK}` }],
           }],
         },
       };
@@ -206,6 +215,12 @@ export async function executeClaudeCode(params) {
     let stderr = '';
     let finalResult = null;
     let lastAssistantText = ''; // Fallback: capture last text block from assistant events
+    // Actual model the CLI ran on. The requested model (`model` param) is NOT it:
+    // CLAUDE_FLEET_MODEL overrides the agent's stored id at spawn (see above), so
+    // reporting the request back made every job row claim the fleet's previous
+    // model. The `system/init` event is the CLI's own statement of what it
+    // resolved — the only in-band source of truth.
+    let initModel = null;
 
     child.stdout.on('data', (chunk) => {
       buffer += chunk.toString();
@@ -219,6 +234,10 @@ export async function executeClaudeCode(params) {
           // Fire callback for real-time step saving
           if (onEvent) {
             try { onEvent(event); } catch { /* ignore callback errors */ }
+          }
+          // Capture the model the CLI actually resolved (stream-json init event)
+          if (event.type === 'system' && event.subtype === 'init' && typeof event.model === 'string' && event.model) {
+            initModel = event.model;
           }
           // Capture last assistant text for fallback
           if (event.type === 'assistant' && event.message?.content) {
@@ -268,6 +287,9 @@ export async function executeClaudeCode(params) {
         try {
           const event = JSON.parse(buffer);
           if (onEvent) { try { onEvent(event); } catch { /* */ } }
+          if (event.type === 'system' && event.subtype === 'init' && typeof event.model === 'string' && event.model) {
+            initModel = event.model;
+          }
           if (event.type === 'result') finalResult = event;
         } catch { /* */ }
       }
@@ -302,7 +324,19 @@ export async function executeClaudeCode(params) {
         apiLogger.warn({ code, context: 'executeClaudeCode' }, 'CLI exited with non-zero code and empty result — using fallback content');
       }
 
-      apiLogger.info({ contentLength: content.length, turns: finalResult?.num_turns }, 'Claude Code CLI completed');
+      // Resolve the model actually used: CLI init event first, then the result
+      // event's per-model usage map, and only then the requested id as a last
+      // resort (flagged via modelSource so callers can tell a fact from a guess).
+      const usageModel = finalResult?.modelUsage && typeof finalResult.modelUsage === 'object'
+        ? Object.keys(finalResult.modelUsage)[0] || null
+        : null;
+      const actualModel = initModel || usageModel || null;
+      const modelSource = initModel ? 'cli_init' : (usageModel ? 'cli_result' : 'requested');
+
+      apiLogger.info({
+        contentLength: content.length, turns: finalResult?.num_turns,
+        requestedModel: model || null, actualModel, modelSource,
+      }, 'Claude Code CLI completed');
 
       resolve({
         content,
@@ -311,7 +345,9 @@ export async function executeClaudeCode(params) {
           completionTokens: usage.output_tokens || 0,
           totalTokens: (usage.input_tokens || 0) + (usage.output_tokens || 0)
         },
-        model: model || 'claude-sonnet-4',
+        model: actualModel || model || 'claude-sonnet-4',
+        requestedModel: model || null,
+        modelSource,
         finishReason: finalResult?.stop_reason || 'end_turn',
         costUsd: finalResult?.total_cost_usd || 0
       });
@@ -330,13 +366,24 @@ export async function executeClaudeCode(params) {
 }
 
 /**
- * Execute prompt via GitHub Copilot CLI (gh copilot)
- * Similar to executeClaudeCode but uses Copilot CLI binary.
- * Copilot outputs JSON-lines when using --output-format stream-json.
+ * Execute prompt via GitHub Copilot CLI (`copilot`, package @github/copilot).
+ *
+ * NOT the old `gh copilot` extension — that one only suggests shell commands.
+ * The standalone binary runs a full agent loop; non-interactive mode requires
+ * -p plus --allow-all-tools, and reports real usage via --usage-output-file.
+ *
+ * Usage JSON gives `currentModel` (what actually ran) and
+ * `totalPremiumRequestCost` (premium requests, NOT dollars). The dollar figure
+ * is derived with COPILOT_PREMIUM_REQUEST_USD (default 0.04 = GitHub's overage
+ * price) so cost_limit_usd has something to enforce; the raw request count is
+ * returned alongside as premiumRequestCost.
  */
 export async function executeCopilotCli(params) {
   const { model, messages, systemPrompt, maxTokens, onEvent } = params;
   const { spawn } = await import('child_process');
+  const fs = await import('fs');
+  const os = await import('os');
+  const path = await import('path');
 
   // Build prompt with conversation history (same as Claude Code)
   const nonSystemMessages = messages.filter(m => m.role !== 'system');
@@ -351,32 +398,59 @@ export async function executeCopilotCli(params) {
     fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\n[User]: ${lastMessage}`;
   }
 
+  // Copilot CLI has no --system-prompt flag. The previous version left this as
+  // an empty if-block, so the agent's system prompt was silently dropped.
+  if (systemPrompt) {
+    fullPrompt = `<system_instructions>\n${systemPrompt}\n</system_instructions>\n\n${fullPrompt}`;
+  }
+
   return new Promise((resolve, reject) => {
-    // gh copilot -- -p "prompt" --allow-all-tools --model <model> -s
+    const usageFile = path.join(
+      os.tmpdir(),
+      `copilot-usage-${Date.now()}-${Math.random().toString(36).slice(2)}.json`
+    );
+
+    // copilot -p "prompt" --allow-all-tools -s --model <model>
     const copilotArgs = [
-      'copilot', '--',
       '-p', fullPrompt,
       '--allow-all-tools',
       '--allow-all-paths',
-      '-s' // silent — output only agent response
+      '-s', // silent — output only agent response
+      '--no-color',
+      '--log-level', 'none',
+      '--usage-output-file', usageFile
     ];
 
+    // Copilot model ids are dotted (claude-haiku-4.5, gpt-5-mini) — pass through
+    // verbatim, no aliasing. An unknown id makes the CLI exit non-zero with
+    // 'Model "X" from --model flag is not available.' on stderr.
     if (model) {
       copilotArgs.push('--model', model);
     }
 
-    if (systemPrompt) {
-      // Copilot doesn't have --system-prompt, prepend to prompt
-      // Already handled by fullPrompt construction
-    }
+    const copilotBin = process.env.COPILOT_CLI_BIN || 'copilot';
 
-    apiLogger.info({ model, promptLen: fullPrompt.length }, 'Spawning GitHub Copilot CLI');
+    apiLogger.info({
+      model: model || null,
+      promptLen: fullPrompt.length,
+      systemPromptLength: systemPrompt ? systemPrompt.length : 0,
+      bin: copilotBin,
+    }, 'Spawning GitHub Copilot CLI');
 
-    const child = spawn('gh', copilotArgs, {
+    // Classic PATs (ghp_) are rejected by Copilot; the CLI must fall through to
+    // the OAuth token in ~/.config/gh/hosts.yml. Strip any inherited token vars.
+    const childEnv = { ...process.env, TERM: 'dumb', NO_COLOR: '1' };
+    delete childEnv.GH_TOKEN;
+    delete childEnv.GITHUB_TOKEN;
+    delete childEnv.GH_ENTERPRISE_TOKEN;
+
+    const child = spawn(copilotBin, copilotArgs, {
       cwd: process.cwd(),
-      env: { ...process.env, TERM: 'dumb', NO_COLOR: '1' },
-      stdio: ['ignore', 'pipe', 'pipe']
+      env: childEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true, // process group — kill MCP children together on timeout
     });
+    child.unref();
 
     let stdout = '';
     let stderr = '';
@@ -384,12 +458,26 @@ export async function executeCopilotCli(params) {
     child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
     child.stderr.on('data', (data) => { stderr += data.toString(); });
 
+    const readUsage = () => {
+      try {
+        const raw = fs.readFileSync(usageFile, 'utf-8');
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      } finally {
+        try { fs.unlinkSync(usageFile); } catch { /* ignore */ }
+      }
+    };
+
     child.on('error', (err) => {
+      try { fs.unlinkSync(usageFile); } catch { /* ignore */ }
       apiLogger.error({ err }, 'Failed to spawn Copilot CLI');
       reject(new Error(`Failed to spawn Copilot CLI: ${err.message}`));
     });
 
     child.on('close', (code) => {
+      const usageJson = readUsage();
+
       if (code !== 0 && !stdout.trim()) {
         apiLogger.warn({ code, stderr }, 'Copilot CLI exited with non-zero code');
         reject(new Error(`Copilot CLI exited with code ${code}: ${stderr}`));
@@ -397,14 +485,44 @@ export async function executeCopilotCli(params) {
       }
 
       const content = stdout.trim();
-      apiLogger.info({ contentLength: content.length }, 'Copilot CLI completed');
+
+      // Sum per-model token metrics; the top-level lastCall* fields only cover
+      // the final API call, which undercounts any multi-turn tool loop.
+      let promptTokens = 0;
+      let completionTokens = 0;
+      for (const m of Object.values(usageJson?.modelMetrics || {})) {
+        promptTokens += m?.usage?.inputTokens || 0;
+        completionTokens += m?.usage?.outputTokens || 0;
+      }
+
+      const premiumRequestCost = usageJson?.totalPremiumRequestCost ?? null;
+      const usdPerPremiumRequest = Number(process.env.COPILOT_PREMIUM_REQUEST_USD || 0.04);
+      const actualModel = usageJson?.currentModel || null;
+
+      apiLogger.info({
+        contentLength: content.length,
+        model: actualModel || model || null,
+        modelSource: actualModel ? 'cli_usage' : 'requested',
+        premiumRequestCost,
+        promptTokens,
+        completionTokens,
+      }, 'Copilot CLI completed');
 
       resolve({
         content,
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-        model: model || 'claude-sonnet-4.5',
+        usage: {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        },
+        // Fact from the CLI's own usage report, not the requested id — the same
+        // trap that made agent_jobs.result_metadata.model lie on the Claude path.
+        model: actualModel || model || null,
+        modelSource: actualModel ? 'cli_usage' : 'requested',
+        requestedModel: model || null,
+        premiumRequestCost,
         finishReason: 'end_turn',
-        costUsd: 0
+        costUsd: premiumRequestCost != null ? premiumRequestCost * usdPerPremiumRequest : 0
       });
     });
 
@@ -412,7 +530,8 @@ export async function executeCopilotCli(params) {
     const CLI_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
     const timeout = setTimeout(() => {
       apiLogger.warn('Copilot CLI timeout reached (30 min), killing process');
-      child.kill('SIGTERM');
+      killProcessTree(child.pid, child);
+      try { fs.unlinkSync(usageFile); } catch { /* ignore */ }
       reject(new Error('Copilot CLI timeout (30 min)'));
     }, CLI_TIMEOUT_MS);
 

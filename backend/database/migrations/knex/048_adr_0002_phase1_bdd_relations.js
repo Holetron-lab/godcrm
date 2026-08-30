@@ -235,7 +235,33 @@ function writeReport(stats) {
   return file;
 }
 
+// From-scratch guard (ADR-187 Finding #2).
+// This migration only upgrades relation metadata on the Tickets(1708) + BDD
+// (7255/7256/7258) logical tables. Those exist solely as application data on
+// master A — a fresh DB (community box like pro.hltrn.cc, CI-from-empty) never
+// has them, so every table_columns insert below would violate
+// table_columns_table_id_foreign (FK → universal_tables). When the FK-target
+// logical tables are absent the whole migration is inapplicable → clean no-op.
+async function relationTargetTablesPresent(knex) {
+  // Only 1708 (Tickets) and 7256 (bdd_criteria) are hard FK dependencies —
+  // they are the two tables this migration inserts table_columns rows for.
+  const rows = await knex('universal_tables')
+    .whereIn('id', [TBL_TICKETS, TBL_BDD_CRITERIA])
+    .select('id');
+  const ids = new Set(rows.map((r) => r.id));
+  return ids.has(TBL_TICKETS) && ids.has(TBL_BDD_CRITERIA);
+}
+
 export async function up(knex) {
+  if (!(await relationTargetTablesPresent(knex))) {
+    // eslint-disable-next-line no-console
+    console.log(
+      '[048] Tickets(1708)/bdd_criteria(7256) logical tables absent (fresh DB) — ' +
+        'skipping BDD relation-metadata upgrade (no-op).',
+    );
+    return;
+  }
+
   // 1. A1.1 — add ticket_id metadata column
   await ensureTicketIdColumn(knex);
 

@@ -35,6 +35,7 @@ export function ExpandableCard({
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCornerConfirm, setShowCornerConfirm] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showPrioritySelect, setShowPrioritySelect] = useState(false);
   const [showTypeSelect, setShowTypeSelect] = useState(false);
@@ -194,10 +195,43 @@ export function ExpandableCard({
   return (
     <div
       style={cardBorderStyle}
-      className={`group bg-[var(--bg-primary)] rounded-lg border border-[var(--border-primary)] shadow-sm hover:shadow-md transition-all select-none ${
+      className={`group relative bg-[var(--bg-primary)] rounded-lg border border-[var(--border-primary)] shadow-sm hover:shadow-md transition-all select-none ${
         isDragging ? 'opacity-50 scale-105' : ''
       } ${isExpanded ? 'ring-2 ring-[var(--color-primary-500)]/30' : ''}`}
     >
+      {/* ═══ Corner delete (✕ top-right) — only when deletion is allowed ═══ */}
+      {onDelete && (
+        <div className="absolute top-1 right-1 z-20" onClick={(e) => e.stopPropagation()}>
+          {showCornerConfirm ? (
+            <div className="flex items-center gap-0.5 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-md shadow-lg px-1.5 py-1">
+              <span className="text-[10px] text-red-400 mr-0.5 whitespace-nowrap">Удалить тикет?</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(); setShowCornerConfirm(false); }}
+                className="p-0.5 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition"
+                title="Подтвердить удаление"
+              >
+                <Check className="w-3 h-3" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowCornerConfirm(false); }}
+                className="p-0.5 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] transition"
+                title="Отмена"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowCornerConfirm(true); }}
+              className="p-0.5 rounded-full bg-[var(--bg-primary)]/80 text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-500/15 opacity-0 group-hover:opacity-100 focus:opacity-100 transition shadow-sm"
+              title="Удалить тикет"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* ═══ ROW 1: Emoji + Title ═══ */}
       <div className="flex items-start gap-2 p-2 pb-1.5 mb-[5px] border-b border-[var(--border-secondary)]">
         <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>

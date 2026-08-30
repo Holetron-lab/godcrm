@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { FormProvider } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useLoginForm } from '../hooks/useLogin';
 import { Input, Button } from '@/shared/components/ui';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
@@ -191,31 +191,26 @@ export const LoginForm = ({ onForgotPassword }: LoginFormProps) => {
             error={form.formState.errors.password?.message}
           />
           
-          {/* Forgot password link */}
           {displayError && (
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm text-[var(--color-error)]">{displayError}</p>
-              <button 
-                type="button"
-                onClick={onForgotPassword}
-                className="text-sm text-[var(--color-primary)] hover:underline whitespace-nowrap"
-              >
-                {t('auth.login.forgotPassword')}
-              </button>
-            </div>
+            <p className="text-sm text-[var(--color-error)]">{displayError}</p>
           )}
-          
-          {!displayError && (
-            <div className="flex justify-end">
-              <button 
-                type="button"
-                onClick={onForgotPassword}
-                className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:underline"
-              >
-                {t('auth.login.forgotPassword')}
-              </button>
-            </div>
-          )}
+
+          {/* Register + forgot password links */}
+          <div className="flex items-center justify-between gap-4 text-sm">
+            <Link
+              to="/auth/register"
+              className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:underline"
+            >
+              {t('auth.login.register')}
+            </Link>
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:underline"
+            >
+              {t('auth.login.forgotPassword')}
+            </button>
+          </div>
           
           <Button type="submit" loading={isLoading} className="w-full">
             {t('auth.login.submit')}

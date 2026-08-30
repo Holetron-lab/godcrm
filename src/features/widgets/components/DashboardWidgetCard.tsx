@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { logger } from '@/shared/utils/logger';
+import { showToast } from '@/shared/hooks/useToast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
 import { useAIChat } from '@/features/ai-chat/context/AIChatContext';
@@ -20,6 +21,7 @@ import { WelcomeDashboardWidget } from './presets/WelcomeDashboardWidget';
 import { getWidgetPreset } from '../registry/modulePresetRegistry';
 import { TableFilters } from '@/features/tables/components/TableFilters/TableFilters';
 import { CardDetailModal } from './modals/CardDetailModal';
+import { GalleryCardDetailModal } from './modals/GalleryCardDetailModal';
 import { AddRowModal } from '@/features/tables/components/modals/AddRowModal';
 import { tablesApi } from '@/features/tables/api/tablesApi';
 import { ticketsApi, isTicketsTable, resolveStateName } from '@/features/tickets/api/ticketsApi';
@@ -279,8 +281,15 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
       await tablesApi.deleteRow(String(widget.config.table_id), cardId);
       await queryClient.invalidateQueries({ queryKey: ['widget-data', widgetId] });
       await refetchData();
+      showToast('Тикет удалён', 'success');
     } catch (error) {
       logger.error('Failed to delete card:', error);
+      const msg = error instanceof Error ? error.message : '';
+      const forbidden = /\b403\b|forbidden|permission|прав/i.test(msg);
+      showToast(
+        forbidden ? 'Нет прав на удаление этого тикета' : 'Не удалось удалить тикет',
+        'error',
+      );
     }
   };
 
@@ -386,7 +395,9 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
       case 'chart_widget':
         return <ChartWidget {...props} />;
       case 'gallery_widget':
-        return <GalleryWidget {...props} onCardClick={(card) => handleCardDoubleClick(card, 'details')} />;
+        // columnsInfo is what lets the gallery find the state column on its own —
+        // without it archived cards never sink and never go grey.
+        return <GalleryWidget {...props} columnsInfo={columnsInfo} onCardClick={(card) => handleCardDoubleClick(card, 'details')} />;
       case 'number_widget':
         return <NumberWidget {...props} />;
       case 'task_list':
@@ -506,19 +517,31 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
 
       {/* Card Detail Modal */}
       {showCardDetailModal && selectedCard && widget?.config?.table_id && (
-        <CardDetailModal
-          isOpen={showCardDetailModal}
-          onClose={() => setShowCardDetailModal(false)}
-          card={selectedCard}
-          columns={tableColumns}
-          onSave={handleCardSave}
-          tableId={String(widget.config.table_id)}
-          initialTab={cardDetailInitialTab}
-          relationData={allRelationData}
-          onOpenChat={handleOpenRowChat}
-          onAttachToChat={handleAttachRowToChat}
-          onAttachToMessage={handleAttachRowToMessage}
-        />
+        widget.preset_name === 'gallery_widget' ? (
+          <GalleryCardDetailModal
+            isOpen={showCardDetailModal}
+            onClose={() => setShowCardDetailModal(false)}
+            card={selectedCard}
+            columns={tableColumns}
+            config={widget.config}
+            onSave={handleCardSave}
+            tableId={String(widget.config.table_id)}
+          />
+        ) : (
+          <CardDetailModal
+            isOpen={showCardDetailModal}
+            onClose={() => setShowCardDetailModal(false)}
+            card={selectedCard}
+            columns={tableColumns}
+            onSave={handleCardSave}
+            tableId={String(widget.config.table_id)}
+            initialTab={cardDetailInitialTab}
+            relationData={allRelationData}
+            onOpenChat={handleOpenRowChat}
+            onAttachToChat={handleAttachRowToChat}
+            onAttachToMessage={handleAttachRowToMessage}
+          />
+        )
       )}
 
       {/* Add Row Modal */}

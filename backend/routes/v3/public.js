@@ -18,6 +18,7 @@ import {
 } from '../../lib/publicScrubber.js';
 import { resolveLandingProject } from '../../services/public/resolveLandingProject.js';
 import { readPublicSidebarPrefs } from '../../services/SpaceVisibilityService.js';
+import { isPromoEnabled } from '../../services/starter-pack/StarterPackService.js';
 // NO-SIGNUP-MCP §B1: per-space public MCP mount. Imported here (not the other
 // way) so the route inherits this router's abuse-guard + rate-limit. The
 // gated read loaders publicMcp.js needs are exported from THIS file at the
@@ -41,6 +42,23 @@ router.use(publicRateLimit);
  * Streamable-HTTP uses GET (stream) + POST (messages), hence `router.all`.
  */
 router.all('/s/:slug/mcp', publicSpaceAccess, mcpPublicHandler);
+
+/**
+ * GET /api/v3/public/registration-config — ADR-183-A D6.
+ * Pre-auth bootstrap for the registration form. Exposes the owner-controlled promo
+ * toggle so the FE renders the promo field iff `promo_enabled === true`. The FE must
+ * NOT read `_app_settings` directly — this is the public contract. Not space-scoped
+ * (no publicSpaceAccess), but still behind the router-level abuse-guard + rate-limit.
+ */
+router.get('/registration-config', async (req, res) => {
+  try {
+    return success(res, { promo_enabled: await isPromoEnabled() });
+  } catch (err) {
+    apiLogger.error({ err }, 'registration-config failed');
+    // Fail-open to the flag's own default (promo ON) — never break the register page.
+    return success(res, { promo_enabled: true });
+  }
+});
 
 /**
  * GET /api/v3/public/s/:slug
@@ -164,6 +182,12 @@ async function loadPublicDocumentsRegistry(spaceId) {
       category: data.category || null,
       status: data.status || 'draft',
       order_index: data.order_index || 0,
+      // ADR-190-A D3: optional per-document SEO overrides. Additive, optional
+      // keys — note this loader also backs the anonymous MCP `list_documents`
+      // (services/mcp/publicMcp.js), so the MCP payload widens by these three.
+      seo_title: data.seo_title || '',
+      seo_description: data.seo_description || '',
+      seo_noindex: data.seo_noindex === true,
       created_at: row.created_at,
       updated_at: row.updated_at
     };

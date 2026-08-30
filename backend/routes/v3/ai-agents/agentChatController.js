@@ -105,10 +105,15 @@ router.post('/chat', async (req, res) => {
         model, messages, systemPrompt, maxTokens: resolvedMaxTokens
       });
       responseText = cliResult.content;
+      // Record the model the CLI reported running (usage JSON), not the one we
+      // asked for — same trap the Claude path had in agent_jobs.result_metadata.
+      const copilotModelUsed = cliResult.model || model;
       if (conversationId && responseText) {
         await saveStepMessage(conversationId, {
           content: responseText, contentType: 'text', role: 'assistant',
-          senderType: 'agent', agentId, modelUsed: model
+          senderType: 'agent', agentId, modelUsed: copilotModelUsed,
+          tokensIn: cliResult.usage?.promptTokens || 0,
+          tokensOut: cliResult.usage?.completionTokens || 0
         });
       }
     } else if (isClaudeCode) {

@@ -7,7 +7,7 @@
 
 import { dbGet, dbRun } from '../../../database/connection.js';
 import { getSpaceById } from '../../../services/SpaceService.js';
-import { getVisibility, setVisibility, setPassword, removePassword, setPublicSidebarPrefs } from '../../../services/SpaceVisibilityService.js';
+import { getVisibility, setVisibility, setPassword, removePassword, setPublicSidebarPrefs, setPublicSeoPrefs } from '../../../services/SpaceVisibilityService.js';
 import { apiLogger } from '../../../utils/logger.js';
 import { success, error, badRequest, notFound, forbidden } from '../../../utils/response.js';
 
@@ -107,31 +107,46 @@ export default function registerVisibilityRoutes(router) {
 
   /**
    * PUT /spaces/:id/visibility
-   * Update space visibility level.
-   * Body: { visibility: 'internal'|'open'|'external', customSlug?, clearSlug? }
+   * Update space visibility level and/or the per-space SEO settings (ADR-190-A AC-3).
+   * Body: { visibility?: 'internal'|'open'|'external', customSlug?, clearSlug?, public_seo? }
+   *
+   * `visibility` stays required unless `public_seo` is supplied on its own — the
+   * settings UI must be able to save an SEO toggle without echoing (and so
+   * risking a change to) the space's visibility level.
    */
   router.put('/:id/visibility', async (req, res) => {
     try {
       const result = await requireOwnerOrAdmin(req, res);
       if (!result) return;
 
-      const { visibility, customSlug, clearSlug } = req.body;
+      const { visibility, customSlug, clearSlug, public_seo } = req.body;
 
-      if (!visibility) {
+      if (public_seo !== undefined
+        && (public_seo === null || typeof public_seo !== 'object' || Array.isArray(public_seo))) {
+        return badRequest(res, 'public_seo must be an object', 'VALIDATION_ERROR');
+      }
+
+      if (!visibility && public_seo === undefined) {
         return badRequest(res, 'visibility is required', 'VALIDATION_ERROR');
       }
 
-      const validLevels = ['internal', 'open', 'external'];
-      if (!validLevels.includes(visibility)) {
-        return badRequest(res, `visibility must be one of: ${validLevels.join(', ')}`, 'VALIDATION_ERROR');
+      if (visibility) {
+        const validLevels = ['internal', 'open', 'external'];
+        if (!validLevels.includes(visibility)) {
+          return badRequest(res, `visibility must be one of: ${validLevels.join(', ')}`, 'VALIDATION_ERROR');
+        }
+
+        await setVisibility(result.space.id, visibility, {
+          customSlug,
+          clearSlugOnDowngrade: !!clearSlug
+        });
       }
 
-      const updated = await setVisibility(result.space.id, visibility, {
-        customSlug,
-        clearSlugOnDowngrade: !!clearSlug
-      });
+      if (public_seo !== undefined) {
+        await setPublicSeoPrefs(result.space.id, public_seo);
+      }
 
-      success(res, updated);
+      success(res, await getVisibility(result.space.id));
     } catch (err) {
       apiLogger.error('Error updating space visibility:', err);
 
@@ -235,6 +250,39 @@ export default function registerVisibilityRoutes(router) {
       success(res, { public_sidebar: merged });
     } catch (err) {
       apiLogger.error('Error updating public sidebar prefs:', err);
+      error(res, 'UPDATE_ERROR', err.message, 500);
+    }
+  });
+
+  /**
+   * PATCH /spaces/:id/public-seo  (ADR-190-A D1)
+   * Owner-managed per-space SEO settings — the write half, mirroring
+   * PATCH /public-sidebar above. Body is the partial `public_seo` shape;
+   * omitted keys keep their stored value.
+   *
+   * This exists so the settings UI can save an SEO field without naming
+   * `visibility` at all. PUT /visibility still accepts `public_seo` (AC-3),
+   * but it is a route about the access level: a client that echoes a cached
+   * `visibility` back with its SEO write can re-publish a space that was
+   * un-published in another tab. This route cannot touch the access level.
+   */
+  router.patch('/:id/public-seo', async (req, res) => {
+    try {
+      const authz = await requireOwnerOrAdmin(req, res);
+      if (!authz) return;
+
+      const prefs = req.body || {};
+      if (typeof prefs !== 'object' || Array.isArray(prefs)) {
+        return badRequest(res, 'body must be a public_seo object', 'VALIDATION_ERROR');
+      }
+
+      // setPublicSeoPrefs merges against what is stored and normalises through
+      // the reader, so no per-key defaulting is needed here.
+      const merged = await setPublicSeoPrefs(authz.space.id, prefs);
+
+      success(res, { public_seo: merged });
+    } catch (err) {
+      apiLogger.error('Error updating public SEO prefs:', err);
       error(res, 'UPDATE_ERROR', err.message, 500);
     }
   });

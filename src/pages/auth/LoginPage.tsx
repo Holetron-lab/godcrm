@@ -69,7 +69,7 @@ const LoginPage = () => {
               Telegram
             </a>
             <a
-              href="https://github.com/holetron"
+              href="https://github.com/Holetron-lab"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--color-primary)] transition-colors"
@@ -160,7 +160,7 @@ const LoginPage = () => {
             Telegram
           </a>
           <a
-            href="https://github.com/holetron"
+            href="https://github.com/Holetron-lab"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--color-primary)] transition-colors"

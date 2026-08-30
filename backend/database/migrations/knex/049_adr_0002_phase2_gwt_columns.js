@@ -130,7 +130,25 @@ async function addGwtToVerificationGuards(knex) {
     .update({ config: JSON.stringify(cfg), updated_at: knex.fn.now() });
 }
 
+// From-scratch guard (ADR-187 Finding #2). This migration only adds G/W/T
+// columns to the bdd_criteria(7256) logical table, which exists solely as
+// application data on master A. On a fresh DB (community box / CI-from-empty)
+// it is absent, so the table_columns inserts below would violate
+// table_columns_table_id_foreign → clean no-op when the table is missing.
+async function bddCriteriaTablePresent(knex) {
+  const r = await knex('universal_tables').where({ id: TBL_BDD_CRITERIA }).first();
+  return !!r;
+}
+
 export async function up(knex) {
+  if (!(await bddCriteriaTablePresent(knex))) {
+    // eslint-disable-next-line no-console
+    console.log(
+      '[049] bdd_criteria(7256) logical table absent (fresh DB) — skipping G/W/T column upgrade (no-op).',
+    );
+    return;
+  }
+
   const baseOrder = await shiftOrderIndexFromDescription(knex);
   await ensureGwtColumns(knex, baseOrder);
   await hideLegacyDescription(knex);

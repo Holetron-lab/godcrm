@@ -3,7 +3,7 @@
  */
 import { registerUser, loginUser } from '../../../services/AuthService.js';
 import { recordSignup } from '../../../services/SignupService.js';
-import { applyPromoUnlock } from '../../../services/starter-pack/StarterPackService.js';
+import { applyPromoUnlock, isPromoEnabled } from '../../../services/starter-pack/StarterPackService.js';
 import {
   respondSuccess, respondError,
   JWT_SECRET, REFRESH_COOKIE_NAME, ACCESS_TOKEN_TTL,
@@ -71,7 +71,7 @@ export default function registerCoreRoutes(router) {
   // POST /api/v2/auth/register
   router.post('/register', async (req, res) => {
     try {
-      const { email, password, name, promo_code, signup_source, signup_referrer, user_agent } = req.body;
+      const { email, password, name, promo_code, signup_source, signup_referrer, user_agent, community, referral_code } = req.body;
 
       // Validation
       if (!email || !password || !name) {
@@ -86,14 +86,27 @@ export default function registerCoreRoutes(router) {
         ? promo_code.trim().toUpperCase().slice(0, 32)
         : null;
 
-      // Register user (includes auto-create projects + ADR-0079 starter pack)
-      const user = await registerUser({ email, password, name });
+      // Register user (includes auto-create projects + ADR-0079 starter pack).
+      // ADR-183 Block A: `community: true` marks a street/community sign-up → viewer role.
+      // ADR-183 Block C: `referral_code` (if present) is the INVITER's code from the
+      // deep-link /start <code>; it is resolved to write-once `referred_by` inside
+      // registerUser. Unknown codes are ignored (best-effort attribution).
+      const user = await registerUser({
+        email, password, name,
+        communitySignup: community === true,
+        inviteCode: referral_code
+      });
 
       // ADR-0079 P4: MASTERMIND / MESHOK promo unlocks the Tier-B coding agent pack for this user.
       // Best-effort — never fail the request on unlock issues.
-      applyPromoUnlock(user.id, promoNormalized).catch((err) =>
-        authLogger.error({ err, userId: user.id }, 'applyPromoUnlock unhandled rejection')
-      );
+      // ADR-183-A D6: promo is owner-gated. Skip the unlock server-side when the owner has
+      // switched promo off (defence-in-depth — not just the FE hiding the field). The flag
+      // read only happens when a promo code was actually submitted, keeping the hot path lean.
+      if (promoNormalized && await isPromoEnabled()) {
+        applyPromoUnlock(user.id, promoNormalized).catch((err) =>
+          authLogger.error({ err, userId: user.id }, 'applyPromoUnlock unhandled rejection')
+        );
+      }
 
       // ADR-0070: mirror to Signups table 100045 + send welcome email (best-effort, fire-and-forget)
       recordSignup({
@@ -118,7 +131,9 @@ export default function registerCoreRoutes(router) {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role
+          role: user.role,
+          // ADR-183 Block C: the newcomer's own code to hand out (their invite link).
+          referral_code: user.referral_code
         },
         accessToken,
         refreshToken
@@ -129,6 +144,12 @@ export default function registerCoreRoutes(router) {
 
       if (error.message.includes('already exists')) {
         return respondError(res, 409, 'USER_EXISTS', 'User with this email already exists');
+      }
+
+      // ADR-183 Block F4 (enforce) — signup_mode gate rejected this sign-up: the box
+      // is invite-only or closed and this request carried no valid inviter code.
+      if (error.code === 'REGISTRATION_NOT_ALLOWED') {
+        return respondError(res, 403, 'REGISTRATION_NOT_ALLOWED', error.message);
       }
 
       return respondError(res, 500, 'REGISTRATION_FAILED', 'Failed to register user', error.message);

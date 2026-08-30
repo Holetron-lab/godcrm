@@ -36,7 +36,50 @@ import { buildToolList } from './services/mcp/buildToolList.js';
 // env fallback (e.g. bluesky_search → bluesky_handle/app_password) return
 // "not configured" even though the creds are present and decrypt fine.
 import secretsVault from './services/secrets/SecretsVault.js';
-import { getAdapter as getDbAdapter } from './database/connection.js';
+import { getAdapter as getDbAdapter, dbGet, safeJsonParse } from './database/connection.js';
+
+// ── Caller identity ────────────────────────────────────────────
+// This process is one CLI agent's bridge, so its identity is a property of the
+// process, not of a request — resolved once and reused.
+//
+// AGENT_ID is injected per child by the CLI provider that spawns the agent
+// (cli-providers.js), which makes it server-derived: the agent cannot choose
+// it. That is why it outranks MCP_AGENT_SLUG (launch config) and both outrank
+// a self-declared `author` tool argument.
+//
+// The lookup is a deliberate plain read, NOT resolveAgentUser(): that helper
+// find-or-creates the agent's user row, and a memory write is no reason to
+// mutate the users table.
+let cachedIdentity;
+async function resolveCallerIdentity() {
+  if (cachedIdentity !== undefined) return cachedIdentity;
+
+  const agentId = Number((process.env.AGENT_ID || '').trim());
+  if (Number.isFinite(agentId) && agentId > 0) {
+    try {
+      const row = await dbGet(
+        `SELECT tr.data
+           FROM table_rows tr
+           JOIN universal_tables ut ON tr.table_id = ut.id
+          WHERE ut.name = 'AI Agents' AND tr.id = $1`,
+        [agentId]
+      );
+      const data = row ? safeJsonParse(row.data, {}) : {};
+      const name = data.slug || data.name || null;
+      if (name) {
+        cachedIdentity = name;
+        console.error(`[godcrm-mcp] caller identity: ${name} (AGENT_ID=${agentId})`);
+        return cachedIdentity;
+      }
+      console.error(`[godcrm-mcp] AGENT_ID=${agentId} resolved to no agent row — falling back`);
+    } catch (err) {
+      console.error('[godcrm-mcp] agent identity lookup failed:', err?.message || err);
+    }
+  }
+
+  cachedIdentity = (process.env.MCP_AGENT_SLUG || '').trim() || null;
+  return cachedIdentity;
+}
 
 // ── Build tool list ────────────────────────────────────────────
 // SKIP_TOOLS + the OpenAI→MCP conversion now live in the shared builder so the
@@ -82,6 +125,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       spaceId: parseInt(process.env.MCP_SPACE_ID || '11', 10),
       source: 'mcp',
     };
+
+    // Author attribution for MCP/CLI callers. Threading the resolved identity
+    // as agentName makes it outrank a self-declared `author` argument, exactly
+    // as the in-CRM agent loop's identity does. Unresolvable → the tool falls
+    // back to the argument, and warns if there is none.
+    const callerIdentity = await resolveCallerIdentity();
+    if (callerIdentity) context.agentName = callerIdentity;
 
     const result = await executeTool(name, args || {}, 1, context);
 

@@ -1,5 +1,6 @@
 // System Table Service - Sync real database tables to universal_tables interface
 import { dbAll, dbGet } from '../database/connection.js';
+import { getMailColumns, MAIL_OPTIONAL_COLS } from './mail/schema.js';
 
 /**
  * Get data from real system tables and format as universal table rows
@@ -23,7 +24,10 @@ export async function getSystemTableData(syncTarget, projectId) {
 
   switch (syncTarget) {
     case 'users':
-      return await getUsersData();
+      // ADR-158 §P3 — users is a real space-scoped system table (like files):
+      // membership resolves from user_access_permissions (+owner), role = per-space
+      // access_level. Admin System Management (space 1) / no-space context = global stock.
+      return await getUsersData(spaceId, isAdminSystemSpace);
     case 'projects':
       return await getProjectsData(spaceId, isAdminSystemSpace);
     case 'spaces':
@@ -52,6 +56,9 @@ export async function getSystemTableData(syncTarget, projectId) {
       return await getWidgetsData();
     case '_inflight_runs':
       return await getInflightRunsData(spaceId, isAdminSystemSpace);
+    case 'mail_messages':
+      // ADR-158 §P3 — mail is ALWAYS space-scoped; no admin-global path.
+      return await getMailMessagesData(spaceId);
     default:
       throw new Error(`Unknown sync_target: ${syncTarget}`);
   }
@@ -68,7 +75,7 @@ export function getSystemTableColumns(syncTarget) {
       { id: 'id', name: 'id', displayName: 'ID', type: 'number', isRequired: true, orderIndex: 0 },
       { id: 'email', name: 'email', displayName: 'Email', type: 'email', isRequired: true, orderIndex: 1 },
       { id: 'name', name: 'name', displayName: 'Name', type: 'text', isRequired: true, orderIndex: 2 },
-      { id: 'role', name: 'role', displayName: 'Role', type: 'select', config: { options: [{ label: 'Owner', value: 'owner' }, { label: 'Admin', value: 'admin' }, { label: 'User', value: 'user' }] }, orderIndex: 3 },
+      { id: 'role', name: 'role', displayName: 'Role', type: 'select', config: { options: [{ label: 'Owner', value: 'owner' }, { label: 'Admin', value: 'admin' }, { label: 'Editor', value: 'editor' }, { label: 'Viewer', value: 'viewer' }, { label: 'User', value: 'user' }] }, orderIndex: 3 },
       { id: 'password_hash', name: 'password_hash', displayName: 'Password', type: 'password', isReadonly: true, orderIndex: 4 },
       { id: 'email_verified', name: 'email_verified', displayName: 'Email Verified', type: 'checkbox', orderIndex: 5 },
       { id: 'user_type', name: 'user_type', displayName: 'User Type', type: 'select', config: { options: [{ label: 'Human', value: 'human' }, { label: 'Agent', value: 'agent' }, { label: 'Bot', value: 'bot' }, { label: 'Service', value: 'service' }] }, orderIndex: 6 },
@@ -161,6 +168,27 @@ export function getSystemTableColumns(syncTarget) {
       { id: 'widget_type', name: 'widget_type', displayName: 'Type', type: 'text', isReadonly: true, orderIndex: 6 },
       { id: 'created_at', name: 'created_at', displayName: 'Created At', type: 'datetime', isReadonly: true, orderIndex: 7 },
       { id: 'updated_at', name: 'updated_at', displayName: 'Updated At', type: 'datetime', isReadonly: true, orderIndex: 8 }
+    ],
+    // ADR-158 §P3 Slice 1 — read-only mail header projection. Heavy body_text/
+    // body_html are deliberately omitted (list view needs headers only; full
+    // body stays behind the Mail UI). Every column isReadonly — writes are
+    // rejected at the mutate controller and edits go through the mail PATCH API.
+    mail_messages: [
+      { id: 'id', name: 'id', displayName: 'ID', type: 'number', isRequired: true, isReadonly: true, orderIndex: 0 },
+      { id: 'folder', name: 'folder', displayName: 'Folder', type: 'select', config: { options: [
+        { label: 'Inbox', value: 'inbox' }, { label: 'Sent', value: 'sent' },
+        { label: 'Drafts', value: 'drafts' }, { label: 'Archive', value: 'archive' },
+        { label: 'Trash', value: 'trash' } ] }, isReadonly: true, orderIndex: 1 },
+      { id: 'from_name', name: 'from_name', displayName: 'From Name', type: 'text', isReadonly: true, orderIndex: 2 },
+      { id: 'from_address', name: 'from_address', displayName: 'From', type: 'email', isReadonly: true, orderIndex: 3 },
+      { id: 'subject', name: 'subject', displayName: 'Subject', type: 'text', isReadonly: true, orderIndex: 4 },
+      { id: 'preview', name: 'preview', displayName: 'Preview', type: 'text', isReadonly: true, orderIndex: 5 },
+      { id: 'date', name: 'date', displayName: 'Date', type: 'datetime', isReadonly: true, orderIndex: 6 },
+      { id: 'is_read', name: 'is_read', displayName: 'Read', type: 'checkbox', isReadonly: true, orderIndex: 7 },
+      { id: 'starred', name: 'starred', displayName: 'Starred', type: 'checkbox', isReadonly: true, orderIndex: 8 },
+      { id: 'ticket_id', name: 'ticket_id', displayName: 'Ticket', type: 'number', isReadonly: true, orderIndex: 9 },
+      { id: 'linked_table_id', name: 'linked_table_id', displayName: 'Linked Table', type: 'number', isReadonly: true, orderIndex: 10 },
+      { id: 'linked_row_id', name: 'linked_row_id', displayName: 'Linked Row', type: 'number', isReadonly: true, orderIndex: 11 }
     ]
   };
 
@@ -168,9 +196,8 @@ export function getSystemTableColumns(syncTarget) {
 }
 
 // Data fetchers for each system table
-async function getUsersData() {
-  const users = await dbAll('SELECT id, email, name, role, password_hash, email_verified, user_type, managed_by_agent_table_id, managed_by_agent_row_id, created_at FROM users ORDER BY id');
-  return users.map(u => ({
+function mapUserRow(u) {
+  return {
     id: `user-${u.id}`,
     base_id: `USER${String(u.id).padStart(4, '0')}`,
     data: {
@@ -188,7 +215,34 @@ async function getUsersData() {
     created_at: u.created_at,
     updated_at: u.created_at,
     created_by: 'system'
-  }));
+  };
+}
+
+async function getUsersData(spaceId = null, isAdminSystemSpace = false) {
+  // No space context (or Admin System Management space) → global stock, unchanged.
+  if (!spaceId || isAdminSystemSpace) {
+    const users = await dbAll('SELECT id, email, name, role, password_hash, email_verified, user_type, managed_by_agent_table_id, managed_by_agent_row_id, created_at FROM users ORDER BY id');
+    return users.map(mapUserRow);
+  }
+
+  // Space-scoped: real membership from user_access_permissions (+owner). Source of
+  // truth for "who belongs to this space", NOT the drift-prone mirror. `role` carries
+  // the per-space access_level (owner/admin/editor/viewer) so labels/filters can split
+  // by role. Owner wins over any explicit uap row.
+  const space = await dbGet('SELECT owner_id FROM spaces WHERE id = ?', [spaceId]);
+  const ownerId = space?.owner_id || null;
+  const users = await dbAll(`
+    SELECT u.id, u.email, u.name, u.password_hash, u.email_verified, u.user_type,
+           u.managed_by_agent_table_id, u.managed_by_agent_row_id, u.created_at,
+           CASE WHEN u.id = ? THEN 'owner' ELSE uap.access_level END AS role
+    FROM users u
+    LEFT JOIN user_access_permissions uap
+           ON uap.user_id = u.id AND uap.space_id = ?
+    WHERE u.status != 'deleted'
+      AND ( u.id = ? OR (uap.user_id IS NOT NULL AND uap.access_level != 'denied') )
+    ORDER BY u.id
+  `, [ownerId, spaceId, ownerId]);
+  return users.map(mapUserRow);
 }
 
 async function getProjectsData(spaceId, isAdminSystemSpace = false) {
@@ -581,6 +635,138 @@ async function getInflightRunsData(spaceId, isAdminSystemSpace = false) {
     updated_at: r.updated_at,
     created_by: 'system'
   }));
+}
+
+// ADR-158 §P3 Slice 1 — expose mail_messages as a read-only system table.
+// Scoping: mail_messages carries a native `space_id`, so the filter is a plain
+// `WHERE space_id = ?` (no connector join needed). PII SAFETY: unlike
+// users/projects there is NO admin-global fallback — without a resolved space we
+// return nothing, so one space's mail can never bleed into another's grid.
+function mapMailRow(m) {
+  return {
+    id: `mail-${m.id}`,
+    base_id: `MAIL${String(m.id).padStart(6, '0')}`,
+    data: {
+      id: m.id,
+      folder: m.folder,
+      from_name: m.from_name,
+      from_address: m.from_address,
+      subject: m.subject,
+      preview: m.preview,
+      date: m.date,
+      is_read: m.is_read,
+      starred: m.starred,
+      ticket_id: m.ticket_id,
+      linked_table_id: m.linked_table_id,
+      linked_row_id: m.linked_row_id
+    },
+    created_at: m.date,
+    updated_at: m.date,
+    created_by: 'system'
+  };
+}
+
+// ADR-175 P1 §drift-guard — the projection is built per-call from the columns
+// that actually exist on this DB. On a copied DB missing migs 079/080 the optional
+// columns are substituted with a literal `NULL AS <col>`, so mapMailRow and the
+// response shape stay byte-identical and the facade degrades instead of 500-ing.
+const MAIL_BASE_SELECT = ['id', 'folder', 'from_name', 'from_address', 'subject',
+  'preview', 'date', 'is_read', 'ticket_id'];
+
+function mailSelect(cols) {
+  const proj = [...MAIL_BASE_SELECT];
+  for (const c of MAIL_OPTIONAL_COLS) proj.push(cols.has(c) ? c : `NULL AS ${c}`);
+  return `SELECT ${proj.join(', ')}\n    FROM mail_messages`;
+}
+
+async function getMailMessagesData(spaceId) {
+  if (!spaceId) return [];
+
+  const cols = await getMailColumns();
+  const rows = await dbAll(`
+    ${mailSelect(cols)}
+    WHERE space_id = ?
+    ORDER BY date DESC NULLS LAST, id DESC
+    LIMIT 1000
+  `, [spaceId]);
+
+  return rows.map(mapMailRow);
+}
+
+// ADR-175 P1 §push-down — the mail facade is the ONLY system table at business
+// scale (100k+ messages/account), so it cannot rely on the in-memory
+// search/filter/slice() path the small system tables use (users, widgets, …).
+// buildMailQuery is the PURE half (unit-tested, no DB): it turns the grid's
+// ?search / ?filter / ?page / ?limit into a parameterized WHERE + LIMIT/OFFSET,
+// whitelisting every column name so an attacker-controlled column can never reach
+// SQL, and escaping ILIKE wildcards. getMailMessagesPage runs it (COUNT + one page)
+// and rides idx_mail_messages_list (space_id, …, date DESC). table_rows is never touched.
+const MAIL_FILTERABLE = new Set([
+  'folder', 'is_read', 'starred', 'ticket_id', 'linked_table_id', 'linked_row_id', 'from_address'
+]);
+const MAIL_SEARCHABLE = ['from_name', 'from_address', 'subject', 'preview'];
+const escapeLike = (s) => String(s).replace(/[\\%_]/g, '\\$&');
+
+// availableColumns (drift-guard, ADR-175 P1): when provided, a filter on an
+// optional column absent from this DB (migs 079/080 not applied) is dropped rather
+// than emitted into SQL — otherwise `WHERE starred = ?` 500s on a copied DB. Left
+// null by callers/tests that don't probe → every whitelisted column is assumed
+// present (prior behaviour, keeps the pure unit suite unchanged).
+export function buildMailQuery({ spaceId, filter = null, search = null, searchColumns = null, page = 1, limit = 50, availableColumns = null } = {}) {
+  const where = ['space_id = ?'];
+  const params = [spaceId];
+
+  if (filter && typeof filter === 'object') {
+    for (const [col, val] of Object.entries(filter)) {
+      if (!MAIL_FILTERABLE.has(col)) continue;            // reject unknown/unsafe column names
+      if (availableColumns && !availableColumns.has(col)) continue;  // drift-guard: column absent on this DB
+      where.push(`${col} = ?`);
+      params.push(val);
+    }
+  }
+
+  if (search != null && String(search).length) {
+    let cols = MAIL_SEARCHABLE;
+    if (searchColumns) {
+      const requested = String(searchColumns).split(',').map((c) => c.trim());
+      cols = MAIL_SEARCHABLE.filter((c) => requested.includes(c));   // intersect with whitelist
+    }
+    if (cols.length) {
+      const like = `%${escapeLike(search)}%`;
+      where.push('(' + cols.map((c) => `${c} ILIKE ? ESCAPE '\\'`).join(' OR ') + ')');
+      cols.forEach(() => params.push(like));
+    }
+  }
+
+  const lim = Math.max(1, Math.min(Number(limit) || 50, 1000));
+  const pageNum = Math.max(1, Number(page) || 1);
+  const offset = (pageNum - 1) * lim;
+
+  return { whereSql: `WHERE ${where.join(' AND ')}`, params, limit: lim, offset };
+}
+
+export async function getMailMessagesPage(projectId, opts = {}) {
+  let spaceId = null;
+  if (projectId) {
+    const project = await dbGet('SELECT space_id FROM projects WHERE id = ?', [projectId]);
+    spaceId = project?.space_id || null;
+  }
+  if (!spaceId) return { rows: [], total: 0 };
+
+  const cols = await getMailColumns();
+  const { whereSql, params, limit, offset } = buildMailQuery({ spaceId, ...opts, availableColumns: cols });
+
+  const totalRow = await dbGet(`SELECT COUNT(*)::int AS total FROM mail_messages ${whereSql}`, params);
+  const total = totalRow?.total || 0;
+
+  const rows = await dbAll(`
+    ${mailSelect(cols)}
+    ${whereSql}
+    ORDER BY date DESC NULLS LAST, id DESC
+    LIMIT ? OFFSET ?
+  `, [...params, limit, offset]);
+
+  return { rows: rows.map(mapMailRow), total };
 }
 
 async function getAutomationLogsData() {

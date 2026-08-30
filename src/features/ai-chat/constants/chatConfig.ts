@@ -13,10 +13,14 @@ export const CHAT_CONFIG = {
   /** Page size for useConversationMessages hook — must match RAW_PAGE_SIZE */
   MESSAGE_PAGE_SIZE: 50,
   /** Scroll threshold for auto-scroll (px from bottom).
-   *  If user scrolled up more than this — do NOT auto-scroll on new messages. */
-  AUTO_SCROLL_THRESHOLD: 500,
-  /** Distance from bottom (px) at which scroll-to-bottom button appears */
-  SCROLL_BUTTON_THRESHOLD: 500,
+   *  If user scrolled up more than this — do NOT auto-scroll on new messages.
+   *  300px: once the user lifts even a few messages off the bottom to read, new
+   *  messages (incl. agent polling) stop yanking the viewport down. */
+  AUTO_SCROLL_THRESHOLD: 300,
+  /** Distance from bottom (px) at which scroll-to-bottom button appears.
+   *  Kept equal to AUTO_SCROLL_THRESHOLD so the "new messages ↓" button shows
+   *  exactly when auto-scroll disengages — no silent dead zone. */
+  SCROLL_BUTTON_THRESHOLD: 300,
   /** Pre-trigger distance for infinite scroll (px from top) */
   PREFETCH_THRESHOLD: 800,
 } as const;

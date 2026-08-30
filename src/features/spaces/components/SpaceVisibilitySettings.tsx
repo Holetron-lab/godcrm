@@ -13,6 +13,7 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { apiClient } from '@/shared/utils/apiClient';
 import { spacesApi } from '../api/spacesApi';
 import type { SpaceVisibility, SpaceVisibilityData } from '../types/space.types';
+import { SpaceSeoSettings } from './SpaceSeoSettings';
 import {
   Lock,
   Globe,
@@ -661,6 +662,13 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
               </div>
             )}
           </div>
+
+          {/* Search-engine settings — ADR-190-A */}
+          <SpaceSeoSettings
+            spaceId={spaceId}
+            hasPassword={!!visibilityData?.has_password}
+            value={visibilityData?.public_seo}
+          />
         </div>
       )}
     </div>

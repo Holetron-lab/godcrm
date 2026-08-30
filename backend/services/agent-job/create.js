@@ -583,6 +583,15 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
       return;
     }
 
+    // The model the run ACTUALLY used, not the one we asked for. CLAUDE_FLEET_MODEL
+    // overrides the agent's stored id at spawn, so `resolved.model` is the request
+    // and can differ from what the CLI resolved (it reported the whole fleet as the
+    // agent-row model regardless of the pin). executeClaudeCode now returns the
+    // model from the CLI's own `system/init` event plus `modelSource` saying whether
+    // that is a fact (`cli_init`/`cli_result`) or a fallback guess (`requested`).
+    const _actualModel = result?.model || resolved.model;
+    const _modelSource = result?.modelSource || 'requested';
+
     if (responseContent) {
       const _finalMsgId = await saveStepMessage(conversationId, {
         content: responseContent,
@@ -591,7 +600,7 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
         senderType: 'agent',
         agentId: agentRowId,
         senderId,
-        modelUsed: resolved.model,
+        modelUsed: _actualModel,
         tokensIn: result?.usage?.promptTokens || null,
         tokensOut: result?.usage?.completionTokens || null,
         metadata: messageMetadata,
@@ -626,7 +635,7 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
         senderType: 'agent',
         agentId: agentRowId,
         senderId,
-        modelUsed: resolved.model,
+        modelUsed: _actualModel,
         metadata: messageMetadata,
       });
     }
@@ -635,7 +644,9 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
     await completeJob(jobDbId, responseContent, {
       tokens: result?.usage || {},
       cost_usd: result?.costUsd || 0,
-      model: resolved.model,
+      model: _actualModel,
+      model_source: _modelSource,
+      requested_model: resolved.model || null,
       duration_ms: Date.now() - _startTime,
     });
 

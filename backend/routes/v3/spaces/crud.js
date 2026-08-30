@@ -250,6 +250,14 @@ export default function registerCrudRoutes(router) {
         return badRequest(res, 'type is required', 'VALIDATION_ERROR');
       }
 
+      // ADR-183 Block A: community viewers may not create spaces via the user route.
+      // This gates the *user-initiated* path ONLY — the system bootstrap path
+      // (registration → autoCreateDefaultProjects → createSpace service) does not go
+      // through this route, so a new community user's own default space still provisions.
+      if (req.user.role === 'viewer') {
+        return error(res, 'FORBIDDEN', 'Viewers cannot create spaces', 403);
+      }
+
       const space = await createSpace({
         owner_id: req.user.id,
         name,

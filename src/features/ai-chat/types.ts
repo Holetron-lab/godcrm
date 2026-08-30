@@ -107,6 +107,35 @@ export interface ChatMessage {
     approved_at?: string;
     [key: string]: unknown;
   };
+  // ADR-185 — chat message translation. Per-language translated bodies mirror
+  // the physical `messages.content_<lang>` columns; the original stays in
+  // `content`. Populated by POST /chat/messages/:id/translate and read
+  // client-side per the viewer's UI language. Absent/null = not translated to
+  // that language yet. Read via `getTranslation()` rather than by key so the
+  // dynamic column access stays in one typed place.
+  detected_lang?: string | null;
+  translation_meta?: Record<string, MessageTranslationProvenance> | null;
+  // Dynamic per-language content columns (`content_en`, `content_ru`, …).
+  // Kept as an index signature — the set is data-driven (CONTENT_LANGUAGES in
+  // shared/i18n/contentLanguages) and matches the DB's physical column shape.
+  [contentColumn: `content_${string}`]: string | null | undefined;
+}
+
+// ADR-185 — provenance for a single translation, stored in
+// `messages.translation_meta[lang]`. Who requested it, whether a human or agent
+// produced it, which agent, and when.
+export interface MessageTranslationProvenance {
+  by?: number;
+  actor_type?: 'human' | 'agent';
+  agent_id?: number | null;
+  at?: string;
+}
+
+// ADR-185 — read a message's translated body for `lang`, or null when absent.
+// Single choke-point for the dynamic `content_<lang>` column access.
+export function getTranslation(message: ChatMessage, lang: string): string | null {
+  const value = message[`content_${lang}`];
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 export interface ToolResult {

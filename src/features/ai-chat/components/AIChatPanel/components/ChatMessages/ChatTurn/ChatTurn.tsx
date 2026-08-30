@@ -1,7 +1,11 @@
 import React from 'react';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import type { ChatTurnProps, MessageReaction } from './types';
 import type { ChatMessage } from '../../../types';
+import { getTranslation } from '@/features/ai-chat/types';
+import { contentLanguageLabel } from '@/shared/i18n/contentLanguages';
+import { useTranslateMessage } from '@/features/ai-chat/hooks/useTranslateMessage';
 import { formatTime } from './helpers';
 import { TurnHeader } from './TurnHeader';
 import { TurnBody } from './TurnBody';
@@ -127,6 +131,76 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
   const _rawReactableId = primaryMessage?.id ? Number(primaryMessage.id) : null;
   const reactableMessageId = (_rawReactableId != null && !isNaN(_rawReactableId)) ? _rawReactableId : null;
 
+  // ADR-185 — chat message translation. The viewer's UI language is the target
+  // for the client-side display swap (scheme 2a): if the primary message already
+  // carries a translation for it, show that with a toggle back to the original.
+  // The translation lives on the message row, so one user's translation is
+  // reused by everyone viewing in that language.
+  const { language } = useLanguage();
+  const { translate, translatingId } = useTranslateMessage(conversationId);
+  const [showOriginal, setShowOriginal] = React.useState(false);
+  // The language the viewer is looking at: whatever they last picked from the
+  // per-message «Перевод» menu, falling back to their UI locale so a shared
+  // translation already stored in that language auto-surfaces (ADR-185 reuse).
+  // Picking any of the 15 targets must swap the view to THAT language — reading
+  // only the UI locale was why translating to e.g. Deutsch did nothing visible.
+  const [pickedLang, setPickedLang] = React.useState<string | null>(null);
+  // Default target for the one-tap «Язык» button: the viewer's UI locale — but
+  // if the message is already in that language, fall to a sensible other target
+  // so the first tap never bounces off the "already in X" guard.
+  const defaultTarget =
+    primaryMessage?.detected_lang && primaryMessage.detected_lang === language
+      ? (language === 'en' ? 'ru' : 'en')
+      : language;
+  const targetLang = pickedLang ?? defaultTarget;
+  const displayLang = targetLang;
+  const translatedText = primaryMessage ? getTranslation(primaryMessage, displayLang) : null;
+  const hasTranslation = !!translatedText;
+  const showingTranslation = hasTranslation && !showOriginal;
+  const translationOverride =
+    showingTranslation && primaryMessage
+      ? { messageId: String(primaryMessage.id), content: translatedText as string }
+      : null;
+  const isTranslatingPrimary =
+    !!primaryMessage && translatingId === String(primaryMessage.id);
+  // ADR-185 — the viewer switched to a language we don't have yet and a fresh
+  // translation is in flight. Signal the body to show a loading indicator
+  // instead of flashing back to the original: «сразу загружалось, а потом язык
+  // ставится выбранный». Clears on success (hasTranslation → override) or on
+  // failure (isTranslatingPrimary drops, body falls back to the original).
+  const awaitingTranslation =
+    !!primaryMessage && !showOriginal && !hasTranslation && isTranslatingPrimary;
+  const pendingTranslation =
+    awaitingTranslation && primaryMessage
+      ? { messageId: String(primaryMessage.id), langLabel: contentLanguageLabel(displayLang) }
+      : null;
+  // ADR-185 scope: translate any real "final text" — the agent's final text OR
+  // a user's message (both are plain text bodies). Never reasoning/steps: on an
+  // incomplete agent turn the primary message falls back to a step message, so
+  // we still require a real text body with content here.
+  const canTranslate =
+    !!primaryMessage &&
+    (primaryMessage.contentType === 'text' || !primaryMessage.contentType) &&
+    !!primaryMessage.content;
+  const requestTranslation = React.useCallback(
+    (code: string) => {
+      if (!primaryMessage) return;
+      // Picking the message's own original language means "show the original",
+      // not "translate it into itself" — there is nothing to fetch.
+      if (primaryMessage.detected_lang && code === primaryMessage.detected_lang) {
+        setPickedLang(code);
+        setShowOriginal(true);
+        return;
+      }
+      setPickedLang(code);
+      setShowOriginal(false);
+      if (!getTranslation(primaryMessage, code)) {
+        void translate(primaryMessage.id, code);
+      }
+    },
+    [primaryMessage, translate],
+  );
+
   // Process reactions
   const reactionList: MessageReaction[] = Object.entries(reactions).map(
     ([emoji, users]) => ({
@@ -146,21 +220,6 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
   const messageTimeEnd = messages.length > 1
     ? ((lastMsg as unknown as { created_at?: string })?.created_at || lastMsg?.timestamp)
     : undefined;
-
-  // Agent work duration: span from first to last message in the bubble.
-  // Minute-granularity timestamps above can collapse to one number when start
-  // and end fall in the same minute, which made bubbles read as "only the
-  // final-text time". Showing an explicit duration surfaces the real work span.
-  const bubbleDurationMs: number | undefined = (() => {
-    if (turnType !== 'agent' || messages.length < 2) return undefined;
-    const firstTs = (messages[0] as unknown as { created_at?: string })?.created_at || messages[0]?.timestamp;
-    const lastTs = (lastMsg as unknown as { created_at?: string })?.created_at || lastMsg?.timestamp;
-    if (!firstTs || !lastTs) return undefined;
-    const a = new Date(firstTs as string | Date).getTime();
-    const b = new Date(lastTs as string | Date).getTime();
-    if (!isFinite(a) || !isFinite(b)) return undefined;
-    return Math.max(0, b - a);
-  })();
 
   // Extract token count from metadata if available
   const tokenCount = primaryMessage?.metadata?.usage
@@ -250,7 +309,6 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
             senderName={senderName}
             timestamp={formatTime(messageTime)}
             timestampEnd={messageTimeEnd ? formatTime(messageTimeEnd) : undefined}
-            durationMs={bubbleDurationMs}
             isProcessing={isProcessing}
             agentColor={agentColor}
             agentIcon={agentIcon}
@@ -360,6 +418,8 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
             fetchToolSteps={fetchToolSteps}
             onContinueAgent={onContinueAgent}
             onNavigateToConversation={onNavigateToConversation}
+            translationOverride={translationOverride}
+            pendingTranslation={pendingTranslation}
           />
         )}
 
@@ -377,6 +437,25 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
           onUnpin={onUnpin}
           canPin={canPin}
           onDelete={onDelete}
+          onTranslate={canTranslate ? requestTranslation : undefined}
+          onToggleTranslate={
+            canTranslate
+              ? () => {
+                  // Currently showing a translation → one tap reverts to original.
+                  // Otherwise → translate to (and show) the current target language.
+                  if (showingTranslation) {
+                    setShowOriginal(true);
+                    return;
+                  }
+                  requestTranslation(targetLang);
+                }
+              : undefined
+          }
+          showingTranslation={showingTranslation}
+          activeLangLabel={contentLanguageLabel(displayLang)}
+          activeLangCode={displayLang}
+          originalLangCode={primaryMessage?.detected_lang ?? undefined}
+          isTranslating={isTranslatingPrimary}
           primaryMessage={primaryMessage || null}
           allMessages={messages}
           turnType={turnType}

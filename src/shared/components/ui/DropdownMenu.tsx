@@ -9,6 +9,8 @@ export interface DropdownMenuItem {
   icon?: ReactNode;
   shortcut?: string;
   danger?: boolean;
+  /** Currently-selected entry — rendered with the primary accent (blue) highlight. */
+  active?: boolean;
   submenu?: Array<{
     label: string;
     value: string;
@@ -21,9 +23,12 @@ export interface DropdownMenuProps {
   items: DropdownMenuItem[];
   align?: Dropdown.DropdownMenuContentProps['align'];
   side?: Dropdown.DropdownMenuContentProps['side'];
+  /** Extra classes for the content panel — e.g. a max-height + `overflow-y-auto`
+   *  to cap a long list instead of letting it span the whole viewport. */
+  contentClassName?: string;
 }
 
-export const DropdownMenu = ({ trigger, items, align = 'end', side = 'bottom' }: DropdownMenuProps) => {
+export const DropdownMenu = ({ trigger, items, align = 'end', side = 'bottom', contentClassName }: DropdownMenuProps) => {
   return (
     <Dropdown.Root>
       <Dropdown.Trigger asChild>{trigger}</Dropdown.Trigger>
@@ -32,7 +37,10 @@ export const DropdownMenu = ({ trigger, items, align = 'end', side = 'bottom' }:
           align={align}
           side={side}
           sideOffset={5}
-          className="z-[9999] min-w-[180px] rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] p-1 shadow-lg"
+          className={cn(
+            'z-[9999] min-w-[180px] rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] p-1 shadow-lg',
+            contentClassName
+          )}
         >
           {items.map((item) => {
             if (item.submenu) {
@@ -69,7 +77,10 @@ export const DropdownMenu = ({ trigger, items, align = 'end', side = 'bottom' }:
               <Dropdown.Item
                 key={item.value}
                 className={cn(
-                  'flex cursor-pointer select-none items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-[var(--text-primary)] focus:bg-[var(--bg-secondary)]',
+                  'flex cursor-pointer select-none items-center justify-between gap-2 rounded-md px-3 py-2 text-sm focus:bg-[var(--bg-secondary)]',
+                  item.active
+                    ? 'text-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10 font-medium'
+                    : 'text-[var(--text-primary)]',
                   item.danger && 'text-[var(--color-error)]'
                 )}
                 onSelect={item.onSelect}

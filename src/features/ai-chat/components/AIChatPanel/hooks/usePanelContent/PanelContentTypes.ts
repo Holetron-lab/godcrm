@@ -153,6 +153,9 @@ export interface PanelContentDeps {
   summaryAgentId?: number | null;
   isSavingSummaryAgent?: boolean;
   onSummaryAgentChange?: (agentId: number | null) => void;
+  translationAgentId?: number | null;
+  isSavingTranslationAgent?: boolean;
+  onTranslationAgentChange?: (agentId: number | null) => void;
   quickEmojis: string[];
   setQuickEmojis: (emojis: string[]) => void;
   isSavingEmojis: boolean;

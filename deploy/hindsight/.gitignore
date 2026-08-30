@@ -1,3 +1,6 @@
 hindsight.env
 *.env
 .hindsight_api_pw
+# rotation/backup copies carry the DB URL with its password
+hindsight.env.bak*
+*.env.bak*

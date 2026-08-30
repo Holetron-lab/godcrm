@@ -119,11 +119,15 @@ describe('ModelSyncService', () => {
   });
 
   describe('fetchCopilotModels', () => {
-    it('returns known Copilot CLI models', async () => {
+    it('returns only Copilot models verified available on this account', async () => {
       const models = await fetchCopilotModels();
       expect(models.length).toBeGreaterThan(0);
       expect(models.some(m => m.model_id === 'claude-sonnet-4.5')).toBe(true);
-      expect(models.some(m => m.model_id === 'gpt-5.2-codex')).toBe(true);
+      expect(models.some(m => m.model_id === 'gpt-5-mini')).toBe(true);
+      // Probed 2026-08-30: these ids fail at spawn with "not available", so
+      // they must not be seeded into the AI Models table.
+      expect(models.some(m => m.model_id === 'gpt-5.2-codex')).toBe(false);
+      expect(models.some(m => m.model_id === 'claude-opus-4.6')).toBe(false);
     });
   });
 

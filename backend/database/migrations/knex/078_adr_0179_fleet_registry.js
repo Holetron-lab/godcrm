@@ -30,6 +30,27 @@ export async function up(knex) {
     return;
   }
 
+  // From-scratch guard (ADR-187 Finding #2). The base oidc_clients table was
+  // never created by a migration — the "mig 018" reference above is stale; it
+  // exists on master A only via manual DDL drift (ADR-0179 IdP bootstrap). On a
+  // fresh DB (community box / CI-from-empty) it is absent, so the ALTER below
+  // fails with 'relation "oidc_clients" does not exist'. Create the base shape
+  // here (columns mirror master A pre-078); IF NOT EXISTS makes it a no-op on
+  // master A. The ALTER then adds the fleet-registry columns idempotently.
+  await knex.raw(`
+    CREATE TABLE IF NOT EXISTS oidc_clients (
+      id             SERIAL PRIMARY KEY,
+      client_id      TEXT NOT NULL,
+      client_secret  TEXT,
+      name           TEXT NOT NULL,
+      redirect_uris  TEXT NOT NULL,
+      allowed_scopes TEXT,
+      is_active      INTEGER DEFAULT 1,
+      created_at     TIMESTAMP DEFAULT NOW(),
+      updated_at     TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
   await knex.raw(`
     ALTER TABLE oidc_clients
       ADD COLUMN IF NOT EXISTS secret_ref                 TEXT,

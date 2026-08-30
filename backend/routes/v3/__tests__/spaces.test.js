@@ -12,8 +12,9 @@ const app = express();
 app.use(express.json());
 
 let mockUserId = 1;
+let mockUserRole = 'owner';
 app.use((req, _res, next) => {
-  req.user = { id: mockUserId, role: 'owner' };
+  req.user = { id: mockUserId, role: mockUserRole };
   next();
 });
 
@@ -32,6 +33,7 @@ describe('Spaces API Routes (v3) - ADR-064', () => {
   beforeEach(async () => {
     process.env.TEST_MODE = 'true';
     process.env.SKIP_DEV_USER = 'true';
+    mockUserRole = 'owner';
     await resetAdapter();
 
     // Add columns that migrations skip (schema evolution gaps in test DB)
@@ -117,6 +119,38 @@ describe('Spaces API Routes (v3) - ADR-064', () => {
       );
       expect(projects.length).toBeGreaterThanOrEqual(0); // May or may not auto-create
     });
+  });
+
+  // ============================================================
+  // POST /api/v3/spaces — community viewer gate (ADR-183 Block A)
+  // ============================================================
+  describe('POST /api/v3/spaces — viewer gate (ADR-183)', () => {
+    test('viewer cannot create a space via the user route (403)', async () => {
+      mockUserRole = 'viewer';
+      const res = await request(app)
+        .post('/api/v3/spaces')
+        .send({ name: 'Should Fail', type: 'business' })
+        .expect(403);
+
+      expect(res.body.success).toBe(false);
+      // No space row should have been created for the viewer.
+      const rows = await dbAll('SELECT * FROM spaces WHERE owner_id = ? AND name = ?', [mockUserId, 'Should Fail']);
+      expect(rows.length).toBe(0);
+    });
+
+    test.each(['owner', 'admin', 'editor', 'user'])(
+      '%s can still create a space (201)',
+      async (role) => {
+        mockUserRole = role;
+        const res = await request(app)
+          .post('/api/v3/spaces')
+          .send({ name: `Space ${role}`, type: 'business' })
+          .expect(201);
+
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.space.name).toBe(`Space ${role}`);
+      }
+    );
   });
 
   // ============================================================

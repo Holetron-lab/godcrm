@@ -31,7 +31,12 @@ export const ROOMS = [
 // Keyword hints per room. A hit is a whole-word match of a hint in the query.
 // `general` is intentionally absent — it is the "no specific collection" room,
 // reached only as the widen target, never as a positive route.
-const ROOM_HINTS = {
+//
+// Exported because ADR-193 gives this map a SECOND point of application: it
+// already routes reads, and roomVocabulary.js now also uses it to canonicalise
+// the room an agent types on a write (`deploy` → `deployment`). One map, two
+// call sites — not a copy that drifts out of sync.
+export const ROOM_HINTS = {
   auth: ['auth', 'login', 'token', 'jwt', 'password', 'oauth', 'session', 'permission', 'permissions'],
   pipeline: ['pipeline', 'deal', 'deals', 'stage', 'funnel', 'lead', 'leads'],
   schema: ['schema', 'column', 'columns', 'migration', 'field', 'fields'],

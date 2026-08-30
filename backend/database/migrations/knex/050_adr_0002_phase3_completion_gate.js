@@ -212,7 +212,25 @@ function writeReport(stats) {
   return file;
 }
 
+// From-scratch guard (ADR-187 Finding #2). This migration sets up completion-
+// gate + criteria_progress metadata on the Tickets(1708) logical table, which
+// exists solely as application data on master A. On a fresh DB (community box /
+// CI-from-empty) it is absent, so the table_columns insert would violate
+// table_columns_table_id_foreign → clean no-op when the table is missing.
+async function ticketsTablePresent(knex) {
+  const r = await knex('universal_tables').where({ id: TBL_TICKETS }).first();
+  return !!r;
+}
+
 export async function up(knex) {
+  if (!(await ticketsTablePresent(knex))) {
+    // eslint-disable-next-line no-console
+    console.log(
+      '[050] Tickets(1708) logical table absent (fresh DB) — skipping completion-gate/progress setup (no-op).',
+    );
+    return;
+  }
+
   await ensureCriteriaProgressColumn(knex);
   const stats = await backfillProgress(knex);
   let reportPath = null;

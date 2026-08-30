@@ -45,6 +45,7 @@ export const HeaderBreadcrumbs = ({
   const isHomePage = pathname === '/' || pathname === '/spaces';
   const isSettingsPage = pathname === '/settings';
   const isHelpPage = pathname === '/help';
+  const isMailPage = pathname === '/mail';
   const isSchemaEditorPage = pathname.startsWith('/schema-editor');
 
   if (isHomePage) {
@@ -57,6 +58,11 @@ export const HeaderBreadcrumbs = ({
   } else if (isHelpPage) {
     items.push({
       name: t('nav.help') || 'Help'
+    });
+  } else if (isMailPage) {
+    items.push({
+      icon: '✉️',
+      name: t('nav.mail') || 'Mail'
     });
   } else if (isSchemaEditorPage) {
     // Schema editor - show space if available

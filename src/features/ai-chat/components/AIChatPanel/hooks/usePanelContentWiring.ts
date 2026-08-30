@@ -137,6 +137,9 @@ interface PanelContentWiringParams {
   summaryAgentId?: number | null;
   isSavingSummaryAgent?: boolean;
   onSummaryAgentChange?: (agentId: number | null) => void;
+  translationAgentId?: number | null;
+  isSavingTranslationAgent?: boolean;
+  onTranslationAgentChange?: (agentId: number | null) => void;
   quickEmojis: string[];
   setQuickEmojis: (v: string[]) => void;
   saveQuickEmojis: any;
@@ -192,6 +195,7 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
     messages, contextSettings, setContextSettings, saveContextSettings,
     isSavingContextSettings, defaultAgentId, saveDefaultAgent, isSavingDefaultAgent,
     summaryAgentId, isSavingSummaryAgent, onSummaryAgentChange,
+    translationAgentId, isSavingTranslationAgent, onTranslationAgentChange,
     quickEmojis, setQuickEmojis, saveQuickEmojis, isSavingEmojis,
     voiceMode, setVoiceMode, voiceError, webSpeechAvailable,
     filesSource, setFilesSource,
@@ -353,6 +357,7 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
     saveContextSettings, isSavingContextSettings,
     defaultAgentId, saveDefaultAgent, isSavingDefaultAgent,
     summaryAgentId, isSavingSummaryAgent, onSummaryAgentChange,
+    translationAgentId, isSavingTranslationAgent, onTranslationAgentChange,
     quickEmojis, setQuickEmojis, saveQuickEmojis, isSavingEmojis,
     voiceMode, setVoiceMode, voiceError, webSpeechAvailable,
     filesSource, updateFilesSource: updateFilesSourcePersist,

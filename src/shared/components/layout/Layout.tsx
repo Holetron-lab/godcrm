@@ -1,5 +1,5 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
-import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { useProjectsQuery } from '@/features/projects/hooks/useProjectsQuery';
@@ -23,7 +23,7 @@ import { useDesktopApp } from '@/shared/hooks/useDesktopApp';
 import { useHeaderLanguageSwitcher } from '@/shared/hooks/useHeaderLanguageSwitcher';
 import { readSidebarDefault } from '@/shared/hooks/useSidebarDefault';
 import { isDesktopApp, getPlatform } from '@/shared/types/electron.types';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Mail } from 'lucide-react';
 import { logger } from '@/shared/utils/logger';
 import { LayoutLoader } from './LayoutLoader';
 import { FullscreenToggle } from './FullscreenToggle';
@@ -463,6 +463,7 @@ const LayoutContent = ({
 
   const tabTitle = useMemo(() => {
     if (isHomePage) return 'Главная';
+    if (location.pathname === '/mail') return 'Почта';
     if (location.pathname === '/settings') return 'Настройки';
     if (location.pathname === '/help') return 'Помощь';
     if (currentWidget) return currentWidget.title || `Module #${currentWidget.id}`;
@@ -474,6 +475,7 @@ const LayoutContent = ({
 
   const tabIcon = useMemo(() => {
     if (isHomePage) return '__home__';
+    if (location.pathname === '/mail') return '✉️';
     if (location.pathname === '/settings') return '__settings__';
     if (location.pathname === '/help') return '__help__';
     if (location.pathname.includes('/dashboard')) return '__dashboard__';
@@ -644,6 +646,19 @@ const LayoutContent = ({
           className="flex items-center gap-2 flex-shrink-0"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
+          <NavLink
+            to="/mail"
+            className={({ isActive }) =>
+              `p-2 rounded-md transition-colors ${
+                isActive
+                  ? 'bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
+                  : 'hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+              }`
+            }
+            title={t('nav.mail') || 'Mail'}
+          >
+            <Mail className="w-4 h-4" />
+          </NavLink>
           <FullscreenToggle />
           {showHeaderLanguageSwitcher && <LanguageSwitcher />}
           <ThemeToggle />

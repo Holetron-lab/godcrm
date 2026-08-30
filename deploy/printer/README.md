@@ -11,7 +11,7 @@ Slicing uses the `prusa-slicer` CLI on the CRM box (profile:
 
 ## What broke
 
-The CRM migrated to **v881099.hosted-by-vdsina.com / `<PROD_IP>`**.
+The CRM migrated to **<PROD_HOST> / `<PROD_IP>`**.
 The MKS Pi's autossh still dials the old (dead) address, so 7125 is empty and
 every `printer_*` MCP tool returns `fetch failed`.
 

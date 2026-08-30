@@ -11,18 +11,36 @@ export interface PublicSidebarPrefs {
   hidden: boolean;
 }
 
+// ADR-190-A D1: owner-managed SEO preferences (per-space), stored in
+// spaces.settings.public_seo. Honoured only for password-less external spaces —
+// that guard lives in the backend resolver (D2), never in this UI.
+export interface PublicSeoPrefs {
+  indexable: boolean;
+  in_sitemap: boolean;
+  site_origin: string;
+  site_name: string;
+  /** Single `%s` placeholder, replaced by the document title. */
+  title_template: string;
+  default_description: string;
+  og_image: string;
+  default_lang: string;
+}
+
 // Response from GET /api/v3/spaces/:id/visibility
 export interface SpaceVisibilityData {
   visibility: SpaceVisibility;
   public_slug: string | null;
   has_password: boolean;
   public_sidebar: PublicSidebarPrefs;
+  /** Optional until the ADR-190-A backend lands; always sent afterwards. */
+  public_seo?: PublicSeoPrefs;
 }
 
 // Payload for PUT /api/v3/spaces/:id/visibility
 export interface SetSpaceVisibilityPayload {
   visibility: SpaceVisibility;
   custom_slug?: string;
+  public_seo?: Partial<PublicSeoPrefs>;
 }
 
 // Payload for PUT /api/v3/spaces/:id/public-password

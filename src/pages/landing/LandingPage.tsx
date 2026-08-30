@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
 import { TorusBrand } from '@/components/brand/TorusBrand';
 import { useTheme } from '@/shared/hooks/useTheme';
+import { LandingNewsSection } from './LandingNewsSection';
 
-const GITHUB_REPO_URL = 'https://github.com/holetron/godcrm';
+const SOURCE_REPO_URL = 'https://godcrm.ai/git/holetron-lab/godcrm';
 
 type CapabilityDownload = { label: string; url: string; filename: string; meta: string };
 const CAPABILITIES: Array<{
@@ -309,7 +310,7 @@ const LandingPage = () => {
         <div className="flex items-center gap-2 md:gap-3">
           <LandingThemeToggle />
           <a
-            href={GITHUB_REPO_URL}
+            href={SOURCE_REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="brutal-shadow inline-flex items-center justify-center border-2 px-3 py-2 font-mono text-xs font-black uppercase tracking-widest text-white"
@@ -340,7 +341,7 @@ const LandingPage = () => {
           </p>
           <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4 md:mt-8">
             <a
-              href={GITHUB_REPO_URL}
+              href={SOURCE_REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="brutal-edge brutal-shadow inline-flex items-center justify-center gap-2 border-2 px-6 py-3 font-mono text-sm font-black uppercase tracking-widest text-white"
@@ -384,6 +385,7 @@ const LandingPage = () => {
 
       {/* Building in Public — neutral RowCardsWidget feed (renders only when posts exist).
           Sits directly under the hero badge: proof-of-life before the pitch. */}
+      <LandingNewsSection />
 
       {/* Manifesto */}
       <section className="brutal-edge relative overflow-hidden border-y-2 px-6 py-24 md:py-32">
@@ -687,7 +689,7 @@ const LandingPage = () => {
           </p>
           <div className="mt-8 flex">
             <a
-              href={GITHUB_REPO_URL}
+              href={SOURCE_REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="brutal-shadow inline-flex w-full max-w-2xl items-center justify-center gap-2 border-2 px-6 py-5 font-mono text-sm font-black uppercase tracking-widest text-white md:text-base"
@@ -696,7 +698,7 @@ const LandingPage = () => {
                 borderColor: 'var(--color-primary-500)',
               }}
             >
-              READ THE CODE → GITHUB.COM/HOLETRON/GODCRM
+              READ THE CODE → GODCRM.AI/GIT/GODCRM
             </a>
           </div>
         </div>
@@ -717,12 +719,12 @@ const LandingPage = () => {
             </a>
             <span aria-hidden>·</span>
             <a
-              href="https://github.com/holetron"
+              href="https://godcrm.ai/git/holetron-lab/godcrm"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-[var(--text-primary)] transition-colors"
             >
-              GITHUB.COM/HOLETRON
+              GODCRM.AI/GIT
             </a>
             <span aria-hidden>·</span>
             <Link
@@ -730,6 +732,13 @@ const LandingPage = () => {
               className="hover:text-[var(--text-primary)] transition-colors"
             >
               KNOWLEDGE BASE
+            </Link>
+            <span aria-hidden>·</span>
+            <Link
+              to="/blog"
+              className="hover:text-[var(--text-primary)] transition-colors"
+            >
+              BLOG
             </Link>
           </p>
           <div className="brutal-edge mt-6 border-t-2 pt-4 leading-relaxed">

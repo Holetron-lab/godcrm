@@ -9,6 +9,7 @@ import {
   requireAuth,
   dbGet, dbRun, authLogger
 } from './authShared.js';
+import { regenerateReferralCode } from '../../../services/AuthService.js';
 
 // ---------------------------------------------------------------------------
 // Avatar upload configuration (ADR-099)
@@ -92,7 +93,7 @@ export default function registerProfileRoutes(router) {
   router.get('/profile', requireAuth, async (req, res) => {
     try {
       const user = await dbGet(
-        'SELECT id, email, name, avatar, role, totp_enabled, created_at FROM users WHERE id = ?',
+        'SELECT id, email, name, avatar, role, totp_enabled, created_at, referral_code FROM users WHERE id = ?',
         [req.user.id]
       );
 
@@ -147,6 +148,22 @@ export default function registerProfileRoutes(router) {
     } catch (error) {
       authLogger.error({ err: error }, 'Update profile error:', error);
       return respondError(res, 500, 'PROFILE_UPDATE_FAILED', 'Failed to update profile');
+    }
+  });
+
+  // POST /api/v3/auth/referral-code/regenerate — ADR-183-A D3.
+  // Self-service reroll of the caller's OWN referral code. The value is entirely
+  // server-minted (not client-supplied — that would be the rejected vanity-code
+  // surface): only the suffix changes, the name-prefix is frozen. The caller's
+  // incoming edge (referred_by — who invited them) is untouched. D5: this
+  // invalidates already-shared ?ref=<old> links (best-effort attribution, no gate).
+  router.post('/referral-code/regenerate', requireAuth, async (req, res) => {
+    try {
+      const referral_code = await regenerateReferralCode(req.user.id);
+      return respondSuccess(res, { referral_code });
+    } catch (error) {
+      authLogger.error({ err: error, userId: req.user.id }, 'Referral code regeneration error:', error);
+      return respondError(res, 500, 'REFERRAL_REGEN_FAILED', 'Failed to regenerate referral code');
     }
   });
 
