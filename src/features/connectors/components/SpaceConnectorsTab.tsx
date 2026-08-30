@@ -40,13 +40,19 @@ const POLL_TIMEOUT_MS = 60_000;
 
 export interface SpaceConnectorsTabProps {
   spaceId: number;
+  /**
+   * Catalogue slug to expand on mount (e.g. `'imap'` when opened from the mail
+   * widget so the IMAP/SMTP form is ready without an extra click). The user can
+   * still collapse it or open another provider — this only seeds initial state.
+   */
+  initialExpandedSlug?: string | null;
 }
 
-export function SpaceConnectorsTab({ spaceId }: SpaceConnectorsTabProps) {
+export function SpaceConnectorsTab({ spaceId, initialExpandedSlug = null }: SpaceConnectorsTabProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
 
-  const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
+  const [expandedSlug, setExpandedSlug] = useState<string | null>(initialExpandedSlug);
   const [highlightId, setHighlightId] = useState<number | null>(null);
   const [pendingTypeSlug, setPendingTypeSlug] = useState<string | null>(null);
 

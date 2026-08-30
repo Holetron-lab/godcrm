@@ -20,7 +20,7 @@
  * barrier and must never block or kill a live loop.
  */
 
-import { dbGet } from '../../database/connection.js';
+import { dbAll, dbGet } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
 
 const log = apiLogger.child({ module: 'agent_write_reservations' });
@@ -146,6 +146,58 @@ export async function releaseWriteReservation({ filePath, holderSession }) {
 }
 
 /**
+ * Release EVERY path held by one holder_session — the turn-end fast path.
+ *
+ * Why this exists: each chat turn runs as its own headless `claude -p` worker
+ * with a FRESH session UUID, while the agent identity stays the same. Without
+ * a turn-end release the reservation survives for the full TTL and the SAME
+ * agent's next turn hits its own lock as if it were a foreign loop. The Stop
+ * hook (scripts/agent-reservation-release-hook.js) calls this with the ending
+ * session's id. TTL remains the backstop; a missed release just expires.
+ *
+ * @returns {Promise<number>} number of reservations released
+ */
+export async function releaseSessionReservations({ holderSession }) {
+  try {
+    if (!holderSession) return 0;
+    const rows = await dbAll(
+      `DELETE FROM _agent_write_reservations
+        WHERE holder_session = ? RETURNING file_path`,
+      [holderSession]
+    );
+    return Array.isArray(rows) ? rows.length : 0;
+  } catch (err) {
+    log.warn({ err: String(err?.message || err) }, 'releaseSessionReservations failed (ignored)');
+    return 0;
+  }
+}
+
+/**
+ * Drop every already-expired reservation, regardless of holder.
+ *
+ * Purely hygienic: an expired row is transparently stolen by the next acquire
+ * (see the ON CONFLICT predicate), so deleting it changes NO decision — it only
+ * stops the table growing without bound. A live row can never be hit: the
+ * predicate is `expires_at < now()` evaluated server-side, so a reservation
+ * another loop acquires mid-statement is out of scope by construction.
+ *
+ * Called from the Stop hook so the table self-cleans at every turn end.
+ *
+ * @returns {Promise<number>} number of expired rows dropped
+ */
+export async function purgeExpiredReservations() {
+  try {
+    const rows = await dbAll(
+      `DELETE FROM _agent_write_reservations WHERE expires_at < now() RETURNING file_path`
+    );
+    return Array.isArray(rows) ? rows.length : 0;
+  } catch (err) {
+    log.warn({ err: String(err?.message || err) }, 'purgeExpiredReservations failed (ignored)');
+    return 0;
+  }
+}
+
+/**
  * Read the current live holder of a normalized path (observability / tests).
  * @returns {Promise<object|null>}
  */
@@ -195,4 +247,4 @@ export async function gateWrite({ toolName, toolInput, holderSession, wpId = nul
   }
 }
 
-export default { WRITE_TOOLS, normalizeReservationPath, acquireWriteReservation, releaseWriteReservation, checkReservation, gateWrite };
+export default { WRITE_TOOLS, normalizeReservationPath, acquireWriteReservation, releaseWriteReservation, releaseSessionReservations, purgeExpiredReservations, checkReservation, gateWrite };

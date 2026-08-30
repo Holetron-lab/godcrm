@@ -1,8 +1,8 @@
 # GOD CRM — Development Commands
 # PROD: crm.hltrn.cc — code lives here, PM2: godcrm
 # DEV:  devcrm.hltrn.cc — test here, PM2: godcrm
-#       DEV host moved off the decommissioned .72 (2026-06); real IP lives in
-#       the git-ignored scripts/deploy.local.env (DEV_HOST=root@<real-ip>).
+#       DEV host/IP resolves from the git-ignored scripts/deploy.local.env
+#       (DEV_HOST=root@<real-ip>) — no infra IPs in tracked files.
 
 # Pull DEV_HOST from the git-ignored local override; fall back to placeholder.
 -include scripts/deploy.local.env
@@ -11,26 +11,26 @@ DEV_HOST ?= root@<DEV_IP>
 .PHONY: dev prod sync-db build restart restart-prod status logs logs-dev publish-adr
 
 # Deploy to DEV (sync + build + restart)
-# Touches: rsync /root/production/business-crm/ → root@<DEV_IP>:/root/production/business-crm/
+# Touches: rsync /root/production/business-crm/ → $(DEV_HOST):/root/production/business-crm/
 #          ssh build on DEV → /root/production/business-crm/dist/ (symlinked to /var/www/business-crm-dev)
-#          ssh pm2 restart godcrm on .72
+#          ssh pm2 restart godcrm on DEV
 # Does NOT touch: PROD nginx (/var/www/business-crm/), PROD PM2
 dev:
-	@echo "[make dev] Destinations: DEV code (rsync .72), DEV dist (ssh build), DEV PM2 (ssh restart). PROD untouched."
+	@echo "[make dev] Destinations: DEV code (rsync), DEV dist (ssh build), DEV PM2 (ssh restart). PROD untouched."
 	bash scripts/deploy.sh dev
 
 # Deploy to PROD (build + copy dist + restart)
 # Touches: local build → /root/production/business-crm/dist/
 #          cp dist → /var/www/business-crm/ (PROD nginx root)
-#          pm2 restart godcrm on .205
+#          pm2 restart godcrm on the agent-home box (master A)
 # Does NOT touch: DEV code, DEV PM2
 prod:
 	@echo "[make prod] Destinations: local build, /var/www/business-crm/ (PROD nginx), PROD PM2 godcrm. DEV untouched."
 	bash scripts/deploy.sh prod
 
 # Sync PROD DB → DEV
-# Touches: pg_dump godcrm_prod (public schema) on this box (.128, master A) → /tmp/godcrm_prod.dump
-#          scp → DEV (.72):/tmp/godcrm_prod.dump
+# Touches: pg_dump godcrm_prod (public schema) on this box (master A) → /tmp/godcrm_prod.dump
+#          scp → DEV ($(DEV_HOST)):/tmp/godcrm_prod.dump
 #          pg_restore --clean --if-exists on DEV godcrm_prod
 # Does NOT touch: PROD DB writes, code, nginx
 sync-db:
@@ -47,7 +47,7 @@ restart:
 
 # Restart PROD PM2 (requires explicit confirmation)
 restart-prod:
-	@echo "WARNING: This will restart PROD PM2 on $$(hostname) (.205)"
+	@echo "WARNING: This will restart PROD PM2 on $$(hostname) (agent-home / master A)"
 	@read -r -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || (echo "Aborted."; exit 1)
 	pm2 restart godcrm
 

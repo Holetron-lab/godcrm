@@ -16,7 +16,7 @@ import { apiLogger } from '../utils/logger.js';
  * @param {string} text - Text to slugify
  * @returns {string} Slug
  */
-function slugify(text) {
+export function slugify(text) {
   const cyrillicToLatin = {
     'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
     'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',

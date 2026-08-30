@@ -83,7 +83,11 @@ import mailRoutesV3 from './routes/v3/mail.js'; // ADR-160: Mail module (IMAP/SM
 import credentialVault from './services/connectors/CredentialVault.js'; // ADR-0028 Phase 1: vault lifecycle
 import adminChatNotificationsRoutesV3 from './routes/v3/admin/chatNotifications.js'; // ADR-0064 WP-A: global default chat notification prefs
 import { startInvalidationListener as startChatPrefsListener } from './services/notifications/resolveChatPrefs.js'; // ADR-0064 WP-A: cluster-wide cache eviction
+import adminRegistrationRoutesV3 from './routes/v3/admin/registration.js'; // ADR-188 F1: owner-only runtime registration policy
+import { startRegistrationPolicyListener } from './services/registrationPolicy.js'; // ADR-188 F1: cluster-wide policy-cache eviction
 import { startInflightBus } from './services/inflight/notifyBus.js'; // ADR-0057-A WP-B: chat_inflight LISTEN bus
+import { registerBlogSeoRoutes } from './services/blogSeo.js'; // ADR-190: crawler-readable SSR-lite for /blog/* + sitemap/robots
+import { registerPublicDocsSeoRoutes, collectDocsSitemapUrls } from './services/publicDocsSeo.js'; // ADR-190-A: same for opted-in public spaces' docs hub
 import ownerRoutesV3 from './routes/v3/owner.js'; // ADR-0059 AMEND-3 §4.9: owner calls settings
 import permissionResolver from './services/agent-permissions/resolver.js'; // ADR-0053 Phase C2: command-policy resolver
 import agentPermissionsRoutesV3 from './routes/v3/agent-permissions.js'; // ADR-0053 Phase C2: PreToolUse hook endpoint
@@ -326,7 +330,6 @@ app.use('/api/v3', authenticate, rowsRoutesV3);      // ADR-019: Separated rows 
 app.use('/api/v3', authenticate, widgetRoutesV3);
 // MODULE-CONTRACT v1: mount present autonomous modules' backend routes by manifest
 // (data, not static imports). Absent module → nothing mounted, core boots clean.
-// Formerly the static SC-SIM mount; now sc-sim rides backend/modules/sc-sim/.
 await mountModuleRoutes(app, authenticate, apiLogger);
 app.use('/api/v3', authenticate, filesRoutesV3);
 app.use('/api/v3', authenticate, webhooksRoutesV3);
@@ -367,6 +370,9 @@ app.use('/api/v3/admin', authenticate, adminChatNotificationsRoutesV3);
 // ADR-0064 WP-A: global-default chat notification prefs (app-owner gate
 // enforced inside the router).
 app.use('/api/v3/admin', authenticate, adminChatNotificationsRoutesV3);
+
+// ADR-188 F1: owner-only runtime registration policy (GET/PUT /admin/registration).
+app.use('/api/v3/admin', authenticate, adminRegistrationRoutesV3);
 
 // ADR-0059 AMEND-3 §4.9: owner-only calls-settings (read-only until D14).
 app.use('/api/v3/owner', authenticate, ownerRoutesV3);
@@ -530,6 +536,19 @@ app.use('/uploads', uploadsFileGuard, express.static(UPLOAD_BASE_PATH, {
 // Inherits the same abuse-guard + rate-limit + space-pinning as the canonical
 // `/api/v3/public/s/:slug/mcp` route.
 app.all('/s/:slug/mcp', publicAbuseGuard, publicRateLimit, publicSpaceAccess, mcpPublicHandler);
+
+// ADR-190: request-time SSR-lite for /blog/* + /sitemap.xml + /robots.txt.
+// MUST precede the SPA static mount + `app.get('*')` catch-all so crawlers get
+// server-injected per-post <head>/JSON-LD/body instead of the generic shell.
+// ADR-190-A: the docs hub of every opted-in public space contributes its URLs
+// to the same /sitemap.xml — injected here rather than imported inside blogSeo
+// so the dependency stays one-way (publicDocsSeo → blogSeo).
+registerBlogSeoRoutes(app, { clientDistPath, extraSitemapUrls: collectDocsSitemapUrls });
+
+// ADR-190-A: /s/:slug, /s/:slug/docs and /s/:slug/docs/:docSlug for spaces that
+// opted in via settings.public_seo. Registered AFTER the /s/:slug/mcp alias
+// above (which it must not swallow) and BEFORE the static + catch-all mounts.
+registerPublicDocsSeoRoutes(app, { clientDistPath });
 
 // Static frontend (SPA)
 app.use(express.static(clientDistPath, {
@@ -702,6 +721,12 @@ const server = httpServer.listen(PORT, () => {
     apiLogger.warn({ err }, 'chat_prefs invalidation listener failed to start — TTL-only eviction');
   });
 
+  // ADR-188 F1: registration-policy cache invalidation listener. Best-effort —
+  // failure degrades eviction to local-only + 60s TTL.
+  startRegistrationPolicyListener().catch((err) => {
+    apiLogger.warn({ err }, 'registration policy listener failed to start — TTL-only eviction');
+  });
+
   // ADR-0053 Phase C2: PermissionResolver lifecycle. Backs the PreToolUse hook
   // (scripts/agent-permission-hook.js) — never fail-hard, hook fails-open if
   // the resolver is unavailable. Listens on pg_notify('command_policies_changed')
@@ -784,6 +809,17 @@ const server = httpServer.listen(PORT, () => {
       startScheduledMessageWorker();
     }).catch(err => {
       apiLogger.error({ err }, 'Failed to start ScheduledMessageWorker');
+    });
+  }
+
+  // ADR-158 §P6: Scheduled outbound mail worker (every 60s). SOAKOFF-gated so
+  // the NL box (Ring 1) keeps it OFF until Phase C — it must not send real
+  // email while the frozen KZ copy is still live. Dev/Ring 0 run it by default.
+  if (process.env.NODE_ENV !== 'test' && process.env.MAIL_SCHEDULED_WORKER_SOAKOFF !== 'true') {
+    import('./services/mail/scheduledWorker.js').then(({ startMailScheduledWorker }) => {
+      startMailScheduledWorker();
+    }).catch(err => {
+      apiLogger.error({ err }, 'Failed to start MailScheduledWorker');
     });
   }
 

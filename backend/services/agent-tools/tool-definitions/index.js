@@ -11,6 +11,7 @@ import { DATA_TOOLS } from './data.js';
 import { DASHBOARD_TOOLS } from './dashboard.js';
 import { WEB_TOOLS } from './web.js';
 import { BLUESKY_TOOLS } from './bluesky.js';
+import { REDDIT_TOOLS } from './reddit.js';
 import { FILE_TOOLS } from './file.js';
 import { TICKET_TOOLS } from './ticket.js';
 import { IMAGE_TOOLS } from './image.js';
@@ -29,6 +30,7 @@ const byName = Object.fromEntries(
     ...DASHBOARD_TOOLS,
     ...WEB_TOOLS,
     ...BLUESKY_TOOLS,
+    ...REDDIT_TOOLS,
     ...FILE_TOOLS,
     ...TICKET_TOOLS,
     ...IMAGE_TOOLS,
@@ -80,6 +82,7 @@ export const AGENT_TOOLS = [
 
   // === SOCIAL-LISTENING (Austin recon — public posts only) ===
   t('bluesky_search'),
+  t('reddit_search'),
 
   // === CONVERSATION INTROSPECTION TOOLS ===
   t('view_conversation_steps'),
@@ -123,6 +126,7 @@ export const AGENT_TOOLS = [
   // === MEMORY TOOLS (Hindsight) ===
   t('memory_retain'),
   t('memory_recall'),
+  t('memory_rooms'), // ADR-193: the floor plan, read before you write
   t('memory_reflect'),
   t('memory_compress'),
   t('memory_bridge'),

@@ -313,9 +313,12 @@ export async function agentLoop(params) {
     });
     responseText = cliResult.content;
     if (responseText) {
+      // Model the CLI reported running (usage JSON), not the requested id.
+      // Counters (tokens/cost_usd) are still NOT fed here — that is WP-2c.
       const _finalMsgIdCopilot = await saveStepMessage(conversationId, {
         content: responseText, contentType: 'text', role: 'assistant',
-        senderType: 'agent', agentId: agentRowId, senderId, modelUsed: model,
+        senderType: 'agent', agentId: agentRowId, senderId,
+        modelUsed: cliResult.model || model,
         metadata: stepMetadata
       });
       _maybeDispatchFromThinking(responseText, { ..._dispatchCtx, sourceLabel: 'final_text', sourceMessageId: _finalMsgIdCopilot });

@@ -57,6 +57,20 @@ const MessageMarkdown = React.memo<{
   );
 });
 
+// ADR-185: shown in place of a message body while its translation into the
+// picked language is still in flight — so switching to a not-yet-cached
+// language never flashes back to the original text.
+const TranslationPendingLine: React.FC<{ langLabel: string }> = ({ langLabel }) => (
+  <div
+    className="flex items-center gap-2 py-1 text-sm text-[var(--text-tertiary)]"
+    role="status"
+    aria-live="polite"
+  >
+    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-primary-500)]" />
+    <span>Перевод на {langLabel}…</span>
+  </div>
+);
+
 // ADR-0031 WP-20+21: collect every widget_embed attachment from a single
 // message. Author-agnostic — same code path for human (future Type A) and
 // agent messages.
@@ -77,6 +91,8 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
   onCheckboxClick,
   currentUser,
   conversationId,
+  translationOverride,
+  pendingTranslation,
 }) => {
   if (messages.length === 0) return null;
 
@@ -84,6 +100,18 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
     // ADR-0031 §Z / WP-24: source-side moved stubs are now rendered by
     // ChatTurn in the bubble's header zone — skip them here.
     if (message.contentType === 'moved') return null;
+
+    // ADR-185: swap in the translated body when this message is the override
+    // target (the primary message showing a translation for the viewer's lang).
+    const displayContent =
+      translationOverride && String(message.id) === translationOverride.messageId
+        ? translationOverride.content
+        : message.content;
+
+    // ADR-185: translation into the picked language is still in flight for this
+    // message — show a loading line instead of falling back to the original.
+    const isTranslationPending =
+      !!pendingTranslation && String(message.id) === pendingTranslation.messageId;
 
     if (message.is_deleted) {
       return (
@@ -109,7 +137,9 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
             <Forward className="w-3 h-3" />
           </button>
         )}
-        {message.content ? (
+        {isTranslationPending ? (
+          <TranslationPendingLine langLabel={pendingTranslation!.langLabel} />
+        ) : message.content ? (
           message.content.includes('No API key configured') ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2 text-red-400">
@@ -163,11 +193,11 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
             }
             return markdownEnabled ? (
               <div className="text-sm text-[var(--text-primary)] prose-sm break-words">
-                <MessageMarkdown content={message.content} message={message} onCheckboxClick={onCheckboxClick} onForward={onForward} currentUser={currentUser} />
+                <MessageMarkdown content={displayContent} message={message} onCheckboxClick={onCheckboxClick} onForward={onForward} currentUser={currentUser} />
               </div>
             ) : (
               <div className="text-sm whitespace-pre-wrap break-words text-[var(--text-primary)]">
-                <HighlightedText text={message.content} onMentionClick={onMentionClick} />
+                <HighlightedText text={displayContent} onMentionClick={onMentionClick} />
               </div>
             );
           })()
@@ -226,6 +256,8 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
   fetchFullMessage,
   fetchToolSteps,
   onContinueAgent,
+  translationOverride,
+  pendingTranslation,
 }) => {
   const sg = useStepGroups(messages, {
     isProcessing: !!isProcessing,
@@ -417,6 +449,18 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
   })();
   const toolStepsAfterLastThinking = toolsAfterLastThinking.length;
 
+  // Bug 3-C: don't flash "Агент запускается..." at the same instant the user's
+  // message lands. Reveal the hint only after a short grace period — if the
+  // agent's first step or final text arrives quickly, the condition clears
+  // before the timer fires and everything stays in one bubble.
+  const isStartingHint = isProcessing && turnType === 'agent' && !hasAnySteps && !finalText;
+  const [showStartingHint, setShowStartingHint] = React.useState(false);
+  React.useEffect(() => {
+    if (!isStartingHint) { setShowStartingHint(false); return; }
+    const t = setTimeout(() => setShowStartingHint(true), 600);
+    return () => clearTimeout(t);
+  }, [isStartingHint]);
+
   return (
     <>
       {/* ADR-0031 P2: row-mutation system events render above agent content */}
@@ -424,7 +468,7 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
         <RowMutationBubbleStack messages={mutationMessages} />
       )}
 
-      {isProcessing && turnType === 'agent' && !hasAnySteps && !finalText && (
+      {showStartingHint && (
         <div className="flex items-center gap-2 py-2 text-xs text-[var(--text-tertiary)]">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-primary-500)]" />
           <span>Агент запускается...</span>
@@ -498,7 +542,19 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
         </>
       )}
 
-      {finalText && finalText.content ? (
+      {finalText && pendingTranslation && String(finalText.id) === pendingTranslation.messageId ? (
+        // ADR-185: translation for the final text is in flight — loading line
+        // instead of the original body.
+        <TranslationPendingLine langLabel={pendingTranslation.langLabel} />
+      ) : finalText && finalText.content ? (
+        (() => {
+          // ADR-185: swap in the translated body when finalText is the override
+          // target (the primary message showing a translation for the viewer).
+          const finalDisplayContent =
+            translationOverride && String(finalText.id) === translationOverride.messageId
+              ? translationOverride.content
+              : finalText.content;
+          return (
         <div data-message-id={finalText.id} className="text-sm text-[var(--text-primary)] break-words">
           {finalText.content.includes('No API key configured') ? (
             <div className="flex flex-col gap-2">
@@ -506,11 +562,13 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
               <a href="/tables/232" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-xs font-medium transition-colors"><ExternalLink className="w-3 h-3" />Открыть таблицу API Keys</a>
             </div>
           ) : markdownEnabled ? (
-            <MessageMarkdown content={finalText.content} message={finalText} onCheckboxClick={onCheckboxClick} onForward={onForward} currentUser={currentUser} />
+            <MessageMarkdown content={finalDisplayContent} message={finalText} onCheckboxClick={onCheckboxClick} onForward={onForward} currentUser={currentUser} />
           ) : (
-            <p className="whitespace-pre-wrap break-words"><HighlightedText text={finalText.content} onMentionClick={onMentionClick} /></p>
+            <p className="whitespace-pre-wrap break-words"><HighlightedText text={finalDisplayContent} onMentionClick={onMentionClick} /></p>
           )}
         </div>
+          );
+        })()
       ) : finalText && !finalText.content && !isProcessing && !(finalText.attachments?.some(isWidgetEmbedAttachment)) ? (
         // ADR-0031 WP-20+21 (T-141238): suppress "no text response" when the
         // message intentionally carries only a widget_embed attachment.

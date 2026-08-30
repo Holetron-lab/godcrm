@@ -188,7 +188,25 @@ async function ensureSealVerificationTable(knex) {
   return tableId;
 }
 
+// From-scratch guard (ADR-187 Finding #2). Phase 4 adds seal columns to the
+// Tickets(1708) logical table AND creates ticket_seal_verification inside
+// project 5102 (space 11) — both exist solely as application data on master A.
+// On a fresh DB (community box / CI-from-empty) Tickets is absent (and so is
+// project 5102), so every insert below would violate a FK → clean no-op.
+async function ticketsTablePresent(knex) {
+  const r = await knex('universal_tables').where({ id: TBL_TICKETS }).first();
+  return !!r;
+}
+
 export async function up(knex) {
+  if (!(await ticketsTablePresent(knex))) {
+    // eslint-disable-next-line no-console
+    console.log(
+      '[051] Tickets(1708) logical table absent (fresh DB) — skipping ticket-seal setup (no-op).',
+    );
+    return;
+  }
+
   // 1. A4.1 — Tickets columns
   await ensureTicketColumn(
     knex,

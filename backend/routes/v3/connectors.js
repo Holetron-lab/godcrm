@@ -25,6 +25,7 @@ import {
   listConnectorTypes,
   validateConnectorTypeBody,
 } from '../../services/connectors/catalogue/index.js';
+import { ensureMailSystemTableForSpace } from '../../services/SystemTablesCreator.js';
 import { apiLogger } from '../../utils/logger.js';
 import { success, created, error, badRequest, notFound, forbidden } from '../../utils/response.js';
 
@@ -472,6 +473,17 @@ authedRouter.post('/spaces/:spaceId/connectors', async (req, res) => {
     extra: { display_name },
     req,
   });
+
+  // ADR-158 §P3 — a space's first mailbox provisions the read-only Mail system
+  // table so mail_messages shows up in the space's tables. Best-effort +
+  // idempotent: a failure here must never fail connector creation.
+  if (type_slug === 'imap') {
+    try {
+      await ensureMailSystemTableForSpace(spaceId);
+    } catch (err) {
+      apiLogger.warn({ err, spaceId }, 'ADR-158 §P3: mail system-table provision failed (non-fatal)');
+    }
+  }
 
   const row = await dbGet(
     `SELECT id, space_id, type_slug, kind, display_name, status, scopes_requested,

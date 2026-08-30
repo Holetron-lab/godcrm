@@ -25,6 +25,7 @@ import { getWidgetById } from '../../../services/WidgetService.js';
 import { isBookingConflictError, findConflictingRowId } from '../../../lib/booking-constraint.js';
 import { writeAudit } from '../../../services/audit/writeAudit.js';
 import { computeRowDiff } from '../../../services/audit/rowDiff.js';
+import { applyMailMessageWrites, extractMailRowId, MailWriteError } from '../../../services/mail/messageWrites.js';
 
 const router = express.Router();
 
@@ -35,6 +36,7 @@ const router = express.Router();
 router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
   try {
     const { tableId, rowId } = req.params;
+
     let { data } = req.body;
 
     try { data = coerceDataObject(data, 'data') || {}; }
@@ -51,13 +53,45 @@ router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
     apiLogger.debug({ dataKeys: Object.keys(data || {}) }, 'UPDATE received data keys');
 
     const table = await dbGet(`
-      SELECT data_source_id, source_table_name, source_id_column
+      SELECT data_source_id, source_table_name, source_id_column, is_system, sync_target, project_id
       FROM universal_tables
       WHERE id = ?
     `, [tableId]);
 
     if (!table) {
       return notFound(res, 'Table');
+    }
+
+    // ADR-175 P1 §write-dispatch — the mail facade is now writable from the grid.
+    // Field edits (is_read/starred/folder/linkage) dispatch to the ONE mail-write
+    // authority (applyMailMessageWrites), which validates + applies the same
+    // space-scoped UPDATE the Mail module's PATCH/link routes use. table_rows is
+    // never touched (B2 invariant). Label add/remove and assignment are relational
+    // (separate endpoints / §6/§7), not field patches — they stay out of this path.
+    // PES is intentionally NOT fired here (Open Question #4 unresolved).
+    if (table.is_system && table.sync_target === 'mail_messages') {
+      const project = await dbGet('SELECT space_id FROM projects WHERE id = ?', [table.project_id]);
+      const spaceId = project?.space_id;
+      if (!spaceId) return forbidden(res, 'Mail table is not bound to a space');
+
+      const msgId = extractMailRowId(rowId);
+      if (!Number.isFinite(msgId)) return badRequest(res, 'Invalid mail message id');
+
+      // Pick only writable mail fields from the incoming grid payload; ignore
+      // read-only cells (subject, from_address, …) the grid may echo back.
+      const patch = {};
+      for (const key of ['is_read', 'starred', 'folder', 'linked_table_id', 'linked_row_id']) {
+        if (key in data) patch[key] = data[key];
+      }
+
+      try {
+        const row = await applyMailMessageWrites({ spaceId, id: msgId, patch });
+        if (!row) return notFound(res, 'Message');
+        return success(res, null, 'Row updated successfully');
+      } catch (mailErr) {
+        if (mailErr instanceof MailWriteError) return badRequest(res, mailErr.message);
+        throw mailErr;
+      }
     }
 
     // If external table, update in data source
@@ -616,6 +650,12 @@ router.delete('/tables/:tableId/rows/:rowId', async (req, res) => {
     // which has the proper atom_refs guard (see WidgetService.deleteWidget).
     if (table.is_system && table.sync_target === 'widgets') {
       return forbidden(res, 'Deleting widgets via system table is not supported. Use DELETE /api/v3/widgets/:id.');
+    }
+
+    // ADR-158 §P3 — mail_messages is read-only from the grid. Trashing a message
+    // (folder move) goes through the Mail module's PATCH API, not a row DELETE.
+    if (table.is_system && table.sync_target === 'mail_messages') {
+      return forbidden(res, 'Mail messages are read-only here. Use the Mail module to archive/delete.');
     }
 
     if (table.data_source_id && table.source_table_name) {

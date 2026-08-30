@@ -148,7 +148,3 @@ scripts/deploy.local.env
 # edit-lane env (secrets — Constitution v4.0 §12 variant A)
 .env.edit
 scripts/vibe-kz/out/
-.env
-node_modules/
-dist/
-*.log

@@ -5,7 +5,7 @@ import { logger } from '@/shared/utils/logger';
 import { apiClient } from '@/shared/utils/apiClient';
 import { useAIChat } from '../../../context/AIChatContext';
 import { useAuthStore } from '@/features/auth/store/authStore';
-import { useCurrentSpace } from '@/features/spaces/store/spacesStore';
+import { useCurrentSpace, useSpacesStore } from '@/features/spaces/store/spacesStore';
 import type { ContextSettings } from '../types';
 import type { MentionUser } from '../../MentionInput';
 import type { ChatMessage } from '../../../types';
@@ -25,6 +25,13 @@ import { CHAT_CONFIG } from '../../../constants/chatConfig';
 import { usePanelContentWiring } from './usePanelContentWiring';
 import { useScheduledMessages } from './useScheduledMessages';
 import { PILL_INSERT_EVENT } from '../../InvocationPills';
+
+// spaces.settings can arrive as a JSON string (API refetch) or an object
+// (optimistic store update) — normalize both to a plain object. (ADR-185)
+function parseSpaceSettings(raw: unknown): Record<string, unknown> {
+  if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return {}; } }
+  return raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+}
 
 export function useAIChatPanelLogic(opts?: { fillContainer?: boolean }) {
   const ctx = useAIChat();
@@ -80,6 +87,16 @@ export function useAIChatPanelLogic(opts?: { fillContainer?: boolean }) {
   const isAdminOrOwner = currentUser?.role === 'admin' || currentUser?.role === 'owner';
   const currentSpace = useCurrentSpace();
   const effectiveSpaceId = contextSpaceId ?? currentSpace?.id;
+  // Bind agent settings to the panel's EFFECTIVE space (contextSpaceId), not the
+  // global currentSpace. In a Direct/DM panel currentSpace is null while the panel
+  // is still space-scoped — reading currentSpace silently no-op'd both hydrate and
+  // save, so the agent dropdowns showed "— Не выбран —" and selects never persisted
+  // (no PUT fired). Subscribe to whichever space actually owns the settings. (ADR-185)
+  const effectiveSpace = useSpacesStore(state => {
+    const sid = contextSpaceId ?? state.currentSpace?.id;
+    if (sid == null) return null;
+    return state.currentSpace?.id === sid ? state.currentSpace : (state.spaces.find(s => s.id === sid) ?? null);
+  });
   const isWideMode = !isMobile && panelWidth >= 600;
   const conversationMode = chatPartner?.type === 'agent' ? 'solo' as const : chatPartner?.type === 'group' ? 'group' as const : chatPartner?.type === 'user' ? 'solo' as const : null;
 
@@ -107,6 +124,10 @@ export function useAIChatPanelLogic(opts?: { fillContainer?: boolean }) {
   const [scheduledActive, setScheduledActive] = useState(false);
   const [summaryAgentId, setSummaryAgentId] = useState<number | null>(null);
   const [isSavingSummaryAgent, setIsSavingSummaryAgent] = useState(false);
+  // ADR-185 — dedicated translation agent, distinct from the default (auto-respond)
+  // agent. Persisted space-wide in spaces.settings.translation_agent_id.
+  const [translationAgentId, setTranslationAgentId] = useState<number | null>(null);
+  const [isSavingTranslationAgent, setIsSavingTranslationAgent] = useState(false);
 
   const [contextSettings, setContextSettings] = useState<ContextSettings | string | undefined | null>(
     currentAgent ? (currentAgent as unknown as Record<string, unknown>).context_settings as ContextSettings | string | undefined : undefined
@@ -129,6 +150,29 @@ export function useAIChatPanelLogic(opts?: { fillContainer?: boolean }) {
       setIsSavingSummaryAgent(false);
     }
   }, [currentConversationId, userConversationId]);
+
+  // Save translation agent to SPACE settings (space-wide, like the default agent —
+  // the backend translator resolves spaces.settings.translation_agent_id).
+  const saveTranslationAgent = useCallback(async (agentId: number | null) => {
+    // Read fresh store state at click time — resolve the effective space even when
+    // the global currentSpace is null (DM panel), keyed by contextSpaceId. (ADR-185)
+    const store = useSpacesStore.getState();
+    const sid = contextSpaceId ?? store.currentSpace?.id;
+    if (sid == null) return;
+    setIsSavingTranslationAgent(true);
+    try {
+      const space = store.currentSpace?.id === sid ? store.currentSpace : store.getSpaceById(sid);
+      const newSettings = { ...parseSpaceSettings(space?.settings), translation_agent_id: agentId };
+      await apiClient.put(`/spaces/${sid}`, { settings: newSettings });
+      setTranslationAgentId(agentId);
+      if (store.currentSpace?.id === sid) store.setCurrentSpace({ ...store.currentSpace, settings: newSettings });
+      store.updateSpace(sid, { settings: newSettings });
+    } catch (err) {
+      logger.error('Failed to save translation agent:', err);
+    } finally {
+      setIsSavingTranslationAgent(false);
+    }
+  }, [contextSpaceId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -315,6 +359,7 @@ export function useAIChatPanelLogic(opts?: { fillContainer?: boolean }) {
   const scheduled = useScheduledMessages(activeConvId);
 
   const mutations = useChatMutations({
+    effectiveSpaceId,
     currentAgent, chatOperatorId, chatModelId, chatSystemPrompt,
     setIsSavingAgentSettings, setContextSettings,
     setDefaultAgentId, setIsSavingDefaultAgent,
@@ -419,12 +464,15 @@ export function useAIChatPanelLogic(opts?: { fillContainer?: boolean }) {
   }, [currentAgent]);
 
   useEffect(() => {
-    if (currentSpace?.settings && typeof currentSpace.settings === 'object') {
-      const s = currentSpace.settings as Record<string, unknown>;
-      setDefaultAgentId(s.default_agent_id ? Number(s.default_agent_id) : null);
-      setQuickEmojis(Array.isArray(s.quick_emojis) ? s.quick_emojis as string[] : ['👍','❤️','😂','🔥','💯','🙏','😍','😮']);
-    } else { setDefaultAgentId(null); setQuickEmojis(['👍','❤️','😂','🔥','💯','🙏','😍','😮']); }
-  }, [currentSpace?.id, currentSpace?.settings]);
+    // Hydrate the agent dropdowns from the EFFECTIVE space's settings (see
+    // effectiveSpace above), parsing string-or-object. The old code read
+    // currentSpace — null in DM panels — so both dropdowns reset to
+    // "— Не выбран —" even when the space had agents saved. (ADR-185)
+    const s = parseSpaceSettings(effectiveSpace?.settings);
+    setDefaultAgentId(s.default_agent_id ? Number(s.default_agent_id) : null);
+    setTranslationAgentId(s.translation_agent_id ? Number(s.translation_agent_id) : null);
+    setQuickEmojis(Array.isArray(s.quick_emojis) ? s.quick_emojis as string[] : ['👍','❤️','😂','🔥','💯','🙏','😍','😮']);
+  }, [effectiveSpace?.id, effectiveSpace?.settings]);
 
   // Auto-map summary agent by name "Summary" when agents load
   useEffect(() => {
@@ -644,6 +692,7 @@ export function useAIChatPanelLogic(opts?: { fillContainer?: boolean }) {
     saveContextSettings: mutations.saveContextSettings as any, isSavingContextSettings,
     defaultAgentId, saveDefaultAgent: mutations.saveDefaultAgent, isSavingDefaultAgent,
     summaryAgentId, isSavingSummaryAgent, onSummaryAgentChange: saveSummaryAgent,
+    translationAgentId, isSavingTranslationAgent, onTranslationAgentChange: saveTranslationAgent,
     quickEmojis, setQuickEmojis, saveQuickEmojis: mutations.saveQuickEmojis, isSavingEmojis,
     voiceMode, setVoiceMode, voiceError: voiceError || null, webSpeechAvailable,
     filesSource, setFilesSource,

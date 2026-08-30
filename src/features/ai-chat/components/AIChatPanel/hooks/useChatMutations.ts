@@ -15,6 +15,9 @@ import type { ContextSettings } from '../types';
 import type { ApiResponse } from '../../AIChatPanel.types';
 
 interface UseChatMutationsParams {
+  // Space that owns the default-agent setting for this panel. In a DM panel the
+  // global currentSpace is null, so the panel passes its context space id. (ADR-185)
+  effectiveSpaceId?: number;
   currentAgent: AIAgent | null;
   chatOperatorId: number | null;
   chatModelId: string;
@@ -32,6 +35,7 @@ interface UseChatMutationsParams {
 
 export function useChatMutations(params: UseChatMutationsParams) {
   const {
+    effectiveSpaceId,
     currentAgent,
     chatOperatorId,
     chatModelId,
@@ -94,25 +98,29 @@ export function useChatMutations(params: UseChatMutationsParams) {
 
   // Save default agent to space settings
   const saveDefaultAgent = useCallback(async (agentId: number | null) => {
-    if (!currentSpace?.id) return;
+    // Resolve the effective space from fresh store state — currentSpace is null in
+    // a DM panel, so fall back to the panel's context space id + spaces list. The
+    // old currentSpace-only guard silently no-op'd here: no PUT, dropdown reverted
+    // to "— Не выбран —". (ADR-185)
+    const store = useSpacesStore.getState();
+    const sid = effectiveSpaceId ?? store.currentSpace?.id;
+    if (sid == null) return;
     setIsSavingDefaultAgent(true);
     try {
-      const currentSettings = parseSettings(currentSpace?.settings);
-      const newSettings = { ...currentSettings, default_agent_id: agentId };
-      await apiClient.put(`/spaces/${currentSpace.id}`, { settings: newSettings });
+      const space = store.currentSpace?.id === sid ? store.currentSpace : store.getSpaceById(sid);
+      const newSettings = { ...parseSettings(space?.settings), default_agent_id: agentId };
+      await apiClient.put(`/spaces/${sid}`, { settings: newSettings });
       setDefaultAgentId(agentId);
-      if (currentSpace) {
-        setCurrentSpaceInStore({ ...currentSpace, settings: newSettings } as typeof currentSpace);
-        updateSpaceInStore(currentSpace.id, { settings: newSettings } as Partial<typeof currentSpace>);
-      }
-      queryClient.invalidateQueries({ queryKey: ['spaces', 'detail', currentSpace.id] });
+      if (store.currentSpace?.id === sid) store.setCurrentSpace({ ...store.currentSpace, settings: newSettings });
+      store.updateSpace(sid, { settings: newSettings });
+      queryClient.invalidateQueries({ queryKey: ['spaces', 'detail', sid] });
       queryClient.invalidateQueries({ queryKey: ['spaces'] });
     } catch (error) {
       logger.error('Failed to save default agent:', error);
     } finally {
       setIsSavingDefaultAgent(false);
     }
-  }, [currentSpace, parseSettings, setDefaultAgentId, setIsSavingDefaultAgent, setCurrentSpaceInStore, updateSpaceInStore, queryClient]);
+  }, [effectiveSpaceId, parseSettings, setDefaultAgentId, setIsSavingDefaultAgent, queryClient]);
 
   // Save quick emojis to space settings
   const saveQuickEmojis = useCallback(async (emojis: string[]) => {

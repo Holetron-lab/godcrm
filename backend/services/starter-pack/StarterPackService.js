@@ -39,6 +39,26 @@ async function isFeatureEnabled() {
   }
 }
 
+// ADR-183-A D6 — owner kill-switch for the promo mechanism. Same `_app_settings`
+// read pattern as isFeatureEnabled; key `promo_enabled`. Default: ENABLED (fail-open,
+// preserves pre-amendment behaviour — an absent row means promo is on). The owner flips
+// it off post-campaign via the owner-only settings surface (settingsController).
+export const PROMO_FLAG_KEY = 'promo_enabled';
+
+export async function isPromoEnabled() {
+  try {
+    const row = await dbGet('SELECT value FROM _app_settings WHERE key = ?', [PROMO_FLAG_KEY]);
+    if (!row) return true;
+    const v = row.value;
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'string') return !(v === 'false' || v === '"false"');
+    return safeJsonParse(v, true) !== false;
+  } catch (err) {
+    authLogger.warn({ err }, '[StarterPack] promo_enabled read failed — defaulting to enabled');
+    return true;
+  }
+}
+
 /**
  * Locate the user's personal Space + its default "Home" project.
  * Returns null if the personal space is missing (autoCreateDefaultProjects must run first).

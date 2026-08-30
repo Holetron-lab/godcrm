@@ -103,6 +103,11 @@ interface MessagesAreaProps {
   setForwardMessages?: (v: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   /** ADR-0031 §Z / WP-24: ChatLinkCard click — open another conversation. */
   onNavigateToConversation?: (conversationId: number, firstMessageId?: number) => void;
+  /** ADR-185 — active conversation id, threaded to ChatTurn so the per-message
+   *  translate mutation patches the right `['conversation-messages', id]` cache.
+   *  Without it ChatTurn saw `undefined` and the translation landed on a phantom
+   *  cache key → server persisted it (success toast) but the body never updated. */
+  conversationId?: number | null;
 }
 
 function MessagesAreaImpl(props: MessagesAreaProps) {
@@ -120,7 +125,7 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
     activePollingError, activePollingStopped, activeReconnect,
     error, localError, fetchThinkingSteps, fetchToolStepsPreview, fetchFullMessage, fetchToolSteps,
     isLoadingMessages, forwardMessageIds, moveMessageIds, setInputValue, setForwardMessages,
-    onNavigateToConversation,
+    onNavigateToConversation, conversationId,
   } = props;
 
   const isUserOrGroup = chatPartner?.type === 'user' || chatPartner?.type === 'group';
@@ -290,6 +295,7 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
                 isForwarded={forwardMessageIds ? turn.messages.some(m => m.id && forwardMessageIds.has(m.id)) : false}
                 isMoved={moveMessageIds ? turn.messages.some(m => m.id && moveMessageIds.has(m.id)) : false}
                 onNavigateToConversation={onNavigateToConversation}
+                conversationId={conversationId ?? undefined}
               />
             ))}
 

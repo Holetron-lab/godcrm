@@ -468,9 +468,16 @@ export function groupMessagesIntoTurns(
       flushAllAgentTextBuffers(); // steps start a new agent turn (not text)
       // If this chain's buffer is empty but the LAST turn in `turns` is from the same chain,
       // append to that existing turn instead of starting a new buffer → prevents plan split.
+      // EXCEPTION: a turn already sealed by a final assistant `text` response is a
+      // completed answer — new steps from the same agent must NOT be appended to it
+      // (that would "drag" the sealed bubble on while the agent keeps working). Start
+      // a fresh buffer → a new bubble opens after the final text.
       if (!agentStepBuffers.has(chainId) && turns.length > 0) {
         const lastTurn = turns[turns.length - 1];
-        if (lastTurn.turnType === 'agent' && lastTurn.agentChainId === chainId) {
+        const lastTurnSealed = lastTurn.messages.some(
+          (m) => (m.contentType === 'text' || !m.contentType) && m.role === 'assistant',
+        );
+        if (lastTurn.turnType === 'agent' && lastTurn.agentChainId === chainId && !lastTurnSealed) {
           lastTurn.messages.push(msg);
           continue;
         }

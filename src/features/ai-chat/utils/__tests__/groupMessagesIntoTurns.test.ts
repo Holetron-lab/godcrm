@@ -383,4 +383,29 @@ describe('groupMessagesIntoTurns', () => {
     expect(turns[1].senderName).toBe('MainAgent');
     expect(turns[2].senderName).toBe('Summarizer');
   });
+
+  // ─── Final text seals the bubble; later steps open a NEW bubble ──
+  // Regression: after a turn is sealed by a final assistant `text`, more steps
+  // from the SAME agent must start a fresh turn — not get appended to the sealed
+  // one (which would "drag" the completed bubble on while the agent keeps working).
+  it('seals the bubble on final text — later steps from the same agent open a new turn', () => {
+    const messages: ChatMessage[] = [
+      msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }),
+      // First answer: steps + final text → sealed turn
+      msg({ id: '2', role: 'assistant', content: 'thinking A', contentType: 'thinking', agentName: 'Dev', agentId: 42 }),
+      msg({ id: '3', role: 'assistant', content: '{"tool":"read"}', contentType: 'tool_call', agentName: 'Dev', agentId: 42 }),
+      msg({ id: '4', role: 'assistant', content: 'first answer', contentType: 'text', agentName: 'Dev', agentId: 42 }),
+      // Same agent keeps working AFTER the final text → must be a new bubble
+      msg({ id: '5', role: 'assistant', content: 'thinking B', contentType: 'thinking', agentName: 'Dev', agentId: 42 }),
+      msg({ id: '6', role: 'assistant', content: '{"tool":"write"}', contentType: 'tool_call', agentName: 'Dev', agentId: 42 }),
+      msg({ id: '7', role: 'assistant', content: 'second answer', contentType: 'text', agentName: 'Dev', agentId: 42 }),
+    ];
+    const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1);
+    expect(turns).toHaveLength(3); // human, sealed-1, sealed-2
+    // First sealed bubble: only its own steps + first final text (NOT dragged on)
+    expect(turns[1].messages.map(m => m.id)).toEqual(['2', '3', '4']);
+    expect(turns[1].isLastInGroup).toBe(true); // completed answer breaks the group
+    // Second bubble: the post-seal work
+    expect(turns[2].messages.map(m => m.id)).toEqual(['5', '6', '7']);
+  });
 });

@@ -16,6 +16,14 @@ export interface UserProfile {
   role: string;
   totp_enabled: boolean;
   created_at: string;
+  // ADR-183-A — the user's own referral code (named format `slug-suffix`).
+  // Populated by the backend profile response; may be absent until minted.
+  referral_code?: string | null;
+}
+
+// ADR-183-A D6 — public registration config surfaced pre-auth on the signup form.
+export interface RegistrationConfig {
+  promo_enabled: boolean;
 }
 
 export interface TwoFASetupResponse {
@@ -126,5 +134,27 @@ export const authApi = {
   deleteAvatar: () =>
     apiClient.request<{ success: boolean; data: { avatar: null } }>('/auth/avatar', {
       method: 'DELETE'
+    }),
+
+  // ADR-183-A D3 — regenerate the caller's referral code. The backend rerolls
+  // only the suffix (frozen name prefix) and returns the new full code.
+  regenerateReferralCode: () =>
+    apiClient.request<{ success: boolean; data: { referral_code: string } }>(
+      '/auth/referral-code/regenerate',
+      { method: 'POST' }
+    ),
+
+  // ADR-183-A D6 — public read of the promo toggle (pre-auth, drives the signup
+  // form). Contract owned with @developer-ralph: GET /auth/registration-config.
+  getRegistrationConfig: () =>
+    apiClient.request<{ success: boolean; data: RegistrationConfig }>('/auth/registration-config', {
+      skipAuth: true
+    }),
+
+  // ADR-183-A D6 — owner-only write of the promo toggle.
+  setPromoEnabled: (enabled: boolean) =>
+    apiClient.request<{ success: boolean; data: RegistrationConfig }>('/auth/registration-config', {
+      method: 'PUT',
+      body: JSON.stringify({ promo_enabled: enabled })
     })
 };

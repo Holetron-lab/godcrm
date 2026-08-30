@@ -780,6 +780,79 @@ export async function createTicketsModuleTables(projectId) {
 }
 
 /**
+ * Create the Mail system table (ADR-158 §P3 Slice 1).
+ * Read-only projection over `mail_messages` (is_system=1, sync_target=mail_messages).
+ * Columns mirror getSystemTableColumns('mail_messages') — headers only, no body.
+ * @param {number} projectId - Project ID where to create the table
+ * @returns {Promise<number>} Created table ID
+ */
+export async function createMailMessagesSystemTable(projectId) {
+  const result = await dbRun(`
+    INSERT INTO universal_tables (project_id, name, description, icon, is_system, sync_target)
+    VALUES (?, ?, ?, ?, 1, ?)
+  `, [projectId, 'Mail', 'Email messages (read-only)', '📬', 'mail_messages']);
+
+  const tableId = result.lastInsertRowid || result.lastID;
+
+  const columns = [
+    { name: 'id', display: 'ID', type: 'number', order: 0, is_system: true },
+    { name: 'folder', display: 'Folder', type: 'text', order: 1 },
+    { name: 'from_name', display: 'From Name', type: 'text', order: 2 },
+    { name: 'from_address', display: 'From', type: 'email', order: 3 },
+    { name: 'subject', display: 'Subject', type: 'text', order: 4 },
+    { name: 'preview', display: 'Preview', type: 'text', order: 5 },
+    { name: 'date', display: 'Date', type: 'datetime', order: 6 },
+    { name: 'is_read', display: 'Read', type: 'checkbox', order: 7 },
+    { name: 'starred', display: 'Starred', type: 'checkbox', order: 8 },
+    { name: 'ticket_id', display: 'Ticket', type: 'number', order: 9 },
+    { name: 'linked_table_id', display: 'Linked Table', type: 'number', order: 10 },
+    { name: 'linked_row_id', display: 'Linked Row', type: 'number', order: 11 },
+  ];
+
+  for (const col of columns) {
+    await dbRun(`
+      INSERT INTO table_columns (
+        table_id, column_name, display_name, type, config,
+        order_index, is_required, is_system
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [tableId, col.name, col.display, col.type, null, col.order, toBool(false), toBool(!!col.is_system)]);
+  }
+
+  return tableId;
+}
+
+/**
+ * Ensure the read-only Mail system table exists in a space's System Data project.
+ * Idempotent + gated: only spaces that actually own an `imap` connector get the
+ * table (ADR-158 §P3 — no mail connector ⇒ nothing to show, and provisioning
+ * everywhere would litter empty Mail tables across unrelated spaces).
+ * @param {number} spaceId
+ * @returns {Promise<number|null>} table id, or null when not applicable
+ */
+export async function ensureMailSystemTableForSpace(spaceId) {
+  if (!spaceId) return null;
+
+  // Gate: does this space have a mail connector at all?
+  const connector = await dbGet(
+    `SELECT id FROM space_connectors WHERE space_id = ? AND type_slug = 'imap' LIMIT 1`,
+    [spaceId]
+  );
+  if (!connector) return null;
+
+  // Reuse (or create) the space's System Data project — same home as core tables.
+  const core = await ensureCoreSystemTablesForSpace(spaceId);
+  if (!core) return null;
+
+  const existing = await dbGet(
+    `SELECT id FROM universal_tables WHERE project_id = ? AND sync_target = 'mail_messages'`,
+    [core.systemProjectId]
+  );
+  if (existing) return existing.id;
+
+  return await createMailMessagesSystemTable(core.systemProjectId);
+}
+
+/**
  * Ensure per-space System Data project has core system tables (Projects, Tables, Files, Variables)
  * ADR-026: Added Variables table for formulas and aggregations
  * @param {number} spaceId

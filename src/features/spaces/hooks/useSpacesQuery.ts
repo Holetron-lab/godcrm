@@ -1,4 +1,5 @@
 // React Query hooks for Spaces
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { spacesApi } from '../api/spacesApi';
 import { useSpacesStore } from '../store/spacesStore';
@@ -47,13 +48,12 @@ export const useSpaceQuery = (spaceId: number | null) => {
   const setCurrentSpace = useSpacesStore(state => state.setCurrentSpace);
   const setError = useSpacesStore(state => state.setError);
 
-  return useQuery({
+  const query = useQuery({
     queryKey: spacesKeys.detail(spaceId!),
     queryFn: async () => {
       if (!spaceId) return null;
       try {
         const space = await spacesApi.getById(spaceId);
-        setCurrentSpace(space);
         setError(null);
         return space;
       } catch (error) {
@@ -65,6 +65,19 @@ export const useSpaceQuery = (spaceId: number | null) => {
     enabled: !!spaceId,
     staleTime: 1000 * 60 * 5
   });
+
+  // Re-assert the active space into the store on every settle — including
+  // React Query cache-hits, where `queryFn` never runs. `currentSpace` is not
+  // persisted (only `activeSpaceId` is), so without this a cached detail query
+  // leaves `currentSpace` null and space-scoped widgets (e.g. AIAgentsWidget)
+  // render empty/disabled.
+  useEffect(() => {
+    if (query.data) {
+      setCurrentSpace(query.data);
+    }
+  }, [query.data, setCurrentSpace]);
+
+  return query;
 };
 
 /**

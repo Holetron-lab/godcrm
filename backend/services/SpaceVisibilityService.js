@@ -38,7 +38,8 @@ export async function getVisibility(spaceId) {
     visibility: space.visibility || 'internal',
     public_slug: space.public_slug || null,
     has_password: !!space.public_password_hash,
-    public_sidebar: readPublicSidebarPrefs(space.settings)
+    public_sidebar: readPublicSidebarPrefs(space.settings),
+    public_seo: readPublicSeoPrefs(space.settings)
   };
 }
 
@@ -109,6 +110,136 @@ export async function setPublicSidebarPrefs(spaceId, prefs) {
   );
 
   return next.public_sidebar;
+}
+
+// ============================================================
+// ADR-190-A D1 — per-space SEO settings in spaces.settings.public_seo
+// ============================================================
+
+/**
+ * Defaults used when `public_seo` is absent, empty or unparseable (AC-1).
+ *
+ * `indexable` / `in_sitemap` default to FALSE on purpose: publishing a space by
+ * slug is a sharing decision, indexing it is a marketing decision, and they are
+ * made by different people at different times (ADR-190-A D1).
+ *
+ * ponytail: `site_origin` and `og_image` default to '' rather than to the
+ * literal values printed in the ADR-190-A shape block. The block calls them
+ * "the values used when absent", but D5 mandates a three-step origin fallback
+ * (space → PUBLIC_SITE_ORIGIN → compiled default) which a non-empty default
+ * would make unreachable, and the documented `/og/godcrm-docs.png` asset does
+ * not exist in the webroot. Empty means "not configured" and lets the chain run.
+ */
+const PUBLIC_SEO_DEFAULTS = Object.freeze({
+  indexable: false,
+  in_sitemap: false,
+  site_origin: '',
+  site_name: 'GOD CRM',
+  title_template: '%s — GOD CRM Docs',
+  default_description: 'GOD CRM documentation — spaces, tables, agents, modules and widgets.',
+  og_image: '',
+  default_lang: 'en'
+});
+
+/** Parse `spaces.settings`, tolerating a JSON string, an object, or garbage. */
+function parseSettings(settingsText) {
+  if (!settingsText) return null;
+  if (typeof settingsText === 'object') return settingsText;
+  if (typeof settingsText === 'string') {
+    try {
+      return JSON.parse(settingsText);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Trimmed string or the default — keeps a blank/non-string out of the head. */
+function str(value, fallback) {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+/**
+ * Origin with trailing slashes stripped. Canonicals are built by concatenation
+ * (`origin + '/s/' + slug`), so a stored `https://godcrm.ai/` would emit
+ * `https://godcrm.ai//s/help` — a different URL from the one the env branch of
+ * D5 emits, which trims. Normalising here keeps both branches on one address.
+ */
+function originStr(value, fallback) {
+  return str(value, fallback).replace(/\/+$/, '');
+}
+
+/**
+ * Parse `spaces.settings` and extract the public_seo preferences with defaults.
+ * Same contract as readPublicSidebarPrefs: total, never throws, unknown keys
+ * dropped. Single reader for getVisibility, the SSR routes and the sitemap, so
+ * the guards in publicDocsSeo.js cannot drift from what the settings UI shows.
+ */
+export function readPublicSeoPrefs(settingsText) {
+  const raw = parseSettings(settingsText)?.public_seo;
+  const seo = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+  return {
+    indexable: seo.indexable === true,
+    in_sitemap: seo.in_sitemap === true,
+    site_origin: originStr(seo.site_origin, PUBLIC_SEO_DEFAULTS.site_origin),
+    site_name: str(seo.site_name, PUBLIC_SEO_DEFAULTS.site_name),
+    title_template: str(seo.title_template, PUBLIC_SEO_DEFAULTS.title_template),
+    default_description: str(seo.default_description, PUBLIC_SEO_DEFAULTS.default_description),
+    og_image: str(seo.og_image, PUBLIC_SEO_DEFAULTS.og_image),
+    default_lang: str(seo.default_lang, PUBLIC_SEO_DEFAULTS.default_lang)
+  };
+}
+
+/**
+ * Merge new public_seo preferences into spaces.settings JSON (read-modify-write,
+ * so `public_sidebar` and every other sibling key survives — AC-2).
+ *
+ * The merge is two-level: siblings of `public_seo` survive, and so do the keys
+ * *inside* it that this call did not mention. Without the inner merge a partial
+ * write — the settings UI saving one toggle, or PATCH /public-seo by contract —
+ * would silently reset `site_name`, `title_template` and `site_origin` to their
+ * defaults, because the reader is total and fills every absent key.
+ */
+export async function setPublicSeoPrefs(spaceId, prefs) {
+  const space = await dbGet('SELECT id, settings FROM spaces WHERE id = ?', [spaceId]);
+  if (!space) {
+    throw new Error('Space not found');
+  }
+
+  const current = parseSettings(space.settings) || {};
+  const stored = (current.public_seo && typeof current.public_seo === 'object' && !Array.isArray(current.public_seo))
+    ? current.public_seo
+    : {};
+  const incoming = (prefs && typeof prefs === 'object' && !Array.isArray(prefs)) ? prefs : {};
+  // Normalise through the reader so only known keys, of known types, persist.
+  const next = { ...current, public_seo: readPublicSeoPrefs({ public_seo: { ...stored, ...incoming } }) };
+
+  await dbRun(
+    'UPDATE spaces SET settings = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [JSON.stringify(next), spaceId]
+  );
+
+  return next.public_seo;
+}
+
+/**
+ * List every space that is allowed to appear in the sitemap (ADR-190-A D2).
+ * The two hard guards live in the SQL, not in the caller: a non-external or
+ * password-protected space can never be returned, whatever its config says.
+ */
+export async function listIndexableSpaces() {
+  const spaces = await dbAll(`
+    SELECT id, name, public_slug, settings
+    FROM spaces
+    WHERE visibility = 'external'
+      AND public_password_hash IS NULL
+      AND public_slug IS NOT NULL
+    ORDER BY id
+  `);
+  return spaces
+    .map(s => ({ ...s, public_seo: readPublicSeoPrefs(s.settings) }))
+    .filter(s => s.public_seo.indexable);
 }
 
 /**

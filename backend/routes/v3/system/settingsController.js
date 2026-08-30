@@ -7,8 +7,52 @@ import { apiLogger } from '../../../utils/logger.js';
 import SMTPService from '../../../services/SMTPService.js';
 import { success, badRequest, serverError } from '../../../utils/response.js';
 import { ownerOnly } from './helpers.js';
+import { isPromoEnabled, PROMO_FLAG_KEY } from '../../../services/starter-pack/StarterPackService.js';
 
 const router = express.Router();
+
+/**
+ * GET /api/v3/system/promo-settings — ADR-183-A D6 (owner only).
+ * Read the promo kill-switch. Default ON when the row is absent (fail-open).
+ */
+router.get('/promo-settings', ownerOnly, async (req, res) => {
+  try {
+    return success(res, { promo_enabled: await isPromoEnabled() });
+  } catch (error) {
+    apiLogger.error('Error reading promo settings:', error);
+    return serverError(res, error.message);
+  }
+});
+
+/**
+ * PUT /api/v3/system/promo-settings — ADR-183-A D6 (owner only).
+ * Flip the promo kill-switch. Body: { promo_enabled: boolean }. Stored in
+ * _app_settings (JSONB), the same store StarterPackService reads.
+ */
+router.put('/promo-settings', ownerOnly, async (req, res) => {
+  try {
+    const { promo_enabled } = req.body;
+    if (typeof promo_enabled !== 'boolean') {
+      return badRequest(res, 'promo_enabled must be a boolean', 'VALIDATION_ERROR');
+    }
+
+    await dbRun(
+      `INSERT INTO _app_settings (key, value, updated_by, updated_at)
+       VALUES (?, ?::jsonb, ?, NOW())
+       ON CONFLICT (key) DO UPDATE
+         SET value = EXCLUDED.value,
+             updated_by = EXCLUDED.updated_by,
+             updated_at = NOW()`,
+      [PROMO_FLAG_KEY, JSON.stringify(promo_enabled), req.user.id]
+    );
+
+    apiLogger.info({ userId: req.user.id, promo_enabled }, 'Promo settings updated');
+    return success(res, { promo_enabled });
+  } catch (error) {
+    apiLogger.error('Error updating promo settings:', error);
+    return serverError(res, error.message);
+  }
+});
 
 // In-memory storage for verification codes
 const verificationCodes = new Map();

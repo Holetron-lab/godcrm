@@ -12,6 +12,9 @@
 
 import { dbRun, dbAll, isPostgres } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
+// ADR-185 — backend-authoritative language detection for agent text messages.
+// Reuses the same detector wired into the human insert path (messageController).
+import { detectLanguage } from '../../utils/detectLanguage.js';
 
 // ── Title resolution heuristics ──────────────────────────────────────
 // Mirrors src/features/ai-chat/components/RowBindingV2.tsx TITLE_ALIASES (line 254)
@@ -252,13 +255,20 @@ export async function saveStepMessage(conversationId, opts) {
     ? JSON.stringify(finalAttachments)
     : '[]';
 
+  // ADR-185 — detect source language for user-facing prose only. thinking /
+  // tool_call / tool_result bodies aren't prose, so leave their detected_lang null.
+  const isProse = contentType === 'text' || contentType === 'markdown';
+  const detectedLang = (isProse && typeof finalContent === 'string' && finalContent.trim().length > 0)
+    ? detectLanguage(finalContent)
+    : null;
+
   const result = await dbRun(
     isPostgres()
-      ? `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, model_used, tokens_in, tokens_out, latency_ms, tool_results, attachments, metadata, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, NOW(), NOW())`
-      : `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, model_used, tokens_in, tokens_out, latency_ms, tool_results, attachments, metadata, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-    [conversationId, senderId, senderType, role, finalContent, contentType, agentId, modelUsed, tokensIn, tokensOut, latencyMs, toolResultsJson, attachmentsJson, metadata]
+      ? `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, model_used, tokens_in, tokens_out, latency_ms, tool_results, attachments, metadata, detected_lang, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, NOW(), NOW())`
+      : `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, model_used, tokens_in, tokens_out, latency_ms, tool_results, attachments, metadata, detected_lang, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    [conversationId, senderId, senderType, role, finalContent, contentType, agentId, modelUsed, tokensIn, tokensOut, latencyMs, toolResultsJson, attachmentsJson, metadata, detectedLang]
   );
 
   // Update conversation updated_at
@@ -270,6 +280,79 @@ export async function saveStepMessage(conversationId, opts) {
   );
 
   return result.lastInsertRowid;
+}
+
+/**
+ * Promote an already-saved streamed step message into the run's final answer.
+ *
+ * The CLI emits its last assistant text block over the stream (persisted here as
+ * a `thinking` step) and then repeats the very same string in the `result`
+ * event. Inserting that result as a fresh message produced two identical bubbles
+ * per run. Callers now detect the twin and promote the existing row in place —
+ * one bubble, same ordering, and no delete for the client to miss.
+ *
+ * Applies the same post-processing the insert path does: `[[row:T/R]]` tokens
+ * are extracted into attachments and stripped, and detected_lang is filled
+ * (both are skipped on `thinking` rows, so the promotion has to do them now).
+ *
+ * @param {number} messageId - id of the streamed step message to promote
+ * @param {number} conversationId
+ * @param {Object} opts - { content, modelUsed, tokensIn, tokensOut, metadata }
+ * @returns {Promise<number>} the promoted message id
+ */
+export async function promoteStepMessageToFinal(messageId, conversationId, opts = {}) {
+  const {
+    content = '',
+    modelUsed = null,
+    tokensIn = null,
+    tokensOut = null,
+    metadata = null,
+  } = opts;
+
+  let finalContent = content;
+  let finalAttachments = [];
+  if (typeof content === 'string' && /\[\[row:\d+\/\d+\]\]/.test(content)) {
+    try {
+      const { cleanedText, attachments: rowAttachments } = await processRowReferenceTokens(content);
+      finalContent = cleanedText;
+      finalAttachments = rowAttachments || [];
+    } catch (err) {
+      apiLogger.error(
+        { err: err.message, conversationId, messageId },
+        'promoteStepMessageToFinal: row-token post-processor crashed — keeping original content'
+      );
+      finalContent = content;
+    }
+  }
+
+  const detectedLang = (typeof finalContent === 'string' && finalContent.trim().length > 0)
+    ? detectLanguage(finalContent)
+    : null;
+  const attachmentsJson = finalAttachments.length > 0 ? JSON.stringify(finalAttachments) : '[]';
+
+  await dbRun(
+    isPostgres()
+      ? `UPDATE messages
+            SET content = $1, content_type = 'text', model_used = $2, tokens_in = $3,
+                tokens_out = $4, attachments = $5::jsonb, metadata = COALESCE($6, metadata),
+                detected_lang = $7, updated_at = NOW()
+          WHERE id = $8`
+      : `UPDATE messages
+            SET content = ?, content_type = 'text', model_used = ?, tokens_in = ?,
+                tokens_out = ?, attachments = ?, metadata = COALESCE(?, metadata),
+                detected_lang = ?, updated_at = datetime('now')
+          WHERE id = ?`,
+    [finalContent, modelUsed, tokensIn, tokensOut, attachmentsJson, metadata, detectedLang, messageId]
+  );
+
+  await dbRun(
+    isPostgres()
+      ? 'UPDATE conversations SET updated_at = NOW() WHERE id = $1'
+      : `UPDATE conversations SET updated_at = datetime('now') WHERE id = ?`,
+    [conversationId]
+  );
+
+  return messageId;
 }
 
 /**

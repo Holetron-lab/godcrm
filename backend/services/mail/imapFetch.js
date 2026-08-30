@@ -103,6 +103,16 @@ export async function imapFetch({ creds, folder = 'inbox', limit = 50 }) {
       const from = firstAddress(env.from);
       const text = parsed.text || null;
       const html = parsed.html || null;
+      // ADR-158 §P5 — metadata only (name/type/size); bytes stay in IMAP until a
+      // download-attachment endpoint lands. Inline images (cid, no filename) are
+      // part of the body, not attachments — skip them.
+      const attachments = (parsed.attachments || [])
+        .filter((a) => a.filename)
+        .map((a) => ({
+          filename: a.filename,
+          contentType: a.contentType || 'application/octet-stream',
+          size: a.size ?? (a.content ? a.content.length : 0),
+        }));
       rows.push({
         imap_uid: msg.uid,
         message_id: env.messageId || parsed.messageId || null,
@@ -115,6 +125,7 @@ export async function imapFetch({ creds, folder = 'inbox', limit = 50 }) {
         body_html: html || null,
         date: env.date || parsed.date || null,
         is_read: msg.flags ? msg.flags.has('\\Seen') : false,
+        attachments,
       });
     }
   } finally {

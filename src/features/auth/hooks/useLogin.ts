@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ForgotPasswordFormValues, LoginFormValues, RegisterFormValues, loginSchema, registerSchema, forgotPasswordSchema } from '../types/auth.types';
@@ -21,16 +21,28 @@ export const useLoginForm = () => {
   return { form, onSubmit: form.handleSubmit(handleSubmit), isLoading: loading, serverError: error };
 };
 
+// ADR-183-A — read the inviter's referral code from the `?ref=<code>` deep-link
+// (https://<host>/auth/register?ref=<code>). Codes are lowercase (`slug-suffix`),
+// so we normalize the URL value to lowercase before it seeds the visible field.
+const readInviteRefFromUrl = (): string => {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get('ref')?.trim().toLowerCase() || '';
+};
+
 export const useRegisterForm = () => {
   const { register: registerAction, loading, error } = useAuthStore();
   const [succeeded, setSucceeded] = useState(false);
+  // Snapshot the deep-link code once so re-renders don't clobber user edits.
+  const initialReferral = useMemo(readInviteRefFromUrl, []);
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { email: '', password: '', name: '', promoCode: '' }
+    defaultValues: { email: '', password: '', name: '', referralCode: initialReferral, promoCode: '' }
   });
 
   const handleSubmit = useCallback(
     async (values: RegisterFormValues) => {
+      // Referral: lowercase (named-code format); Promo: uppercase (campaign codes).
+      const referralNormalized = values.referralCode?.trim().toLowerCase() || null;
       const promoNormalized = values.promoCode?.trim().toUpperCase() || null;
       const referrer = typeof document !== 'undefined' ? document.referrer || null : null;
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
@@ -41,7 +53,9 @@ export const useRegisterForm = () => {
         promo_code: promoNormalized,
         signup_source: 'godcrm.ai/register',
         signup_referrer: referrer,
-        user_agent: ua
+        user_agent: ua,
+        // Best-effort: server resolves unknown/absent codes to referred_by=NULL.
+        referral_code: referralNormalized
       });
       setSucceeded(true);
     },
@@ -53,7 +67,9 @@ export const useRegisterForm = () => {
     onSubmit: form.handleSubmit(handleSubmit),
     isLoading: loading,
     serverError: error,
-    succeeded
+    succeeded,
+    /** True when the referral field was seeded from a `?ref=` invite link. */
+    referralPrefilled: Boolean(initialReferral)
   };
 };
 

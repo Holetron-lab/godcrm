@@ -29,6 +29,49 @@ search:
 ui:
   static_use_hash: true
 
+# Engine pinning (2026-08-30). The upstream default set enables only
+# brave / duckduckgo / google / startpage for the `general` category — and on
+# this VPS IP ddg+startpage sit on permanent CAPTCHA while brave gets
+# "Suspended: too many requests" after a handful of calls. When brave is
+# suspended the whole query returns [] with HTTP 200, which reads to the caller
+# as "no such thing on the internet" instead of "upstream refused".
+# Everything below is `disabled: false` on an engine that ships disabled by
+# default. Keep the survivors measured, not assumed: `?engines=<name>` per call.
+#
+# Measured 2026-08-30 on RU pharma control query "Герофарм инсулин гларгин
+# патент Sanofi", one engine per call:
+#   bing 10 · seznam 10 · yandex 15 · brave 19   → kept
+#   mojeek 0 (also 0 on an EN control) · google 0 (silent, no error)
+#   presearch/mwmbl timeout · qwant/yep/dogpile "access denied"
+#   yahoo "HTTP protocol error" · duckduckgo/startpage CAPTCHA
+# Re-measure before trusting this list again — engine health tracks the VPS IP,
+# not the config.
+#
+# Second pass, same day: "non-empty" is not "usable". bing answers every query
+# with exactly 10 results that have nothing to do with it (Dropbox/Microsoft
+# landing pages for a RU pharma query, under both en-US and ru-RU) — a soft
+# bot-block that looks like success and eats top-5 slots, which is worse for a
+# recall benchmark than an honest zero. Disabled. Weights push the two engines
+# that actually answer to the top of the merged ranking; web-tools.js slices
+# the first `limit` rows, so ranking order is what the caller ever sees.
+engines:
+  - name: bing
+    disabled: true
+  - name: yandex
+    disabled: false
+    weight: 3
+  - name: brave
+    weight: 3
+  - name: seznam
+    disabled: false
+    weight: 0.4
+  # Enabled upstream by default, dead on this IP: every call costs a request
+  # (and up to request_timeout) and returns nothing.
+  - name: duckduckgo
+    disabled: true
+  - name: startpage
+    disabled: true
+
 # Loopback-only, single consumer (godcrm) — no bot/rate limiting needed.
 outgoing:
   # Was 6.0 — mojeek (our best result engine) intermittently exceeded it and got

@@ -13,6 +13,7 @@ import type {
   SpaceVisibilityData,
   SetSpaceVisibilityPayload,
   SetPublicPasswordPayload,
+  PublicSeoPrefs,
   SpaceInvitation,
   CreateInvitationPayload,
   InvitationDetails
@@ -241,6 +242,27 @@ export const spacesApi = {
       prefs
     );
     return response.data;
+  },
+
+  /**
+   * ADR-190-A (D1): update owner-managed SEO preferences.
+   * Persists into spaces.settings.public_seo; the backend merges on two levels —
+   * the siblings of public_seo, and the keys inside it — so a partial `prefs`
+   * leaves everything it does not name alone.
+   *
+   * PUT /visibility also accepts `public_seo`, but that route is about the access
+   * level: echoing a cached `visibility` back with an SEO write can re-publish a
+   * space that was un-published in another tab. This route cannot reach it.
+   */
+  setPublicSeoPrefs: async (
+    spaceId: number,
+    prefs: Partial<PublicSeoPrefs>
+  ): Promise<PublicSeoPrefs> => {
+    const response = await apiClient.patch<{ data: { public_seo: PublicSeoPrefs } }>(
+      `/spaces/${spaceId}/public-seo`,
+      prefs
+    );
+    return response.data.public_seo;
   },
 
   // ─── ADR-105: Invitations ──────────────────────────────────────────

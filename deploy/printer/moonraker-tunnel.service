@@ -7,7 +7,7 @@
 #   sudo cp mkspi_tunnel /home/<user>/.ssh/mkspi_tunnel && chmod 600 ...
 #   sudo systemctl daemon-reload && sudo systemctl enable --now moonraker-tunnel
 #
-# Server target = v881099.hosted-by-vdsina.com / <PROD_IP> (single box, June 2026).
+# Server target = <PROD_HOST> / <PROD_IP> (single box, June 2026).
 # If the CRM box migrates again, change ONLY the IP in ExecStart below.
 
 [Unit]

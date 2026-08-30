@@ -7,6 +7,9 @@
 
 import { dbGet, dbRun, dbAll, isPostgres } from '../../../database/connection.js';
 import { apiLogger } from '../../../utils/logger.js';
+// ADR-185 — backend-authoritative language detection for agent text messages.
+// Same detector wired into the human insert path and services/agent-loop/messages.js.
+import { detectLanguage } from '../../../utils/detectLanguage.js';
 
 /**
  * Generate unique base_id for rows
@@ -194,13 +197,20 @@ export async function saveStepMessage(conversationId, opts) {
 
   const toolResultsJson = toolResults ? JSON.stringify(toolResults) : null;
 
+  // ADR-185 — detect source language for user-facing prose only. thinking /
+  // tool_call / tool_result bodies aren't prose, so leave their detected_lang null.
+  const isProse = contentType === 'text' || contentType === 'markdown';
+  const detectedLang = (isProse && typeof content === 'string' && content.trim().length > 0)
+    ? detectLanguage(content)
+    : null;
+
   const result = await dbRun(
     isPostgres()
-      ? `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, model_used, tokens_in, tokens_out, latency_ms, tool_results, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())`
-      : `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, model_used, tokens_in, tokens_out, latency_ms, tool_results, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-    [conversationId, senderId, senderType, role, content, contentType, agentId, modelUsed, tokensIn, tokensOut, latencyMs, toolResultsJson]
+      ? `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, model_used, tokens_in, tokens_out, latency_ms, tool_results, detected_lang, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())`
+      : `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, model_used, tokens_in, tokens_out, latency_ms, tool_results, detected_lang, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    [conversationId, senderId, senderType, role, content, contentType, agentId, modelUsed, tokensIn, tokensOut, latencyMs, toolResultsJson, detectedLang]
   );
 
   await dbRun(

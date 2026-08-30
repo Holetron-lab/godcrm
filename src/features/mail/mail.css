@@ -1,0 +1,53 @@
+/* ADR-158 — mail print isolation.
+ *
+ * Gmail's "Print" opens just the open message. We stay in-page: on print, hide
+ * the whole app chrome and promote only the reading pane (#mail-print-root) to
+ * the page. Screen rendering is untouched — these rules apply to `@media print`
+ * only. The body view-type toggle (rendered vs. source) prints whichever is on
+ * screen, since we print the live node.
+ */
+/* Rendered message body — keep foreign HTML inside the reading pane. Long unbroken
+ * tokens (URLs, ids) wrap instead of pushing the pane wider than the viewport
+ * (visible as right-edge clipping on mobile), and wide media/tables scale or scroll
+ * within the pane rather than blowing out the layout. */
+.mail-body {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.mail-body img,
+.mail-body video {
+  max-width: 100%;
+  height: auto;
+}
+.mail-body table,
+.mail-body pre {
+  max-width: 100%;
+}
+.mail-body table {
+  display: block;
+  overflow-x: auto;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #mail-print-root,
+  #mail-print-root * {
+    visibility: visible;
+  }
+
+  #mail-print-root {
+    position: absolute;
+    inset: 0;
+    height: auto;
+    overflow: visible;
+  }
+
+  /* The scrollable body must expand fully so nothing clips at the page break. */
+  #mail-print-root .mail-body {
+    overflow: visible !important;
+    height: auto !important;
+  }
+}

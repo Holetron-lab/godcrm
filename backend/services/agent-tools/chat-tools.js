@@ -7,6 +7,7 @@
 import { dbGet, dbRun, dbAll, isPostgres, sqlNow } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
 import { parseRowData } from './data-tools.js';
+import { isMailMirror, fetchMailChipHeaders, mailChipTitle } from '../mail/mailChip.js';
 import {
   dispatchInvocationsFromContent, hasInvocationTokens,
 } from '../chat/invocation-dispatcher.js';
@@ -131,23 +132,33 @@ export const chatToolHandlers = {
 
     // Resolve table metadata (name + icon for the collapsed chip view).
     const table = await dbGet(
-      'SELECT id, name, display_name, icon FROM universal_tables WHERE id = ?',
+      'SELECT id, name, display_name, icon, sync_target FROM universal_tables WHERE id = ?',
       [table_id]
     );
     if (!table) return { error: `Table ${table_id} not found` };
 
-    // Resolve row + a best-effort title from common display columns.
-    const row = await dbGet(
-      isPostgres()
-        ? 'SELECT id, data FROM table_rows WHERE id = $1 AND table_id = $2'
-        : 'SELECT id, data FROM table_rows WHERE id = ? AND table_id = ?',
-      [row_id, table_id]
-    );
-    if (!row) return { error: `Row ${row_id} not found in table ${table_id}` };
-
-    const rowData = parseRowData(row.data) || {};
-    const TITLE_KEYS = ['title', 'name', 'what', 'subject', 'summary', 'display_name', 'label'];
+    // ADR-158 §P5: the Mail system table is a read-only projection over the
+    // physical `mail_messages` table; its rows never land in `table_rows`, so
+    // title the chip straight from there via the shared read-through helper.
+    let rowData = {};
     let rowTitle = '';
+    if (isMailMirror(table)) {
+      const header = (await fetchMailChipHeaders([row_id])).get(Number(row_id));
+      if (!header) return { error: `Row ${row_id} not found in table ${table_id}` };
+      rowTitle = mailChipTitle(header) || '';
+    } else {
+      // Resolve row + a best-effort title from common display columns.
+      const row = await dbGet(
+        isPostgres()
+          ? 'SELECT id, data FROM table_rows WHERE id = $1 AND table_id = $2'
+          : 'SELECT id, data FROM table_rows WHERE id = ? AND table_id = ?',
+        [row_id, table_id]
+      );
+      if (!row) return { error: `Row ${row_id} not found in table ${table_id}` };
+      rowData = parseRowData(row.data) || {};
+    }
+
+    const TITLE_KEYS = ['title', 'name', 'what', 'subject', 'summary', 'display_name', 'label'];
     for (const k of TITLE_KEYS) {
       const v = rowData[k];
       if (typeof v === 'string' && v.trim()) { rowTitle = v.trim(); break; }

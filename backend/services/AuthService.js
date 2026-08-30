@@ -5,6 +5,8 @@ import crypto from 'crypto';
 import { dbRun, dbGet } from '../database/connection.js';
 import { autoCreateDefaultProjects } from './ProjectService.js';
 import { applyStarterPack } from './starter-pack/StarterPackService.js';
+import { getEffectiveRegistrationPolicy } from './registrationPolicy.js';
+import { slugify } from './ImportService.js';
 import { authLogger } from '../utils/logger.js';
 
 const SALT_ROUNDS = 10;
@@ -72,18 +74,147 @@ export function decryptPersonalKey(encryptedKey) {
   return decrypted;
 }
 
+// ADR-183 Block C — referral graph helpers.
+// referral_code is a short human-shareable token (deep-link /start <code>). We draw
+// from a 30-char unambiguous alphabet (no O/0, I/1, L, U) so codes survive being read
+// aloud or copied by hand. The DB partial-UNIQUE index (migration 085) is the source
+// of truth for uniqueness; this loop just avoids handing the caller a doomed INSERT.
+const REFERRAL_ALPHABET = 'ABCDEFGHJKMNPQRSTVWXYZ23456789';
+const REFERRAL_CODE_LEN = 8;
+
+function mintReferralCode() {
+  const bytes = crypto.randomBytes(REFERRAL_CODE_LEN);
+  let code = '';
+  for (let i = 0; i < REFERRAL_CODE_LEN; i++) {
+    code += REFERRAL_ALPHABET[bytes[i] % REFERRAL_ALPHABET.length];
+  }
+  return code;
+}
+
+// ADR-183-A D1 — referral code shape `<name-slug>-<suffix>` (e.g. `geratron-hfg57ff`).
+// The prefix caps at 20 chars so the full code (20 + 1 + 8) stays under resolveInviter's
+// 32-char guard.
+const REFERRAL_PREFIX_MAX = 20;
+
+// ADR-183-A D1 — derive the frozen name-prefix. Reuse ImportService.slugify (it already
+// carries the Cyrillic→Latin map, so `Пётр` → `pyotr` for our RU/KZ base — no new
+// transliteration invented). Strip stray hyphens, cap to 20, fall back to `user` when the
+// name has no transliterable chars.
+function referralPrefix(name) {
+  const base = slugify(typeof name === 'string' ? name : '')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, REFERRAL_PREFIX_MAX)
+    .replace(/-+$/g, '');
+  return base || 'user';
+}
+
+// ADR-183-A D1/D2 — mint a unique `<prefix>-<suffix>` code. The prefix is caller-supplied
+// and frozen; only the 8-char [a-z2-9] suffix is (re)rolled on clash. The full string is
+// clash-checked against users.referral_code (the DB partial-UNIQUE index is the source of
+// truth; this loop just avoids a doomed INSERT). Shared by signup (D2) and regeneration
+// (D3) so both mint identically and never drift.
+async function mintUniqueReferralCodeForPrefix(prefix, maxTries = 6) {
+  for (let i = 0; i < maxTries; i++) {
+    const candidate = `${prefix}-${mintReferralCode().toLowerCase()}`;
+    const clash = await dbGet('SELECT 1 AS x FROM users WHERE referral_code = ?', [candidate]);
+    if (!clash) return candidate;
+  }
+  // Astronomically unlikely at any realistic user count; fail loud rather than
+  // insert a NULL and silently break a user's invite link.
+  throw new Error('Could not mint a unique referral_code after several attempts');
+}
+
+// ADR-183-A D2 — mint at signup: the frozen prefix is derived from the new user's name.
+async function mintUniqueReferralCode(name, maxTries = 6) {
+  return mintUniqueReferralCodeForPrefix(referralPrefix(name), maxTries);
+}
+
+/**
+ * ADR-183-A D3 — self-service regeneration. Reroll ONLY the suffix, keep the frozen
+ * prefix: split the CURRENT code on its LAST `-` (a multi-word prefix like
+ * `petr-ivanov-<suffix>` stays intact). A pre-amendment code with no `-` derives its
+ * prefix from the user's current name. Leaves the user's INCOMING edge (`referred_by` —
+ * who invited them) untouched; only the OUTGOING code they hand out changes.
+ * @param {number} userId
+ * @returns {Promise<string>} the new referral_code
+ */
+export async function regenerateReferralCode(userId) {
+  const user = await dbGet('SELECT id, name, referral_code FROM users WHERE id = ?', [userId]);
+  if (!user) throw new Error('User not found');
+
+  const current = typeof user.referral_code === 'string' ? user.referral_code : '';
+  const lastDash = current.lastIndexOf('-');
+  const prefix = lastDash > 0 ? current.slice(0, lastDash) : referralPrefix(user.name);
+
+  const newCode = await mintUniqueReferralCodeForPrefix(prefix);
+  await dbRun('UPDATE users SET referral_code = ? WHERE id = ?', [newCode, userId]);
+  return newCode;
+}
+
+/**
+ * Resolve an inbound inviter code to the inviter's user id (or null).
+ * ADR-183-A D4: codes are normalized (trim + LOWER) to match the new lowercase canonical
+ * form — links are shared by humans, so matching is case-insensitive. Unknown or blank
+ * codes resolve to null — referral is best-effort attribution, never a gate.
+ */
+async function resolveInviter(inviteCode) {
+  if (typeof inviteCode !== 'string') return null;
+  const normalized = inviteCode.trim().toLowerCase();
+  if (!normalized || normalized.length > 32) return null;
+  const inviter = await dbGet('SELECT id FROM users WHERE referral_code = ?', [normalized]);
+  return inviter ? inviter.id : null;
+}
+
 /**
  * Register a new user
- * @param {object} userData - { email, password, name }
+ * @param {object} userData - { email, password, name, communitySignup?, inviteCode? }
  * @returns {object} Created user
  */
 export async function registerUser(userData) {
-  const { email, password, name } = userData;
+  const { email, password, name, communitySignup = false, inviteCode = null } = userData;
 
   // Check if user exists
   const existingUser = await dbGet('SELECT id FROM users WHERE email = ?', [email]);
   if (existingUser) {
     throw new Error('User with this email already exists');
+  }
+
+  // ADR-183 Block C: resolve the inbound inviter code → referred_by. This is the
+  // *inviter's* referral_code carried by the deep-link /start <code>. It is written
+  // ONCE here at INSERT and never updated (write-once by construction — there is no
+  // update path), satisfying the immutability criterion without a DB trigger.
+  const referredBy = await resolveInviter(inviteCode);
+
+  // Check if this is the first user (owner) — cheap COUNT, also the bootstrap escape
+  // hatch for the signup_mode gate below.
+  const userCount = await dbGet('SELECT COUNT(*) as count FROM users', []);
+  // Postgres COUNT(*) comes back as a string ("0"), so coerce before comparing —
+  // otherwise the first user on a fresh install never gets the owner role.
+  const isFirstUser = Number(userCount.count) === 0;
+
+  // Resolve the box registration policy (Block F) before any expensive work.
+  // ADR-188 F1: the effective policy layers the owner's runtime `_app_settings.registration`
+  // blob (Settings toggle) over the env preset, so a saved `default_role`/`signup_mode` takes
+  // effect without a redeploy. Async, but registerUser is already async — no hot-path change.
+  const policy = await getEffectiveRegistrationPolicy();
+
+  // ADR-183 Block F4 (enforce) — signup_mode gate at the anonymous front door.
+  // `open` (standard/community presets): anyone may self-register — unchanged.
+  // `invite`: only a sign-up carrying a VALID inviter code (referredBy resolved) passes.
+  // `closed`: nobody self-registers. The first user (owner bootstrap) ALWAYS passes,
+  // else a box shipping a non-open default (incl. SAFE_FALLBACK='invite') could never
+  // provision its owner. Reject BEFORE bcrypt so a closed door can't be a hash-DoS.
+  if (!isFirstUser && policy.signup_mode !== 'open') {
+    const invited = policy.signup_mode === 'invite' && referredBy != null;
+    if (!invited) {
+      const err = new Error(
+        policy.signup_mode === 'invite'
+          ? 'Registration is invite-only'
+          : 'Registration is currently closed'
+      );
+      err.code = 'REGISTRATION_NOT_ALLOWED';
+      throw err;
+    }
   }
 
   // Hash password
@@ -92,19 +223,25 @@ export async function registerUser(userData) {
   // Generate and encrypt personal key
   const personalKey = generatePersonalKey();
   const encryption_key_encrypted = encryptPersonalKey(personalKey);
+  // ADR-183 Block A + F3: the first user is always `owner`. A `community: true`
+  // sign-up is always `viewer` (read-only, cannot create spaces — gate in
+  // spaces/crud.js). Otherwise the role comes from the box's registration policy
+  // (Block F) rather than a literal: on a standard box the instance default is
+  // `user` (byte-identical to pre-F behaviour); on a community box
+  // (REGISTRATION_DEFAULT=community) the front-door default is `viewer`, so even a
+  // sign-up that omits `community=true` lands as `viewer` — the box policy is
+  // authoritative, not client-elective (closes the Block C trust boundary).
+  const role = isFirstUser ? 'owner' : (communitySignup ? 'viewer' : policy.default_role);
 
-  // Check if this is the first user (owner)
-  const userCount = await dbGet('SELECT COUNT(*) as count FROM users', []);
-  // Postgres COUNT(*) comes back as a string ("0"), so coerce before comparing —
-  // otherwise the first user on a fresh install never gets the owner role.
-  const isFirstUser = Number(userCount.count) === 0;
-  const role = isFirstUser ? 'owner' : 'user';
+  // ADR-183 Block C: mint this newcomer's own referral_code (the code THEY hand out).
+  // ADR-183-A D2: the code is `<name-slug>-<suffix>`; the name-prefix is frozen at mint.
+  const referralCode = await mintUniqueReferralCode(name);
 
   // Insert user
   const result = await dbRun(`
-    INSERT INTO users (email, password_hash, name, encryption_key_encrypted, role)
-    VALUES (?, ?, ?, ?, ?)
-  `, [email, password_hash, name, encryption_key_encrypted, role]);
+    INSERT INTO users (email, password_hash, name, encryption_key_encrypted, role, referral_code, referred_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [email, password_hash, name, encryption_key_encrypted, role, referralCode, referredBy]);
 
   // Return user data (without sensitive info)
   const userId = result.lastInsertRowid;

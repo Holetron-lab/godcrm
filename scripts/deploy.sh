@@ -2,16 +2,19 @@
 # =============================================================================
 # GOD CRM — Deploy Script
 # =============================================================================
-# Runs from PROD (.205) where Claude Code and source code live.
+# Runs from the agent-home / PROD-master box (master A, Ring 0) where Claude
+# Code and the source tree live.
 #
 # Layout:
-#   PROD (.205) code:       /root/production/business-crm/
-#   PROD (.205) nginx root: /var/www/business-crm/
-#   PROD (.205) PM2:        godcrm
+#   PROD (agent-home) code:       /root/production/business-crm/
+#   PROD (agent-home) nginx root: /var/www/business-crm/
+#   PROD (agent-home) PM2:        godcrm
 #
-#   DEV  (.72)  code:       /root/production/business-crm/ (rsync copy)
-#   DEV  (.72)  nginx root: /var/www/business-crm-dev → symlink to dist/
-#   DEV  (.72)  PM2:        godcrm
+#   DEV  code:       /root/production/business-crm/ (rsync copy)
+#   DEV  nginx root: /var/www/business-crm-dev → symlink to dist/
+#   DEV  PM2:        godcrm
+#   DEV  host/URL:   resolved from git-ignored scripts/deploy.local.env
+#                    (DEV_HOST=root@<real-ip>) — no infra IPs in tracked files
 #
 # Usage:
 #   ./scripts/deploy.sh dev           # sync code to DEV, build, restart
@@ -24,10 +27,9 @@
 set -euo pipefail
 
 PROJ="/root/production/business-crm"
-# DEV box moved off the decommissioned .72 (2026-06). Real DEV is now
-# <SPB_IP> (920814.melbi.spaceb). The host/URL live in the git-ignored
-# scripts/deploy.local.env so real infra IPs stay out of tracked files; the
-# placeholder default below is only a fallback if that file is missing.
+# DEV_HOST / DEV_URL resolve from the git-ignored scripts/deploy.local.env so
+# real infra IPs stay out of tracked files. The placeholder default below is
+# only a fallback if that file is missing (deploy aborts if left unresolved).
 DEV_HOST="root@<DEV_IP>"
 DEV_URL="https://devcrm.hltrn.cc"
 PROD_NGINX="/var/www/business-crm"
@@ -136,7 +138,7 @@ fi
 
 HASH=$(grep -o 'index-[^"]*\.js' "$PROJ/dist/index.html" 2>/dev/null || echo "unknown")
 
-# --- Deploy to DEV (.72) ---
+# --- Deploy to DEV (host from deploy.local.env) ---
 if [ "$TARGET" = "dev" ] || [ "$TARGET" = "both" ]; then
   echo ""
   echo "[DEV] Syncing code PROD → DEV..."

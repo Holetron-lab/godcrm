@@ -97,14 +97,19 @@ const fileFilter = (req, file, cb) => {
   const allowedMimes = [
     // Images (NO SVG - XSS risk)
     'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'image/heic', 'image/heif',
     // Documents
-    'application/pdf', 
-    'application/msword', 
+    'application/pdf',
+    'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.ms-powerpoint',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.oasis.opendocument.text',
+    'application/vnd.oasis.opendocument.spreadsheet',
+    // Ebooks
+    'application/epub+zip', 'application/x-mobipocket-ebook',
     // Text (NO HTML - XSS risk)
     'text/plain', 'text/csv', 'text/markdown',
     // Archives
@@ -120,10 +125,24 @@ const fileFilter = (req, file, cb) => {
   ];
   
   if (allowedMimes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} is not allowed`), false);
+    return cb(null, true);
   }
+
+  // ADR-194 B2: do NOT throw here. A thrown fileFilter error aborts multer on the
+  // FIRST bad file, so the response could only ever name one of them. Collect every
+  // rejection on the request instead; the route handler turns a non-empty list into
+  // a 400 that names them all. All-or-nothing is preserved there, not here — nothing
+  // is written to the DB when anything was rejected.
+  (req.rejectedFiles ||= []).push({
+    name: file.originalname,
+    type: file.mimetype,
+    reason: 'type_not_allowed'
+  });
+  fileLogger.warn(
+    { name: file.originalname, mimetype: file.mimetype, userId: req.user?.id },
+    'Upload rejected: MIME type not allowed'
+  );
+  cb(null, false);
 };
 
 // Multer upload middleware
@@ -189,6 +208,28 @@ router.post('/files/upload', upload.array('files', 10), async (req, res) => {
     const visibility = rawVisibility || 'internal';
 
     fileLogger.debug({ spaceId, projectId, userId, visibility }, 'Upload request received');
+
+    // ADR-194 B2: all-or-nothing, but loud. Anything rejected by fileFilter fails the
+    // whole request — drop the temp files multer already wrote for the accepted ones
+    // and answer with every refused file named. Checked before the "no files" branch:
+    // a batch of only-rejected files leaves req.files empty and must not be reported
+    // as "No files uploaded".
+    const rejected = req.rejectedFiles || [];
+    if (rejected.length > 0) {
+      for (const file of req.files || []) {
+        fs.rmSync(file.path, { force: true });
+      }
+      const message = rejected.length === 1
+        ? `Файл «${rejected[0].name}» отклонён: тип ${rejected[0].type} не поддерживается`
+        : `Отклонено файлов: ${rejected.length} — ${rejected.map((f) => f.name).join(', ')}`;
+      // Same envelope as utils/response.js `error()`, plus `rejected` — the helper only
+      // exposes a `details` key and B3 renders the per-file list from `error.rejected`.
+      return res.status(400).json({
+        success: false,
+        error: { code: 'FILE_TYPE_NOT_ALLOWED', message, rejected },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     if (!req.files || req.files.length === 0) {
       return badRequest(res, 'No files uploaded');
@@ -264,7 +305,16 @@ router.post('/files/upload', upload.array('files', 10), async (req, res) => {
     
     success(res, uploadedFiles.length === 1 ? uploadedFiles[0] : uploadedFiles);
   } catch (err) {
-    fileLogger.error({ err }, 'Upload failed');
+    // ADR-194 B2: the bare { err } this used to carry said nothing about who
+    // uploaded what — which is why the 500s of 2026-08-15 stayed undiagnosable.
+    fileLogger.error(
+      {
+        err,
+        userId: req.user?.id,
+        files: (req.files || []).map((f) => ({ name: f.originalname, type: f.mimetype, size: f.size }))
+      },
+      'Upload failed'
+    );
     error(res, 'UPLOAD_FAILED', err.message, 500);
   }
 });
@@ -598,11 +648,14 @@ router.delete('/storage-providers/:providerId', async (req, res) => {
 });
 
 // ─── Multer error handler ──────────────────────────────────────
-// Bug fix: fileFilter errors are plain Error objects thrown via cb(new Error(...)).
+// Multer limit violations (size / count / unexpected field) surface as MulterError.
 // Without this handler they bubble to the global errorHandler which defaults to 500.
 // We intercept them here and return 400 Bad Request instead.
-router.use((err, _req, res, next) => {
+// ADR-194 B2: MIME rejections no longer arrive here — fileFilter collects them and
+// the upload handler answers 400 itself, so it can name every rejected file.
+router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
+    fileLogger.warn({ code: err.code, field: err.field, userId: req.user?.id }, 'Upload rejected by multer');
     if (err.code === 'LIMIT_FILE_SIZE') {
       return badRequest(res, 'File too large. Maximum size: 100 MB.');
     }
@@ -614,10 +667,9 @@ router.use((err, _req, res, next) => {
     }
     return badRequest(res, `Upload error: ${err.message}`);
   }
-  // fileFilter custom errors (e.g. "File type X is not allowed")
-  if (err?.message?.includes('is not allowed')) {
-    return badRequest(res, err.message);
-  }
+  // ADR-194 B2: anything else becomes a 500 in the global handler with no trace of
+  // the route that produced it. Leave a line before handing it on.
+  fileLogger.error({ err, path: req.path, userId: req.user?.id }, 'Files router middleware error');
   next(err);
 });
 

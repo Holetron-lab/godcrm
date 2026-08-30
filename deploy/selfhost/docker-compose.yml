@@ -1,17 +1,56 @@
 # GOD CRM — self-host stack.
 #
-#   docker compose up -d                      → CRM + Postgres (everything you need)
-#   docker compose --profile memory up -d     → also start Hindsight MemPalace
+#   docker compose up -d                                → CRM + Postgres, no memory
+#   docker compose --profile memory-embedded  up -d     → + RCLL memory in the CRM's own Postgres
+#   docker compose --profile memory-standalone up -d    → + RCLL memory in its own Postgres
 #
-# The `install.sh` helper in this folder asks whether to enable the memory
-# profile and generates secrets for you. You can also run compose directly.
+# `install.sh` asks which of the three you want, writes MEMORY_MODE into .env
+# and passes the matching profile. You can also run compose directly.
+#
+# EMBEDDED vs STANDALONE — same image, same migration lineage, same data model.
+# The only difference is where the memory schema lives:
+#
+#   embedded    → schema ${MEMORY_SCHEMA} inside the CRM database.
+#                 One database to back up, one to operate. Memory migrations are
+#                 DDL against the CRM's database — that is why they are opt-out
+#                 (MEMORY_RUN_MIGRATIONS) and why the schema is kept separate.
+#   standalone  → its own `hindsight` database in its own container/volume.
+#                 Two databases to back up; the CRM database is never touched
+#                 by memory migrations.
+#
+# Enable exactly ONE memory profile. Both publish the same network alias
+# (`hindsight`), so the CRM reaches memory at http://hindsight:5100 either way
+# and HINDSIGHT_URL never has to change.
 
 name: godcrm
 
+# Config shared by both memory topologies. Everything that differs (database
+# URL, schema, migrations) is set per-service below.
+x-memory-common: &memory-common
+  HINDSIGHT_API_HOST: "0.0.0.0"
+  HINDSIGHT_API_PORT: "5100"
+  # The LLM is used for memory classification on WRITE only — the read path
+  # never calls a model. `none` is a supported provider: retain still works,
+  # only classification quality degrades. A real provider with an EMPTY key is
+  # a hard boot failure (ValueError → restart loop), so install.sh writes
+  # `none` when no key is present.
+  HINDSIGHT_API_LLM_PROVIDER: ${LLM_PROVIDER:-none}
+  HINDSIGHT_API_LLM_API_KEY: ${LLM_API_KEY:-}
+  HINDSIGHT_API_LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+  # Embeddings and reranker run locally on CPU — no key, no egress.
+  HINDSIGHT_API_EMBEDDINGS_PROVIDER: local
+  HINDSIGHT_API_EMBEDDINGS_LOCAL_FORCE_CPU: "true"
+  HINDSIGHT_API_RERANKER_PROVIDER: local
+  HINDSIGHT_API_RERANKER_LOCAL_FORCE_CPU: "true"
+  HINDSIGHT_API_WORKERS: "1"
+
 services:
   # ---- PostgreSQL: the CRM's own database ----
+  # pgvector/pgvector:pg16 is stock Postgres 16 plus the `vector` extension.
+  # It is the default for every mode so that turning memory on later never
+  # requires swapping the image under an existing data volume.
   db:
-    image: postgres:16-alpine
+    image: ${DB_IMAGE:-pgvector/pgvector:pg16}
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-godcrm}
@@ -62,50 +101,70 @@ services:
       # Missing origins serve a white screen (CORS gates static assets).
       CORS_ORIGINS: ${PUBLIC_URL:-http://localhost:${APP_PORT:-5000}}
       UPLOAD_PATH: /app/uploads
-      # Hindsight memory backend. Only reachable when the `memory` profile is up.
+      # Memory backend. Same alias in both topologies; unreachable (and unused)
+      # when no memory profile is up.
       HINDSIGHT_URL: ${HINDSIGHT_URL:-http://hindsight:5100}
     ports:
       - "${APP_PORT:-5000}:5000"
     volumes:
       - godcrm-uploads:/app/uploads
 
-  # ---- Hindsight MemPalace (optional): `--profile memory` ----
-  # Our own MemPalace fork (rooms/halls/layers — see ADR-148), published to
-  # GHCR so it pulls with no build step. Requires an LLM key for memory
-  # classification; embeddings/reranker run locally on CPU.
-  hindsight:
-    image: ${HINDSIGHT_IMAGE:-ghcr.io/holetron/hindsight-mempalace:latest}
-    profiles: ["memory"]
+  # ---- RCLL memory, EMBEDDED: `--profile memory-embedded` ----
+  # Lives in schema ${MEMORY_SCHEMA} inside the CRM database. This is the
+  # topology Ring 0 runs.
+  memory-embedded:
+    image: ${MEMORY_IMAGE:?set MEMORY_IMAGE in .env}
+    profiles: ["memory-embedded"]
     restart: unless-stopped
     depends_on:
-      hindsight-db:
+      db:
         condition: service_healthy
     environment:
-      HINDSIGHT_API_DATABASE_URL: postgresql://hindsight:${HINDSIGHT_DB_PASSWORD:-hindsight_dev}@hindsight-db:5432/hindsight
-      HINDSIGHT_API_MIGRATION_DATABASE_URL: postgresql+psycopg2://hindsight:${HINDSIGHT_DB_PASSWORD:-hindsight_dev}@hindsight-db:5432/hindsight
-      HINDSIGHT_API_HOST: "0.0.0.0"
-      HINDSIGHT_API_PORT: "5100"
-      HINDSIGHT_API_LLM_PROVIDER: ${LLM_PROVIDER:-openai}
-      HINDSIGHT_API_LLM_API_KEY: ${LLM_API_KEY:-}
-      HINDSIGHT_API_LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
-      HINDSIGHT_API_EMBEDDINGS_PROVIDER: local
-      HINDSIGHT_API_EMBEDDINGS_LOCAL_FORCE_CPU: "true"
-      HINDSIGHT_API_RERANKER_PROVIDER: local
-      HINDSIGHT_API_RERANKER_LOCAL_FORCE_CPU: "true"
-      HINDSIGHT_API_RUN_MIGRATIONS: "true"
-      HINDSIGHT_API_WORKERS: "1"
-    # Internal only — the CRM reaches it at http://hindsight:5100.
+      <<: *memory-common
+      HINDSIGHT_API_DATABASE_URL: postgresql://${POSTGRES_USER:-godcrm}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-godcrm}
+      HINDSIGHT_API_MIGRATION_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-godcrm}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-godcrm}
+      # Own namespace inside the CRM database — never `public`.
+      HINDSIGHT_API_DATABASE_SCHEMA: ${MEMORY_SCHEMA:-hindsight_v2}
+      # Builds/upgrades the memory schema on start. A fresh install NEEDS this
+      # once; afterwards it is DDL against your CRM database on every restart —
+      # set MEMORY_RUN_MIGRATIONS=false in .env and run upgrades deliberately.
+      # NOTE: the knob is *_ON_STARTUP. `HINDSIGHT_API_RUN_MIGRATIONS` (no
+      # suffix) is read by nothing and the real default is ON — do not
+      # "simplify" this back.
+      HINDSIGHT_API_RUN_MIGRATIONS_ON_STARTUP: ${MEMORY_RUN_MIGRATIONS:-true}
+    networks:
+      default:
+        aliases: [hindsight]
 
-  hindsight-db:
+  # ---- RCLL memory, STANDALONE: `--profile memory-standalone` ----
+  # Own database, own volume. The CRM database is never touched by memory DDL.
+  memory-standalone:
+    image: ${MEMORY_IMAGE:?set MEMORY_IMAGE in .env}
+    profiles: ["memory-standalone"]
+    restart: unless-stopped
+    depends_on:
+      memory-db:
+        condition: service_healthy
+    environment:
+      <<: *memory-common
+      HINDSIGHT_API_DATABASE_URL: postgresql://hindsight:${HINDSIGHT_DB_PASSWORD:?set HINDSIGHT_DB_PASSWORD in .env}@memory-db:5432/hindsight
+      HINDSIGHT_API_MIGRATION_DATABASE_URL: postgresql+psycopg2://hindsight:${HINDSIGHT_DB_PASSWORD}@memory-db:5432/hindsight
+      HINDSIGHT_API_DATABASE_SCHEMA: public
+      HINDSIGHT_API_RUN_MIGRATIONS_ON_STARTUP: ${MEMORY_RUN_MIGRATIONS:-true}
+    networks:
+      default:
+        aliases: [hindsight]
+
+  memory-db:
     image: pgvector/pgvector:pg16
-    profiles: ["memory"]
+    profiles: ["memory-standalone"]
     restart: unless-stopped
     environment:
       POSTGRES_DB: hindsight
       POSTGRES_USER: hindsight
-      POSTGRES_PASSWORD: ${HINDSIGHT_DB_PASSWORD:-hindsight_dev}
+      POSTGRES_PASSWORD: ${HINDSIGHT_DB_PASSWORD:?set HINDSIGHT_DB_PASSWORD in .env}
     volumes:
-      - hindsight-db:/var/lib/postgresql/data
+      - memory-db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hindsight -d hindsight"]
       interval: 5s
@@ -115,4 +174,4 @@ services:
 volumes:
   godcrm-db:
   godcrm-uploads:
-  hindsight-db:
+  memory-db:

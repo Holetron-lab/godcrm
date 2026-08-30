@@ -169,9 +169,6 @@ export interface TurnHeaderProps {
   timestamp: string;
   /** End timestamp for time range display (e.g. "10:30 – 10:45") */
   timestampEnd?: string;
-  /** Agent work span in ms (first→last message in bubble) — shown next to the
-   *  time range so users see the real duration even when start/end share a minute. */
-  durationMs?: number;
   isProcessing?: boolean;
   /** Agent color for the dot indicator */
   agentColor?: string;
@@ -267,6 +264,15 @@ export interface TurnBodyProps {
   onContinueAgent?: () => void;
   /** ADR-0031 P5: navigate to a different conversation and scroll to a moved message */
   onNavigateToConversation?: (conversationId: number, messageId?: number) => void;
+  /** ADR-185 — when set, render this message's body using the translated text
+   *  instead of its original `content`. Only the primary message is translatable
+   *  in the MVP, so at most one message id is overridden per turn. */
+  translationOverride?: { messageId: string; content: string } | null;
+  /** ADR-185 — when set, this message's translation into `langLabel` is still
+   *  in flight. Render a loading indicator in place of the body instead of
+   *  flashing back to the original text; the translated body swaps in via
+   *  `translationOverride` once the request resolves. */
+  pendingTranslation?: { messageId: string; langLabel: string } | null;
 }
 
 export interface TurnFooterProps {
@@ -285,6 +291,24 @@ export interface TurnFooterProps {
   onUnpin?: (messageId: number) => void;
   canPin?: boolean;
   onDelete?: (messageId: number) => void;
+  /** ADR-185 — pick a specific target language (chevron menu). Absent = turn is
+   *  not translatable (only agent final-text turns are). */
+  onTranslate?: (targetLang: string) => void;
+  /** ADR-185 — main «Язык» button: translate-to-current-target / revert toggle.
+   *  Absent = turn is not translatable. */
+  onToggleTranslate?: () => void;
+  /** ADR-185 — the turn is currently displaying a translation (vs. the original). */
+  showingTranslation?: boolean;
+  /** ADR-185 — label of the language the main button targets / is showing. */
+  activeLangLabel?: string;
+  /** ADR-185 — code of the currently-targeted language: pinned to the top of the
+   *  picker and highlighted blue. */
+  activeLangCode?: string;
+  /** ADR-185 — original/detected language code of the message: pinned near the top
+   *  and badged «оригинал» in the picker. */
+  originalLangCode?: string;
+  /** ADR-185 — a translate request for this turn is in flight. */
+  isTranslating?: boolean;
   primaryMessage: ChatMessage | null;
   allMessages?: ChatMessage[];
   turnType: 'human' | 'agent';

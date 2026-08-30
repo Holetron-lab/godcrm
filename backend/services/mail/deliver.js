@@ -1,0 +1,120 @@
+/**
+ * deliverMail — the single outbound-send path shared by the immediate
+ * `POST /mail/send` route and the scheduled-send worker (ADR-158 §P6).
+ *
+ * It does exactly what the /send route used to do inline: mint a reply token
+ * when composing against a CRM row, embed it in the subject, send over the
+ * connector's SMTP creds, then persist a Sent copy in mail_messages (metadata
+ * only for attachments — bytes stay out of the row, same as mig 081). Pulling
+ * it into one function means the worker can replay a send with byte-identical
+ * behavior instead of a copy-pasted second implementation.
+ */
+
+import { dbGet } from '../../database/connection.js';
+import SMTPService from '../SMTPService.js';
+import { generateReplyToken, embedReplyToken } from './replyToken.js';
+
+// Thrown for a caller-fixable precondition (missing SMTP creds). SMTP transport
+// failures propagate as the raw nodemailer error so callers can log the cause.
+export class MailSendError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'MailSendError';
+  }
+}
+
+/**
+ * Send one message and persist its Sent copy.
+ *
+ * @param {object} args
+ * @param {number} args.spaceId
+ * @param {{ id:number, creds:object }} args.conn  resolved imap/smtp connector
+ * @param {string[]} args.to
+ * @param {string[]} [args.cc]
+ * @param {string[]} [args.bcc]
+ * @param {string} args.subject
+ * @param {string} [args.body]
+ * @param {boolean} [args.html]  body is HTML when true, else plain text
+ * @param {Array<{filename,content:Buffer,contentType}>} [args.attachments]
+ * @param {number|null} [args.linkedTableId]
+ * @param {number|null} [args.linkedRowId]
+ * @returns {Promise<{ info:object, sentRow:object, replyToken:string|null, linked:boolean }>}
+ */
+export async function deliverMail({
+  spaceId,
+  conn,
+  to,
+  cc = [],
+  bcc = [],
+  subject,
+  body = '',
+  html = false,
+  attachments = [],
+  linkedTableId = null,
+  linkedRowId = null,
+}) {
+  const { smtp_host, smtp_port, username, password } = conn.creds;
+  if (!smtp_host || !username || !password) {
+    throw new MailSendError('connector is missing SMTP host/username/password');
+  }
+
+  const linked = Number.isFinite(linkedTableId) && Number.isFinite(linkedRowId);
+  const replyToken = linked ? generateReplyToken() : null;
+  const outSubject = linked ? embedReplyToken(subject, replyToken) : subject;
+
+  // Metadata-only projection persisted on the Sent copy (bytes stay out of the
+  // row — same rationale as migration 081).
+  const attachmentMeta = attachments.map((a) => ({
+    filename: a.filename,
+    contentType: a.contentType,
+    size: a.content.length,
+  }));
+
+  const transport = SMTPService.createTransport({
+    host: smtp_host,
+    port: Number(smtp_port) || 587,
+    user: username,
+    password,
+  });
+  const info = await transport.sendMail({
+    from: username,
+    to,
+    cc: cc.length ? cc : undefined,
+    bcc: bcc.length ? bcc : undefined,
+    subject: outSubject,
+    text: html ? undefined : body || '',
+    html: html ? body || '' : undefined,
+    attachments: attachments.length ? attachments : undefined,
+  });
+
+  // Persist a Sent copy so the UI reflects it immediately (imap_uid NULL → never
+  // collides with a synced row; an IMAP-side APPEND is a later enhancement).
+  const sentRow = await dbGet(
+    `INSERT INTO mail_messages
+       (space_id, connector_id, folder, message_id, from_name, from_address,
+        to_addresses, subject, preview, body_text, body_html, date, is_read,
+        attachments, reply_token, linked_table_id, linked_row_id)
+     VALUES (?, ?, 'sent', ?, ?, ?, ?::jsonb, ?, ?, ?, ?, now(), true, ?::jsonb, ?, ?, ?)
+     RETURNING *`,
+    [
+      spaceId,
+      conn.id,
+      info?.messageId || null,
+      username,
+      username,
+      JSON.stringify(to),
+      outSubject,
+      String(body || '').replace(/\s+/g, ' ').slice(0, 140),
+      html ? null : body || '',
+      html ? body || '' : null,
+      JSON.stringify(attachmentMeta),
+      replyToken,
+      linked ? linkedTableId : null,
+      linked ? linkedRowId : null,
+    ]
+  );
+
+  return { info, sentRow, replyToken, linked };
+}
+
+export default { deliverMail, MailSendError };

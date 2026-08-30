@@ -100,6 +100,12 @@ export const TIER_1_SECRETS = Object.freeze([
     category: 'social',
     description: 'Bluesky app-password (revocable; createSession → searchPosts)',
   },
+  {
+    vaultKey: 'reddit_api_key',
+    envFallback: 'REDDIT_API_KEY',
+    category: 'social',
+    description: 'Reddit search API key (redditapis.com Bearer-token; reddit_search social-listening)',
+  },
 
   // ── Email ──────────────────────────────────────────────────────────────
   {

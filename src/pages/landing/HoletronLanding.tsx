@@ -368,7 +368,7 @@ const HoletronLanding = () => {
           <div className="hltrn-cta-row mt-10">
             <a
               className="hltrn-cta"
-              href="https://github.com/holetron"
+              href="https://github.com/Holetron-lab"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -440,11 +440,11 @@ const HoletronLanding = () => {
             <p className="meta">MIT · Python + TypeScript · MCP-compatible</p>
             <a
               className="cta"
-              href="https://github.com/holetron/hindsight-mempalace"
+              href="https://github.com/Holetron-lab/fleet-memory"
               target="_blank"
               rel="noopener noreferrer"
             >
-              → github.com/holetron/hindsight-mempalace
+              → github.com/Holetron-lab/fleet-memory
             </a>
           </article>
 
@@ -454,8 +454,8 @@ const HoletronLanding = () => {
             <p className="body">
               Tables, automations, agents, MCP — all in one place. Used internally to run
               Holetron&apos;s operations. Now in limited public beta. The code is open at{' '}
-              <a href="https://github.com/holetron" target="_blank" rel="noopener noreferrer">
-                github.com/holetron
+              <a href="https://godcrm.ai/git/holetron-lab/godcrm" target="_blank" rel="noopener noreferrer">
+                godcrm.ai/git
               </a>
               .
             </p>
@@ -474,8 +474,8 @@ const HoletronLanding = () => {
         {/* FOOTER */}
         <footer className="hltrn-footer">
           <div className="hltrn-footer__row">
-            <a href="https://github.com/holetron" target="_blank" rel="noopener noreferrer">
-              github.com/holetron
+            <a href="https://github.com/Holetron-lab" target="_blank" rel="noopener noreferrer">
+              github.com/Holetron-lab
             </a>
             <span className="hltrn-footer__sep" aria-hidden>·</span>
             <a href="https://x.com/holetron" target="_blank" rel="noopener noreferrer">

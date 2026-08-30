@@ -64,6 +64,9 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
   const widgetRef = useRef<HTMLDivElement>(null);
   const currentConversationIdRef = useRef<number | null>(null);
   const isSavingRef = useRef(false);
+  // Background poller for the agent's reply — the mini-widget has no push/stream,
+  // so after a send we must poll the /chat message store to read the reply back.
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Get current space for filtering agents
   const currentSpace = useCurrentSpace();
@@ -127,6 +130,15 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
   useEffect(() => {
     currentConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId]);
+
+  // Stop any in-flight reply poller (on unmount, new chat, or conversation switch)
+  const stopReplyPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+  useEffect(() => stopReplyPolling, [stopReplyPolling]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -249,6 +261,95 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
     setInputValue(prev => prev ? `${prev}\n${text}` : text);
   }, []);
 
+  // Poll the /chat message store for the agent's reply after a send.
+  // Personas write their answer straight to `messages`; this mini-widget has no
+  // websocket/stream, so without polling the placeholder bubble hangs on
+  // "Waiting for response..." forever even though the reply is already in the DB
+  // (ADR-190, conv 3542/3543). We read back the SAME store we POST to.
+  const REPLY_POLL_INTERVAL_MS = 2500;
+  const REPLY_POLL_TIMEOUT_MS = 3 * 60 * 1000;
+  const beginReplyPolling = (convId: number, afterMessageId: number, placeholderId: string) => {
+    stopReplyPolling();
+    const startedAt = Date.now();
+    const ownId = authUser ? Number(authUser.id) : null;
+    let cursor = afterMessageId;
+    let boundFirst = false;
+
+    const tick = async () => {
+      // Abandon if the user switched conversations / started a new chat
+      if (currentConversationIdRef.current !== convId) { stopReplyPolling(); return; }
+      try {
+        const resp = await apiClient.get<{
+          success: boolean;
+          data: {
+            messages: Array<{
+              id: number; content: string; content_type?: string; contentType?: string;
+              sender_id?: number; sender_type?: string; senderType?: string; sender_user_type?: string;
+              sender_name?: string; created_at?: string; timestamp?: string;
+            }>;
+            is_processing?: boolean;
+          };
+        }>(`/chat/conversations/${convId}/messages?after=${cursor}&content_types=text`);
+
+        const rows = (resp.success && resp.data?.messages) || [];
+        const replies = rows.filter(m => {
+          const ct = m.contentType || m.content_type || 'text';
+          const senderId = m.sender_id != null ? Number(m.sender_id) : null;
+          const notOwn = ownId == null || senderId == null || senderId !== ownId;
+          const hasContent = typeof m.content === 'string' && m.content.trim().length > 0;
+          return ct === 'text' && notOwn && hasContent;
+        });
+
+        if (rows.length > 0) {
+          cursor = Math.max(cursor, ...rows.map(m => Number(m.id) || cursor));
+        }
+
+        if (replies.length > 0) {
+          setMessages(prev => {
+            let next = prev;
+            replies.forEach((r, i) => {
+              const ts = r.created_at || r.timestamp;
+              const mapped: ChatMessage = {
+                id: `reply_${r.id}`,
+                role: 'assistant',
+                content: r.content,
+                agentName: r.sender_name || currentAgent?.name,
+                timestamp: ts ? new Date(ts) : new Date(),
+                isStreaming: false,
+              };
+              if (!boundFirst && i === 0) {
+                next = next.map(msg => (msg.id === placeholderId ? { ...mapped, id: placeholderId } : msg));
+              } else {
+                next = [...next, mapped];
+              }
+            });
+            return next;
+          });
+          boundFirst = true;
+        }
+
+        const stillProcessing = resp.data?.is_processing === true;
+        if (boundFirst && !stillProcessing) { stopReplyPolling(); return; }
+
+        if (Date.now() - startedAt > REPLY_POLL_TIMEOUT_MS) {
+          stopReplyPolling();
+          if (!boundFirst) {
+            setMessages(prev => prev.map(msg =>
+              msg.id === placeholderId
+                ? { ...msg, content: '', isStreaming: false, error: 'Агент пока не ответил. Откройте полный чат, чтобы увидеть ответ.' }
+                : msg
+            ));
+          }
+        }
+      } catch (err) {
+        logger.error('Reply polling failed:', err);
+      }
+    };
+
+    pollTimerRef.current = setInterval(tick, REPLY_POLL_INTERVAL_MS);
+    void tick(); // fire immediately so fast replies show without waiting a full interval
+  };
+
   // Send message function
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -290,9 +391,20 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
       }
       if (!convId) throw new Error('Failed to create or find conversation');
 
+      // Explicitly invoke the selected agent. Personas (e.g. sixty-*) run with
+      // response_mode='mention_only', so the backend dispatcher only fires on a
+      // <<@slug>> token. Without it the message is stored but no agent is ever
+      // summoned — the bubble hangs on "Waiting for response..." forever
+      // (conv 3542, ADR-190). Slug is derived the same way as agentToSlug():
+      // agent name → lowercase kebab, matching the users.handle the resolver
+      // looks up. Skip injection if the user already typed an explicit mention.
+      const agentSlug = currentAgent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const alreadyMentions = /<<[@/][^>]+>>/.test(trimmedInput);
+      const outgoingContent = alreadyMentions ? trimmedInput : `<<@${agentSlug}>> ${trimmedInput}`;
+
       const response = await apiClient.post<{ success: boolean; data: { id: number; content: string; sender_id: number } }>(
         `/chat/conversations/${convId}/messages`,
-        { content: trimmedInput, content_type: 'text', agent_mode: agentMode ? 'agent' : 'ask' }
+        { content: outgoingContent, content_type: 'text', agent_mode: agentMode ? 'agent' : 'ask' }
       );
 
       if (response.success) {
@@ -300,6 +412,12 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
           msg.id === assistantMsgId ? { ...msg, content: 'Waiting for response...', isStreaming: true } : msg
         ));
         refetchConversations();
+        // Read the agent's reply back from the same store — the widget has no
+        // stream, so poll from just after the user message we just created.
+        const userMsgId = Number(response.data?.id);
+        if (Number.isFinite(userMsgId)) {
+          beginReplyPolling(convId, userMsgId, assistantMsgId);
+        }
       } else {
         throw new Error('Failed to send message');
       }
@@ -395,22 +513,51 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
     }
   };
 
-  // Select conversation
+  // Select conversation — read history from the /chat message store, the SAME
+  // store messages are written to (POST /chat/conversations/:id/messages) and
+  // polled from. The old path read /ai/conversations/:id and expected a
+  // `data.conversation` wrapper the endpoint no longer returns, so old chats
+  // always opened empty (ADR-190).
   const handleSelectConversation = async (id: number) => {
+    stopReplyPolling();
     try {
       const response = await apiClient.get<{
         success: boolean;
-        data: { conversation: { id: number; title: string; agentId: number; agentName: string; messages: ChatMessage[] } };
-      }>(`/ai/conversations/${id}`);
-      if (response.success && response.data?.conversation) {
+        data: {
+          messages: Array<{
+            id: number; content: string; content_type?: string; contentType?: string;
+            sender_id?: number; sender_type?: string; senderType?: string; sender_user_type?: string;
+            sender_name?: string; created_at?: string; timestamp?: string;
+          }>;
+        };
+      }>(`/chat/conversations/${id}/messages?content_types=text&limit=200`);
+      if (response.success && response.data) {
         setSelectedConversationId(id);
         currentConversationIdRef.current = id;
-        const restoredMessages = (response.data.conversation.messages || []).map((m, idx) => ({
-          ...m, id: m.id || `restored_${idx}_${Date.now()}`, timestamp: m.timestamp ? new Date(m.timestamp) : new Date()
-        }));
+        const ownId = authUser ? Number(authUser.id) : null;
+        const restoredMessages: ChatMessage[] = (response.data.messages || [])
+          .filter(m => typeof m.content === 'string' && m.content.trim().length > 0)
+          .map((m, idx) => {
+            const senderId = m.sender_id != null ? Number(m.sender_id) : null;
+            const st = m.senderType || m.sender_type || m.sender_user_type;
+            const isUser = ownId != null && senderId != null ? senderId === ownId : st === 'human';
+            // Strip the leading <<@slug>> we inject on send so restored user
+            // messages read like what the user typed.
+            const content = isUser ? m.content.replace(/^\s*<<[@/][^>]+>>\s*/, '') : m.content;
+            const ts = m.created_at || m.timestamp;
+            return {
+              id: m.id != null ? `msg_${m.id}` : `restored_${idx}_${Date.now()}`,
+              role: isUser ? 'user' : 'assistant',
+              content,
+              agentName: isUser ? undefined : (m.sender_name || undefined),
+              timestamp: ts ? new Date(ts) : new Date(),
+            };
+          });
         setMessages(restoredMessages);
-        if (response.data.conversation.agentId) {
-          const agent = agents.find(a => a.id === response.data.conversation.agentId);
+        // Restore the agent from the conversation list metadata if available.
+        const conv = conversations.find(c => c.id === id);
+        if (conv?.agent_id) {
+          const agent = agents.find(a => a.id === conv.agent_id);
           if (agent) setCurrentAgent(agent);
         }
         setShowConversations(false);
@@ -422,6 +569,7 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
   };
 
   const handleNewConversation = () => {
+    stopReplyPolling();
     setMessages([]);
     setSelectedConversationId(null);
     currentConversationIdRef.current = null;

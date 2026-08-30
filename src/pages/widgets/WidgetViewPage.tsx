@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { logger } from '@/shared/utils/logger';
+import { showToast } from '@/shared/hooks/useToast';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
@@ -19,9 +20,11 @@ import { LabsWidget } from '@/features/widgets/components/presets/LabsWidget';
 import { VirtualOfficeWidget } from '@/features/widgets/components/presets/virtual-office';
 import { TerminalWidget } from '@/features/widgets/components/presets/TerminalWidget';
 import { Neo16Widget } from '@/features/widgets/components/presets/Neo16Widget';
+import { getWidgetPreset } from '@/features/widgets/registry/modulePresetRegistry';
 import { AddRowModal } from '@/features/tables/components/modals/AddRowModal';
 import { AddColumnOptionModal } from '@/features/widgets/components/modals/AddColumnOptionModal';
 import { CardDetailModal } from '@/features/widgets/components/modals/CardDetailModal';
+import { GalleryCardDetailModal } from '@/features/widgets/components/modals/GalleryCardDetailModal';
 import { TableFilters } from '@/features/tables/components/TableFilters/TableFilters';
 import { PrintModal } from '@/features/tables/components/PrintModal';
 import { tablesApi } from '@/features/tables/api/tablesApi';
@@ -334,6 +337,25 @@ export function WidgetViewPage() {
     }
   };
 
+  // Handle card deletion from kanban card (✕ corner button)
+  const handleDeleteCard = async (cardId: string) => {
+    if (!widget?.config?.table_id) return;
+    try {
+      await tablesApi.deleteRow(String(widget.config.table_id), cardId);
+      await queryClient.invalidateQueries({ queryKey: ['widget-data', widgetId] });
+      await refetchData();
+      showToast('Тикет удалён', 'success');
+    } catch (error) {
+      logger.error('Failed to delete card:', error);
+      const msg = error instanceof Error ? error.message : '';
+      const forbidden = /\b403\b|forbidden|permission|прав/i.test(msg);
+      showToast(
+        forbidden ? 'Нет прав на удаление этого тикета' : 'Не удалось удалить тикет',
+        'error',
+      );
+    }
+  };
+
   // Render appropriate widget based on preset
   const renderWidgetContent = () => {
     const props = { widget, data: filteredData };
@@ -398,6 +420,7 @@ export function WidgetViewPage() {
             onMoveCard={handleMoveCard}
             onCardDoubleClick={handleCardDoubleClick}
             onCardUpdate={handleCardFieldUpdate}
+            onDeleteCard={handleDeleteCard}
             onOpenRowChat={handleOpenRowChat}
             onAttachRowToMessage={handleAttachRowToMessage}
           />
@@ -439,7 +462,9 @@ export function WidgetViewPage() {
       case 'chart_widget':
         return <ChartWidget {...props} />;
       case 'gallery_widget':
-        return <GalleryWidget {...props} onCardClick={(card) => handleCardDoubleClick(card, 'details')} />;
+        // columnsInfo is what lets the gallery find the state column on its own —
+        // without it archived cards never sink and never go grey.
+        return <GalleryWidget {...props} columnsInfo={columnsInfo} onCardClick={(card) => handleCardDoubleClick(card, 'details')} />;
       case 'number_widget':
         return <NumberWidget {...props} />;
       case 'task_list':
@@ -476,12 +501,19 @@ export function WidgetViewPage() {
         return <TerminalWidget widget={widget} data={widgetData} />;
       case '16neo':
         return <Neo16Widget widget={widget} data={widgetData} />;
-      default:
+      default: {
+        // Autonomous-module presets (MODULE-CONTRACT v1, seam #2) — same fallback
+        // the dashboard renderer already has (WidgetRenderer.tsx `default:`). If a
+        // module registered this preset key, render it full-page; otherwise fall
+        // through to the core "unknown module" notice. No static import, no case.
+        const ModulePreset = getWidgetPreset(widget.preset_name);
+        if (ModulePreset) return <ModulePreset widget={widget} data={widgetData} />;
         return (
           <div className="flex items-center justify-center h-full text-[var(--text-tertiary)]">
             {t('Неизвестный тип модуля:', 'Unknown module type:')} {widget.preset_name}
           </div>
         );
+      }
     }
   };
 
@@ -595,26 +627,43 @@ export function WidgetViewPage() {
         tableName={t('Таблица статусов', 'Statuses table')}
       />
 
-      {/* Card Detail Modal - for viewing/editing cards on double-click */}
-      <CardDetailModal
-        isOpen={showCardDetailModal}
-        onClose={() => {
-          setShowCardDetailModal(false);
-          setSelectedCard(null);
-        }}
-        card={selectedCard}
-        columns={tableColumns}
-        titleField={widget?.config?.card_title_column || widget?.config?.titleColumn || 'title'}
-        groupByField={kanbanGroupColumn?.name}
-        onSave={handleCardSave}
-        initialTab={cardDetailInitialTab}
-        tableId={widget?.config?.table_id}
-        relationData={allRelationData}
-        descriptionField="why"
-        onOpenChat={handleOpenRowChat}
-        onAttachToChat={handleAttachRowToChat}
-        onAttachToMessage={handleAttachRowToMessage}
-      />
+      {/* Card Detail Modal - for viewing/editing cards on double-click.
+          Gallery gets its own layout (photo strip + care fields), see GalleryCardDetailModal. */}
+      {widget?.preset_name === 'gallery_widget' ? (
+        <GalleryCardDetailModal
+          isOpen={showCardDetailModal}
+          onClose={() => {
+            setShowCardDetailModal(false);
+            setSelectedCard(null);
+          }}
+          card={selectedCard}
+          columns={tableColumns}
+          config={widget?.config}
+          titleField={widget?.config?.card_title_column || widget?.config?.titleColumn || 'title'}
+          onSave={handleCardSave}
+          tableId={widget?.config?.table_id}
+        />
+      ) : (
+        <CardDetailModal
+          isOpen={showCardDetailModal}
+          onClose={() => {
+            setShowCardDetailModal(false);
+            setSelectedCard(null);
+          }}
+          card={selectedCard}
+          columns={tableColumns}
+          titleField={widget?.config?.card_title_column || widget?.config?.titleColumn || 'title'}
+          groupByField={kanbanGroupColumn?.name}
+          onSave={handleCardSave}
+          initialTab={cardDetailInitialTab}
+          tableId={widget?.config?.table_id}
+          relationData={allRelationData}
+          descriptionField="why"
+          onOpenChat={handleOpenRowChat}
+          onAttachToChat={handleAttachRowToChat}
+          onAttachToMessage={handleAttachRowToMessage}
+        />
+      )}
 
       {/* Print Modal */}
       <PrintModal

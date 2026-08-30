@@ -11,9 +11,11 @@ import { SecuritySettings } from './components/SecuritySettings';
 import { TwoFactorSettings } from './components/TwoFactorSettings';
 import { RateLimitSettings } from './components/RateLimitSettings';
 import { CallsSettings } from './components/CallsSettings';
+import { PromoSettings } from './components/PromoSettings';
 import { PrimaryColorPicker } from './components/PrimaryColorPicker';
 import { ApiSettings } from './components/ApiSettings';
 import { AddAgentSettings } from './components/AddAgentSettings';
+import { RegistrationPolicySettings } from '@/features/registration/components/RegistrationPolicySettings';
 import { useEffect } from 'react';
 import { setPageTitle } from '@/shared/utils/pageTitle';
 import { Settings, Server, Shield, Palette, Sun, Moon, Monitor, ChevronDown, Crown, PanelLeft, PanelLeftClose } from 'lucide-react';
@@ -74,6 +76,9 @@ const SettingsPage = () => {
 
       {/* ADR-0079 §2: Add Agent — unlocks Tier-B coding pack on demand */}
       <AddAgentSettings />
+
+      {/* ADR-188 Block F — referral surface now lives inside ProfileSettings
+          (code + link + scannable QR, sourced from /auth/profile). */}
 
       {/* Language & Preferences */}
       <div className="space-y-4 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-6 shadow-sm">
@@ -197,9 +202,12 @@ const SettingsPage = () => {
             </div>
           </div>
           <CallsSettings />
+          <PromoSettings />
           <SMTPConfigurator />
           <GoogleAuthSettings />
           <RateLimitSettings />
+          {/* ADR-188 Block F1/F3 — runtime registration policy + auto-join mapping */}
+          <RegistrationPolicySettings />
         </>
       )}
     </div>

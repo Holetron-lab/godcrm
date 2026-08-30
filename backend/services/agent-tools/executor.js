@@ -11,6 +11,7 @@ import { dataToolHandlers } from './data-tools.js';
 import { dashboardToolHandlers } from './dashboard-tools.js';
 import { webToolHandlers } from './web-tools.js';
 import { blueskyToolHandlers } from './bluesky-tools.js';
+import { redditToolHandlers } from './reddit-tools.js';
 import { ticketToolHandlers } from './ticket-tools.js';
 import { miscToolHandlers } from './misc-tools.js';
 import { imageToolHandlers } from './image-tools.js';
@@ -45,6 +46,7 @@ export const toolHandlers = {
   ...dashboardToolHandlers,
   ...webToolHandlers,
   ...blueskyToolHandlers,
+  ...redditToolHandlers,
   ...fileToolHandlers,
   ...ticketToolHandlers,
   ...miscToolHandlers,

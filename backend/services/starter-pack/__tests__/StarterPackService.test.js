@@ -32,7 +32,7 @@ vi.mock('../../../utils/logger.js', () => ({
   authLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }
 }));
 
-const { applyStarterPack, applyPromoUnlock, __test } =
+const { applyStarterPack, applyPromoUnlock, isPromoEnabled, __test } =
   await import('../StarterPackService.js');
 
 const { TIER_B_AGENT_SLUGS } = await import('../starterPackCatalog.js');
@@ -61,6 +61,40 @@ describe('StarterPackService', () => {
     it('fails open on DB error', async () => {
       mockDbGet.mockRejectedValueOnce(new Error('boom'));
       await expect(__test.isFeatureEnabled()).resolves.toBe(true);
+    });
+  });
+
+  // ADR-183-A D6 — promo owner-toggle. Default ON (fail-open); only an explicit
+  // false disables promo. Mirrors isFeatureEnabled but keyed on 'promo_enabled'.
+  describe('isPromoEnabled (D6 owner toggle)', () => {
+    it('returns true when the row is missing (fail-open, default ON)', async () => {
+      mockDbGet.mockResolvedValueOnce(null);
+      await expect(isPromoEnabled()).resolves.toBe(true);
+    });
+
+    it('returns false when value is boolean false', async () => {
+      mockDbGet.mockResolvedValueOnce({ value: false });
+      await expect(isPromoEnabled()).resolves.toBe(false);
+    });
+
+    it('returns false when value is string "false"', async () => {
+      mockDbGet.mockResolvedValueOnce({ value: 'false' });
+      await expect(isPromoEnabled()).resolves.toBe(false);
+    });
+
+    it('returns true when value is boolean true', async () => {
+      mockDbGet.mockResolvedValueOnce({ value: true });
+      await expect(isPromoEnabled()).resolves.toBe(true);
+    });
+
+    it('returns true when value is string "true"', async () => {
+      mockDbGet.mockResolvedValueOnce({ value: 'true' });
+      await expect(isPromoEnabled()).resolves.toBe(true);
+    });
+
+    it('fails open (ON) on DB error', async () => {
+      mockDbGet.mockRejectedValueOnce(new Error('boom'));
+      await expect(isPromoEnabled()).resolves.toBe(true);
     });
   });
 

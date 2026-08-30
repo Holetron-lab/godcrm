@@ -611,6 +611,7 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                 moveMessageIds={moveMessages.length > 0 ? new Set(moveMessages.map(m => m.id).filter(Boolean) as number[]) : undefined}
                 setForwardMessages={setForwardMessages as any}
                 onNavigateToConversation={handleNavigateToConversation}
+                conversationId={activeConversationId}
               />
             </div>
 

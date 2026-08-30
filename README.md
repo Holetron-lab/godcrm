@@ -84,7 +84,7 @@ three rules:
 Clone it and read the code. That's the only benchmark that matters.
 
 ```
-git clone https://github.com/holetron/godcrm
+git clone https://godcrm.ai/git/holetron-lab/godcrm.git
 ```
 
 MIT licensed. Postgres · Node/Express · React 19 · TypeScript. Early alpha — issues and PRs welcome.

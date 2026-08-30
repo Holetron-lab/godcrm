@@ -217,26 +217,24 @@ export async function fetchDeepSeekModels(apiKey) {
 }
 
 /**
- * Known GitHub Copilot CLI models (from `gh copilot --list-models`)
+ * GitHub Copilot CLI models.
+ *
+ * The CLI has no list-models command; availability is per-account (plan +
+ * org policy) and only observable by probing — an unavailable id fails with
+ * 'Model "X" from --model flag is not available.' before any request is made
+ * (so probing costs nothing).
+ *
+ * Probed on .128 with the fleet's OAuth token, 2026-08-30: exactly these three
+ * resolved. gpt-5.2 / gpt-5.1 / gpt-5 / gpt-4.1 / gpt-5*-codex /
+ * claude-opus-4.6 / claude-opus-4.5 / claude-sonnet-4 / gemini-3-pro-preview
+ * all came back "not available" and were removed — seeding them would hand
+ * agents ids that hard-fail at spawn. Re-probe after a plan change.
  */
 export async function fetchCopilotModels() {
-  // These are the models available via `gh copilot --model`
   return [
+    { model_id: 'claude-haiku-4.5', name: 'Claude Haiku 4.5 (Copilot default)' },
     { model_id: 'claude-sonnet-4.5', name: 'Claude Sonnet 4.5' },
-    { model_id: 'claude-haiku-4.5', name: 'Claude Haiku 4.5' },
-    { model_id: 'claude-opus-4.6', name: 'Claude Opus 4.6' },
-    { model_id: 'claude-opus-4.5', name: 'Claude Opus 4.5' },
-    { model_id: 'claude-sonnet-4', name: 'Claude Sonnet 4' },
-    { model_id: 'gemini-3-pro-preview', name: 'Gemini 3 Pro Preview' },
-    { model_id: 'gpt-5.2-codex', name: 'GPT-5.2 Codex' },
-    { model_id: 'gpt-5.2', name: 'GPT-5.2' },
-    { model_id: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max' },
-    { model_id: 'gpt-5.1-codex', name: 'GPT-5.1 Codex' },
-    { model_id: 'gpt-5.1', name: 'GPT-5.1' },
-    { model_id: 'gpt-5', name: 'GPT-5' },
-    { model_id: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini' },
     { model_id: 'gpt-5-mini', name: 'GPT-5 Mini' },
-    { model_id: 'gpt-4.1', name: 'GPT-4.1' },
   ];
 }
 

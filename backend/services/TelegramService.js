@@ -5,18 +5,16 @@
 import { apiLogger } from '../utils/logger.js';
 import { getSecret } from './secrets/getSecret.js';
 
-// ADR-0040: lazy resolution. BOT_TOKEN now sourced from vault (env fallback
+// ADR-0040: lazy resolution. BOT_TOKEN sourced from vault (env fallback
 // during transition); `getBotToken()` / `getTgApi()` resolve on first call
-// and cache for the process lifetime. The hardcoded fallback only triggers
-// when both vault and env are empty.
-const HARDCODED_BOT_TOKEN_FALLBACK = '<TELEGRAM_BOT_TOKEN>';
+// and cache for the process lifetime. No hardcoded literal — if both vault
+// and env are empty the token resolves empty and send paths no-op.
 let _BOT_TOKEN = null;
 let _TG_API = null;
 
 async function _ensureBotToken() {
   if (_BOT_TOKEN !== null) return;
-  _BOT_TOKEN = (await getSecret('telegram_bot_token', 'TELEGRAM_BOT_TOKEN'))
-    || HARDCODED_BOT_TOKEN_FALLBACK;
+  _BOT_TOKEN = (await getSecret('telegram_bot_token', 'TELEGRAM_BOT_TOKEN')) || '';
   _TG_API = `https://api.telegram.org/bot${_BOT_TOKEN}`;
 }
 

@@ -170,9 +170,8 @@ async function handleCallbackQuery(cb) {
 
   // Answer the callback to remove loading indicator
   try {
-    // ADR-0040: vault first, env fallback during transition.
-    const BOT_TOKEN_CB = (await getSecret('telegram_bot_token', 'TELEGRAM_BOT_TOKEN'))
-      || '<TELEGRAM_BOT_TOKEN>';
+    // ADR-0040: vault first, env fallback during transition. No hardcoded literal.
+    const BOT_TOKEN_CB = (await getSecret('telegram_bot_token', 'TELEGRAM_BOT_TOKEN')) || '';
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN_CB}/answerCallbackQuery`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

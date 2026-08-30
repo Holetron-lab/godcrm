@@ -280,7 +280,7 @@ const SpacesPage = () => {
               </h2>
               <div className="flex flex-wrap gap-3">
                 <a
-                  href="https://github.com/holetron"
+                  href="https://github.com/Holetron-lab"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 text-sm transition-colors hover:border-[var(--color-primary-400)]"

@@ -3,14 +3,12 @@ import { Bot, Cpu, User, Zap } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { Avatar } from '@/shared/components/ui/Avatar';
 import type { TurnHeaderProps } from './types';
-import { formatDuration } from './helpers';
 
 export const TurnHeader: React.FC<TurnHeaderProps> = ({
   turnType,
   senderName,
   timestamp,
   timestampEnd,
-  durationMs,
   isProcessing,
   agentColor,
   agentIcon,
@@ -26,7 +24,6 @@ export const TurnHeader: React.FC<TurnHeaderProps> = ({
   // ⚡ Zap for slash-command agents (`<</slug>>`), 🤖 Bot for @-mention agents.
   // `both` defaults to Bot (mention is the legacy/primary path).
   const AgentRoleIcon = agentInvocationMode === 'command' ? Zap : Bot;
-  const durationLabel = formatDuration(durationMs);
   // Show green dot if this turn is processing OR if the same agent is active elsewhere in chat
   const showGreenDot = isProcessing || isAgentActiveInChat;
   return (
@@ -143,22 +140,11 @@ export const TurnHeader: React.FC<TurnHeaderProps> = ({
     {/* Spacer */}
     <span className="flex-1" />
 
-    {/* Timestamp -- show range if start != end */}
+    {/* Timestamp — span of the whole bubble: first message → last message.
+        Collapses to a single time when both fall in the same minute. */}
     <span className="text-[10px] text-[var(--text-tertiary)] flex-shrink-0">
       {timestampEnd && timestampEnd !== timestamp ? `${timestamp} – ${timestampEnd}` : timestamp}
     </span>
-
-    {/* Agent work duration: span from first to last message in the bubble.
-        Surfaces real elapsed time even when the timestamp range collapses
-        because start and end fall in the same minute. */}
-    {durationLabel && (
-      <span
-        className="text-[10px] text-[var(--text-tertiary)] opacity-70 tabular-nums flex-shrink-0"
-        title="Agent work duration: first → last message in this bubble"
-      >
-        · {durationLabel}
-      </span>
-    )}
   </div>
   );
 };

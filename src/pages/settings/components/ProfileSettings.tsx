@@ -1,9 +1,11 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { User, Camera, Loader2, Check, AlertTriangle, X, Trash2 } from 'lucide-react';
+import { User, Camera, Loader2, Check, AlertTriangle, X, Trash2, Gift, Copy, RefreshCw } from 'lucide-react';
+import QRCode from 'qrcode';
 import { authApi, UserProfile } from '@/features/auth/api/authApi';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { Button, Input } from '@/shared/components/ui';
+import { showToast } from '@/shared/hooks/useToast';
 
 // Max file size: 5MB (matches backend limit)
 const MAX_FILE_SIZE_MB = 5;
@@ -35,6 +37,7 @@ export const ProfileSettings = () => {
   const [name, setName] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const { data: profileData, isLoading } = useQuery({
     queryKey: ['profile'],
@@ -47,6 +50,23 @@ export const ProfileSettings = () => {
       throw new Error('Failed to load profile');
     }
   });
+
+  // ADR-183-A D3 — scannable QR of the invite link. Client-side via the existing
+  // `qrcode` dep (no server round-trip); regenerates whenever the code changes,
+  // so self-service regeneration swaps the QR in step with the link.
+  useEffect(() => {
+    const code = profileData?.referral_code;
+    if (!code) {
+      setQrDataUrl(null);
+      return;
+    }
+    const link = `${window.location.origin}/auth/register?ref=${encodeURIComponent(code)}`;
+    let alive = true;
+    QRCode.toDataURL(link, { margin: 1, width: 256, color: { dark: '#000000', light: '#ffffff' } })
+      .then((url) => { if (alive) setQrDataUrl(url); })
+      .catch(() => { if (alive) setQrDataUrl(null); });
+    return () => { alive = false; };
+  }, [profileData?.referral_code]);
 
   const updateProfileMutation = useMutation({
     mutationFn: (data: { name?: string }) => authApi.updateProfile(data),
@@ -74,6 +94,20 @@ export const ProfileSettings = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       setUploadError(null);
+    }
+  });
+
+  // ADR-183-A D3 — regenerate the user's referral code (backend rerolls suffix only).
+  const regenerateReferralMutation = useMutation({
+    mutationFn: () => authApi.regenerateReferralCode(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+      // D5 — regeneration invalidates previously-shared ?ref= links.
+      showToast(t('settings.profile.referralRegenWarning'), 'info');
+      showToast(t('settings.profile.referralRegenSuccess'), 'success');
+    },
+    onError: () => {
+      showToast(t('settings.profile.referralRegenError'), 'error');
     }
   });
 
@@ -131,6 +165,22 @@ export const ProfileSettings = () => {
   const profile = profileData as UserProfile;
   const avatarSrc = getAvatarSrc(profile?.avatar);
   const isUploading = uploadAvatarMutation.isPending || deleteAvatarMutation.isPending;
+
+  // ADR-183-A D3 — referral code + shareable invite link.
+  const referralCode = profile?.referral_code || '';
+  const inviteLink = referralCode
+    ? `${window.location.origin}/auth/register?ref=${encodeURIComponent(referralCode)}`
+    : '';
+
+  const handleCopyInvite = async () => {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      showToast(t('settings.profile.referralCopied'), 'success');
+    } catch {
+      showToast(t('settings.profile.referralCopyError'), 'error');
+    }
+  };
 
   return (
     <div className="rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-6 shadow-sm">
@@ -292,6 +342,66 @@ export const ProfileSettings = () => {
             </p>
           </div>
         </div>
+      </div>
+
+      {/* ADR-183-A D3 — referral code + shareable invite link + regenerate */}
+      <div className="mt-6 p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
+        <div className="flex items-center gap-2 mb-1">
+          <Gift className="h-4 w-4 text-[var(--color-primary)]" />
+          <label className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
+            {t('settings.profile.referralTitle')}
+          </label>
+        </div>
+        <p className="text-xs text-[var(--text-secondary)] mb-3">
+          {t('settings.profile.referralSubtitle')}
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <code className="flex-1 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] px-3 py-2 font-mono text-sm text-[var(--text-primary)] break-all">
+            {referralCode || '—'}
+          </code>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={handleCopyInvite} disabled={!inviteLink}>
+              <Copy className="h-4 w-4 mr-1" />
+              {t('settings.profile.referralCopyLink')}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => regenerateReferralMutation.mutate()}
+              disabled={regenerateReferralMutation.isPending}
+            >
+              {regenerateReferralMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              {t('settings.profile.referralRegenerate')}
+            </Button>
+          </div>
+        </div>
+
+        {inviteLink && (
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <div className="rounded-xl border border-[var(--border-secondary)] bg-white p-3 shadow-sm">
+              {qrDataUrl ? (
+                <img
+                  src={qrDataUrl}
+                  alt={t('settings.profile.referralQrHint')}
+                  width={144}
+                  height={144}
+                  className="h-36 w-36"
+                />
+              ) : (
+                <div className="flex h-36 w-36 items-center justify-center">
+                  <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+                </div>
+              )}
+            </div>
+            <p className="max-w-[10rem] text-center text-xs text-[var(--text-tertiary)]">
+              {t('settings.profile.referralQrHint')}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
