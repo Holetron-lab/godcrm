@@ -79,7 +79,7 @@ export function AddAgentSettings() {
             Add Agent
           </h3>
           <p className="text-sm text-[var(--text-secondary)]">
-            {t('Подключи дополнительных агентов в этот Space без промо-кода', 'Add extra agents to this Space without a promo code')}
+            {t('Подключи дополнительных агентов в этот Space', 'Add extra agents to this Space')}
           </p>
         </div>
       </div>
@@ -142,13 +142,6 @@ export function AddAgentSettings() {
           ))}
         </div>
       )}
-
-      {/* Footer hint */}
-      <div className="mt-4 text-xs text-[var(--text-tertiary)]">
-        {t('Промо-коды', 'Promo codes')} <code className="px-1 py-0.5 rounded bg-[var(--bg-tertiary)]">MASTERMIND</code> {t('и', 'and')}{' '}
-        <code className="px-1 py-0.5 rounded bg-[var(--bg-tertiary)]">MESHOK</code>{' '}
-        {t('при регистрации включают весь coding-pack сразу.', 'unlock the entire coding-pack at once during registration.')}
-      </div>
     </div>
   );
 }

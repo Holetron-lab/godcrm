@@ -1,42 +1,64 @@
 // Column Service - Validation & Formatting for All Column Types
+//
+// ADR-0041R Phase 2: the column-type enum has a single owner. The set itself
+// lives in shared/column-types.js — one file both trees read, so the frontend
+// derives `ColumnType` instead of re-declaring it. This module owns the
+// backend-side policy built on top of it: what the API accepts
+// (VALID_COLUMN_TYPES) and what may be written (persistColumnType).
+//
+// The manifest is a `.js` module rather than `shared/*.json` (the repo's usual
+// cross-tree pattern) because `resolveJsonModule` widens a JSON array to
+// `string[]`, which would silently degrade the frontend's derived union to
+// `string` while still compiling. See the header of shared/column-types.js.
 
-// Supported column types - synchronized with frontend (src/shared/types/index.ts)
-export const VALID_COLUMN_TYPES = [
-  // Basic types
-  'text', 'long_text', 'number', 'email', 'url', 'phone',
-  'date', 'datetime', 'checkbox',
-  // Selection types
-  'select', 'multi-select',
-  // Relation & advanced types
-  'relation', 'person', 'file', 'image',
-  'password', 'formula', 'table', 'rollup', 'button',
-  // AI types
-  'vector',
-  // Verification (ADR-0011)
-  'verification',
-  // ADR-151: typed order (sort position) + actor (provenance)
-  'order', 'actor',
-  // ADR-0041: legacy aliases — kept permanently as defense-in-depth for
-  // external API consumers (mobile, desktop, integrations). Normalized to
-  // canonical types via canonicalizeColumnType() before validate/format.
-  'boolean', 'multi_select', 'multiselect',
-  'textarea', 'markdown', 'longtext', 'richText', 'rich_text'
-];
+import {
+  COLUMN_TYPES,
+  COLUMN_TYPE_ALIASES,
+  PROVISIONAL_COLUMN_TYPES,
+  canonicalizeColumnType
+} from '../../shared/column-types.js';
+
+// Re-exported so backend callers keep importing the enum from ColumnService.
+// `canonicalizeColumnType`'s contract is unchanged (ADR-0041R Phase 2); only
+// its `textarea`/`markdown` and `person` mappings are corrected, in the manifest.
+export {
+  COLUMN_TYPES,
+  COLUMN_TYPE_ALIASES,
+  PROVISIONAL_COLUMN_TYPES,
+  canonicalizeColumnType
+};
 
 /**
- * ADR-0041: Normalize legacy column types to canonical variants.
- * Used on read/validate path to absorb DB drift and external-consumer payloads.
- *   boolean                              → checkbox
- *   multi_select | multiselect           → multi-select
- *   longtext | richText | rich_text      → long_text
- *   textarea | markdown                  → text
+ * Everything accepted on input: canon ∪ Tier D ∪ aliases. Derived, never
+ * re-typed. ADR-0041R repairs two live 400s here — `json` (360 columns) and
+ * `color` (19) exist in production and in the frontend union but were absent
+ * from this list, so creating one through POST /tables/:id/columns failed.
  */
-export function canonicalizeColumnType(type) {
-  if (type === 'boolean') return 'checkbox';
-  if (type === 'multi_select' || type === 'multiselect') return 'multi-select';
-  if (type === 'longtext' || type === 'richText' || type === 'rich_text') return 'long_text';
-  if (type === 'textarea' || type === 'markdown') return 'text';
-  return type;
+export const VALID_COLUMN_TYPES = Object.freeze([
+  ...COLUMN_TYPES,
+  ...PROVISIONAL_COLUMN_TYPES,
+  ...Object.keys(COLUMN_TYPE_ALIASES)
+]);
+
+/**
+ * ADR-0041R Phase 2/3: the ONLY value allowed to reach an INSERT/UPDATE of
+ * `table_columns.type`. Canonicalize, then reject anything the enum does not
+ * own — this is what stops 35 distinct spellings from becoming 36.
+ * @param {string} type
+ * @returns {string} canonical type, safe to persist
+ * @throws {Error} when the type is unknown
+ */
+export function persistColumnType(type) {
+  const canonical = canonicalizeColumnType(type);
+  if (
+    !COLUMN_TYPES.includes(canonical) &&
+    !PROVISIONAL_COLUMN_TYPES.includes(canonical)
+  ) {
+    throw new Error(
+      `Unknown column type '${type}'. Must be one of: ${VALID_COLUMN_TYPES.join(', ')}`
+    );
+  }
+  return canonical;
 }
 
 /**

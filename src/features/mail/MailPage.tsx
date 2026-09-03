@@ -19,7 +19,7 @@ import {
   useMailFolders,
   useMailMessagesMulti,
   useMailMessage,
-  useSyncMail,
+  useMailAutoSync,
   useUpdateMessage,
   useScheduledMail,
   useCancelScheduled,
@@ -208,7 +208,10 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
   const messagesQuery = useMailMessagesMulti(spaceId, folders, activeAccountId);
   const allMessages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
 
-  const sync = useSyncMail(spaceId, activeAccountId);
+  // Pulls IMAP on its own: cold-start when a mailbox/folder first comes into view
+  // (a just-connected account has no rows yet), then on an interval. The toolbar
+  // button drives the same mutation.
+  const sync = useMailAutoSync(spaceId, activeAccountId, folders);
 
   // ADR-158 §P6 — the outbox queue: powers the rail badge and the "Отложенные"
   // view. Polls so the list drains as the worker sends rows.

@@ -84,8 +84,12 @@ export async function resolveAgentProvider(agentConfig, options = {}) {
   }
 
   // Detect local providers (no API key needed)
+  // 'copilot' runs through the GitHub Copilot CLI binary (OAuth token in ~/.config/gh),
+  // so it never carries an api_key — without this it falls into the space fallback below
+  // and silently inherits another operator's key AND provider.
   const isLocal = operatorData?.provider === 'claude-code'
     || operatorData?.provider === 'local'
+    || operatorData?.provider === 'copilot'
     || operatorData?.is_local === true;
 
   // Step 3: Fallback — find any operator with api_key in the same space

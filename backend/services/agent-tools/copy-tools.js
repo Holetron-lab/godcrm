@@ -158,13 +158,15 @@ async function copyTableCore(opts, userId) {
   // agent case (in-scope discipline; a general table_type carry-over is a separate call).
   const copyTableType = src.table_type === 'ai_agents' ? 'ai_agents' : null;
   const tableInsert = await dbRun(
-    `INSERT INTO universal_tables (project_id, name, icon, description, table_type, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ${sqlNow()}, ${sqlNow()})`,
+    // ADR-0066-B: the copy gets the copier as creator, not the source table's.
+    `INSERT INTO universal_tables (project_id, name, icon, description, table_type, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ${sqlNow()}, ${sqlNow()})`,
     [dst_project_id,
      name || `${src.name} (copy)`,
      icon || src.icon || '📊',
      description ?? src.description ?? '',
-     copyTableType]
+     copyTableType,
+     userId ?? null]
   );
   const newTableId = tableInsert.lastInsertRowid || tableInsert.lastID;
   tracking.tables.push(newTableId);

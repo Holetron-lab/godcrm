@@ -3,6 +3,12 @@
 // Created: 2026-01-08
 
 import { z } from 'zod';
+// ADR-0041R Phase 2: the column-type enum has exactly one owner. This file used
+// to declare its own `columnTypeEnum`, which contradicted the canon (it held
+// `rating`/`currency` — number displayStyles, not types — and lacked
+// `multi-select`, `long_text`, `password`) and was reachable only from its own
+// test.
+import { VALID_COLUMN_TYPES } from '../services/ColumnService.js';
 
 // ============================================================
 // Common validators
@@ -108,12 +114,8 @@ export const updateProjectSchema = createProjectSchema.partial();
 // Table schemas
 // ============================================================
 
-const columnTypeEnum = z.enum([
-  'text', 'number', 'date', 'datetime', 'checkbox',
-  'select', 'multiselect', 'relation', 'file',
-  'email', 'phone', 'url', 'rating', 'currency',
-  'formula', 'rollup', 'json', 'markdown'
-]);
+// Derived from the owner module — canon ∪ Tier D ∪ aliases. Never re-typed.
+const columnTypeEnum = z.enum(VALID_COLUMN_TYPES);
 
 const columnSchema = z.object({
   name: safeName,

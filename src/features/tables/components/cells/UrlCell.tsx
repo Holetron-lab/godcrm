@@ -1,3 +1,4 @@
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import { ExternalLink, Link2, Globe, ArrowUpRight, MousePointerClick } from 'lucide-react';
 
 interface UrlCellProps {
@@ -69,6 +70,17 @@ const buttonColorPresets: Record<string, { bg: string; hover: string; text: stri
 };
 
 const SingleLink = ({ url, linkText, style, buttonColor }: SingleLinkProps) => {
+  // The cell content is rendered inside the grid's <button> wrapper (TableGridRow);
+  // nested interactive elements don't reliably fire native anchor navigation,
+  // so open the URL explicitly on plain left click. Modified clicks (ctrl/cmd/shift)
+  // keep native behavior via href.
+  const handleClick = (e: ReactMouseEvent<HTMLAnchorElement>) => {
+    e.stopPropagation();
+    if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   if (style === 'badge') {
     const color = buttonColor && buttonColorPresets[buttonColor] ? buttonColorPresets[buttonColor] : null;
     
@@ -82,7 +94,7 @@ const SingleLink = ({ url, linkText, style, buttonColor }: SingleLinkProps) => {
           backgroundColor: `${color.bg}20`,
           color: color.bg,
         } : undefined}
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleClick}
       >
         <span className="max-w-[120px] truncate">{linkText}</span>
         <ExternalLink className="w-3 h-3 opacity-70" />
@@ -103,7 +115,7 @@ const SingleLink = ({ url, linkText, style, buttonColor }: SingleLinkProps) => {
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 bg-[var(--color-primary-600)] hover:bg-[var(--color-primary-700)] text-white"
-          onClick={(e) => e.stopPropagation()}
+          onClick={handleClick}
         >
           <MousePointerClick className="w-4 h-4" />
           <span className="max-w-[150px] truncate">{linkText}</span>
@@ -119,7 +131,7 @@ const SingleLink = ({ url, linkText, style, buttonColor }: SingleLinkProps) => {
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5 active:translate-y-0 bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-color)]"
-          onClick={(e) => e.stopPropagation()}
+          onClick={handleClick}
         >
           <MousePointerClick className="w-4 h-4" />
           <span className="max-w-[150px] truncate">{linkText}</span>
@@ -137,7 +149,7 @@ const SingleLink = ({ url, linkText, style, buttonColor }: SingleLinkProps) => {
           background: `linear-gradient(135deg, ${color.bg} 0%, ${color.hover} 100%)`,
           color: color.text,
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleClick}
       >
         <MousePointerClick className="w-4 h-4" />
         <span className="max-w-[150px] truncate">{linkText}</span>
@@ -152,7 +164,7 @@ const SingleLink = ({ url, linkText, style, buttonColor }: SingleLinkProps) => {
         target="_blank"
         rel="noopener noreferrer"
         className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--color-primary-500)] transition-colors group"
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleClick}
       >
         <span className="max-w-[180px] truncate underline underline-offset-2 decoration-dotted decoration-[var(--text-tertiary)] group-hover:decoration-[var(--color-primary-500)]">{linkText}</span>
         <ExternalLink className="w-3 h-3 opacity-40 group-hover:opacity-70" />

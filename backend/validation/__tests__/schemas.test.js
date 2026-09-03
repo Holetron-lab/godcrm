@@ -14,6 +14,7 @@ import {
   createFolderSchema,
   createColumnSchema
 } from '../schemas.js';
+import { VALID_COLUMN_TYPES } from '../../services/ColumnService.js';
 
 describe('Validation Schemas', () => {
   describe('loginSchema', () => {
@@ -139,14 +140,10 @@ describe('Validation Schemas', () => {
     });
 
     it('should accept all valid column types', () => {
-      const validTypes = [
-        'text', 'number', 'date', 'datetime', 'checkbox',
-        'select', 'multiselect', 'relation', 'file',
-        'email', 'phone', 'url', 'rating', 'currency',
-        'formula', 'rollup', 'json', 'markdown'
-      ];
-      
-      for (const type of validTypes) {
+      // ADR-0041R: derived from the owner module, not a fourth hand-typed copy.
+      // The list here used to hold `rating` and `currency` — those are number
+      // *display styles* (`config.number.displayStyle`), never column types.
+      for (const type of VALID_COLUMN_TYPES) {
         const result = createTableSchema.safeParse({
           name: 'Test',
           projectId: 1,

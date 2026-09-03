@@ -224,10 +224,14 @@ router.post('/spaces/:spaceId/schema/tables', async (req, res) => {
     const key = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
     // Create table
+    // ADR-0066-B: schema-editor creation is user-initiated, so `created_by`
+    // carries the authenticated creator. A NULL in this column is meant to
+    // mean "system-provisioned", not "the actor was in scope and dropped".
     const result = await dbRun(`
-      INSERT INTO universal_tables (project_id, name, display_name, key, icon, description)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [projectId, name, displayName || name, key, icon || '📋', description || null]);
+      INSERT INTO universal_tables (project_id, name, display_name, key, icon, description, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [projectId, name, displayName || name, key, icon || '📋', description || null,
+        req.user?.id ?? null]);
 
     const tableId = result.lastInsertRowid;
 

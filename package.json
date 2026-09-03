@@ -2,6 +2,7 @@
   "name": "business-crm",
   "version": "1.2.0",
   "description": "GOD CRM - Universal Workspace Management System (Clean Architecture)",
+  "license": "MIT",
   "type": "module",
   "main": "dist-electron/electron/main.js",
   "scripts": {

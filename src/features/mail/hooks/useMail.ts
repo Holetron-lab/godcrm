@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { mailApi, type MailPatch, type MailSendInput } from '../api/mailApi';
 import type { MailFolder, MailFolderId, MailMessage, MailScheduled } from '../types';
@@ -118,6 +118,70 @@ export function useSyncMail(spaceId: number | undefined, connectorId: number | n
       qc.invalidateQueries({ queryKey: ['mail', 'folders', spaceId] });
     },
   });
+}
+
+/**
+ * Keep the mailbox pulling on its own. `useSyncMail` is a manual mutation and the
+ * toolbar button used to be its only caller — so a freshly connected account had
+ * no rows at all and the list rendered empty until someone thought to click Sync.
+ *
+ * Two triggers: a cold pull the first time a (mailbox, folder) pair comes into
+ * view, then a refresh on an interval while the tab is visible. Folders are
+ * pulled one at a time — the backend opens an IMAP connection per call, so a
+ * fan-out would multiply connections against the same mailbox.
+ *
+ * Returns the underlying mutation so the toolbar's manual Sync shares its
+ * `isPending` state and can't run concurrently with a background pull.
+ */
+export function useMailAutoSync(
+  spaceId: number | undefined,
+  connectorId: number | null,
+  folders: MailFolderId[],
+  intervalMs = 120_000
+) {
+  const sync = useSyncMail(spaceId, connectorId);
+  const { mutateAsync } = sync;
+  const pulled = useRef(new Set<string>());
+  const running = useRef(false);
+  // Effects key off the folder *ids*, so toggling an unrelated bit of page state
+  // doesn't restart the interval.
+  const folderKey = folders.join(',');
+
+  const pull = useCallback(
+    async (targets: MailFolderId[]) => {
+      if (running.current || !Number.isFinite(spaceId) || !connectorId) return;
+      running.current = true;
+      try {
+        for (const folder of targets) {
+          // A dead connector / unreachable IMAP must not kill the loop or surface
+          // as an unhandled rejection — the manual button still reports errors.
+          await mutateAsync(folder).catch(() => undefined);
+          pulled.current.add(`${spaceId}:${connectorId}:${folder}`);
+        }
+      } finally {
+        running.current = false;
+      }
+    },
+    [spaceId, connectorId, mutateAsync]
+  );
+
+  useEffect(() => {
+    const cold = folders.filter((f) => !pulled.current.has(`${spaceId}:${connectorId}:${f}`));
+    if (cold.length) void pull(cold);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folderKey, spaceId, connectorId, pull]);
+
+  useEffect(() => {
+    if (!intervalMs) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void pull(folders);
+    }, intervalMs);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folderKey, intervalMs, pull]);
+
+  return sync;
 }
 
 /**

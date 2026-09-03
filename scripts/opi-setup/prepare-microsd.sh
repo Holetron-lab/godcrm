@@ -44,7 +44,7 @@ echo "[+] Injecting SSH keys..."
 mkdir -p "$MOUNT_POINT/root/.ssh"
 cat > "$MOUNT_POINT/root/.ssh/authorized_keys" << 'KEYS'
 # CRM Server (orchestrator access)
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBppUKrYwTExkgChP1LA+is99MWsFotoquCnF2rgtUfd root@<DEV_HOST>
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBppUKrYwTExkgChP1LA+is99MWsFotoquCnF2rgtUfd root@v527836.hosted-by-vdsina.com
 # Add more keys below (e.g. Geratron's key)
 KEYS
 chmod 700 "$MOUNT_POINT/root/.ssh"

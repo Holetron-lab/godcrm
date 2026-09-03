@@ -49,7 +49,7 @@ vi.mock('mailparser', () => ({
   simpleParser: async (src) => ({ text: `parsed: ${src.toString()}`, html: null }),
 }));
 
-const { imapFetch } = await import('../../services/mail/imapFetch.js');
+const { imapFetch, resolveMailbox } = await import('../../services/mail/imapFetch.js');
 
 const creds = { imap_host: 'mail.godcrm.ai', imap_port: 993, username: 'me@godcrm.ai', password: 'secret' };
 
@@ -85,5 +85,55 @@ describe('imapFetch', () => {
     const rows = await imapFetch({ creds, folder: 'inbox' });
     expect(rows).toEqual([]);
     spy.mockRestore();
+  });
+
+  // The mocked server LISTs only `Sent`, so `archive` is unresolvable. Before the
+  // fix resolveMailbox fell back to INBOX and these inbox rows were upserted
+  // under folder='archive' — a copy of the inbox appearing in another folder on
+  // every sync.
+  it('does not fall back to INBOX when the folder is missing on the server', async () => {
+    const imapflow = await import('imapflow');
+    const spy = vi.spyOn(imapflow.ImapFlow.prototype, 'mailboxOpen');
+    const rows = await imapFetch({ creds, folder: 'archive' });
+    expect(rows).toEqual([]);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe('resolveMailbox', () => {
+  const client = (boxes) => ({ list: async () => boxes });
+
+  it('always resolves inbox without a LIST', async () => {
+    await expect(resolveMailbox({ list: async () => { throw new Error('no LIST'); } }, 'inbox'))
+      .resolves.toBe('INBOX');
+  });
+
+  it('prefers the SPECIAL-USE flag over the name', async () => {
+    const boxes = [
+      { path: 'Sent', name: 'Sent' },
+      { path: 'INBOX.Отправленные', name: 'Отправленные', specialUse: '\\Sent' },
+    ];
+    await expect(resolveMailbox(client(boxes), 'sent')).resolves.toBe('INBOX.Отправленные');
+  });
+
+  it('falls back to the leaf name when the server omits SPECIAL-USE', async () => {
+    const boxes = [{ path: 'INBOX.Sent Items', name: 'Sent Items' }];
+    await expect(resolveMailbox(client(boxes), 'sent')).resolves.toBe('INBOX.Sent Items');
+  });
+
+  it('derives the leaf name from the path when `name` is absent', async () => {
+    await expect(resolveMailbox(client([{ path: 'INBOX.Trash' }]), 'trash'))
+      .resolves.toBe('INBOX.Trash');
+  });
+
+  it('returns null when the mailbox does not exist', async () => {
+    await expect(resolveMailbox(client([{ path: 'Sent', specialUse: '\\Sent' }]), 'trash'))
+      .resolves.toBeNull();
+  });
+
+  it('returns null when LIST fails', async () => {
+    await expect(resolveMailbox({ list: async () => { throw new Error('boom'); } }, 'sent'))
+      .resolves.toBeNull();
   });
 });

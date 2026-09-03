@@ -1,9 +1,11 @@
 /**
- * ADR-0068 WP-E — Pinned-messages banner.
+ * ADR-0068 WP-E — Pinned-messages panel.
  *
- * Collapsed: 📌 N закреплённых ▾  (single-line strip above the message list).
- * Expanded: scrollable rev-chrono list; each row jumps to the message in-place
- * and offers an inline ✕ unpin button.
+ * The old collapsed "N закреплённых ▾" strip is gone: the pinned count now
+ * lives solely on the toolbar Pin badge (ChatToolbar). This component only
+ * renders the pinned list, and only while `open` (driven by that toolbar
+ * button). Each row is a flat, notification-style card — accent left border,
+ * sender + preview, inline ✕ unpin — deliberately WITHOUT rounded corners.
  *
  * Accepts a generic `PinnedBannerItem` shape so both the new canvas
  * (ChatMessageItem) and the production AIChatPanel canvas (ChatMessage) can
@@ -11,8 +13,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { Pin, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { cn } from '@/shared/utils/cn';
+import { Pin, X } from 'lucide-react';
 
 export interface PinnedBannerItem {
   id: number | string;
@@ -32,8 +33,7 @@ export interface PinnedBannerProps {
   /**
    * Controlled expanded state. When provided together with `onOpenChange`,
    * the host owns the open/closed flag (e.g. AIChatPanel toolbar button).
-   * When omitted, the banner falls back to internal uncontrolled state
-   * — preserves the original ChatConversationView callsite.
+   * When omitted, the banner falls back to internal uncontrolled state.
    */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -42,13 +42,11 @@ export interface PinnedBannerProps {
 const PIN_CAP = 50;
 
 export function PinnedBanner({ messages, onJump, onUnpin, capReached, onClearCapNotice, open: openProp, onOpenChange }: PinnedBannerProps) {
-  const [openInternal, setOpenInternal] = useState(false);
+  const [openInternal] = useState(false);
   const isControlled = openProp !== undefined;
   const open = isControlled ? !!openProp : openInternal;
-  const setOpen = (next: boolean | ((prev: boolean) => boolean)) => {
-    const resolved = typeof next === 'function' ? (next as (p: boolean) => boolean)(open) : next;
-    if (!isControlled) setOpenInternal(resolved);
-    onOpenChange?.(resolved);
+  const setOpen = (next: boolean) => {
+    onOpenChange?.(next);
   };
 
   const pinned = useMemo(() => {
@@ -57,7 +55,8 @@ export function PinnedBanner({ messages, onJump, onUnpin, capReached, onClearCap
       .sort((a, b) => new Date(b.pinned_at as string).getTime() - new Date(a.pinned_at as string).getTime());
   }, [messages]);
 
-  if (pinned.length === 0 && !capReached) return null;
+  // Nothing to surface: no open list and no cap warning.
+  if (!capReached && (!open || pinned.length === 0)) return null;
 
   return (
     <div className="flex-shrink-0 border-b border-[var(--border-secondary)] bg-[var(--bg-tertiary)]">
@@ -68,7 +67,7 @@ export function PinnedBanner({ messages, onJump, onUnpin, capReached, onClearCap
             <button
               type="button"
               onClick={onClearCapNotice}
-              className="p-0.5 rounded hover:bg-amber-200/40 dark:hover:bg-amber-800/40"
+              className="p-0.5 hover:bg-amber-200/40 dark:hover:bg-amber-800/40"
               aria-label="Скрыть"
             >
               <X className="w-3.5 h-3.5" />
@@ -76,54 +75,40 @@ export function PinnedBanner({ messages, onJump, onUnpin, capReached, onClearCap
           )}
         </div>
       )}
-      {pinned.length > 0 && (
-        <>
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-            aria-expanded={open}
-          >
-            <Pin className="w-3.5 h-3.5 text-[var(--color-primary-500)]" />
-            <span className="flex-1 text-left font-medium">
-              {pinned.length} {pinned.length === 1 ? 'закреплённое' : 'закреплённых'}
-            </span>
-            {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
-          {open && (
-            <ul className="max-h-[40vh] overflow-y-auto divide-y divide-[var(--border-secondary)]">
-              {pinned.map((m) => (
-                <li key={m.id} className="flex items-start gap-2 px-3 py-2 hover:bg-[var(--bg-secondary)]">
-                  <button
-                    type="button"
-                    onClick={() => { onJump(m.id); setOpen(false); }}
-                    className="flex-1 min-w-0 text-left"
-                  >
-                    <div className="text-[11px] font-medium text-[var(--color-primary-500)] truncate">
-                      {m.senderLabel || 'Сообщение'}
-                    </div>
-                    <div className={cn(
-                      'text-xs text-[var(--text-primary)] line-clamp-2 break-words',
-                    )}>
-                      {m.content.slice(0, 180)}
-                    </div>
-                  </button>
-                  {onUnpin && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onUnpin(m.id); }}
-                      className="flex-shrink-0 p-1 rounded text-[var(--text-tertiary)] hover:text-red-500 hover:bg-[var(--bg-tertiary)]"
-                      title="Открепить"
-                      aria-label="Открепить"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
+      {open && pinned.length > 0 && (
+        <ul className="max-h-[40vh] overflow-y-auto flex flex-col gap-1 p-1.5">
+          {pinned.map((m) => (
+            <li
+              key={m.id}
+              className="flex items-start gap-2.5 px-3 py-2 bg-[var(--bg-secondary)] border-l-2 border-[var(--color-primary-500)] hover:bg-[var(--bg-primary)] transition-colors"
+            >
+              <Pin className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-[var(--color-primary-500)]" />
+              <button
+                type="button"
+                onClick={() => { onJump(m.id); setOpen(false); }}
+                className="flex-1 min-w-0 text-left"
+              >
+                <div className="text-[11px] font-semibold text-[var(--color-primary-500)] truncate">
+                  {m.senderLabel || 'Сообщение'}
+                </div>
+                <div className="text-xs text-[var(--text-primary)] line-clamp-2 break-words mt-0.5">
+                  {m.content.slice(0, 180)}
+                </div>
+              </button>
+              {onUnpin && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onUnpin(m.id); }}
+                  className="flex-shrink-0 p-1 text-[var(--text-tertiary)] hover:text-red-500 hover:bg-[var(--bg-tertiary)]"
+                  title="Открепить"
+                  aria-label="Открепить"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

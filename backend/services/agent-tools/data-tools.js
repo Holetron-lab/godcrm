@@ -232,10 +232,13 @@ export const dataToolHandlers = {
   // === TABLE MANAGEMENT ===
   async create_table({ project_id, name, icon = '📊', columns }, userId) {
     // Create table
+    // ADR-0066-B: `userId` was in scope and dropped, which is why 66% of
+    // universal_tables rows have a NULL creator — the column existed, the
+    // agent path just never populated it.
     const tableResult = await dbRun(`
-      INSERT INTO universal_tables (project_id, name, icon, description, created_at, updated_at)
-      VALUES (?, ?, ?, '', datetime('now'), datetime('now'))
-    `, [project_id, name, icon]);
+      INSERT INTO universal_tables (project_id, name, icon, description, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, '', ?, datetime('now'), datetime('now'))
+    `, [project_id, name, icon, userId ?? null]);
 
     const tableId = tableResult.lastInsertRowid;
 
@@ -462,10 +465,22 @@ export const dataToolHandlers = {
     if (!marker || typeof marker !== 'string') return { error: 'marker is required (string)' };
     if (typeof content !== 'string') return { error: 'content is required (string)' };
 
+    // Idempotency guard: the marker IS the key, so content must carry it. Without
+    // this a re-run finds no marker and appends again — unbounded duplication.
+    const firstNonEmpty = content.split('\n').find((l) => l.trim() !== '') || '';
+    if (!firstNonEmpty.startsWith(marker)) {
+      return { error: `content must begin with the marker line ("${marker}") so the upsert stays idempotent` };
+    }
+
     const row = await dbGet('SELECT * FROM table_rows WHERE id = ? AND table_id = ?', [row_id, table_id]);
     if (!row) return { error: `Row ${row_id} not found in table ${table_id}` };
 
     const existing = parseRowData(row.data);
+    // Refuse structured fields: upsertMarkedSection would String() them into
+    // "[object Object]" and silently destroy the value.
+    if (existing[field] != null && typeof existing[field] !== 'string') {
+      return { error: `field "${field}" holds a non-text value; upsert_section only operates on text fields` };
+    }
     const newValue = upsertMarkedSection(existing[field], marker, content);
     let merged = { ...existing, [field]: newValue };
 

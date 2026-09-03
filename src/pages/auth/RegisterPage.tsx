@@ -70,7 +70,6 @@ const RegisterPage = () => {
           </div>
           <header className="space-y-1">
             <h2 className="text-2xl font-semibold text-[var(--text-primary)]">{t('auth.register.title')}</h2>
-            <p className="text-sm text-[var(--text-secondary)]">{t('auth.register.subtitle')}</p>
           </header>
 
           <RegisterForm />

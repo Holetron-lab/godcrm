@@ -297,6 +297,7 @@ app.use('/api/v3/content-pipeline', contentPipelineRoutesV3);
 app.use('/api/v3/public', publicRoutesV3);
 // PES Mini App (public, no auth — must be before catch-all /api/v3 authenticated routes)
 app.use('/api/v3/pes', pesAppRoutes);
+// ADR-140: Палевность Checker (public, no auth)
 
 // ADR-156 iter-5 Task 4: /api/v3/echo — smoke-test endpoint for BDD curl runner.
 // Public (no auth) by design; globalLimiter above rate-limits abuse (10k/15m in prod).

@@ -58,11 +58,15 @@ router.post('/setup-tables', async (req, res) => {
 
       // ADR-164 Phase 3a: stamp the stable agent-table marker at birth so the
       // AI Agents table is marker-identifiable without the name convention.
+      // ADR-0066-B: `userId` was resolved above for the access check and then
+      // dropped at the insert — the same omission that left 66% of
+      // universal_tables rows with a NULL creator.
       const tableResult = await dbRun(`
-        INSERT INTO universal_tables (name, display_name, icon, project_id, table_type, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        INSERT INTO universal_tables (name, display_name, icon, project_id, table_type, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
       `, [tableDef.name, tableDef.name, tableDef.icon, projectId,
-          tableDef.name === 'AI Agents' ? 'ai_agents' : null]);
+          tableDef.name === 'AI Agents' ? 'ai_agents' : null,
+          userId ?? null]);
 
       const tableId = tableResult.lastInsertRowid;
       createdTables[tableDef.name] = { id: tableId, existed: false };

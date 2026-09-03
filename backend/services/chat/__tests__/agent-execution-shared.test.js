@@ -16,14 +16,18 @@ vi.mock('../../../database/connection.js', () => ({
   }),
 }));
 
-vi.mock('../../../utils/logger.js', () => ({
-  apiLogger: {
+vi.mock('../../../utils/logger.js', () => {
+  // .child() is needed because provider-resolution.js -> getSecret.js -> SecretsVault.js
+  // calls apiLogger.child() at module load; without it the whole suite fails to import.
+  const mk = () => ({
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-  },
-}));
+    child: vi.fn(() => mk()),
+  });
+  return { apiLogger: mk() };
+});
 
 // Mock pipeline-config for ADR-077 ticket context tests
 vi.mock('../../pipeline-config.js', () => ({
@@ -135,6 +139,28 @@ describe('ADR-093: Shared Agent Execution Services', () => {
       expect(result.isLocal).toBe(true);
       expect(result.provider).toBe('claude-code');
       // Should NOT fall back to env var or space search
+    });
+
+    it('should treat copilot as local and not inherit another operator key', async () => {
+      // Copilot CLI operator carries no api_key by design (OAuth token lives in gh config)
+      dbGet.mockResolvedValueOnce({
+        data: JSON.stringify({ provider: 'copilot', name: 'GitHub Copilot CLI' }),
+      });
+      // AI API Keys lookup for this operator — nothing
+      dbGet.mockResolvedValueOnce(null);
+      // Space fallback would hand back a foreign operator's key AND provider — must NOT be consumed
+      dbGet.mockResolvedValueOnce({
+        data: JSON.stringify({ provider: 'replicate', api_key: 'r8_should_not_be_used' }),
+      });
+
+      const result = await resolveAgentProvider(
+        { operator_id: 31174, model: 'gpt-5-mini' },
+        { spaceId: 11 }
+      );
+
+      expect(result.isLocal).toBe(true);
+      expect(result.provider).toBe('copilot');
+      expect(result.apiKey).toBeFalsy();
     });
 
     it('should fallback to env var when no API key found', async () => {

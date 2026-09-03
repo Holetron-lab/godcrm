@@ -100,7 +100,8 @@ const REFERRAL_PREFIX_MAX = 20;
 // carries the Cyrillic→Latin map, so `Пётр` → `pyotr` for our RU/KZ base — no new
 // transliteration invented). Strip stray hyphens, cap to 20, fall back to `user` when the
 // name has no transliterable chars.
-function referralPrefix(name) {
+// ADR-198 D4 reuses this as the mail local-part slugifier too (one slugifier, two callers).
+export function referralPrefix(name) {
   const base = slugify(typeof name === 'string' ? name : '')
     .replace(/^-+|-+$/g, '')
     .slice(0, REFERRAL_PREFIX_MAX)
@@ -253,6 +254,18 @@ export async function registerUser(userData) {
   // ADR-0079: provision Personal Space Starter Pack (6 tables + Welcome widget + Tor first-message).
   // Best-effort — registration must not fail because of cosmetics.
   await applyStarterPack(user.id, user.name);
+
+  // ADR-198 D6: give the newcomer their own mailbox (mail_boxes row + Maildir + a
+  // connector in their personal space). Same best-effort contract as the starter pack,
+  // and AC-7 states it outright: a disabled kill-switch, a missing substrate or a dead
+  // dovecot must not fail a registration. Imported lazily — provisionMailbox reaches
+  // back into this module for referralPrefix.
+  try {
+    const { provisionMailbox } = await import('./mail/provisionMailbox.js');
+    await provisionMailbox({ userId: user.id, reason: 'registration' });
+  } catch (err) {
+    authLogger.warn({ err, userId: user.id }, '[ADR-198] mailbox provisioning failed (non-fatal)');
+  }
 
   return user;
 }

@@ -18,7 +18,7 @@
  *   --dry-run     Show what would be created without making API calls
  *   --seed        Also seed data from source tables
  *   --api-url     Override API base URL (default: https://crm.hltrn.cc/api/v3)
- *   --api-key     Override API key (default: from env or hardcoded)
+ *   --api-key     Override API key (default: $GODCRM_API_KEY)
  */
 
 const fs = require('fs');
@@ -29,7 +29,7 @@ const http = require('http');
 // ── Config ──
 const PACKAGES_DIR = path.resolve(__dirname, '../packages');
 const DEFAULT_API_URL = process.env.GODCRM_API_URL || 'https://crm.hltrn.cc/api/v3';
-const DEFAULT_API_KEY = process.env.GODCRM_API_KEY || '';
+const DEFAULT_API_KEY = process.env.GODCRM_API_KEY; // no literal fallback — see --api-key
 
 // ── CLI Args ──
 const args = process.argv.slice(2);

@@ -6,6 +6,7 @@ import { useLoginForm } from '../hooks/useLogin';
 import { Input, Button } from '@/shared/components/ui';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { apiClient } from '@/shared/utils/apiClient';
+import { getErrorMessage } from '@/shared/utils/errorUtils';
 import { useAuthStore } from '../store/authStore';
 import type { AuthUser } from '../types/auth.types';
 import { isDesktopApp } from '@/shared/types/electron.types';
@@ -105,7 +106,21 @@ export const LoginForm = ({ onForgotPassword }: LoginFormProps) => {
       }
     } catch (e) {
       logger.error('Google OAuth error:', e);
-      setGoogleError('Ошибка подключения к серверу');
+      // apiClient throws Error(rawBody) on any non-2xx, so the honest else-branch
+      // above never runs. Unwrap our JSON error envelope to surface the real reason
+      // (e.g. "Google OAuth не настроен") instead of a misleading connection error.
+      // A genuine network failure has a non-JSON message → keep the generic text.
+      const raw = getErrorMessage(e, '');
+      let message = 'Ошибка подключения к серверу';
+      try {
+        if (raw.startsWith('{')) {
+          const parsed = JSON.parse(raw);
+          message = parsed.error?.message || parsed.error || message;
+        }
+      } catch {
+        // non-JSON body — real transport error, keep the generic message
+      }
+      setGoogleError(message);
       setGoogleLoading(false);
     }
   };

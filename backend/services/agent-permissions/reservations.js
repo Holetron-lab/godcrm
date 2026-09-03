@@ -2,8 +2,11 @@
  * ADR-0181 — Agent Write-Reservations (advisory concurrent-loop soft-lock).
  *
  * Evaluated as a POST-ALLOW stage inside the ADR-0053 /check route handler
- * (backend/routes/v3/agent-permissions.js). Only file-mutation tools are
- * gated; everything else (Bash/Read/MCP) is untouched.
+ * (backend/routes/v3/agent-permissions.js). Two reservation CLASSES:
+ *   - file-mutation tools (Edit/Write/MultiEdit/NotebookEdit) → per-file key.
+ *   - ADR-0181-A: Bash *git-write* commands → one synthetic per-tree key
+ *     (`::git-index::`) modelling the shared .git index/HEAD/refs mutex.
+ * Everything else (read-only git, non-git Bash, Read, MCP) is untouched.
  *
  * Semantics:
  *   - Fresh path, or the SAME holder_session re-touching it (multi-file WP
@@ -32,6 +35,48 @@ export const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'
 // TTL default 10 min — long enough to cover a multi-file WP turn, short enough
 // that a crashed loop's reservation frees fast. Tunable via env.
 const DEFAULT_TTL_SECONDS = Number(process.env.AGENT_WRITE_RESERVATION_TTL_SECONDS) || 600;
+
+// ── ADR-0181-A — git-index critical-section mutex ─────────────────────────
+// One synthetic key per git tree. A Bash `git`-*write* contends on it
+// regardless of which files it touches, because `git add`/`git commit` race on
+// the tree's shared `.git` index / HEAD / refs — not on any single file. The
+// `::`-prefixed sentinel can never collide with a normalizeReservationPath()
+// output (real keys are repo-relative and never start with ':') — see AC#4.
+export const GIT_INDEX_KEY = '::git-index::';
+
+// Short dedicated TTL for the git-index key, separate from the 10-min file TTL:
+// a commit is near-instant, but the pre-push guard / a large tree can add a few
+// seconds. Steal-if-expired self-heals a crashed committer fast. Env-tunable.
+const GIT_INDEX_TTL_SECONDS = Number(process.env.AGENT_GIT_INDEX_RESERVATION_TTL_SECONDS) || 60;
+
+// git *write* verbs only. Read-only git (status/log/diff/show/rev-parse/
+// branch --list/cat-file) is deliberately NOT matched — serializing reads would
+// stall the fleet for nothing. Bias toward KNOWN write verbs, never a catch-all:
+// a missed classification is fail-open by design (gateWrite → allow).
+const GIT_WRITE_VERBS = 'commit|add|mv|rm|reset|stash|merge|rebase|cherry-pick|apply';
+// Allow global options between `git` and the verb: `-C <path>`, `-c k=v`, long
+// `--flag`s, short `-x`. `(?![\w-])` keeps `commit-tree`/`add-ons` from matching.
+const GIT_GLOBAL_OPTS = String.raw`(?:\s+(?:-C\s+\S+|-c\s+\S+|--?\S+))*`;
+const GIT_WRITE_RE = new RegExp(
+  String.raw`\bgit\b${GIT_GLOBAL_OPTS}\s+(?:${GIT_WRITE_VERBS})(?![\w-])`
+);
+// `git restore` is a write ONLY when it targets the index (--staged / -S);
+// a bare `git restore <file>` is a working-tree op and is left ungated.
+const GIT_RESTORE_STAGED_RE = new RegExp(
+  String.raw`\bgit\b${GIT_GLOBAL_OPTS}\s+restore\b[^\n]*(?:--staged|\s-S\b)`
+);
+
+/**
+ * True when a Bash command string invokes a git *write* subcommand that mutates
+ * the shared index / HEAD / refs. Read-only git and non-git commands → false.
+ * Deliberately biased toward known write verbs; a miss is fail-open (allow).
+ * @param {unknown} command
+ * @returns {boolean}
+ */
+export function isGitWriteCommand(command) {
+  if (typeof command !== 'string' || !command.includes('git')) return false;
+  return GIT_WRITE_RE.test(command) || GIT_RESTORE_STAGED_RE.test(command);
+}
 
 const BASE_TREE = '/root/production/business-crm/';
 const DEPLOY_ARTIFACT = '/srv/godcrm/live/';
@@ -221,22 +266,38 @@ export async function checkReservation(filePath) {
  */
 export async function gateWrite({ toolName, toolInput, holderSession, wpId = null, agentId = null, spaceId = null }) {
   try {
-    if (!WRITE_TOOLS.has(toolName)) return null;          // non-mutation tool — untouched (AC#6)
     if (!holderSession) return null;                       // no holder identity → cannot reserve → allow
-    const key = normalizeReservationPath(extractPath(toolInput));
-    if (!key) return null;                                 // no target path → nothing to reserve
+
+    // Resolve which reservation CLASS this tool contends on.
+    //   - file-mutation tool → per-file key (ADR-0181).
+    //   - Bash git-write     → the one per-tree git-index sentinel (ADR-0181-A).
+    // Anything else (read-only git, non-git Bash, Read, MCP) → untouched.
+    let key = null;
+    let ttlSeconds = DEFAULT_TTL_SECONDS;
+    let denyKind = 'file';
+    if (WRITE_TOOLS.has(toolName)) {
+      key = normalizeReservationPath(extractPath(toolInput));   // per-file mutex (AC#6)
+    } else if (toolName === 'Bash' && isGitWriteCommand(toolInput?.command)) {
+      key = GIT_INDEX_KEY;                                       // shared git-index mutex (AC#1)
+      ttlSeconds = GIT_INDEX_TTL_SECONDS;
+      denyKind = 'git';
+    }
+    if (!key) return null;                                 // non-mutation / non-git-write / no path → allow
 
     const result = await acquireWriteReservation({
-      filePath: key, holderSession, wpId, agentId, spaceId,
+      filePath: key, holderSession, wpId, agentId, spaceId, ttlSeconds,
     });
     if (result.granted) return null;                       // acquired/renewed my own → allow
 
     const until = result.expiresAt ? new Date(result.expiresAt).toISOString() : 'soon';
     const who = result.holder ? `${result.holder}${result.wpId ? `/${result.wpId}` : ''}` : 'another loop';
-    log.info({ key, holder: result.holder, wpId: result.wpId }, 'write-reservation soft-deny');
+    log.info({ key, holder: result.holder, wpId: result.wpId, kind: denyKind }, 'write-reservation soft-deny');
+    const reason = denyKind === 'git'
+      ? `git index reserved by ${who} until ${until} — retry in a moment (ADR-0181-A advisory git-index mutex).`
+      : `File reserved by ${who} until ${until} — defer & re-read (ADR-0181 advisory soft-lock).`;
     return {
       decision: 'deny',
-      reason: `File reserved by ${who} until ${until} — defer & re-read (ADR-0181 advisory soft-lock).`,
+      reason,
       matched_source: 'reservation',
       matched_rule_id: null,
     };

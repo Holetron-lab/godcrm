@@ -43,8 +43,8 @@ export function SpaceDashboardPage() {
   
   // Update page title when space loads
   useEffect(() => {
-    if (spaceData?.space?.name) {
-      setSpaceTitle(spaceData.space.name);
+    if (spaceData?.name) {
+      setSpaceTitle(spaceData.name);
     }
   }, [spaceData]);
 

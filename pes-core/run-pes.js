@@ -25,8 +25,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── CONFIG ────────────────────────────────────────────────
 
-const BOT_TOKEN = process.env.BOT_TOKEN || '<TELEGRAM_BOT_TOKEN>';
-const CHAT_ID   = process.env.CHAT_ID   || '331468767';
+// No literal fallbacks: a token committed as a default is a published token.
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const CHAT_ID   = process.env.CHAT_ID;
+if (!BOT_TOKEN || !CHAT_ID) throw new Error('run-pes: set BOT_TOKEN and CHAT_ID in the environment');
 const DATA_DIR  = join(__dirname, 'pes-data');
 const LOG_FILE  = process.env.LOG_FILE  || join(DATA_DIR, 'pes.log');
 

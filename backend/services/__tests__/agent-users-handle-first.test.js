@@ -31,6 +31,11 @@ vi.mock('../../utils/logger.js', () => ({
   apiLogger: { debug: vi.fn(), info: vi.fn(), warn: (...a) => mockWarn(...a), error: vi.fn() },
 }));
 
+// ADR-165 WP-4 D4: agent-users.js now records passport acts in the hash-chained
+// audit_log. Nothing here issues or revokes, but the import must not drag the
+// real writer (and its logger/DB graph) into a pure unit suite.
+vi.mock('../audit/writeAudit.js', () => ({ writeAudit: vi.fn() }));
+
 beforeEach(() => {
   mockDbAll.mockReset();
   mockDbGet.mockReset();

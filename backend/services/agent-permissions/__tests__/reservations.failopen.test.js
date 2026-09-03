@@ -21,6 +21,17 @@ describe('write-reservation fail-open', () => {
     expect(out).toBeNull();
   });
 
+  // ADR-0181-A AC#6 — the git-index branch shares the same fail-open boundary:
+  // a DB error while reserving the sentinel must never block a live commit.
+  test('gateWrite git-index branch swallows DB error → null (allow, never blocks a commit)', async () => {
+    const out = await gateWrite({
+      toolName: 'Bash',
+      toolInput: { command: 'git add -A && git commit -m x' },
+      holderSession: 'loopA',
+    });
+    expect(out).toBeNull();
+  });
+
   test('releaseWriteReservation swallows DB error → false, never throws', async () => {
     await expect(
       releaseWriteReservation({ filePath: '/root/production/business-crm/backend/x.js', holderSession: 'loopA' })

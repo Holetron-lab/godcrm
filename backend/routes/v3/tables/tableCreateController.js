@@ -184,9 +184,10 @@ router.post('/tables', async (req, res) => {
         data_source_id,
         source_table_name,
         sync_enabled,
+        created_by,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${sqlNow()}, ${sqlNow()})
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${sqlNow()}, ${sqlNow()})
     `, [
       effectiveProjectId,
       name,
@@ -196,7 +197,9 @@ router.post('/tables', async (req, res) => {
       tableType,
       data_source_id || null,
       external_table_name || null,
-      toBool(!!data_source_id)
+      toBool(!!data_source_id),
+      // ADR-0066-B: the authenticated creator was available and discarded.
+      req.user?.id ?? null
     ]);
 
     const tableId = result.lastID || result.lastInsertRowid;

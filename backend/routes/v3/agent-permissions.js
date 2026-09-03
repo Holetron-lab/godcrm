@@ -28,10 +28,10 @@ import { authenticate } from '../../middleware/auth.js';
 import { dbGet, dbAll } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
 import { success, badRequest, forbidden, error } from '../../utils/response.js';
+import { requireOwnerRole } from './system/helpers.js';
 
 const log = apiLogger.child({ module: 'agent_permissions_api' });
 
-const OWNER_SPACE_ID = 11;
 const router = express.Router();
 
 // ─── Internal-token middleware ─────────────────────────────────────────
@@ -50,25 +50,6 @@ function requireInternalToken(req, res, next) {
     return forbidden(res, 'Invalid internal token.');
   }
   return next();
-}
-
-async function requireOwner(req, res) {
-  if (!req.user?.id) {
-    forbidden(res, 'Authentication required.');
-    return false;
-  }
-  try {
-    const row = await dbGet('SELECT owner_id FROM spaces WHERE id = $1', [OWNER_SPACE_ID]);
-    if (!row || row.owner_id !== req.user.id) {
-      forbidden(res, 'Owner-only endpoint.');
-      return false;
-    }
-    return true;
-  } catch (err) {
-    log.error({ err }, 'requireOwner: failed to look up space owner');
-    error(res, 'INTERNAL', 'Internal error');
-    return false;
-  }
 }
 
 // ─── POST /check — main hook endpoint ──────────────────────────────────
@@ -133,7 +114,7 @@ router.post('/check', requireInternalToken, express.json({ limit: '64kb' }), asy
 
 // ─── GET /audit — owner-only audit feed (used by C4 UI) ────────────────
 router.get('/audit', authenticate, async (req, res) => {
-  if (!(await requireOwner(req, res))) return;
+  if (!requireOwnerRole(req, res)) return;
 
   const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
   const offset = parseInt(req.query.offset, 10) || 0;
@@ -178,7 +159,7 @@ router.get('/audit', authenticate, async (req, res) => {
 // and by the future owner Settings UI. The pg_notify trigger handles cache
 // eviction; the resolver picks it up on next request.
 router.post('/policies', authenticate, express.json({ limit: '16kb' }), async (req, res) => {
-  if (!(await requireOwner(req, res))) return;
+  if (!requireOwnerRole(req, res)) return;
 
   const {
     scope,
@@ -242,7 +223,7 @@ router.post('/policies', authenticate, express.json({ limit: '16kb' }), async (r
 
 // ─── GET /health — resolver state (owner-only; no token leak) ──────────
 router.get('/health', authenticate, async (req, res) => {
-  if (!(await requireOwner(req, res))) return;
+  if (!requireOwnerRole(req, res)) return;
   return success(res, resolver.health());
 });
 

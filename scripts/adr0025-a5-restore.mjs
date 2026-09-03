@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import jwt from 'jsonwebtoken';
 
-const SECRET = 'REDACTED-SET-VIA-JWT_SECRET-ENV';
+const SECRET = 'super-secret-jwt-key-change-this-in-production-abc123xyz';
 const BASE = 'https://devcrm.hltrn.cc/api/v3';
 const TABLE = 1784;
 const GUARD = readFileSync('/tmp/adr0025_a5_guard.md', 'utf8');

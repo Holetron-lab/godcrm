@@ -17,7 +17,6 @@ export const auth = {
     },
     register: {
       title: 'Create your account',
-      subtitle: 'GODCRM alpha — free, no card required.',
       nameLabel: 'Name',
       namePlaceholder: 'What to call you',
       emailLabel: 'Email',
@@ -88,7 +87,6 @@ export const auth = {
     },
     register: {
       title: 'Создание аккаунта',
-      subtitle: 'GODCRM alpha — бесплатно, без карты.',
       nameLabel: 'Имя',
       namePlaceholder: 'Как к вам обращаться',
       emailLabel: 'Email',

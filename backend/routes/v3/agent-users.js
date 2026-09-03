@@ -35,9 +35,13 @@ import bcrypt from 'bcrypt';
 import { authenticate } from '../../middleware/auth.js';
 import { dbGet, dbAll, dbRun, safeJsonParse } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
-import { success, created, error, badRequest, notFound, forbidden, unauthorized } from '../../utils/response.js';
+import { success, created, error, badRequest, notFound, forbidden, unauthorized, conflict } from '../../utils/response.js';
+import { issuePassport, revokePassport } from '../../services/agent-users.js';
 
 const router = Router();
+
+// ADR-165 WP-4: the owner of the Development space owns naturalization.
+const OWNER_SPACE_ID = 11;
 
 /**
  * Generate a unique agent email
@@ -463,6 +467,99 @@ router.get('/:id/agent-info', async (req, res) => {
   } catch (err) {
     apiLogger.error({ err, context: 'AgentUser Route' }, 'Error fetching agent info');
     error(res, 'Failed to fetch agent info');
+  }
+});
+
+// ─── ADR-165 WP-4 — owner-gated naturalization ──────────────────────
+//
+// The only authorized path for issuing/revoking a passport. The tool path
+// (issue_passport / revoke_passport) is refused for every principal by the
+// OWNER_ONLY set in executeTool(), so without these routes there would be no
+// issuance path at all.
+//
+// ponytail: `requireOwner` is deliberately NOT extracted into a shared helper
+// here — it exists in three other route files (secrets.js, agent-permissions.js,
+// owner.js) and consolidating them is a real but unrelated cleanup that would
+// widen this diff across four files for no security gain. Logged as debt.
+
+async function requireOwner(req, res) {
+  if (!req.user?.id) {
+    forbidden(res, 'Authentication required');
+    return false;
+  }
+  const space = await dbGet('SELECT id, owner_id FROM spaces WHERE id = ?', [OWNER_SPACE_ID]);
+  if (!space) {
+    // Fail closed: if space 11 vanishes, refuse rather than silently elevate.
+    error(res, 'OWNER_SPACE_MISSING', `Space ${OWNER_SPACE_ID} not found`, 500);
+    return false;
+  }
+  if (space.owner_id !== req.user.id) {
+    forbidden(res, 'Owner-only endpoint');
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Map a service-level refusal onto an HTTP status. The service returns
+ * structured `{ ok:false, error, message }` rather than throwing.
+ */
+function passportFailure(res, result) {
+  if (result.error === 'residence_not_found' || result.error === 'passport_not_found') {
+    return notFound(res, 'Agent passport');
+  }
+  if (result.error === 'handle_taken') {
+    return conflict(res, result.message);
+  }
+  return badRequest(res, result.message || result.error, result.error);
+}
+
+/**
+ * POST /api/v3/users/:id/passport
+ * Naturalize an agent user — grant the global `<<@handle>>` passport.
+ * Body: { handle?: string }  (falls back to the agent row's slug/name)
+ */
+router.post('/:id/passport', async (req, res) => {
+  if (!(await requireOwner(req, res))) return;
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return badRequest(res, 'Invalid user id');
+    }
+    // `audit_req` threads the real request into the hash-chained audit row the
+    // service writes (WP-4 D4) — same entry the tool path produces, but signed
+    // by an actual owner session rather than by the channel.
+    const result = await issuePassport({
+      user_id: userId,
+      handle: req.body?.handle,
+      actor: req.user.id,
+      audit_req: req,
+    });
+    if (!result.ok) return passportFailure(res, result);
+    return success(res, result);
+  } catch (err) {
+    apiLogger.error({ err, context: 'AgentUser Route' }, 'Passport issue failed');
+    return error(res, 'PASSPORT_ISSUE_FAILED', 'Failed to issue passport', 500);
+  }
+});
+
+/**
+ * DELETE /api/v3/users/:id/passport
+ * Soft-revoke the passport: the handle is cleared, the user row is kept.
+ */
+router.delete('/:id/passport', async (req, res) => {
+  if (!(await requireOwner(req, res))) return;
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return badRequest(res, 'Invalid user id');
+    }
+    const result = await revokePassport({ user_id: userId, actor: req.user.id, audit_req: req });
+    if (!result.ok) return passportFailure(res, result);
+    return success(res, result);
+  } catch (err) {
+    apiLogger.error({ err, context: 'AgentUser Route' }, 'Passport revoke failed');
+    return error(res, 'PASSPORT_REVOKE_FAILED', 'Failed to revoke passport', 500);
   }
 });
 

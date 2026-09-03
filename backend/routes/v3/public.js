@@ -19,6 +19,7 @@ import {
 import { resolveLandingProject } from '../../services/public/resolveLandingProject.js';
 import { readPublicSidebarPrefs } from '../../services/SpaceVisibilityService.js';
 import { isPromoEnabled } from '../../services/starter-pack/StarterPackService.js';
+import { getEffectiveRegistrationPolicy } from '../../services/registrationPolicy.js';
 // NO-SIGNUP-MCP §B1: per-space public MCP mount. Imported here (not the other
 // way) so the route inherits this router's abuse-guard + rate-limit. The
 // gated read loaders publicMcp.js needs are exported from THIS file at the
@@ -57,6 +58,39 @@ router.get('/registration-config', async (req, res) => {
     apiLogger.error({ err }, 'registration-config failed');
     // Fail-open to the flag's own default (promo ON) — never break the register page.
     return success(res, { promo_enabled: true });
+  }
+});
+
+/**
+ * GET /api/v3/public/config — ADR-188 F5.
+ * Unauthenticated public projection of the effective registration policy, so the
+ * login page can decide (pre-auth) whether to render the "Sign up" link. Exposes
+ * ONLY the two non-sensitive fields the login page needs — never `default_role`,
+ * `auto_join`, or `landing_space`. Behind the router-level abuse-guard +
+ * rate-limit; NOT space-scoped (the front door is instance-level).
+ *
+ * `signup_mode` — the single source of truth is `getEffectiveRegistrationPolicy()`
+ *   (same 60s cache + pg_notify eviction as the owner/admin surface), so whatever
+ *   the Ring 0 governance default resolves to (ADR-183-B D3) is honoured here with
+ *   no second store.
+ * `referral_enabled` — pure projection: referral self-registration is available
+ *   iff the front door is not `closed`. In `invite` mode a valid referral/invite
+ *   code is precisely the door; in `closed` mode there is no self-registration at
+ *   all, so referral is moot. No separate flag is invented (ADR-183-B D3 keeps the
+ *   promo toggle distinct and out of scope here).
+ */
+router.get('/config', async (req, res) => {
+  try {
+    const policy = await getEffectiveRegistrationPolicy();
+    const signup_mode = policy.signup_mode;
+    return success(res, {
+      signup_mode,
+      referral_enabled: signup_mode !== 'closed',
+    });
+  } catch (err) {
+    apiLogger.error({ err }, 'public/config failed');
+    // Fail CLOSED — never advertise an open front door on an unexpected error.
+    return success(res, { signup_mode: 'closed', referral_enabled: false });
   }
 });
 

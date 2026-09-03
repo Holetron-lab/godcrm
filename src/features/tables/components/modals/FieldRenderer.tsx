@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useQuery } from '@tanstack/react-query';
-import { EyeOff, RefreshCw, Copy, Check, Eye } from 'lucide-react';
+import { EyeOff, RefreshCw, Copy, Check, Eye, ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { Input } from '@/shared/components/ui';
 import { apiClient } from '@/shared/utils/apiClient';
 import type { ColumnModel, ColumnOption } from '../../types/table.types';
@@ -427,17 +427,33 @@ export function FieldRenderer({
         />
       );
 
-    case 'url':
+    case 'url': {
+      const urlValue = String(value || '').trim();
+      const href = urlValue && !/^https?:\/\//i.test(urlValue) ? `https://${urlValue}` : urlValue;
       return withLabel(
-        <Input
-          type="url"
-          value={String(value || '')}
-          onChange={(e) => onChange(e.target.value)}
-          disabled={disabled || isSystemColumn}
-          placeholder="https://..."
-          className={highlighted ? 'border-[var(--color-primary-500)] ring-2 ring-[var(--color-primary-500)]' : ''}
-        />
+        <div className="relative">
+          <Input
+            type="url"
+            value={String(value || '')}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled || isSystemColumn}
+            placeholder="https://..."
+            className={`${highlighted ? 'border-[var(--color-primary-500)] ring-2 ring-[var(--color-primary-500)]' : ''} ${href ? 'pr-9' : ''}`}
+          />
+          {href && (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open link"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)] transition-colors"
+            >
+              <ExternalLinkIcon className="w-4 h-4" />
+            </a>
+          )}
+        </div>
       );
+    }
 
     case 'password':
       return withLabel(

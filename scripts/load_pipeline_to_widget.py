@@ -7,7 +7,7 @@ import subprocess
 import urllib.request
 
 API = "https://crm.hltrn.cc/api/v3"
-JWT_SECRET = "REDACTED-SET-VIA-JWT_SECRET-ENV"
+JWT_SECRET = "super-secret-jwt-key-change-this-in-production-abc123xyz"
 DOC_TABLE = 2197
 ATOMS_TABLE = 3574
 SOURCE_FILE = "/root/production/business-crm/docs/PIPELINE.md"

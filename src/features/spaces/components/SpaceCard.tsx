@@ -240,7 +240,7 @@ export const SpaceCard = ({
           </button>
         )}
         <button
-          onClick={(e) => { e.stopPropagation(); navigate(`/spaces/${space.id}`); }}
+          onClick={(e) => { e.stopPropagation(); navigate(`/spaces/${space.id}/dashboard`); }}
           className="flex items-center justify-center h-5 w-5 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
           title={t('common.open') || 'Open'}
         >

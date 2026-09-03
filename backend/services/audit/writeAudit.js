@@ -16,6 +16,9 @@
 // Reads from `req`:
 //   - req.user.id         → user_id (actor)
 //   - req.actingAs        → acting_as (ADR-0065; null until then)
+//   - req.agentId         → agent_id (ADR-0066-B delegated identity) AND
+//                           `details.acting_agent` — see stampAgent() below
+//   - req.agentName       → details.acting_agent.name (human label only)
 //   - req.requestId       → request_id (UUID from middleware)
 //   - req.spaceId         → space_id (best-effort)
 //   - req.ip / x-forwarded-for → ip_addr (INET)
@@ -112,6 +115,33 @@ export function capDetails(details) {
 }
 
 /**
+ * ADR-0066-B — fold the delegated agent identity INTO `details`.
+ *
+ * `agent_id` is a real column (queryable, indexed), but the hash preimage in
+ * auditChain.js is FROZEN: adding a field there needs a CHAIN_VERSION bump
+ * that invalidates every existing entry_hash. `details` is already inside the
+ * preimage, so stamping the same fact here makes the actor tamper-evident for
+ * free — the column is an index over a hashed value, not a second source of
+ * truth. If they ever disagree, `details.acting_agent` is authoritative.
+ *
+ * Stamps on id OR name. A named agent with no numeric id is the normal case
+ * on the MCP/CLI path (`MCP_AGENT_SLUG` with no `AGENT_ID`), and recording it
+ * as plain human traffic is the exact misattribution this ADR exists to close
+ * — a null `agent_id` column is a weaker claim than none at all, not a reason
+ * to drop the actor.
+ *
+ * Exported for unit tests; not for public consumers.
+ */
+export function stampAgent(details, agentId, agentName) {
+  if (agentId == null && !agentName) return details;
+  const base =
+    details && typeof details === 'object' && !Array.isArray(details)
+      ? details
+      : { value: details ?? null };
+  return { ...base, acting_agent: { id: agentId ?? null, name: agentName ?? null } };
+}
+
+/**
  * Best-effort extraction of client IP for the INET `ip_addr` column.
  * Returns a clean numeric/hex IP string or null. Express's `req.ip`
  * already honours `trust proxy`, but it can include the IPv6-mapped
@@ -150,6 +180,11 @@ export async function writeAudit(req, entry) {
     const userId =
       (req && req.user && req.user.id) != null ? req.user.id : null;
     const actingAs = (req && req.actingAs) != null ? req.actingAs : null;
+    const agentId =
+      req && req.agentId != null && Number.isFinite(Number(req.agentId))
+        ? Number(req.agentId)
+        : null;
+    const agentName = (req && req.agentName) || null;
     const requestId = (req && req.requestId) || null;
     const spaceId =
       (req && req.spaceId) != null ? req.spaceId : null;
@@ -157,7 +192,7 @@ export async function writeAudit(req, entry) {
     const userAgent =
       req && typeof req.get === 'function' ? req.get('user-agent') || null : null;
 
-    const capped = capDetails(entry.details);
+    const capped = capDetails(stampAgent(entry.details, agentId, agentName));
     const detailsText = capped == null ? null : JSON.stringify(capped);
 
     const fields = {
@@ -172,6 +207,7 @@ export async function writeAudit(req, entry) {
       request_id: requestId,
       space_id: spaceId,
       ip_addr: ipAddr,
+      agent_id: agentId,
     };
 
     await appendWithRetry(fields);
@@ -219,11 +255,14 @@ async function appendChainEntry(fields) {
     const prevHash = prevRow?.entry_hash ?? null; // Buffer | null (genesis)
 
     const ins = await trx.query(
+      // ADR-0066-B: `agent_id` is appended LAST on purpose — the preceding 11
+      // positions are the ADR-0066 P0 shape and stay byte-stable.
       `INSERT INTO audit_log (
         user_id, action, entity_type, entity_id, details,
         ip_address, user_agent,
-        acting_as, request_id, space_id, ip_addr
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::inet)
+        acting_as, request_id, space_id, ip_addr,
+        agent_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::inet, ?)
       RETURNING id, created_at`,
       [
         fields.user_id,
@@ -237,6 +276,7 @@ async function appendChainEntry(fields) {
         fields.request_id,
         fields.space_id,
         fields.ip_addr,
+        fields.agent_id,
       ]
     );
     const { id, created_at } = ins.rows[0];

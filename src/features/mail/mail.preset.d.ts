@@ -9,7 +9,7 @@
  * Delete `src/features/mail/` and this augmentation leaves with it:
  * `ModulePresetRegistry` is empty again, `keyof {}` is `never`, and the core
  * union has no dangling `'mail'` member — the autonomy invariant (AC-3) holds
- * with no core edit. Same shape as any other `<module>.preset.d.ts`.
+ * with no core edit. Same shape as `sc-sim.preset.d.ts`.
  */
 import type {} from '@/features/widgets/types/widget.types';
 

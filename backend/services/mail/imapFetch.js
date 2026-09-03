@@ -23,6 +23,15 @@ const SPECIAL_USE = {
   trash: '\\Trash',
 };
 
+// Fallback for servers that don't advertise SPECIAL-USE (RFC 6154) — matched on
+// the mailbox *leaf* name, case-insensitively, so `Sent` and `INBOX.Sent` both hit.
+const FOLDER_NAMES = {
+  sent: ['sent', 'sent items', 'sent messages', 'отправленные'],
+  drafts: ['drafts', 'draft', 'черновики'],
+  archive: ['archive', 'archives', 'архив'],
+  trash: ['trash', 'deleted', 'deleted items', 'bin', 'корзина', 'удалённые', 'удаленные'],
+};
+
 function firstAddress(list) {
   const a = Array.isArray(list) && list.length ? list[0] : null;
   return { name: a?.name || null, address: a?.address || null };
@@ -37,21 +46,37 @@ function stripHtml(html) {
   return String(html).replace(/<[^>]+>/g, ' ');
 }
 
+/** Leaf name of a mailbox: `INBOX.Sent` / `INBOX/Sent` → `sent`. */
+function leafName(box) {
+  const raw = box.name || String(box.path || '').split(/[./]/).pop() || '';
+  return raw.trim().toLowerCase();
+}
+
 /**
  * Resolve a logical folder id to a concrete IMAP mailbox path.
- * @returns {Promise<string>} mailbox path (defaults to 'INBOX')
+ *
+ * Returns `null` when the server has no such mailbox. It MUST NOT fall back to
+ * INBOX: the caller writes the rows under the *requested* folder, so an INBOX
+ * fallback silently files a copy of the inbox into Sent/Trash on every sync
+ * (a fresh Maildir has none of those folders until the first send).
+ *
+ * @returns {Promise<string|null>} mailbox path, or null if unresolvable
  */
-async function resolveMailbox(client, folder) {
+export async function resolveMailbox(client, folder) {
   if (!folder || folder === 'inbox') return 'INBOX';
   const flag = SPECIAL_USE[folder];
-  if (!flag) return 'INBOX';
+  if (!flag) return null;
+  let boxes;
   try {
-    const boxes = await client.list();
-    const hit = boxes.find((b) => b.specialUse === flag);
-    return hit ? hit.path : 'INBOX';
+    boxes = await client.list();
   } catch {
-    return 'INBOX';
+    return null;
   }
+  const names = FOLDER_NAMES[folder] || [];
+  const hit =
+    boxes.find((b) => b.specialUse === flag) ||
+    boxes.find((b) => names.includes(leafName(b)));
+  return hit ? hit.path : null;
 }
 
 /**
@@ -85,6 +110,9 @@ export async function imapFetch({ creds, folder = 'inbox', limit = 50 }) {
   await client.connect();
   try {
     const mailbox = await resolveMailbox(client, folder);
+    // Server has no such mailbox → nothing to fetch. Never open INBOX instead:
+    // its rows would be written under `folder` and duplicate the inbox there.
+    if (!mailbox) return rows;
     const status = await client.mailboxOpen(mailbox);
     const exists = status.exists || 0;
     if (exists === 0) return rows;

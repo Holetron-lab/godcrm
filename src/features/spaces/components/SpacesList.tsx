@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useLayoutEffect, type CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { logger } from '@/shared/utils/logger';
 import { useSpacesQuery } from '../hooks/useSpacesQuery';
 import { useSpacesOrder } from '../hooks/useSpacesOrder';
@@ -105,6 +106,7 @@ const packRows = (
 };
 
 export const SpacesList = ({ onSpaceClick, searchQuery = '', maxCols = 6, typeFilter = 'all', userFilter = 'all' }: SpacesListProps) => {
+  const navigate = useNavigate();
   const { data: spaces, isLoading, error } = useSpacesQuery();
   const { getSpaceOrder } = useSpacesOrder();
   const activeSpaceId = useActiveSpaceId();
@@ -166,7 +168,15 @@ export const SpacesList = ({ onSpaceClick, searchQuery = '', maxCols = 6, typeFi
 
   const handleSpaceClick = (space: SpaceModel) => {
     setActiveSpaceId(space.id);
-    onSpaceClick?.(space);
+    // Consumers that pass `onSpaceClick` opt into custom behaviour (e.g. a
+    // space picker) — respect it. Otherwise navigate to the dashboard, since
+    // SpacesList always passes `onClick` to SpaceCard, suppressing the card's
+    // own built-in navigation default.
+    if (onSpaceClick) {
+      onSpaceClick(space);
+    } else {
+      navigate(`/spaces/${space.id}/dashboard`);
+    }
   };
 
   const handleSizeChange = useCallback((spaceId: number, size: SpaceCardSize) => {

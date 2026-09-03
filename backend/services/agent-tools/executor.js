@@ -29,6 +29,13 @@ import { connectorToolHandlers, connectorRequirements } from './connector-tools.
 import { passportToolHandlers } from './passport-tools.js';
 import { getSpaceConnector } from '../connectors/CredentialVault.js';
 import { evaluateToolGate } from './capability-gate.js';
+import { auditToolCall } from '../audit/toolAudit.js';
+import { isOwnerPrincipal, resolvePrincipal } from './principal.js';
+
+// ADR-165 WP-4: naturalization is an owner act. Frozen in code, not in a DB
+// row or an agent allowlist — the tools that mint and revoke agent identity
+// must not be grantable by the same mechanism they authorize.
+const OWNER_ONLY_TOOLS = new Set(['issue_passport', 'revoke_passport']);
 
 // ADR-165 WP-1: the capability gate ships warn-only first (log violations,
 // don't block) for one soak cycle to size false-positives on under-specified
@@ -66,9 +73,42 @@ export const toolHandlers = {
 };
 
 /**
- * Execute a tool by name
+ * Execute a tool by name.
+ *
+ * ADR-0066-B: this is the single choke point where the agent's identity is
+ * known — callers already thread `context.agentId` / `agentName` for the
+ * ADR-165 capability gate — so it is the only place agent action provenance
+ * can be recorded without pushing a new parameter through 25 handler modules.
+ *
+ * Error semantics are preserved exactly: `dispatchTool` keeps its own
+ * try/catch around the handler (structured `{ error }` return), and anything
+ * propagating out of the gate/connector pre-flight still propagates. The
+ * wrapper records the outcome and re-throws — it never swallows.
  */
 export async function executeTool(toolName, args, userId, context) {
+  const startedAt = Date.now();
+  try {
+    const result = await dispatchTool(toolName, args, userId, context);
+    // Fire-and-forget: auditToolCall → writeAudit never throws or rejects, so
+    // a broken audit pipeline cannot fail a tool call (ADR-0066 posture).
+    void auditToolCall({
+      toolName, args, userId, context, result,
+      durationMs: Date.now() - startedAt,
+    });
+    return result;
+  } catch (error) {
+    void auditToolCall({
+      toolName, args, userId, context, thrown: error,
+      durationMs: Date.now() - startedAt,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Route a tool call to its handler. Internal — callers use executeTool().
+ */
+async function dispatchTool(toolName, args, userId, context) {
   // ADR-113: manage_plan delegates to shared handleManagePlan()
   if (toolName === 'manage_plan') {
     const { conversationId, agentName, agentId } = context || {};
@@ -83,6 +123,28 @@ export async function executeTool(toolName, args, userId, context) {
   const handler = toolHandlers[toolName];
   if (!handler) {
     return { error: `Unknown tool: ${toolName}` };
+  }
+
+  // ADR-165 WP-4: owner-only gate, checked BEFORE the capability gate and with
+  // no env flag — a warn-only owner gate is a gate that does nothing, and
+  // legitimate traffic on this path is countably zero. The MCP transport, an
+  // agent scope, and an undeclared principal are all refused: privilege comes
+  // from the subject, never from the channel.
+  if (OWNER_ONLY_TOOLS.has(toolName) && !isOwnerPrincipal(context)) {
+    const principal = resolvePrincipal(context);
+    aiLogger.warn({
+      event: 'owner_only_tool_denied',
+      toolName,
+      principalKind: principal.kind,
+      principalLabel: principal.label,
+      source: context?.source ?? null,
+      agentId: context?.agentId ?? null,
+    }, 'ADR-165 WP-4: non-owner principal attempted an owner-only tool');
+    return {
+      error: 'owner_only_tool',
+      tool: toolName,
+      message: `Tool ${toolName} is owner-only (ADR-165 WP-4). Use POST/DELETE /api/v3/users/:id/passport from an owner session.`,
+    };
   }
 
   // ADR-165 WP-1: unified capability gate. When the caller threads an agent

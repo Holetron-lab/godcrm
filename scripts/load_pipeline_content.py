@@ -10,7 +10,7 @@ token = subprocess.check_output([
     "node", "-e",
     "const jwt=require('jsonwebtoken');"
     "console.log(jwt.sign({userId:1,role:'admin'},"
-    "'REDACTED-SET-VIA-JWT_SECRET-ENV',{expiresIn:'1h'}))"
+    "'super-secret-jwt-key-change-this-in-production-abc123xyz',{expiresIn:'1h'}))"
 ], cwd="/root/production/business-crm").decode().strip()
 
 HEADERS = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}

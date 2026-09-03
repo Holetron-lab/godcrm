@@ -50,6 +50,12 @@ import { getAdapter as getDbAdapter, dbGet, safeJsonParse } from './database/con
 // The lookup is a deliberate plain read, NOT resolveAgentUser(): that helper
 // find-or-creates the agent's user row, and a memory write is no reason to
 // mutate the users table.
+//
+// ADR-0066-B: returns `{ id, name }`, not a bare name. The numeric AGENT_ID was
+// already resolved here and then discarded, which is why every MCP/CLI tool
+// call reached the audit trail as plain `userId=1` traffic with no actor on it.
+// `id` is populated only when the agent row actually resolved; the slug
+// fallback carries a name and a null id — a weaker claim, not a missing one.
 let cachedIdentity;
 async function resolveCallerIdentity() {
   if (cachedIdentity !== undefined) return cachedIdentity;
@@ -67,7 +73,7 @@ async function resolveCallerIdentity() {
       const data = row ? safeJsonParse(row.data, {}) : {};
       const name = data.slug || data.name || null;
       if (name) {
-        cachedIdentity = name;
+        cachedIdentity = { id: agentId, name };
         console.error(`[godcrm-mcp] caller identity: ${name} (AGENT_ID=${agentId})`);
         return cachedIdentity;
       }
@@ -77,7 +83,8 @@ async function resolveCallerIdentity() {
     }
   }
 
-  cachedIdentity = (process.env.MCP_AGENT_SLUG || '').trim() || null;
+  const slug = (process.env.MCP_AGENT_SLUG || '').trim() || null;
+  cachedIdentity = slug ? { id: null, name: slug } : null;
   return cachedIdentity;
 }
 
@@ -121,17 +128,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     // userId=1 (system/admin), context with space_id
+    //
+    // ADR-165 WP-4: the transport declares what it is instead of impersonating
+    // the owner. `userId` stays 1 deliberately — dozens of handlers stamp
+    // `created_by` from it and changing that is not this package's job — but
+    // authorization decisions now read `context.principal`, so holding the
+    // channel is no longer the same as holding the owner's authority.
     const context = {
       spaceId: parseInt(process.env.MCP_SPACE_ID || '11', 10),
       source: 'mcp',
+      principal: { kind: 'system', label: 'mcp-system', userId: null },
     };
 
     // Author attribution for MCP/CLI callers. Threading the resolved identity
     // as agentName makes it outrank a self-declared `author` argument, exactly
     // as the in-CRM agent loop's identity does. Unresolvable → the tool falls
     // back to the argument, and warns if there is none.
+    // ADR-0066-B: `agentId` rides along so the audit row carries the actor in
+    // the indexed column, not only in the hashed details blob.
     const callerIdentity = await resolveCallerIdentity();
-    if (callerIdentity) context.agentName = callerIdentity;
+    if (callerIdentity) {
+      context.agentName = callerIdentity.name;
+      if (callerIdentity.id != null) context.agentId = callerIdentity.id;
+    }
 
     const result = await executeTool(name, args || {}, 1, context);
 

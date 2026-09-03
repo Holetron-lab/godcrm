@@ -35,6 +35,7 @@
 
 import { dbGet, dbAll, dbRun, safeJsonParse } from '../database/connection.js';
 import { apiLogger } from '../utils/logger.js';
+import { writeAudit } from './audit/writeAudit.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -465,6 +466,45 @@ function mergePassportAudit(existingConfig, passportPatch) {
 }
 
 /**
+ * ADR-165 WP-4 D4 — record a naturalization act in the hash-chained audit_log.
+ *
+ * Written by the service, not by its callers: the owner HTTP route and the
+ * tool handler then produce the same entry, and a future caller cannot forget
+ * it. Only real changes are recorded — an idempotent re-issue returns before
+ * this point, and an entry claiming an act that did not happen would make the
+ * chain less truthful, not more.
+ *
+ * `writeAudit` reads only `req.user.id`, `req.actingAs`, `req.requestId`,
+ * `req.spaceId`, `req.ip` and `req.get`, so the HTTP path passes its real
+ * request and a service caller passes a synthetic principal-carrying object —
+ * no new writer, no signature change. Fire-and-forget: it never throws.
+ *
+ * The principal's label rides in `details`, NEVER in `req.actingAs`:
+ * `audit_log.acting_as` is an INTEGER column (a user id — ADR-0065), so a
+ * string label there fails the INSERT with `invalid input syntax for type
+ * integer` (verified against godcrm_test). Because writeAudit is
+ * fire-and-forget, that failure would not surface to the caller — the act
+ * would record nothing at all while paging the owner with
+ * AUDIT_CHAIN_APPEND_FAILED. An audit that silently drops exactly the
+ * machine-principal acts is the defect this package exists to remove.
+ */
+async function writePassportAudit(action, userId, { handle, actor, actor_label, audit_req }) {
+  const req = audit_req || { user: actor != null ? { id: actor } : null };
+  await writeAudit(req, {
+    action,
+    entity_type: 'agent_user',
+    entity_id: userId,
+    details: {
+      handle: handle ?? null,
+      actor_kind: actor != null ? 'human_owner' : 'system',
+      actor_user_id: actor ?? null,
+      actor_label: actor_label ?? null,
+      source: audit_req ? 'http' : 'tool',
+    },
+  });
+}
+
+/**
  * issuePassport — ADR-164 Phase 2 naturalization (explicit act).
  *
  * Grants an agent residence a global `<<@handle>>` passport. Idempotent: an
@@ -484,9 +524,22 @@ function mergePassportAudit(existingConfig, passportPatch) {
  * @param {number} [input.table_id]- Residence table id (informational)
  * @param {number} [input.row_id]  - Residence AI Agents row id
  * @param {number|string} [input.actor] - Id of the user performing the act
+ * @param {string} [input.actor_label] - ADR-165 WP-4: label for a non-human
+ *   principal (system/agent). Set together with a null `actor` so the record
+ *   never signs a machine act with a user id.
+ * @param {Object} [input.audit_req] - Express request for the audit row when
+ *   the act comes over HTTP; a synthetic principal object is built otherwise.
  * @returns {Promise<Object>} { ok, ... }
  */
-export async function issuePassport({ handle, user_id, table_id, row_id, actor } = {}) {
+export async function issuePassport({
+  handle,
+  user_id,
+  table_id,
+  row_id,
+  actor,
+  actor_label,
+  audit_req,
+} = {}) {
   // 1. Locate the residence agent row id.
   let residenceRowId =
     Number.isFinite(Number(row_id)) && Number(row_id) > 0 ? Number(row_id) : null;
@@ -573,6 +626,7 @@ export async function issuePassport({ handle, user_id, table_id, row_id, actor }
     status: 'active',
     handle: desired,
     issued_by: actor ?? null,
+    issued_by_label: actor_label ?? null,
     issued_at: new Date().toISOString(),
     revoked_by: null,
     revoked_at: null,
@@ -582,6 +636,25 @@ export async function issuePassport({ handle, user_id, table_id, row_id, actor }
     JSON.stringify(audit),
     resolved.userId,
   ]);
+
+  await writePassportAudit('agent.passport.issue', resolved.userId, {
+    handle: desired,
+    actor,
+    actor_label,
+    audit_req,
+  });
+
+  // ADR-198 D6 — the handle IS the mail local-part, so naturalization is also the moment
+  // this agent gets `<handle>@agents.godcrm.ai`. Best-effort and deliberately AFTER the
+  // audit write: a passport must still be issued (and recorded) when the mail substrate
+  // is absent (NL/KZ) or the kill-switch is off. Retries for anything that failed here
+  // live in backend/scripts/backfill-mailboxes.js.
+  try {
+    const { provisionMailbox } = await import('./mail/provisionMailbox.js');
+    await provisionMailbox({ userId: resolved.userId, reason: 'passport' });
+  } catch (err) {
+    apiLogger.warn({ err, userId: resolved.userId, handle: desired }, '[ADR-198] mailbox provisioning failed (non-fatal)');
+  }
 
   return {
     ok: true,
@@ -610,9 +683,11 @@ export async function issuePassport({ handle, user_id, table_id, row_id, actor }
  * @param {string} [input.handle]  - Current handle of the agent to revoke
  * @param {number} [input.user_id] - Passport id to revoke (alt. to handle)
  * @param {number|string} [input.actor] - Id of the user performing the act
+ * @param {string} [input.actor_label] - ADR-165 WP-4 label for a non-human principal
+ * @param {Object} [input.audit_req] - Express request for the audit row (HTTP path)
  * @returns {Promise<Object>} { ok, ... }
  */
-export async function revokePassport({ handle, user_id, actor } = {}) {
+export async function revokePassport({ handle, user_id, actor, actor_label, audit_req } = {}) {
   let passport = null;
   if (user_id) {
     passport = await dbGet(`SELECT * FROM users WHERE id = $1 AND user_type = 'agent'`, [user_id]);
@@ -641,12 +716,20 @@ export async function revokePassport({ handle, user_id, actor } = {}) {
     status: 'revoked',
     prior_handle: priorHandle,
     revoked_by: actor ?? null,
+    revoked_by_label: actor_label ?? null,
     revoked_at: new Date().toISOString(),
   });
   await dbRun(`UPDATE users SET handle = NULL, agent_config = $1, updated_at = NOW() WHERE id = $2`, [
     JSON.stringify(audit),
     passport.id,
   ]);
+
+  await writePassportAudit('agent.passport.revoke', passport.id, {
+    handle: priorHandle,
+    actor,
+    actor_label,
+    audit_req,
+  });
 
   return { ok: true, changed: true, revoked: true, user_id: passport.id, prior_handle: priorHandle };
 }

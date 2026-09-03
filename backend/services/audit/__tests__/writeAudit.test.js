@@ -113,7 +113,7 @@ describe('writeAudit — chain-append transaction shape (ADR-0066-A §B)', () =>
     };
   }
 
-  it('acquires the advisory lock, reads prev, inserts 11 columns, updates hashes', async () => {
+  it('acquires the advisory lock, reads prev, inserts 12 columns, updates hashes', async () => {
     await writeAudit(makeReq(), {
       action: 'row.create',
       entity_type: 'table_row',
@@ -132,7 +132,8 @@ describe('writeAudit — chain-append transaction shape (ADR-0066-A §B)', () =>
       expect.stringMatching(/entry_hash IS NOT NULL/)
     );
 
-    // INSERT shape — 11 columns, RETURNING id, created_at.
+    // INSERT shape — 12 columns, RETURNING id, created_at. ADR-0066-B appended
+    // `agent_id` LAST so the ADR-0066 P0 positions 0..10 stay byte-stable.
     const [insSql, insParams] = findInsertCall();
     expect(insSql).toMatch(/RETURNING id, created_at/);
     expect(insSql).toMatch(/::inet/);
@@ -148,6 +149,7 @@ describe('writeAudit — chain-append transaction shape (ADR-0066-A §B)', () =>
       'req-uuid-abc',
       11,
       '203.0.113.7',
+      null, // agent_id — human HTTP traffic
     ]);
 
     // UPDATE writes prev_hash (null at genesis) + a real 32-byte entry_hash.
@@ -159,6 +161,65 @@ describe('writeAudit — chain-append transaction shape (ADR-0066-A §B)', () =>
     expect(Buffer.isBuffer(updParams[1])).toBe(true);
     expect(updParams[1]).toHaveLength(32); // sha256
     expect(updParams[2]).toBe(100); // id from RETURNING
+  });
+
+  // ── ADR-0066-B: delegated identity ──
+  //
+  // The point of these three: an agent acting under a person's credential must
+  // be distinguishable from that person, the agent field must be tamper-
+  // evident, and none of it may disturb the FROZEN hash preimage.
+
+  it('records the agent in BOTH the indexed column and the hashed details', async () => {
+    await writeAudit(
+      makeReq({ agentId: 42, agentName: 'developer-ralph' }),
+      { action: 'tool.create_table', details: { ok: true } }
+    );
+
+    const [, insParams] = findInsertCall();
+    expect(insParams[0]).toBe(7);   // credential used
+    expect(insParams[11]).toBe(42); // actor that used it
+
+    // `details` is inside CANONICAL_FIELDS, so this copy is hash-covered —
+    // editing the column alone would not survive verifyAuditChain.
+    expect(JSON.parse(insParams[4])).toEqual({
+      ok: true,
+      acting_agent: { id: 42, name: 'developer-ralph' },
+    });
+  });
+
+  it('leaves details untouched when there is no agent (human traffic)', async () => {
+    await writeAudit(makeReq(), { action: 'row.create', details: { table_id: 1708 } });
+
+    const [, insParams] = findInsertCall();
+    expect(insParams[11]).toBeNull();
+    // No `acting_agent` key at all — the pre-ADR-0066-B payload byte-for-byte,
+    // so historical entry_hash values stay reproducible.
+    expect(JSON.parse(insParams[4])).toEqual({ table_id: 1708 });
+  });
+
+  it('ignores a non-numeric agent id rather than poisoning the column', async () => {
+    await writeAudit(makeReq({ agentId: 'not-a-number' }), { action: 'tool.x' });
+
+    const [, insParams] = findInsertCall();
+    expect(insParams[11]).toBeNull();
+    expect(insParams[4]).toBeNull();
+  });
+
+  it('records a named agent that has no numeric id (MCP slug fallback)', async () => {
+    // The MCP/CLI path resolves a slug with no AGENT_ID. Dropping the actor
+    // here would file the call as ordinary human traffic under the credential
+    // it borrowed — the precise misattribution this ADR exists to close.
+    await writeAudit(
+      makeReq({ agentName: 'marketer' }),
+      { action: 'tool.create_document', details: { ok: true } }
+    );
+
+    const [, insParams] = findInsertCall();
+    expect(insParams[11]).toBeNull(); // nothing to index on
+    expect(JSON.parse(insParams[4])).toEqual({
+      ok: true,
+      acting_agent: { id: null, name: 'marketer' },
+    });
   });
 
   it('chains onto an existing head (prev_hash forwarded from prev read)', async () => {

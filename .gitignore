@@ -122,8 +122,10 @@ scripts/snapshots/doc-statuses-per-project-*/
 
 # Documentation — lives in CRM Documents (devcrm.hltrn.cc/widgets/124)
 # Agent prompts live in ai_agents table (table 1784)
-# Only README.md stays in git
-docs/
+# Only README.md and the two public docs it links to stay in git
+docs/*
+!docs/MANIFESTO.md
+!docs/MCP.md
 .gitnexus
 scripts/snapshots/
 

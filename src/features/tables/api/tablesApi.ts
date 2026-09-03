@@ -226,13 +226,20 @@ export const tablesApi = {
     const result = await response.json();
     return result.data;
   },
-  createTable: (payload: CreateTablePayload) =>
-    unwrap<{ table: TableModel; columns: ColumnModel[] }>(
-      apiClient.request<{ data: { table: TableModel; columns: ColumnModel[] } }>('/tables', {
+  createTable: async (payload: CreateTablePayload) => {
+    // Backend returns raw snake_case rows — run them through the same
+    // transforms as every other read path. Skipping this left `table.projectId`
+    // undefined, so useCreateTable's sidebar-cache invalidation silently no-op'd
+    // and a freshly created table stayed hidden from the nav until an unrelated
+    // refetch (e.g. toggling its visibility) revealed it.
+    const { table, columns } = await unwrap<{ table: BackendTable; columns: BackendColumn[] }>(
+      apiClient.request<{ data: { table: BackendTable; columns: BackendColumn[] } }>('/tables', {
         method: 'POST',
         body: JSON.stringify(payload)
       })
-    ),
+    );
+    return { table: transformTable(table), columns: columns.map(transformColumn) };
+  },
   createCalendarTable: async (projectId: number, tableName: string = 'Calendar') => {
     const token = apiClient.getAccessToken();
     const headers: HeadersInit = {

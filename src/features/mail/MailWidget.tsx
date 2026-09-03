@@ -15,7 +15,7 @@ import type { PresetWidgetProps, Widget } from '@/features/widgets/types/widget.
  * `space_id` to it would be a core edit this module must not need.
  *
  * `MailPage` is lazy-loaded so the mail chunk stays out of the dashboard bundle
- * until a board actually renders this preset (mirrors the widget-preset lazy-mount pattern).
+ * until a board actually renders this preset (mirrors `SimWidget.tsx:27`).
  */
 const MailPage = lazy(() => import('./MailPage').then((m) => ({ default: m.MailPage })));
 
