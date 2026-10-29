@@ -47,7 +47,7 @@ describe('TableViewWidget row contract', () => {
     expect(screen.getByRole('table', { name: 'JSON as a table' })).toBeInTheDocument();
     expect(screen.getByText('shelf')).toBeInTheDocument();
     expect(screen.getByText('A-12')).toBeInTheDocument();
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Сохранить' })).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
     fireEvent.click(screen.getByText('A-12'));
     expect(onRowClick).toHaveBeenCalledTimes(1);

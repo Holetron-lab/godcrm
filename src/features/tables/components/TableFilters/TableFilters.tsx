@@ -1,4 +1,4 @@
-import { useState, useEffect, type RefObject } from 'react';
+import { useState, useEffect, type ReactNode, type RefObject } from 'react';
 import { Search, X, Filter, Plus, RefreshCw, Zap, LayoutGrid, Table2, Printer, Settings, Settings2, Replace } from 'lucide-react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Input } from '@/shared/components/ui';
@@ -33,6 +33,8 @@ interface TableFiltersProps {
   paginationInfo?: PaginationInfo | null;
   onGoToRow?: (rowNumber: number) => void;
   onAddRow?: () => void;
+  afterAddRow?: ReactNode;
+  columnVisibilityControl?: ReactNode;
   addRowText?: string; // Custom text for add row button
   onRefresh?: () => void;
   /** Kept for callers; the refresh button no longer depends on it. */
@@ -72,6 +74,8 @@ export const TableFilters = ({
   paginationInfo,
   onGoToRow,
   onAddRow,
+  afterAddRow,
+  columnVisibilityControl,
   addRowText,
   onRefresh,
   scrollContainerRef,
@@ -237,6 +241,8 @@ export const TableFilters = ({
             <Plus className="w-4 h-4" />
           </button>
         )}
+
+        {afterAddRow}
 
         {/* Automations Button - Hide in compact mode, opens modal */}
         {tableId && !compact && (
@@ -417,7 +423,7 @@ export const TableFilters = ({
         )}
 
         {/* Edit column picker — click, then pick a column to open its full settings */}
-        {(columns || []).length > 0 && (
+        {columnVisibilityControl ?? ((columns || []).length > 0 && (
           <div className="relative">
             <button
               type="button"
@@ -463,7 +469,7 @@ export const TableFilters = ({
               </>
             )}
           </div>
-        )}
+        ))}
 
         {/* Table Settings Button */}
         {showTableSettings && onTableSettings && (

@@ -1,3 +1,4 @@
+import { WidgetColumnChecklist } from '../presets/WidgetColumnVisibility';
 import { useId, useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { logger } from '@/shared/utils/logger';
@@ -104,6 +105,8 @@ export function EditWidgetSettingsModal({
     widget.config?.visible_columns || []
   );
   
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>(widget.config?.hidden_columns || []);
+
   // Create column state
   const [creatingColumn, setCreatingColumn] = useState(false);
   
@@ -225,6 +228,7 @@ export function EditWidgetSettingsModal({
       setColorColumn(widget.config?.kanban?.colorColumn || '');
       setCardColumns(widget.config?.card_columns || []);
       setVisibleColumns(widget.config?.visible_columns || []);
+      setHiddenColumns(widget.config?.hidden_columns || []);
       setDateColumn(widget.config?.calendar?.dateColumn || '');
       setCalendarEndDateColumn(widget.config?.calendar?.endDateColumn || '');
       setCalendarTitleColumn(widget.config?.calendar?.titleColumn || '');
@@ -403,7 +407,7 @@ export function EditWidgetSettingsModal({
   });
 
   const handleSave = createHandleSave({
-    widget,
+    widget: { ...widget, config: { ...widget.config, hidden_columns: hiddenColumns } },
     title,
     description,
     icon,
@@ -605,6 +609,13 @@ export function EditWidgetSettingsModal({
               </div>
             </div>
           )}
+
+          {(widget.preset_name === 'table_view' || String(widget.preset_name) === 'table_widget') && <div>
+            <WidgetColumnChecklist columns={safeColumns} config={{ visible_columns: visibleColumns, hidden_columns: hiddenColumns }} onChange={patch => {
+              setVisibleColumns(patch.visible_columns || []);
+              setHiddenColumns(patch.hidden_columns || []);
+            }} />
+          </div>}
 
           {/* Preset-specific config */}
           {(selectedTableId || widget.preset_name === 'ai_agents') && (

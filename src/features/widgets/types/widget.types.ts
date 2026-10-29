@@ -94,6 +94,9 @@ export interface WidgetConfig {
   table_id?: number | null;
   filters?: WidgetFilter[];
   visible_columns?: string[];
+  /** Widget-only visibility and opt-in cell editing. Never changes table columns. */
+  hidden_columns?: string[];
+  editable_columns?: string[];
   sort_by?: string;
   sort_order?: 'asc' | 'desc';
   limit?: number;

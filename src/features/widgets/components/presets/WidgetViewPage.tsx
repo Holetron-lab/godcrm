@@ -1,3 +1,6 @@
+import { WidgetColumnVisibility } from '@/features/widgets/components/presets/WidgetColumnVisibility';
+import { useWidgetTableControls } from '@/features/widgets/hooks/useWidgetTableControls';
+import { WidgetTableLink } from '@/features/widgets/components/presets/WidgetTableLink';
 import { useState, useMemo } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { showToast } from '@/shared/hooks/useToast';
@@ -74,6 +77,8 @@ export function WidgetViewPage() {
     isLoadingData: dataLoading,
     refetchData
   } = useTicketData({ widgetId: Number(widgetId), enabled: !!widgetId });
+  const tableControls = useWidgetTableControls(widget);
+
 
   // Fetch columns for the related statuses table (for AddRowModal of "add status row")
   const { data: statusTableColumns = [] } = useQuery({
@@ -402,7 +407,11 @@ export function WidgetViewPage() {
       }
       case 'table_view':
         return (
-          <TableViewWidget 
+          <TableViewWidget
+            tableColumns={tableColumns}
+            onCellUpdate={tableControls.canConfigure ? tableControls.onCellUpdate : undefined}
+            onConfigChange={tableControls.canConfigure ? tableControls.onConfigChange : undefined}
+            savingConfig={tableControls.saving}
             {...props} 
             columnsInfo={columnsInfo}
             onRowDoubleClick={handleCardDoubleClick}
@@ -492,6 +501,8 @@ export function WidgetViewPage() {
       {showTableFilters && (
         <div className="flex-shrink-0">
           <TableFilters
+            columnVisibilityControl={tableControls.canConfigure && widget ? <WidgetColumnVisibility columns={tableColumns} config={widget.config || {}} onChange={tableControls.onConfigChange} disabled={tableControls.saving} /> : undefined}
+            afterAddRow={tableControls.canConfigure && widget?.config?.table_id ? <WidgetTableLink tableId={widget.config.table_id} /> : undefined}
             columns={tableColumns}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}

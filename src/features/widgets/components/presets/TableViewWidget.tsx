@@ -1,9 +1,17 @@
-import { Table2 } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { CaptionedMedia } from '@/shared/components/CaptionedMedia';
+import { ArrowDown, ArrowUp, ArrowUpDown, EyeOff, Lock, LockOpen, MoreHorizontal, Table2 } from 'lucide-react';
+import { DropdownMenu } from '@/shared/components/ui/DropdownMenu';
+import { WidgetCellEditor, canEditWidgetColumn } from './WidgetCellEditor';
+import { isWidgetColumnVisible } from './WidgetColumnVisibility';
+import type { WidgetConfig } from '../../types/widget.types';
+import type { ColumnModel } from '../../../tables/types/table.types';
 import { ProcurementWidget } from './procurement/ProcurementWidget';
 import type { PresetWidgetProps } from '../../types/widget.types';
 import type { ColumnType } from '../../../../shared/types';
 import type { ColumnConfig } from '../../../tables/types/table.types';
 import {
+  ImageCell,
   TextCell,
   NumberCell,
   CheckboxCell,
@@ -18,7 +26,7 @@ import {
   JsonCell,
   JsonTableCell
 } from '../../../tables/components/cells';
-import { parseImageUrls, resolveAttachmentUrl } from '../../../tables/components/cells/attachmentValue';
+import { resolveAttachmentUrl } from '../../../tables/components/cells/attachmentValue';
 import { resolveLens } from '../../../tables/utils/resolveLens';
 import type { TicketRowData } from '../../hooks/useTicketData';
 import { useIsPublicReadOnly } from '@/features/public/PublicViewContext';
@@ -74,7 +82,8 @@ const typeEmojiMap: Partial<Record<string, string>> = {
   person: '👤',
   file: '📎',
   rollup: '📊',
-  image: '🖼️'
+  image: '🖼️',
+  content: '🖼️'
 };
 
 // Форматирование имени колонки (из snake_case в Title Case)
@@ -95,10 +104,10 @@ const renderCell = (
   relationData?: RelationDataMap,
   publicReadOnly = false,
   columns?: ColumnInfo[],
-) => {
+): ReactNode => {
   // ADR-0060 AC13: public viewer cannot resolve authenticated uploads,
   // so render a non-fetching placeholder instead of <img>/<a>.
-  if (publicReadOnly && (type === 'image' || type === 'file' || type === 'attachment')) {
+  if (publicReadOnly && (type === 'image' || type === 'file' || type === 'attachment' || type === 'content')) {
     const variant = type === 'image' ? 'image' : type === 'file' ? 'file' : 'attachment';
     return <PublicAttachmentPlaceholder value={value} variant={variant} />;
   }
@@ -139,6 +148,9 @@ const renderCell = (
 
   // Regular rendering by column type
   switch (type) {
+    case 'textarea':
+    case 'long_text':
+    case 'richText':
     case 'text':
       return <TextCell value={value} cellFormat={config?.cellFormat} textConfig={config?.text} rowData={rowData} />;
     case 'number':
@@ -169,29 +181,21 @@ const renderCell = (
       return config?.json?.cellView === 'table'
         ? <JsonTableCell value={value} config={config.json} />
         : <JsonCell value={value} config={config?.json} />;
-    case 'image': {
-      // Same parser as ImageCell: comma lists, JSON strings and external {path,...} arrays
-      const imageUrls = parseImageUrls(value)
-        .map((url) => resolveAttachmentUrl(url, (config as { file?: { prefix?: string; suffix?: string } } | undefined)?.file, rowData))
-        .slice(0, 3);
-      if (imageUrls.length === 0) return <span className="text-[var(--text-tertiary)]">—</span>;
-      return (
-        <span className="inline-flex gap-1">
-          {imageUrls.map((url, index) => (
-            <img
-              key={`${url}-${index}`}
-              src={url}
-              alt=""
-              loading="lazy"
-              className="w-10 h-10 object-cover rounded"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          ))}
-        </span>
-      );
+    case 'content': {
+      let items: unknown = value;
+      if (typeof items === 'string') {
+        try { items = JSON.parse(items); } catch { return <TextCell value={value} />; }
+      }
+      if (!Array.isArray(items)) return <TextCell value={value} />;
+      return <div className="flex flex-wrap gap-2">{items.map((item: unknown, index) => {
+        if (!item || typeof item !== 'object' || !('url' in item) || typeof item.url !== 'string' || !('kind' in item)) return null;
+        if (item.kind === 'image') return <span key={index}>{renderCell(item.url, 'image', config, rowData)}</span>;
+        if (item.kind === 'audio' || item.kind === 'video') return <CaptionedMedia key={index} kind={item.kind} src={resolveAttachmentUrl(item.url, config?.file, rowData)} preload="none" style={{ maxHeight: config?.image?.rowHeight || 180 }} />;
+        return null;
+      })}</div>;
     }
+    case 'image':
+      return <ImageCell value={value} config={config} rowData={rowData} readOnly />;
     default:
       return <TextCell value={value} />;
   }
@@ -209,6 +213,10 @@ interface TableViewWidgetProps extends PresetWidgetProps {
   columnsInfo?: ColumnInfo[];
   relationData?: RelationDataMap;
   tableConfig?: TableRowHeightConfig | null;
+  onConfigChange?: (patch: Partial<WidgetConfig>) => void;
+  onCellUpdate?: (rowId: string, field: string, value: unknown) => Promise<void>;
+  savingConfig?: boolean;
+  tableColumns?: ColumnModel[];
   onRowClick?: (row: TicketRowData) => void;
   onRowDoubleClick?: (row: TicketRowData) => void;
 }
@@ -217,8 +225,12 @@ interface TableViewWidgetProps extends PresetWidgetProps {
  * Table View Widget - displays table data with beautiful column headers and typed cells
  * Now supports real column types from schema via columnsInfo prop
  */
-export function TableViewWidget({ widget, data, columnsInfo, relationData, tableConfig, onRowClick, onRowDoubleClick }: TableViewWidgetProps) {
+export function TableViewWidget({ widget, data, columnsInfo, relationData, tableConfig, onRowClick, onRowDoubleClick, onConfigChange, onCellUpdate, savingConfig, tableColumns }: TableViewWidgetProps) {
   const publicReadOnly = useIsPublicReadOnly();
+  const [sort, setSort] = useState<{ column: string; order: 'asc' | 'desc' } | null>(null);
+  const [editing, setEditing] = useState<{ rowId: string; column: string } | null>(null);
+  const canConfigure = !!onConfigChange && !publicReadOnly;
+
 
   if (widget.config?.procurement) {
     if (publicReadOnly) return <p className="p-4">Поставки доступны в рабочем пространстве после входа.</p>;
@@ -226,7 +238,7 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
   }
 
   const config = widget.config;
-  const rows = (data ?? []).map((row) => {
+  const rows: Array<Record<string, unknown> & { id: string | number | undefined; data: Record<string, unknown> }> = (data ?? []).map((row) => {
     const fields = row.data && typeof row.data === 'object' && !Array.isArray(row.data)
       ? row.data as Record<string, unknown>
       : row;
@@ -259,7 +271,7 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
 
   // Determine which columns to show:
   // 1. If widget config has visible_columns - use those
-  // 2. Otherwise use columnsInfo with isVisible filter and orderIndex sorting
+  // 2. Otherwise use schema order, independent of the table visibility
   // 3. Fallback to data keys
   let columns: string[];
   
@@ -267,9 +279,8 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
     // Use widget-configured columns
     columns = configVisibleColumns;
   } else if (safeColumnsInfo.length > 0) {
-    // Use columns from schema - filter visible and sort by order
-    columns = safeColumnsInfo
-      .filter(col => col.isVisible !== false)
+    // Table visibility belongs to the table, not this widget.
+    columns = [...safeColumnsInfo]
       .sort((a, b) => (a.orderIndex ?? 999) - (b.orderIndex ?? 999))
       .map(col => col.name);
   } else {
@@ -277,6 +288,16 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
     columns = Object.keys(rows[0]?.data || {})
       .filter(k => !k.startsWith('_') && k !== 'id' && k !== 'table_id' && k !== 'created_at' && k !== 'updated_at');
   }
+
+  columns = columns.filter(name => isWidgetColumnVisible(config || {}, name));
+  const sortedRows = sort ? [...rows].sort((a, b) => {
+    const left = a.data[sort.column] ?? a[sort.column];
+    const right = b.data[sort.column] ?? b[sort.column];
+    const order = typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : String(left ?? '').localeCompare(String(right ?? ''), undefined, { numeric: true });
+    return sort.order === 'asc' ? order : -order;
+  }) : rows;
 
   // Get column type - prefer real type from columnsInfo, fallback to inference
   const getColumnType = (colName: string): string => {
@@ -309,6 +330,7 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
   return (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Keyboard users must be able to scroll the table container.
     <div tabIndex={0} className="h-full overflow-auto rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--text-primary)]">
+      {columns.length === 0 && <p className="p-4 text-sm text-[var(--text-secondary)]">Все колонки скрыты. Откройте «Видимость колонок в виджете».</p>}
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 bg-[var(--bg-secondary)] border-b border-[var(--border-primary)]">
           <tr>
@@ -321,6 +343,7 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
               return (
                 <th
                   key={col}
+                  aria-sort={sort?.column === col ? (sort.order === 'asc' ? 'ascending' : 'descending') : 'none'}
                   style={width ? { width: `${width}px`, minWidth: `${width}px` } : undefined}
                   className="px-4 py-3 text-left border-r border-[var(--border-primary)] last:border-r-0"
                 >
@@ -331,6 +354,20 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
                     <span className="text-xs font-semibold tracking-wide text-[var(--text-secondary)]">
                       {displayName}
                     </span>
+                    <button type="button" disabled={!!editing} aria-label={`Сортировка: ${displayName}`} title="По возрастанию → по убыванию → сброс" className="ml-auto p-1 rounded hover:bg-[var(--bg-tertiary)]"
+                      onClick={() => setSort(current => current?.column !== col ? { column: col, order: 'asc' } : current.order === 'asc' ? { column: col, order: 'desc' } : null)}>
+                      {sort?.column === col ? (sort.order === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} />}
+                    </button>
+                    {canConfigure && <DropdownMenu trigger={<button type="button" disabled={savingConfig || !!editing} aria-label={`Меню колонки: ${displayName}`} className="p-1 rounded hover:bg-[var(--bg-tertiary)]"><MoreHorizontal size={16} /></button>}
+                      items={[
+                        { value: 'hide', label: 'Скрыть в виджете', icon: <EyeOff size={14} />, onSelect: () => onConfigChange?.({ hidden_columns: [...(config?.hidden_columns || []), col] }) },
+                        ...(onCellUpdate && tableColumns?.some(c => c.name === col && canEditWidgetColumn(c)) && config?.actions?.edit !== false ? [{
+                          value: 'edit', label: config?.editable_columns?.includes(col) ? 'Заблокировать колонку' : 'Активная колонка',
+                          icon: config?.editable_columns?.includes(col) ? <LockOpen size={14} /> : <Lock size={14} />,
+                          active: config?.editable_columns?.includes(col),
+                          onSelect: () => onConfigChange?.({ editable_columns: config?.editable_columns?.includes(col) ? config.editable_columns.filter(name => name !== col) : [...(config?.editable_columns || []), col] }),
+                        }] : []),
+                      ]} />}
                   </div>
                 </th>
               );
@@ -338,7 +375,7 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, idx) => (
+          {sortedRows.map((row, idx) => (
             <tr
               key={row.id ?? idx}
               tabIndex={onRowClick || onRowDoubleClick ? 0 : undefined}
@@ -360,16 +397,37 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
               }}
             >
               {columns.map((col) => {
-                const value = row.data[col] ?? data[idx][col];
+                const value = row.data[col] ?? row[col];
                 const type = getColumnType(col);
                 const config = getColumnConfig(col);
                 const width = getColumnWidth(col);
+                const schemaColumn = tableColumns?.find(c => c.name === col);
+                const active = !publicReadOnly && widget.config?.actions?.edit !== false && widget.config?.editable_columns?.includes(col) && !!onCellUpdate && !!schemaColumn && canEditWidgetColumn(schemaColumn) && row.id != null;
+                const isEditing = active && editing?.rowId === String(row.id) && editing.column === col;
                 // Prepare rowData for rollup formulas
                 const cellRowData = row.data || row;
                 
                 return (
+                  // Editable cells retain table semantics and support Enter/Space.
+                  // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex
                   <td
                     key={col}
+                    tabIndex={active ? 0 : undefined}
+                    aria-label={active ? `Редактировать: ${getDisplayName(col)}` : undefined}
+                    onClick={event => {
+                      if (!active) return;
+                      event.stopPropagation();
+                      if (editing || (event.target as HTMLElement).closest('a, button, input, textarea, select, form')) return;
+                      setEditing({ rowId: String(row.id), column: col });
+                    }}
+                    onDoubleClick={event => { if (active) event.stopPropagation(); }}
+                    onKeyDown={event => {
+                      if (!active || event.target !== event.currentTarget || editing) return;
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault(); event.stopPropagation();
+                        setEditing({ rowId: String(row.id), column: col });
+                      }
+                    }}
                     style={{
                       ...(width ? { width: `${width}px`, minWidth: `${width}px` } : {}),
                       minHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${minRowHeight}px`,
@@ -379,7 +437,9 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
                     }}
                     className="px-4 py-2 border-r border-[var(--border-primary)] last:border-r-0 overflow-hidden"
                   >
-                    {renderCell(value, type, config, cellRowData, relationData, publicReadOnly, safeColumnsInfo)}
+                    {isEditing && schemaColumn ? <WidgetCellEditor column={schemaColumn} value={value}
+                      onSave={next => onCellUpdate!(String(row.id), col, next)} onClose={() => setEditing(null)} /> : renderCell(value, type, config, cellRowData, relationData, publicReadOnly, safeColumnsInfo)}
+
                   </td>
                 );
               })}

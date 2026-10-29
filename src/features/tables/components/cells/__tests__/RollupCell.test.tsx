@@ -108,7 +108,7 @@ it('renders dates and rollups identically in a widget, including hidden source c
   const data = [{ id: 1, starts_at: '2026-11-11T00:00:00' }];
   const { rerender } = render(<TableViewWidget widget={widget} data={data} columnsInfo={[{ ...source, isVisible: true }, rollup]} />);
   expect(screen.getAllByText('2026-11-11 00:00:00')).toHaveLength(2);
-  rerender(<TableViewWidget widget={widget} data={data} columnsInfo={[source, rollup]} />);
+  rerender(<TableViewWidget widget={{ ...widget, config: { ...widget.config, hidden_columns: [source.name] } }} data={data} columnsInfo={[source, rollup]} />);
   expect(screen.getAllByText('2026-11-11 00:00:00')).toHaveLength(1);
   expect(screen.getByRole('cell')).toHaveTextContent('Начало:2026-11-11 00:00:00');
 });

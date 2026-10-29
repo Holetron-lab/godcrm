@@ -1,3 +1,6 @@
+import { WidgetColumnVisibility } from '@/features/widgets/components/presets/WidgetColumnVisibility';
+import { useWidgetTableControls } from '@/features/widgets/hooks/useWidgetTableControls';
+import { WidgetTableLink } from '@/features/widgets/components/presets/WidgetTableLink';
 import type { CardData } from './modals/card-detail-types';
 import { useState, useMemo } from 'react';
 import { logger } from '@/shared/utils/logger';
@@ -79,6 +82,8 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
     refetchData,
     tableConfig
   } = useTicketData({ widgetId });
+  const tableControls = useWidgetTableControls(widget);
+
 
   // Filter data
   const filteredData = useMemo(() => {
@@ -372,6 +377,10 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
       case 'table_widget':
         return (
           <TableViewWidget
+            tableColumns={tableColumns}
+            onCellUpdate={tableControls.canConfigure ? tableControls.onCellUpdate : undefined}
+            onConfigChange={tableControls.canConfigure ? tableControls.onConfigChange : undefined}
+            savingConfig={tableControls.saving}
             {...props}
             columnsInfo={columnsInfo}
             relationData={allRelationData}
@@ -499,6 +508,8 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
       {showFilters && (
         <div className="flex-shrink-0 px-2 py-1.5 border-b border-[var(--border-secondary)]">
           <TableFilters
+            columnVisibilityControl={tableControls.canConfigure && widget ? <WidgetColumnVisibility columns={tableColumns} config={widget.config || {}} onChange={tableControls.onConfigChange} disabled={tableControls.saving} /> : undefined}
+            afterAddRow={tableControls.canConfigure && widget?.config?.table_id ? <WidgetTableLink tableId={widget.config.table_id} /> : undefined}
             columns={tableColumns}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
