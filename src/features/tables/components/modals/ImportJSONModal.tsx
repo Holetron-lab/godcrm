@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useId, useState, useCallback, useMemo } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { Modal, Button } from '@/shared/components/ui';
 import { Upload, FileJson2, AlertTriangle, Check, Package, Table, Layers } from 'lucide-react';
@@ -42,6 +42,7 @@ export const ImportJSONModal = ({
   spaceId,
   spaceName,
 }: ImportJSONModalProps) => {
+  const fieldId = useId();
   const queryClient = useQueryClient();
   const [isDragOver, setIsDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -268,18 +269,17 @@ export const ImportJSONModal = ({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             className={cn(
-              "border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer",
+              "relative border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-[var(--color-primary-500)]",
               isDragOver 
                 ? "border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10"
                 : "border-[var(--border-primary)] hover:border-[var(--color-primary-500)]/50"
             )}
-            onClick={() => document.getElementById('json-file-input')?.click()}
           >
             <input
-              id="json-file-input"
+              aria-label="Выбрать JSON файл"
               type="file"
               accept=".json,application/json"
-              className="hidden"
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
               onChange={handleFileInput}
             />
             <FileJson2 className={cn(
@@ -289,7 +289,7 @@ export const ImportJSONModal = ({
             <div className="text-[var(--text-primary)] font-medium mb-1">
               Перетащите JSON файл сюда
             </div>
-            <div className="text-sm text-[var(--text-tertiary)]">
+            <div className="text-sm text-[var(--text-secondary)]">
               или нажмите для выбора файла
             </div>
           </div>
@@ -336,10 +336,10 @@ export const ImportJSONModal = ({
             </div>
 
             {/* Import mode */}
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+            <div role="group" aria-labelledby={`${fieldId}-label-0`}>
+              <span id={`${fieldId}-label-0`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Режим импорта:
-              </label>
+              </span>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: 'merge' as const, label: 'Объединить', description: 'Добавить и обновить' },
@@ -354,7 +354,7 @@ export const ImportJSONModal = ({
                         : "hover:bg-[var(--bg-tertiary)] border-transparent"
                     )}
                   >
-                    <input
+                    <input aria-label={option.label}
                       type="radio"
                       name="importMode"
                       checked={importMode === option.value}

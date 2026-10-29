@@ -6,6 +6,7 @@ import { tablesApi } from '@/features/tables/api/tablesApi';
 import { cn } from '@/shared/utils/cn';
 import { useMailPeopleTable, useLinkMessage } from '../hooks/useMailLink';
 import type { MailMessage } from '../types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 export interface MailPeoplePickerProps {
   spaceId: number | undefined;
@@ -40,6 +41,7 @@ function pickColumn(
  * common case ("file this under the person who wrote it") is one click.
  */
 export function MailPeoplePicker({ spaceId, message, onDone }: MailPeoplePickerProps) {
+  const { t } = useLanguage();
   const { tableId, tables, setTableId } = useMailPeopleTable(spaceId);
   const link = useLinkMessage(spaceId);
 
@@ -113,7 +115,7 @@ export function MailPeoplePicker({ spaceId, message, onDone }: MailPeoplePickerP
   if (tableId == null) {
     return (
       <div className="min-w-[240px] p-3 text-sm text-[var(--text-tertiary)]">
-        В этом пространстве нет таблицы людей для привязки.
+        {t('mail.people.noTable')}
       </div>
     );
   }
@@ -125,11 +127,10 @@ export function MailPeoplePicker({ spaceId, message, onDone }: MailPeoplePickerP
         <Search size={14} className="flex-shrink-0 text-[var(--text-tertiary)]" />
         <input
           type="text"
-          autoFocus
           value={term}
           onChange={(e) => setTerm(e.target.value)}
-          placeholder="Поиск по имени или e-mail…"
-          aria-label="Поиск записи для привязки"
+          placeholder={t('mail.people.searchPlaceholder')}
+          aria-label={t('mail.people.searchLabel')}
           className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
         />
         {(isFetching || link.isPending) && (
@@ -146,14 +147,14 @@ export function MailPeoplePicker({ spaceId, message, onDone }: MailPeoplePickerP
           className="flex items-center gap-2 border-b border-[var(--border-primary)] px-2.5 py-2 text-left text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)] disabled:opacity-50"
         >
           <Link2Off size={14} className="flex-shrink-0" />
-          {linkedHere ? 'Отвязать от текущей записи' : 'Отвязать (привязано в другой таблице)'}
+          {linkedHere ? t('mail.people.unlink') : t('mail.people.unlinkOther')}
         </button>
       )}
 
       <ul className="max-h-72 overflow-y-auto py-1">
         {rows?.length === 0 && (
           <li className="px-2.5 py-3 text-center text-sm text-[var(--text-tertiary)]">
-            {isFetching ? 'Загрузка…' : 'Ничего не найдено'}
+            {isFetching ? t('mail.common.loading') : t('mail.people.notFound')}
           </li>
         )}
         {rows?.map((row) => {
@@ -186,7 +187,7 @@ export function MailPeoplePicker({ spaceId, message, onDone }: MailPeoplePickerP
       {tables.length > 1 && (
         <div className="flex items-center gap-2 border-t border-[var(--border-primary)] px-2.5 py-2">
           <label htmlFor="mail-people-table" className="flex-shrink-0 text-xs text-[var(--text-tertiary)]">
-            Таблица:
+            {t('mail.people.table')}
           </label>
           <select
             id="mail-people-table"

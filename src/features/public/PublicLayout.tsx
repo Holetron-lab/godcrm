@@ -234,8 +234,10 @@ export function PublicLayout() {
         <div className="flex flex-1 min-h-0 relative overflow-hidden">
           {/* Mobile overlay backdrop — click to close */}
           {isMobile && isSidebarOpen && (
-            <div
-              className="absolute inset-0 bg-black/50 z-40"
+            <button
+              type="button"
+              aria-label="Close menu"
+              className="absolute inset-0 bg-black/50 z-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
               onClick={() => setIsSidebarOpen(false)}
             />
           )}

@@ -15,7 +15,7 @@ import type { PresetWidgetProps } from '../types/widget.types';
  * The globbed registrars import the register fn back from that same file, so the
  * two formed a circular import. It worked in dev (native ESM, top-to-bottom) but
  * in the Rollup production build the cycle was concatenated with the
- * `registerWidgetPreset('<preset>', …)` call hoisted ahead of `const registry =
+ * `registerWidgetPreset('sc_sim', …)` call hoisted ahead of `const registry =
  * new Map()`, throwing "Cannot access 's' before initialization" during render.
  * Keeping the storage in a dependency-free leaf makes registration order-proof.
  */

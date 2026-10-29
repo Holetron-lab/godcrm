@@ -31,6 +31,11 @@ vi.mock('../../SelectValueResolver.js', () => ({
   resolveSelectValues: vi.fn(async (_tableId, data) => ({ resolvedData: data, errors: [], rejections: [] })),
   validateAllColumns: vi.fn(async () => ({ errors: [], rejections: [] })),
 }));
+// QA-20816-01 schema guard is DB-backed (row-unknown-keys.test.js); pass-through here.
+vi.mock('../../row-schema-guard.js', () => ({
+  guardRowKeys: vi.fn(async (_tableId, data) => ({ data, unknown: [] })),
+  unknownKeysMessage: (u) => `Unknown columns: ${u.join(', ')}`,
+}));
 
 vi.mock('../../atoms-archive.js', () => ({
   applyAtomVersioning: vi.fn(async ({ newData }) => newData),
@@ -55,6 +60,7 @@ beforeEach(() => {
   dbGet.mockReset();
   dbRun.mockReset();
   dbAll.mockReset();
+  dbAll.mockResolvedValue([]);
   fireRowCreateTriggers.mockClear();
   fireRowUpdateTriggers.mockClear();
 });

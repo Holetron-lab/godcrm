@@ -9,7 +9,8 @@ import {
   Link,
   Copy,
 } from 'lucide-react';
-import type { ModalSize } from '../../types/form-config.types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
+import type { FormAccess, ModalSize } from '../../types/form-config.types';
 import type { ViewMode, FormTypeValue } from './types';
 import { MODAL_SIZE_OPTIONS, FORM_TYPE_OPTIONS } from './types';
 
@@ -20,6 +21,8 @@ export interface FormBuilderToolbarProps {
   onViewModeChange: (mode: ViewMode) => void;
   modalSize: ModalSize;
   onModalSizeChange: (size: ModalSize) => void;
+  access: FormAccess;
+  onAccessChange: (access: FormAccess) => void;
   stats: { pages: number };
   currentPage: number;
   onPageChange: (page: number) => void;
@@ -39,6 +42,8 @@ export function FormBuilderToolbar({
   onViewModeChange,
   modalSize,
   onModalSizeChange,
+  access,
+  onAccessChange,
   stats,
   currentPage,
   onPageChange,
@@ -50,6 +55,7 @@ export function FormBuilderToolbar({
   formUrl,
   embedCode,
 }: FormBuilderToolbarProps) {
+  const { t } = useLanguage();
   return (
     <div className="px-6 py-3 border-y border-[var(--border-primary)] bg-[var(--bg-tertiary)]/50 space-y-3">
       {/* Top row: Form label + type icons + settings */}
@@ -180,7 +186,24 @@ export function FormBuilderToolbar({
 
       {/* Custom form URL row - show only when custom is selected */}
       {formTypes.includes('custom') && tableId && (
-        <div className="flex items-center gap-3 pt-2 border-t border-[var(--border-primary)]/50">
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-[var(--border-primary)]/50">
+          {/* Same scale and labels as space visibility (ADR-105) */}
+          <label className="flex items-center gap-1.5">
+            <span className="text-xs text-[var(--text-tertiary)]">Доступ:</span>
+            <select
+              value={access}
+              onChange={(e) => onAccessChange(e.target.value as FormAccess)}
+              className="px-2 py-1 rounded border bg-[var(--bg-primary)] text-[var(--text-primary)] text-xs focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] border-[var(--border-primary)]"
+              title={t(`spaces.visibility.${access}Hint`)}
+            >
+              {(['internal', 'open', 'external'] as const).map((value) => (
+                <option key={value} value={value}>{t(`spaces.visibility.${value}`)}</option>
+              ))}
+            </select>
+          </label>
+
+          <div className="h-5 w-px bg-[var(--border-primary)]" />
+
           <span className="text-xs text-[var(--text-tertiary)]">Ссылка:</span>
           <div className="flex items-center gap-1.5 flex-1 max-w-[350px]">
             <Link className="w-4 h-4 text-[var(--text-tertiary)]" />

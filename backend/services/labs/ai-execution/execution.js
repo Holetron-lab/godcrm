@@ -14,7 +14,7 @@ import {
   executeAnthropic,
   executeGoogle,
 } from './api-providers.js';
-import { executeClaudeCode } from './cli-providers.js';
+import { executeClaudeCode, executeCodexCli, executeKimiCli } from './cli-providers.js';
 
 /**
  * Main AI execution function
@@ -50,7 +50,8 @@ export async function executeAI(options) {
     const providerType = operator?.provider || agent.provider || 'openai';
     let apiKey = null;
 
-    if (providerType !== 'claude-code') {
+    // codex and kimi-code, like claude-code, authenticate from their own CLI token store.
+    if (providerType !== 'claude-code' && providerType !== 'codex' && providerType !== 'kimi-code') {
       apiKey = await getApiKeyForOperator(agent.operatorId);
       if (!apiKey) {
         // ADR-0040: vault first, env fallback during transition.
@@ -75,7 +76,9 @@ export async function executeAI(options) {
     const finalModel = model || agent.model || operator?.defaultModel || 'gpt-4o-mini';
     const provider = operator?.provider || agent.provider || 'openai';
     const isClaudeCode = provider === 'claude-code';
-    const isAnthropic = !isClaudeCode && (finalModel.includes('claude') || provider === 'anthropic');
+    const isCodex = provider === 'codex';
+    const isKimiCode = provider === 'kimi-code';
+    const isAnthropic = !isClaudeCode && !isCodex && !isKimiCode && (finalModel.includes('claude') || provider === 'anthropic');
     const isGoogle = finalModel.includes('gemini') || provider === 'google';
 
     // Build messages
@@ -102,6 +105,12 @@ export async function executeAI(options) {
     if (isClaudeCode) {
       result = await executeClaudeCode(params);
       actualProvider = 'claude-code';
+    } else if (isCodex) {
+      result = await executeCodexCli(params);
+      actualProvider = 'codex';
+    } else if (isKimiCode) {
+      result = await executeKimiCli(params);
+      actualProvider = 'kimi-code';
     } else if (isAnthropic) {
       result = await executeAnthropic(params);
       actualProvider = 'anthropic';
@@ -198,6 +207,28 @@ export async function executeSimpleAI(options) {
         usage: result.usage,
         model: result.model || model,
         provider: 'claude-code',
+        executionTime,
+        finishReason: result.finishReason
+      };
+    }
+
+    // Kimi Code CLI — same local-seat economics, Moonshot subscription OAuth.
+    if (provider === 'kimi-code') {
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: input }
+      ];
+
+      const params = { model, messages, systemPrompt, maxTokens };
+      const result = await executeKimiCli(params);
+      const executionTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        content: result.content,
+        usage: result.usage,
+        model: result.model || model,
+        provider: 'kimi-code',
         executionTime,
         finishReason: result.finishReason
       };

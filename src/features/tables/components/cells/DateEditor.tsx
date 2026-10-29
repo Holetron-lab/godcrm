@@ -276,33 +276,33 @@ const WeekPicker = ({ value, onCommit, onCancel, position }: {
   return (
     <div ref={containerRef} className="fixed z-[9999] bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl shadow-2xl overflow-hidden" style={dropdownStyle(position, '320px')}>
       <div className="flex items-center justify-between p-3 border-b border-[var(--border-secondary)]">
-        <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="p-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg"><ChevronLeft className="w-4 h-4" /></button>
+        <button type="button" aria-label={language === 'ru' ? 'Предыдущий месяц' : 'Previous month'} onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="p-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg"><ChevronLeft className="w-4 h-4" /></button>
         <span className="font-medium text-sm">{monthNames[viewDate.getMonth()]} {viewDate.getFullYear()}</span>
-        <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="p-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg"><ChevronRight className="w-4 h-4" /></button>
+        <button type="button" aria-label={language === 'ru' ? 'Следующий месяц' : 'Next month'} onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="p-1.5 hover:bg-[var(--bg-tertiary)] rounded-lg"><ChevronRight className="w-4 h-4" /></button>
       </div>
       <div className="p-2">
         <div className="grid grid-cols-8 gap-1 mb-1">
-          <div className="text-center text-xs font-medium text-[var(--text-tertiary)] py-1">W</div>
-          {weekdayNames.map((day) => <div key={day} className="text-center text-xs font-medium text-[var(--text-tertiary)] py-1">{day}</div>)}
+          <div className="text-center text-xs font-medium text-[var(--text-secondary)] py-1">W</div>
+          {weekdayNames.map((day) => <div key={day} className="text-center text-xs font-medium text-[var(--text-secondary)] py-1">{day}</div>)}
         </div>
         {weeks.map((week, wIdx) => {
           const isSelected = selectedWeekYear === week.weekYear && selectedWeek === week.weekNum;
           const now = new Date();
           const isCurrent = getISOWeekYear(now) === week.weekYear && getISOWeek(now) === week.weekNum;
           return (
-            <div key={wIdx} onClick={() => onCommit(`${week.weekYear}-W${String(week.weekNum).padStart(2, '0')}`)}
-              className={`grid grid-cols-8 gap-1 cursor-pointer rounded-lg transition-all mb-0.5 ${isSelected ? 'bg-primary-500/20 ring-1 ring-primary-500' : 'hover:bg-[var(--bg-tertiary)]'} ${isCurrent && !isSelected ? 'ring-1 ring-primary-300' : ''}`}>
-              <div className={`text-center text-xs py-1.5 font-mono font-semibold ${isSelected ? 'text-primary-500' : 'text-[var(--text-tertiary)]'}`}>{week.weekNum}</div>
+            <button key={wIdx} type="button" aria-label={`${t('dateSettings.picker.weekPrefix')} ${week.weekNum}, ${week.weekYear}`} aria-pressed={isSelected} onClick={() => onCommit(`${week.weekYear}-W${String(week.weekNum).padStart(2, '0')}`)}
+              className={`grid w-full grid-cols-8 gap-1 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-primary-500)] cursor-pointer rounded-lg transition-all mb-0.5 ${isSelected ? 'bg-primary-500/20 ring-1 ring-primary-500' : 'hover:bg-[var(--bg-tertiary)]'} ${isCurrent && !isSelected ? 'ring-1 ring-primary-300' : ''}`}>
+              <span className={`text-center text-xs py-1.5 font-mono font-semibold ${isSelected ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>{week.weekNum}</span>
               {week.days.map((day, dIdx) => (
-                <div key={dIdx} className={`text-center text-sm py-1.5 ${day.isCurrentMonth ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'} ${isSelected ? 'font-medium' : ''}`}>{day.date.getDate()}</div>
+                <span key={dIdx} className={`text-center text-sm py-1.5 ${day.isCurrentMonth ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'} ${isSelected ? 'font-medium' : ''}`}>{day.date.getDate()}</span>
               ))}
-            </div>
+            </button>
           );
         })}
       </div>
       <div className="flex justify-between p-2 border-t border-[var(--border-secondary)] bg-[var(--bg-secondary)]">
         <button type="button" onClick={() => { const now = new Date(); onCommit(`${getISOWeekYear(now)}-W${String(getISOWeek(now)).padStart(2, '0')}`); }}
-          className="px-3 py-1.5 text-xs font-medium text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg">{t('dateSettings.picker.current')}</button>
+          className="px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg">{t('dateSettings.picker.current')}</button>
         <button type="button" onClick={onCancel} className="px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg">{t('dateSettings.picker.cancel')}</button>
       </div>
     </div>
@@ -385,28 +385,6 @@ export const DateEditor = ({
 
   const effectiveMode: DateMode = mode || (showTime ? 'datetime' : 'date');
 
-  // For non-calendar modes, use specialized pickers
-  if (effectiveMode === 'month') {
-    return (
-      <><div ref={triggerRef} className="absolute inset-0" />{createPortal(<MonthPicker value={value} onCommit={(v) => onCommit(v)} onCancel={onCancel} position={position} />, document.body)}</>
-    );
-  }
-  if (effectiveMode === 'year') {
-    return (
-      <><div ref={triggerRef} className="absolute inset-0" />{createPortal(<YearPicker value={value} onCommit={(v) => onCommit(v)} onCancel={onCancel} position={position} />, document.body)}</>
-    );
-  }
-  if (effectiveMode === 'week') {
-    return (
-      <><div ref={triggerRef} className="absolute inset-0" />{createPortal(<WeekPicker value={value} onCommit={(v) => onCommit(v)} onCancel={onCancel} position={position} />, document.body)}</>
-    );
-  }
-  if (effectiveMode === 'quarter') {
-    return (
-      <><div ref={triggerRef} className="absolute inset-0" />{createPortal(<QuarterPicker value={value} onCommit={(v) => onCommit(v)} onCancel={onCancel} position={position} />, document.body)}</>
-    );
-  }
-
   // date / datetime modes — existing calendar picker
   const initialDate = parseDate(value) || new Date();
   const [viewDate, setViewDate] = useState<Date>(initialDate);
@@ -423,6 +401,7 @@ export const DateEditor = ({
   }, []);
 
   useEffect(() => {
+    if (effectiveMode !== 'date' && effectiveMode !== 'datetime') return;
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         if (selectedDate) {
@@ -434,16 +413,17 @@ export const DateEditor = ({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [onCommit, onCancel, selectedDate, activeFormat, showTime]);
+  }, [onCommit, onCancel, selectedDate, activeFormat, showTime, effectiveMode]);
 
   useEffect(() => {
+    if (effectiveMode !== 'date' && effectiveMode !== 'datetime') return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCancel();
       else if (event.key === 'Enter') handleConfirm();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedDate, selectedTime, activeFormat]);
+  }, [selectedDate, selectedTime, activeFormat, effectiveMode]);
 
   const calendarDays = useMemo(() => {
     const year = viewDate.getFullYear();
@@ -469,6 +449,28 @@ export const DateEditor = ({
     }
     return days;
   }, [viewDate, selectedDate]);
+
+  // For non-calendar modes, use specialized pickers
+  if (effectiveMode === 'month') {
+    return (
+      <><div ref={triggerRef} className="absolute inset-0" />{createPortal(<MonthPicker value={value} onCommit={(v) => onCommit(v)} onCancel={onCancel} position={position} />, document.body)}</>
+    );
+  }
+  if (effectiveMode === 'year') {
+    return (
+      <><div ref={triggerRef} className="absolute inset-0" />{createPortal(<YearPicker value={value} onCommit={(v) => onCommit(v)} onCancel={onCancel} position={position} />, document.body)}</>
+    );
+  }
+  if (effectiveMode === 'week') {
+    return (
+      <><div ref={triggerRef} className="absolute inset-0" />{createPortal(<WeekPicker value={value} onCommit={(v) => onCommit(v)} onCancel={onCancel} position={position} />, document.body)}</>
+    );
+  }
+  if (effectiveMode === 'quarter') {
+    return (
+      <><div ref={triggerRef} className="absolute inset-0" />{createPortal(<QuarterPicker value={value} onCommit={(v) => onCommit(v)} onCancel={onCancel} position={position} />, document.body)}</>
+    );
+  }
 
   const handlePrevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
   const handleNextMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));

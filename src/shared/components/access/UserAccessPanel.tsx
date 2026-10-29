@@ -3,7 +3,7 @@
  * Used in Space, Project, Table, and Column editing modals
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useQueryClient } from '@tanstack/react-query';
 import { Switch, Button } from '@/shared/components/ui';
@@ -13,7 +13,6 @@ import {
   UserPlus,
   Shield,
   Database,
-  Users,
   Search,
   Loader2,
 } from 'lucide-react';
@@ -83,12 +82,12 @@ export const UserAccessPanel = ({
   onNavigateToProject,
   onNavigateToTable,
 }: UserAccessPanelProps) => {
-  const { language } = useLanguage();
+  const { language, t: translate } = useLanguage();
   const t = (ru: string, en: string) => (language === 'ru' ? ru : en);
   const queryClient = useQueryClient();
   
-  // Active tab state - default to 'access'
-  const [activeTab, setActiveTab] = useState<AccessPanelTab>('access');
+  // Space access opens on the member list; configuration remains in the Access subtab.
+  const [activeTab, setActiveTab] = useState<AccessPanelTab>(entityType === 'space' ? 'users' : 'access');
   
   const [enabled, setEnabled] = useState(false);
   const [isEnabling, setIsEnabling] = useState(false);
@@ -103,6 +102,8 @@ export const UserAccessPanel = ({
   const [customMappingLevel, setCustomMappingLevel] = useState<UserAccessLevel>('viewer');
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState(''); // Search in space users list
+  const [visibleUserCount, setVisibleUserCount] = useState(50);
+  useEffect(() => { setVisibleUserCount(50); }, [userSearchQuery, selectedTableId]);
   const [addUserSearchQuery, setAddUserSearchQuery] = useState(''); // Search for adding new user
   
   // State for editing user granular access
@@ -113,6 +114,9 @@ export const UserAccessPanel = ({
   // All react-query loaders live in a dedicated hook
   const {
     systemUsers,
+    isLoadingSystemUsers,
+    isSystemUsersError,
+    refetchSystemUsers,
     accessSettings,
     isLoadingSettings,
     tablesData,
@@ -122,6 +126,7 @@ export const UserAccessPanel = ({
     usersTableRows,
     usersColumnMap,
     isLoadingUsersTable,
+    isUsersTableError,
     refetchUsersTable,
     permissions,
   } = useUserAccessQueries({
@@ -343,6 +348,8 @@ export const UserAccessPanel = ({
       
       // Refresh the users list
       await refetchUsersTable();
+      await queryClient.invalidateQueries({ queryKey: ['users-for-mentions', spaceId] });
+      await queryClient.invalidateQueries({ queryKey: ['space-users', spaceId] });
       
       // Reset form
       setShowAddUser(false);
@@ -398,6 +405,8 @@ export const UserAccessPanel = ({
       
       // Refresh the users list
       await refetchUsersTable();
+      await queryClient.invalidateQueries({ queryKey: ['users-for-mentions', spaceId] });
+      await queryClient.invalidateQueries({ queryKey: ['space-users', spaceId] });
       
       // Close edit panel if this user was being edited
       if (editingUserRowId === rowId) {
@@ -512,16 +521,22 @@ export const UserAccessPanel = ({
   const getAvailableLevels = (): { value: UserAccessLevel; label: string }[] => {
     return SELECTABLE_ACCESS_LEVELS.filter(level => 
       ACCESS_LEVEL_VALUES[currentUserLevel] > ACCESS_LEVEL_VALUES[level.value]
-    );
+    ).map(level => ({ ...level, label: translate(`userAccess.roles.${level.value}`) }));
   };
+
+  const filteredUsers = usersTableRows.filter(user => {
+    const query = userSearchQuery.trim().toLowerCase();
+    return !query || user.name.toLowerCase().includes(query)
+      || user.email?.toLowerCase().includes(query) || user.system_user_id?.toString().includes(query);
+  });
 
   // Show loading state while loading settings
   if (isLoadingSettings) {
     return (
       <div className="p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)]">
-        <div className="flex items-center gap-2 text-[var(--text-tertiary)]">
+        <div className="flex items-center gap-2 text-[var(--text-secondary)]">
           <Shield className="w-5 h-5 animate-pulse" />
-          <span className="text-sm">Loading access settings...</span>
+          <span className="text-sm">{t('Загрузка настроек доступа...', 'Loading access settings...')}</span>
         </div>
       </div>
     );
@@ -535,20 +550,21 @@ export const UserAccessPanel = ({
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-[var(--accent-primary)]" />
             <h4 className="text-sm font-medium text-[var(--text-primary)]">
-              User access management
+              {t('Управление доступом пользователей', 'User access management')}
             </h4>
             {isEnabling && (
-              <span className="text-xs text-[var(--text-tertiary)]">(creating users table...)</span>
+              <span className="text-xs text-[var(--text-secondary)]">{t('(создание таблицы пользователей...)', '(creating users table...)')}</span>
             )}
           </div>
           <Switch
+            aria-label={t('Управление доступом пользователей', 'User access management')}
             checked={enabled}
             onCheckedChange={handleEnableToggle}
             disabled={isEnabling}
           />
         </div>
-        <p className="text-xs text-[var(--text-tertiary)]">
-          Configure individual access permissions for each user
+        <p className="text-xs text-[var(--text-secondary)]">
+          {t('Настройте индивидуальные права доступа для каждого пользователя', 'Configure individual access permissions for each user')}
         </p>
       </div>
 
@@ -564,12 +580,12 @@ export const UserAccessPanel = ({
                 className={`
                   flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all
                   ${activeTab === tab.id 
-                    ? 'bg-[var(--bg-primary)] text-[var(--accent-primary)] shadow-sm' 
+                    ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'}
                 `}
               >
                 {tab.icon}
-                <span>{tab.label}</span>
+                <span>{translate(`userAccess.tabs.${tab.id}`)}</span>
               </button>
             ))}
           </div>
@@ -619,93 +635,79 @@ export const UserAccessPanel = ({
           {activeTab === 'users' && (
             <div className="space-y-4">
               {!selectedTableId ? (
-                <div className="text-center py-6 text-[var(--text-tertiary)]">
+                <div className="text-center py-6 text-[var(--text-secondary)]">
                   <Database className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">{t('Таблица пользователей не выбрана', 'No users table selected')}</p>
                   <p className="text-xs">{t('Перейдите на вкладку Доступ для выбора таблицы', 'Go to the Access tab to select a table')}</p>
                 </div>
+              ) : isUsersTableError ? (
+                <div role="alert" className="py-6 text-sm text-[var(--text-secondary)]">
+                  {t('Не удалось загрузить пользователей', 'Unable to load users')}
+                  <button type="button" onClick={() => void refetchUsersTable()} className="ml-3 underline">
+                    {t('Повторить', 'Retry')}
+                  </button>
+                </div>
               ) : isLoadingUsersTable ? (
-                <div className="text-center py-6 text-[var(--text-tertiary)]">
+                <div className="text-center py-6 text-[var(--text-secondary)]">
                   <Loader2 className="w-8 h-8 mx-auto mb-2 animate-spin opacity-50" />
                   <p className="text-sm">{t('Загрузка пользователей...', 'Loading users...')}</p>
                 </div>
               ) : (
                 <>
+                  {!showAddUser ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setShowAddUser(true)}>
+                      <UserPlus className="w-4 h-4 mr-2" />{t('Добавить', 'Add')}
+                    </Button>
+                  ) : (
+                    <AddUsersPanel
+                      systemUsers={systemUsers}
+                      isLoading={isLoadingSystemUsers}
+                      isError={isSystemUsersError}
+                      onRetry={() => void refetchSystemUsers()}
+                      usersTableRows={usersTableRows}
+                      selectedUsersToAdd={selectedUsersToAdd}
+                      selectedLevel={selectedLevel}
+                      setSelectedLevel={setSelectedLevel}
+                      addUserSearchQuery={addUserSearchQuery}
+                      setAddUserSearchQuery={setAddUserSearchQuery}
+                      availableLevels={getAvailableLevels()}
+                      isAddingUser={isAddingUser}
+                      onToggleUser={toggleUserSelection}
+                      onUpdateSelectedLevel={updateSelectedUserLevel}
+                      onRemoveSelected={removeUserFromSelection}
+                      onConfirm={handleAddUsersToTable}
+                      onCancel={() => {
+                        setShowAddUser(false);
+                        setSelectedUsersToAdd([]);
+                        setAddUserSearchQuery('');
+                      }}
+                    />
+                  )}
+
                   {/* Search users */}
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
                     <input
                       type="text"
                       value={userSearchQuery}
                       onChange={(e) => setUserSearchQuery(e.target.value)}
+                      aria-label={t('Поиск по имени, email или ID...', 'Search by name, email or ID...')}
                       placeholder={t('Поиск по имени, email или ID...', 'Search by name, email or ID...')}
                       className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/50"
                     />
                   </div>
 
-                  {/* Users list from table - grid 2 columns */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {/* Add user card - first in grid */}
-                    {!showAddUser ? (
-                      <button
-                        type="button"
-                        onClick={() => setShowAddUser(true)}
-                        className="h-full min-h-[80px] rounded-lg border-2 border-dashed border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/5 transition-colors flex flex-col items-center justify-center gap-2"
-                      >
-                        <UserPlus className="w-6 h-6" />
-                        <span className="text-sm">{t('Добавить', 'Add')}</span>
-                      </button>
-                    ) : (
-                      <React.Fragment>
-                        {/* Collapsed placeholder when adding */}
-                        <div className="h-full min-h-[80px] rounded-lg border-2 border-[var(--accent-primary)] bg-[var(--accent-primary)]/10 flex flex-col items-center justify-center gap-2">
-                          <UserPlus className="w-6 h-6 text-[var(--accent-primary)]" />
-                          <span className="text-sm text-[var(--accent-primary)]">{t('Добавление...', 'Adding...')}</span>
-                        </div>
-
-                        <AddUsersPanel
-                          systemUsers={systemUsers}
-                          usersTableRows={usersTableRows}
-                          selectedUsersToAdd={selectedUsersToAdd}
-                          selectedLevel={selectedLevel}
-                          setSelectedLevel={setSelectedLevel}
-                          addUserSearchQuery={addUserSearchQuery}
-                          setAddUserSearchQuery={setAddUserSearchQuery}
-                          availableLevels={getAvailableLevels()}
-                          isAddingUser={isAddingUser}
-                          onToggleUser={toggleUserSelection}
-                          onUpdateSelectedLevel={updateSelectedUserLevel}
-                          onRemoveSelected={removeUserFromSelection}
-                          onConfirm={handleAddUsersToTable}
-                          onCancel={() => {
-                            setShowAddUser(false);
-                            setSelectedUsersToAdd([]);
-                            setAddUserSearchQuery('');
-                          }}
-                        />
-                      </React.Fragment>
-                    )}
-
-                    {usersTableRows.length === 0 && !showAddUser ? (
-                      <div className="text-center py-6 text-[var(--text-tertiary)]">
-                        <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">{t('Нет пользователей в таблице', 'No users in the table')}</p>
-                        <p className="text-xs">{t('Нажмите + чтобы добавить', 'Click + to add')}</p>
-                      </div>
-                    ) : (
-                      usersTableRows
-                        .filter(user => {
-                          if (!userSearchQuery) return true;
-                          const q = userSearchQuery.toLowerCase();
-                          return (
-                            user.name?.toLowerCase().includes(q) ||
-                            user.email?.toLowerCase().includes(q) ||
-                            user.system_user_id?.toString().includes(q)
-                          );
-                        })
-                        .map(user => (
+                  {filteredUsers.length === 0 ? (
+                    <p className="py-6 text-center text-sm text-[var(--text-secondary)]">
+                      {userSearchQuery.trim()
+                        ? t('Пользователи не найдены', 'No matching users')
+                        : t('Нет пользователей в таблице', 'No users in the table')}
+                    </p>
+                  ) : (
+                    <ul aria-label={translate('userAccess.tabs.users')} className="divide-y divide-[var(--border-secondary)]">
+                      {filteredUsers.slice(0, visibleUserCount).map(user => (
+                        <li key={user.row_id}>
                           <UserCard
-                            key={user.row_id}
                             user={user}
                             entityType={entityType}
                             entityId={entityId}
@@ -722,9 +724,15 @@ export const UserAccessPanel = ({
                             onDeleteUserFromTable={handleDeleteUserFromTable}
                             onUpdateGranularAccess={handleUpdateGranularAccess}
                           />
-                        ))
-                    )}
-                  </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {visibleUserCount < filteredUsers.length && (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => setVisibleUserCount(count => count + 50)}>
+                      {t('Загрузить ещё 50', 'Load 50 more')}
+                    </Button>
+                  )}
                 </>
               )}
             </div>

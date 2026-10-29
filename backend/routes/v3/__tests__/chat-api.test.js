@@ -18,6 +18,7 @@
 process.env.SKIP_DEV_USER = 'true';
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import express from 'express';
@@ -391,23 +392,23 @@ describe('ADR-024: Chat API', () => {
 
     it('AC2: ?agentId=N (agent_id) filter works', async () => {
       const response = await request(app)
-        .get('/api/v3/chat/conversations?type=all&agent_id=99999')
+        .get(`/api/v3/chat/conversations?type=all&agent_id=${NON_EXISTENT_ID}`)
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      // No conversations with agent_id=99999 should be returned
+      // No conversations with the unreachable sentinel agent_id should be returned
       expect(response.body.data.conversations.length).toBe(0);
     });
 
     it('AC2b: ?agentId=N (camelCase) filter works', async () => {
       const response = await request(app)
-        .get('/api/v3/chat/conversations?type=all&agentId=99999')
+        .get(`/api/v3/chat/conversations?type=all&agentId=${NON_EXISTENT_ID}`)
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      // No conversations with agentId=99999 should be returned
+      // No conversations with the unreachable sentinel agentId should be returned
       expect(response.body.data.conversations.length).toBe(0);
     });
 
@@ -462,7 +463,7 @@ describe('ADR-024: Chat API', () => {
 
     it('should return 404 for non-existent conversation', async () => {
       const response = await request(app)
-        .get('/api/v3/chat/conversations/99999')
+        .get(`/api/v3/chat/conversations/${NON_EXISTENT_ID}`)
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(response.status).toBe(404);

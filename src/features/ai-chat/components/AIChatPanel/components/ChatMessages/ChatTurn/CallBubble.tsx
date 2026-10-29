@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * CallBubble — renders a `content_type='call'` message (the diarized
  * transcript inserted by /call/transcribe). ADR-0059 §4.8.
@@ -42,6 +43,7 @@ interface CallBubbleProps {
 }
 
 export const CallBubble: React.FC<CallBubbleProps> = ({ message }) => {
+  const { t } = useLanguage();
   const meta = (message.metadata ?? {}) as CallMetadata;
   const dialogue = Array.isArray(meta.dialogue) ? meta.dialogue : [];
   const duration = meta.duration;
@@ -53,7 +55,7 @@ export const CallBubble: React.FC<CallBubbleProps> = ({ message }) => {
           <Phone className="h-4 w-4 text-[var(--color-primary-500)]" aria-hidden="true" />
         </span>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-[var(--text-primary)]">Звонок</div>
+          <div className="text-sm font-medium text-[var(--text-primary)]">{t('aiChat.ui.call')}</div>
           {duration ? (
             <div className="text-[11px] text-[var(--text-tertiary)] tabular-nums">
               {formatDuration(duration)}
@@ -87,8 +89,7 @@ export const CallBubble: React.FC<CallBubbleProps> = ({ message }) => {
         </pre>
       ) : (
         <div className="px-3 py-2 text-xs text-[var(--text-tertiary)] italic">
-          Расшифровка недоступна.
-        </div>
+          {t('aiChat.ui.transcriptUnavailable')}</div>
       )}
     </div>
   );

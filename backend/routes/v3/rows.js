@@ -19,13 +19,22 @@
  */
 
 import express from 'express';
+import { z } from 'zod';
 import { dbAll, dbGet, dbRun, toBool, withTransactionAsync } from '../../database/connection.js';
 import { generateBaseId } from '../../utils/baseId.js';
 import { apiLogger } from '../../utils/logger.js';
-import { success, error, notFound, badRequest, forbidden } from '../../utils/response.js';
-import { resolveSelectValues } from '../../services/SelectValueResolver.js';
+import { success, error, notFound, badRequest, forbidden, unauthorized } from '../../utils/response.js';
+import { resolveSelectValues, validateContentColumns } from '../../services/SelectValueResolver.js';
+import { importRowsAtomically } from '../../services/import-rows-atomic.js';
+import { checkTableAccess, checkTableWriteAccess } from './tables/helpers.js';
 
 const router = express.Router();
+
+// ADR-204 AC8: `content` cells are verified against real files on import too.
+async function assertContentAdmissible(tableId, data) {
+  const problems = await validateContentColumns(tableId, data);
+  if (problems.length) throw new Error(problems.join('; '));
+}
 
 // ============================================================
 // Middleware: Verify table exists and user has access
@@ -147,7 +156,18 @@ const verifyTableAccess = async (req, res, next) => {
 // POST /api/v3/tables/:tableId/rows/import
 // Bulk import rows from CSV or JSON
 // ============================================================
-router.post('/tables/:tableId/rows/import', verifyTableAccess, async (req, res) => {
+router.post('/tables/:tableId/rows/import', async (req, res, next) => {
+  try {
+    if (!req.user?.id) return unauthorized(res);
+    const id = z.coerce.number().int().positive().safe().safeParse(req.params.tableId);
+    if (!id.success) return badRequest(res, 'Invalid table ID');
+    const access = await checkTableAccess(id.data, req.user);
+    if (!access.allowed) return access.table ? forbidden(res, access.error) : notFound(res, 'Table');
+    const writeAccess = await checkTableWriteAccess(req.user, { tableId: id.data });
+    if (!writeAccess.allowed) return forbidden(res, writeAccess.error);
+    next();
+  } catch (err) { next(err); }
+}, async (req, res) => {
   const { tableId } = req.params;
   const { rows, mode = 'add', idMapping, addNewIds = false } = req.body;
   const userId = req.user?.id;
@@ -155,6 +175,14 @@ router.post('/tables/:tableId/rows/import', verifyTableAccess, async (req, res) 
   apiLogger.info({ tableId, mode, rowCount: rows?.length, idMapping, addNewIds }, 'Import started');
 
   try {
+    if (Object.hasOwn(req.body, 'importId')) {
+      try {
+        return success(res, await importRowsAtomically(tableId, userId, req.body));
+      } catch (err) {
+        if (err.status) return error(res, err.code, err.message, err.status);
+        throw err;
+      }
+    }
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
       return badRequest(res, 'No rows provided for import');
     }
@@ -179,6 +207,7 @@ router.post('/tables/:tableId/rows/import', verifyTableAccess, async (req, res) 
         try {
           // ADR-098: Resolve select column text values → numeric IDs before insert
           const { resolvedData: validatedRowData } = await resolveSelectValues(tableId, rowData);
+          await assertContentAdmissible(tableId, validatedRowData);
           const baseId = generateBaseId();
           await dbRun(`
             INSERT INTO table_rows (table_id, base_id, data, created_by, created_at, updated_at)
@@ -234,6 +263,7 @@ router.post('/tables/:tableId/rows/import', verifyTableAccess, async (req, res) 
           if (existingRow) {
             // ADR-098: Resolve select column text values → numeric IDs before merge
             const { resolvedData: validatedRowData } = await resolveSelectValues(tableId, rowData);
+            await assertContentAdmissible(tableId, validatedRowData);
 
             // Update existing row
             const currentData = typeof existingRow.data === 'string'
@@ -258,6 +288,7 @@ router.post('/tables/:tableId/rows/import', verifyTableAccess, async (req, res) 
           } else if (addNewIds) {
             // Add as new row
             const { resolvedData: validatedRowData } = await resolveSelectValues(tableId, rowData);
+            await assertContentAdmissible(tableId, validatedRowData);
             const baseId = generateBaseId();
             await dbRun(`
               INSERT INTO table_rows (table_id, base_id, data, created_by, created_at, updated_at)

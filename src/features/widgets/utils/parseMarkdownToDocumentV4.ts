@@ -5,7 +5,7 @@
  * Extracted from parseMarkdownToAtoms.ts to keep files under the 800-line guard.
  */
 
-import type { DocumentLevel, DocumentItemType, DocumentImportSection } from '../types/documents-v4.types';
+import type { DocumentLevel, DocumentItemType, DocumentImportSection } from '../types/documents.types';
 
 // === TYPES ===
 
@@ -198,7 +198,7 @@ export function parseMarkdownToDocumentV4(
           level: 'text',
           title: '',
           content: trimmedContent,
-          type: 'section',
+          type: 'reference',
           selected: true,
         });
       }
@@ -274,7 +274,7 @@ export function parseMarkdownToDocumentV4(
       level: 'text',
       title: documentTitle,
       content: content,
-      type: 'section',
+      type: 'reference',
       selected: true,
     });
   }

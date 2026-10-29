@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useState } from 'react';
 import {
   ChevronDown,
@@ -117,6 +118,7 @@ const ToolGroupInline: React.FC<ToolGroupInlineProps> = ({
   terminalSessionId,
   onOpenTerminal,
 }) => {
+  const { t, language } = useLanguage();
   const [exp, setExp] = useState(false);
   const [expandedResults, setExpandedResults] = useState<Record<number, boolean>>({});
 
@@ -127,22 +129,24 @@ const ToolGroupInline: React.FC<ToolGroupInlineProps> = ({
   return (
     <div>
       <div className="flex items-center gap-2">
-        <div
+        <button
+          type="button"
+          aria-expanded={exp}
           onClick={() => setExp(!exp)}
-          className="cursor-pointer select-none flex items-center gap-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
+          className="rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary-500)] cursor-pointer select-none flex items-center gap-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
         >
           <Wrench className="w-3.5 h-3.5" />
-          <span>Used {tools.length} tool{tools.length !== 1 ? 's' : ''}</span>
+          <span>{t('aiChat.ui.toolsUsedCount', { count: tools.length })}</span>
           {exp ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-        </div>
+        </button>
         {onOpenTerminal && hasBash && (
           <button
             onClick={(e) => { e.stopPropagation(); onOpenTerminal(terminalSessionId); }}
             className="flex items-center gap-1 text-[10px] text-green-500 hover:text-green-400 transition-colors"
-            title="Open Terminal"
+            title={t('aiChat.ui.openTerminal')}
           >
             <Terminal className="w-3 h-3" />
-            <span>Terminal</span>
+            <span>{t('aiChat.ui.terminal')}</span>
           </button>
         )}
       </div>
@@ -193,7 +197,7 @@ const ToolGroupInline: React.FC<ToolGroupInlineProps> = ({
                         onClick={() => toggleResult(idx)}
                         className="mt-1 text-[10px] text-[var(--color-primary-500)] hover:text-[var(--color-primary-400)] cursor-pointer transition-colors"
                       >
-                        {isResultExpanded ? '← Свернуть' : 'Показать полностью →'}
+                        {isResultExpanded ? t('aiChat.ui.collapseLabel') : t('aiChat.ui.showFullMessage')}
                       </button>
                     )}
                   </div>
@@ -226,6 +230,7 @@ export const AgentStepsBubble: React.FC<AgentStepsBubbleProps> = ({
   onForward,
   onOpenTerminal,
 }) => {
+  const { t, language } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -335,10 +340,10 @@ export const AgentStepsBubble: React.FC<AgentStepsBubbleProps> = ({
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
     const isThisYear = date.getFullYear() === now.getFullYear();
-    const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const time = date.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
     if (isToday) return time;
-    if (isThisYear) return `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} ${time}`;
-    return `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })} ${time}`;
+    if (isThisYear) return `${date.toLocaleDateString(language, { day: 'numeric', month: 'short' })} ${time}`;
+    return `${date.toLocaleDateString(language, { day: 'numeric', month: 'short', year: 'numeric' })} ${time}`;
   };
 
   return (
@@ -371,8 +376,7 @@ export const AgentStepsBubble: React.FC<AgentStepsBubbleProps> = ({
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
               >
                 <Copy className="w-4 h-4" />
-                Копировать
-              </button>
+                {t('settings.profile.referralCopy')}</button>
               <button
                 onClick={() => {
                   if (finalText) onForward?.(finalText);
@@ -381,8 +385,7 @@ export const AgentStepsBubble: React.FC<AgentStepsBubbleProps> = ({
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
               >
                 <Forward className="w-4 h-4" />
-                Переслать
-              </button>
+                {t('aiChat.ui.forward')}</button>
             </div>
           )}
 
@@ -435,7 +438,7 @@ export const AgentStepsBubble: React.FC<AgentStepsBubbleProps> = ({
                         <div key={`s-think-${sIdx}`} className="pl-3 border-l-2 border-purple-500/30">
                           <div className="flex items-center gap-1.5 mb-1">
                             <Brain className="w-3.5 h-3.5 text-purple-400" />
-                            <span className="text-[10px] font-medium text-purple-400 uppercase tracking-wide">Reasoning</span>
+                            <span className="text-[10px] font-medium text-purple-400 uppercase tracking-wide">{t('aiChat.ui.reasoning')}</span>
                           </div>
                           <div className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap">
                             {section.content}
@@ -465,7 +468,7 @@ export const AgentStepsBubble: React.FC<AgentStepsBubbleProps> = ({
             {finalText && finalText.content && (
               <div className="text-sm text-[var(--text-primary)]">
                 {markdownEnabled ? (
-                  <MarkdownPreview content={finalText.content} />
+                  <MarkdownPreview mediaLinks content={finalText.content} />
                 ) : (
                   <p className="whitespace-pre-wrap">{finalText.content}</p>
                 )}
@@ -476,7 +479,7 @@ export const AgentStepsBubble: React.FC<AgentStepsBubbleProps> = ({
             {isProcessing && !finalText && (
               <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)] animate-pulse">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Processing...</span>
+                <span>{t('aiChat.ui.processing')}</span>
               </div>
             )}
           </div>
@@ -496,7 +499,7 @@ export const AgentStepsBubble: React.FC<AgentStepsBubbleProps> = ({
               <button
                 onClick={() => setShowReactionPicker(!showReactionPicker)}
                 className="md:hidden w-5 h-5 rounded-full flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-                title="Добавить реакцию"
+                title={t('aiChat.ui.addReaction')}
               >
                 <Plus className="w-3 h-3" />
               </button>
@@ -510,7 +513,7 @@ export const AgentStepsBubble: React.FC<AgentStepsBubbleProps> = ({
                     ? 'text-red-500'
                     : 'text-[var(--text-tertiary)] hover:text-red-400'
                 )}
-                title={reactionList.find(r => r.emoji === '❤️')?.users.map(u => u.user_name).join(', ') || 'Нравится'}
+                title={reactionList.find(r => r.emoji === '❤️')?.users.map(u => u.user_name).join(', ') || t('aiChat.ui.like')}
               >
                 {reactionList.some(r => r.emoji === '❤️') ? '❤️' : '🤍'}
                 {reactionList.find(r => r.emoji === '❤️')?.users.length ? (

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * QuoteChipStrip — shared chip strip used by both forward (orange) and
  * move (cyan) queues above the chat input. Forward and move have identical
@@ -43,6 +44,7 @@ const TONES = {
 } as const;
 
 export function QuoteChipStrip({ messages, setMessages, tone, leadIcon, footer }: QuoteChipStripProps) {
+  const { t: translate, language } = useLanguage();
   if (messages.length === 0) return null;
   const t = TONES[tone];
   return (
@@ -57,10 +59,10 @@ export function QuoteChipStrip({ messages, setMessages, tone, leadIcon, footer }
             // backend stores the actor's user_id in sender_id for audit. Use
             // "system" as the chip author so the preview reads
             // `system: 📝 Status:...` instead of `GERATRON: 📝 Status:...`.
-            const isSystemEvent = msg.role === 'system' && msg.contentType === 'row_mutation';
+            const isSystemEvent = msg.senderType === 'system' || (msg.role === 'system' && msg.contentType === 'row_mutation');
             const chipAuthor = isSystemEvent
               ? 'system'
-              : (msg.sender_name || msg.agentName || (msg.role === 'user' ? 'User' : 'Agent'));
+              : (msg.sender_name || msg.agentName || (msg.role === 'user' ? translate('aiChat.ui.user') : translate('aiChat.ui.agent')));
             return (
               <div
                 key={msg.id || idx}
@@ -75,7 +77,7 @@ export function QuoteChipStrip({ messages, setMessages, tone, leadIcon, footer }
                   {(msg.content || '').length > 10 ? '…' : ''}
                 </span>
                 <span className={`text-[9px] ${t.timeText} flex-shrink-0`}>
-                  {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : ''}
+                  {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' }) : ''}
                 </span>
                 <button
                   onClick={() => setMessages?.(prev => prev.filter(m => m.id !== msg.id))}
@@ -90,10 +92,10 @@ export function QuoteChipStrip({ messages, setMessages, tone, leadIcon, footer }
           <>
             {messages.slice(0, 2).map((msg, idx) => {
               // ADR-0031: row_mutation = service-authored, not the actor.
-              const isSystemEvent = msg.role === 'system' && msg.contentType === 'row_mutation';
+              const isSystemEvent = msg.senderType === 'system' || (msg.role === 'system' && msg.contentType === 'row_mutation');
               const overflowName = isSystemEvent
                 ? 'system'
-                : (msg.sender_name || msg.agentName || 'User');
+                : (msg.sender_name || msg.agentName || translate('aiChat.ui.user'));
               return (
                 <span key={msg.id || idx} className={`text-[11px] ${t.overflowName}`}>
                   {overflowName}
@@ -101,14 +103,14 @@ export function QuoteChipStrip({ messages, setMessages, tone, leadIcon, footer }
               );
             })}
             <span className={`text-[11px] ${t.overflowCount}`}>
-              +{messages.length - 2} ({messages.length} сообщ.)
+              +{messages.length - 2} ({translate('aiChat.ui.messageCount', { count: messages.length })})
             </span>
           </>
         )}
         <button
           onClick={() => setMessages?.([])}
           className={`${t.closeText} hover:text-red-400 transition-colors ml-auto flex-shrink-0`}
-          title="Убрать все"
+          title={translate('aiChat.ui.removeAll')}
         >
           <X className="w-3 h-3" />
         </button>

@@ -298,7 +298,7 @@ const ChatTurnRenderer = React.memo(function ChatTurnRenderer({ turn, currentUse
           <div className="flex-shrink-0 w-8 self-end">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white">
               {turn.sender?.avatar ? (
-                <img src={turn.sender.avatar} className="w-full h-full rounded-full object-cover" />
+                <img src={turn.sender.avatar} alt="" className="w-full h-full rounded-full object-cover" />
               ) : (
                 <Bot className="w-4 h-4" />
               )}
@@ -331,7 +331,7 @@ const ChatTurnRenderer = React.memo(function ChatTurnRenderer({ turn, currentUse
         <div className="flex-shrink-0 w-8 self-end">
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center text-white">
             {turn.sender?.avatar ? (
-              <img src={turn.sender.avatar} className="w-full h-full rounded-full object-cover" />
+              <img src={turn.sender.avatar} alt="" className="w-full h-full rounded-full object-cover" />
             ) : (
               <Bot className="w-4 h-4" />
             )}

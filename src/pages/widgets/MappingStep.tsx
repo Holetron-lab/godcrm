@@ -78,7 +78,7 @@ export function MappingStep({
                   >
                     <option value="">{t('— Выберите колонку —', '— Select a column —')}</option>
                     {columns
-                      .filter(col => req.types.includes(col.type))
+                      .filter(col => col.type !== undefined && req.types.includes(col.type))
                       .map(col => (
                         <option key={col.id} value={col.name}>
                           {col.display_name || col.name} ({col.type})

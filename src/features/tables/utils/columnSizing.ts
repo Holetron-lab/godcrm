@@ -54,10 +54,11 @@ export const getDefaultColumnSize = (column: ColumnModel) => {
     case 'password':
       return 140;
     case 'text':
-    default:
-      // For text, estimate based on display name length
-      const nameLength = (column.displayName || column.name).length;
-      return Math.max(150, Math.min(300, nameLength * 10 + 100));
+    default: {
+        // For text, estimate based on display name length
+        const nameLength = (column.displayName || column.name).length;
+        return Math.max(150, Math.min(300, nameLength * 10 + 100));
+    }
   }
 };
 

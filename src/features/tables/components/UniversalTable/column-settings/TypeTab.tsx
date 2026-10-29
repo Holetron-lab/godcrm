@@ -5,10 +5,13 @@
  * Extracted from ColumnSettingsDrawer for modularity
  */
 import React from 'react';
+import { canonicalizeColumnType } from '../../../../../../shared/column-types.js';
 import { Select } from '@/shared/components/ui';
 import type { ColumnModel, ColumnRelationConfig } from '@/features/tables/types/table.types';
 import type { ColumnType } from '@/shared/types';
-import { COLUMN_TYPE_METADATA } from '@/shared/types';
+import { COLUMN_TYPE_METADATA, getColumnTypeOptions } from '@/shared/types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
+import { isSystemColumnId } from '@/features/tables/utils/systemColumns';
 import { DefaultValueInput } from './DefaultValueInput';
 import { SelectOptionsEditor } from './SelectOptionsEditor';
 import { MappingSection } from './MappingSection';
@@ -34,6 +37,7 @@ import {
   ColorColumnSettings,
   VerificationColumnSettings,
   JsonColumnSettings,
+  GeoColumnSettings,
   ValidationRulesSettings,
 } from './index';
 
@@ -46,6 +50,8 @@ interface TypeTabProps {
   allColumns: ColumnModel[];
   firstRow: Record<string, unknown> | null;
   rows: Array<{ id: string; data: Record<string, unknown> }>;
+  /** ADR-0035-A: space of the table, for the address «Geocoder» key-name list. */
+  spaceId?: number;
   relationConfig: ColumnRelationConfig | undefined;
   relationTableId: string | undefined;
   relationTableColumns: ColumnModel[];
@@ -83,6 +89,7 @@ export const TypeTab = ({
   allColumns,
   firstRow,
   rows,
+  spaceId,
   relationConfig,
   relationTableId,
   relationTableColumns,
@@ -110,19 +117,25 @@ export const TypeTab = ({
   setOptionsSubTab,
   setActiveTab,
 }: TypeTabProps) => {
+  const { language } = useLanguage();
+  const columnTypes = getColumnTypeOptions(language);
+  const settingsType = canonicalizeColumnType(draft.type);
+  // Preserve the selected legacy type when editing an existing column.
+  if (!columnTypes.some(({ value }) => value === draft.type)) {
+    const meta = COLUMN_TYPE_METADATA[draft.type];
+    columnTypes.push({ value: draft.type, label: (language === 'en' ? meta?.labelEn : meta?.label) ?? draft.type });
+  }
   return (
     <div className="space-y-4">
       <Select
         label={t('columnSettings.columnType')}
         value={draft.type}
         onChange={(value) => setDraft({ ...draft, type: value as ColumnType })}
-        options={Object.entries(COLUMN_TYPE_METADATA).map(([value, meta]) => ({
-          value,
-          label: meta.label
-        }))}
+        options={columnTypes}
+        disabled={isSystemColumnId(draft.id)}
       />
       <DefaultValueInput
-        type={draft.type}
+        type={settingsType as ColumnType}
         value={draft.defaultValue}
         onChange={(value) => setDraft({ ...draft, defaultValue: value })}
         options={options}
@@ -158,14 +171,14 @@ export const TypeTab = ({
       )}
 
       {/* Select/Multi-select options editor */}
-      {(draft.type === 'select' || draft.type === 'multi-select') && (
+      {(settingsType === 'select' || settingsType === 'multi-select') && (
         <SelectOptionsEditor
+          key={`${column?.tableId}:${column?.id}:${draft.type}`}
           draft={draft}
           setDraft={setDraft}
           column={column}
           t={t}
           options={options}
-          rows={rows}
           relationConfig={relationConfig}
           availableTables={availableTables}
           importTableColumns={importTableColumns}
@@ -187,7 +200,7 @@ export const TypeTab = ({
       )}
 
       {/* Checkbox settings */}
-      {draft.type === 'checkbox' && (
+      {settingsType === 'checkbox' && (
         <CheckboxColumnSettings
           draft={draft}
           setDraft={(updater) => setDraft(typeof updater === 'function' ? updater(draft) : updater)}
@@ -261,8 +274,9 @@ export const TypeTab = ({
         </>
       )}
 
-      {/* Relation settings */}
-      {draft.type === 'relation' && (
+      {/* Relation settings — ADR-205 D1: any column type can be a lens; image/file/url/number
+          keep their prefix/suffix in their own section above, the lens only swaps the key. */}
+      {['relation', 'image', 'file', 'url', 'number'].includes(draft.type) && (
         <RelationColumnSettings
           draft={draft}
           setDraft={(updater) => setDraft(typeof updater === 'function' ? updater(draft) : updater)}
@@ -322,7 +336,7 @@ export const TypeTab = ({
       )}
 
       {/* Person settings */}
-      {draft.type === 'person' && (
+      {settingsType === 'user' && (
         <PersonColumnSettings
           draft={draft}
           setDraft={(updater) => setDraft(typeof updater === 'function' ? updater(draft) : updater)}
@@ -358,6 +372,17 @@ export const TypeTab = ({
           setDraft={(updater) => setDraft(typeof updater === 'function' ? updater(draft) : updater)}
           firstRow={firstRow}
           rows={rows}
+        />
+      )}
+
+      {/* «Гео» settings (ADR-0035 / ADR-0035-A): geo_point hint; address → linked point, label template, geocoder */}
+      {(draft.type === 'geo_point' || draft.type === 'address') && (
+        <GeoColumnSettings
+          draft={draft}
+          setDraft={(updater) => setDraft(typeof updater === 'function' ? updater(draft) : updater)}
+          allColumns={allColumns}
+          firstRow={firstRow}
+          spaceId={spaceId}
         />
       )}
 

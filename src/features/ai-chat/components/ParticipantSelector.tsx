@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ParticipantSelector Component
  * ADR-024: Chat & Message Architecture
@@ -79,12 +80,13 @@ export function ParticipantSelector({
   showAgents = true,
   showUsers = true,
   maxParticipants,
-  placeholder = 'Выберите участника...',
+  placeholder,
   showStatus = true,
   filterType = 'all',
   excludeIds = {},
   className
 }: ParticipantSelectorProps) {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'users' | 'agents'>(
@@ -259,11 +261,11 @@ export function ParticipantSelector({
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Users className="w-4 h-4 text-[var(--text-tertiary)]" />
             <span className="text-[var(--text-primary)]">
-              {participants.length} участник(ов)
+              {t('aiChat.ui.participantCount', { count: participants.length })}
             </span>
           </div>
         ) : (
-          <span className="text-[var(--text-tertiary)] flex-1 text-left">{placeholder}</span>
+          <span className="text-[var(--text-tertiary)] flex-1 text-left">{placeholder ?? t('aiChat.ui.participantPlaceholder')}</span>
         )}
         <ChevronDown className={cn(
           "w-4 h-4 text-[var(--text-tertiary)] transition-transform flex-shrink-0",
@@ -283,12 +285,14 @@ export function ParticipantSelector({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Поиск..."
+                placeholder={t('aiChat.ui.search')}
+                aria-label={t('aiChat.ui.search')}
                 className="w-full pl-8 pr-3 py-1.5 text-sm rounded border border-[var(--border-secondary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
+                  aria-label={t('aiChat.ui.clearSearch')}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                 >
                   <X className="w-3 h-3" />
@@ -301,9 +305,9 @@ export function ParticipantSelector({
           {filterType === 'all' && (
             <div className="flex border-b border-[var(--border-secondary)]">
               {[
-                { key: 'all', label: 'Все' },
-                { key: 'users', label: 'Пользователи' },
-                { key: 'agents', label: 'AI Агенты' }
+                { key: 'all', label: t('aiChat.contacts.scopeAll') },
+                { key: 'users', label: t('nav.users') },
+                { key: 'agents', label: t('widgets.picker.aiAgents') }
               ].map(tab => (
                 <button
                   key={tab.key}
@@ -329,7 +333,7 @@ export function ParticipantSelector({
               </div>
             ) : filteredParticipants.length === 0 ? (
               <div className="py-6 text-center text-sm text-[var(--text-tertiary)]">
-                {searchQuery ? 'Не найдено' : 'Нет участников'}
+                {searchQuery ? t('aiChat.contacts.notFound') : t('aiChat.ui.noParticipantsLabel')}
               </div>
             ) : (
               filteredParticipants.map(p => {

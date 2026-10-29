@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * TasksSourceInlineSelector
  * Extracted from AIChatPanel.tsx (lines 5294-5419)
@@ -17,6 +18,7 @@ interface TasksSourceInlineSelectorProps {
 }
 
 export function TasksSourceInlineSelector({ defaultSpaceId, onSelect, onCancel, showHeader = true }: TasksSourceInlineSelectorProps) {
+  const { t } = useLanguage();
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
 
@@ -68,7 +70,7 @@ export function TasksSourceInlineSelector({ defaultSpaceId, onSelect, onCancel, 
       {/* Header with close button */}
       {showHeader && (
         <div className="flex items-center justify-between">
-          <label htmlFor="tasks-project-select" className="text-xs text-[var(--text-tertiary)]">Проект</label>
+          <label htmlFor="tasks-project-select" className="text-xs text-[var(--text-tertiary)]">{t('columnSettings.relation.project')}</label>
           <button
             onClick={onCancel}
             className="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
@@ -79,7 +81,7 @@ export function TasksSourceInlineSelector({ defaultSpaceId, onSelect, onCancel, 
       )}
 
       {/* Project selector with label if no header */}
-      {!showHeader && <label htmlFor="tasks-project-select" className="block text-xs text-[var(--text-tertiary)]">Проект</label>}
+      {!showHeader && <label htmlFor="tasks-project-select" className="block text-xs text-[var(--text-tertiary)]">{t('columnSettings.relation.project')}</label>}
       {/* Project selector */}
       <select
         id="tasks-project-select"
@@ -90,7 +92,7 @@ export function TasksSourceInlineSelector({ defaultSpaceId, onSelect, onCancel, 
         }}
         className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
       >
-        <option value="">— Выберите проект —</option>
+        <option value="">{t('columnSettings.relation.selectProject')}</option>
         {filteredSpaces.map(space => (
           <optgroup key={space.id} label={`${space.icon || '\uD83D\uDCC1'} ${space.name}`}>
             {space.projects.map(project => (
@@ -104,7 +106,7 @@ export function TasksSourceInlineSelector({ defaultSpaceId, onSelect, onCancel, 
 
       {/* Table selector */}
       <div>
-        <label htmlFor="tasks-table-select" className="block text-xs text-[var(--text-tertiary)] mb-1">Таблица</label>
+        <label htmlFor="tasks-table-select" className="block text-xs text-[var(--text-tertiary)] mb-1">{t('columnSettings.relation.table')}</label>
         <select
           id="tasks-table-select"
           value={selectedTableId || ''}
@@ -112,7 +114,7 @@ export function TasksSourceInlineSelector({ defaultSpaceId, onSelect, onCancel, 
           disabled={!selectedProjectId}
           className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50"
         >
-          <option value="">— Выберите таблицу —</option>
+          <option value="">{t('columnSettings.relation.selectTable')}</option>
           {projectTables.map(table => (
             <option key={table.id} value={table.id}>
               {table.icon || '\uD83D\uDCCB'} {table.displayName || table.name}
@@ -128,8 +130,7 @@ export function TasksSourceInlineSelector({ defaultSpaceId, onSelect, onCancel, 
           disabled={!selectedTableId}
           className="px-3 py-1.5 text-xs bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          Сохранить
-        </button>
+          {t('aiChat.ui.save')}</button>
       </div>
     </div>
   );

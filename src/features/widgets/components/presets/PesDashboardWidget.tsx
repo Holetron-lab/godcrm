@@ -103,8 +103,8 @@ export function PesDashboardWidget({ widget }: PresetWidgetProps) {
   const { data: pesData, isLoading, error, refetch } = useQuery<PesStatus>({
     queryKey: ['pes', 'status'],
     queryFn: async () => {
-      const res = await apiClient.get('/api/v3/pes/status');
-      return res.data.data;
+      const res = await apiClient.get<{ data: PesStatus }>('/api/v3/pes/status');
+      return res.data;
     },
     refetchInterval: 15_000,
   });

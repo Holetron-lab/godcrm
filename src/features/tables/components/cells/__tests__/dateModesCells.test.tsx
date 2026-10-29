@@ -281,3 +281,63 @@ describe('DateCell - US format values', () => {
     expect(el).toBeInTheDocument();
   });
 });
+
+// ===================================================================
+// Datetime display formats offered by DateColumnSettings
+// ===================================================================
+describe('DateCell - Datetime display formats', () => {
+  // Local wall-clock value: the formats below render in the browser timezone.
+  const value = '2025-12-15T14:30:45';
+
+  it('renders datetime_iso as "YYYY-MM-DD HH:mm:ss"', () => {
+    render(<DateCell value={value} showTime mode="datetime" displayFormat="datetime_iso" />);
+    expect(screen.getByText('2025-12-15 14:30:45')).toBeInTheDocument();
+  });
+
+  it('renders time_only as hours and minutes', () => {
+    render(<DateCell value={value} showTime mode="datetime" displayFormat="time_only" />);
+    expect(screen.getByText('14:30')).toBeInTheDocument();
+  });
+
+  it('renders time_seconds with seconds', () => {
+    render(<DateCell value={value} showTime mode="datetime" displayFormat="time_seconds" />);
+    expect(screen.getByText('14:30:45')).toBeInTheDocument();
+  });
+
+  it('renders datetime_short as numeric date with time', () => {
+    render(<DateCell value={value} showTime mode="datetime" displayFormat="datetime_short" />);
+    expect(screen.getByText('15.12.2025 14:30')).toBeInTheDocument();
+  });
+});
+
+// ===================================================================
+// Date-only display for a datetime column (time is stored, not shown)
+// ===================================================================
+describe('DateCell - Datetime column shown as date only', () => {
+  const value = '2025-12-15T14:30:45';
+
+  it('renders date_only without the time part', () => {
+    render(<DateCell value={value} showTime mode="datetime" displayFormat="date_only" />);
+    expect(screen.getByText('15 дек. 2025 г.')).toBeInTheDocument();
+  });
+
+  it('renders date_short as numeric date without time', () => {
+    render(<DateCell value={value} showTime mode="datetime" displayFormat="date_short" />);
+    expect(screen.getByText('15.12.2025')).toBeInTheDocument();
+  });
+
+  it('renders date_full as long date without time', () => {
+    render(<DateCell value={value} showTime mode="datetime" displayFormat="date_full" />);
+    expect(screen.getByText('15 декабря 2025 г.')).toBeInTheDocument();
+  });
+
+  it('hides time when a datetime column is switched to mode "date" with the default format', () => {
+    render(<DateCell value={value} showTime mode="date" displayFormat="default" />);
+    expect(screen.getByText('15 дек. 2025 г.')).toBeInTheDocument();
+  });
+
+  it('keeps time for datetime_default so existing columns are unchanged', () => {
+    render(<DateCell value={value} showTime mode="datetime" displayFormat="datetime_default" />);
+    expect(screen.getByText('15 дек. 2025 г. 14:30')).toBeInTheDocument();
+  });
+});

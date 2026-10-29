@@ -168,7 +168,10 @@ export const MoveTablesModal = ({
         const isSelected = selectedProjectId === projectId && selectedFolderId === folderId;
         const hasSub = folder.children?.some((c) => c.type === 'folder');
         return [
-          <div
+          <button
+            type="button"
+            disabled={!isSelectable}
+            aria-pressed={isSelectable ? isSelected : undefined}
             key={`folder-${folder.id}`}
             onClick={() => {
               if (!isSelectable) return;
@@ -178,33 +181,25 @@ export const MoveTablesModal = ({
             }}
             style={{ paddingLeft: `${depth * 16 + 12}px` }}
             className={`
-              flex items-center gap-2 py-2 pr-3 cursor-pointer
+              flex w-full items-center gap-2 py-2 pr-3 text-left cursor-pointer focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-primary)]
               ${isSelected ? 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]' : 'hover:bg-[var(--bg-secondary)]'}
               ${!isSelectable ? 'opacity-60 cursor-default' : ''}
             `}
           >
             {isSelectable ? (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedSpaceId(spaceId);
-                  setSelectedProjectId(projectId);
-                  setSelectedFolderId(folderId);
-                }}
-                className="p-0.5 rounded hover:bg-[var(--bg-tertiary)]"
-              >
+              <span className="p-0.5">
                 {isSelected ? (
                   <CheckSquare className="w-4 h-4 text-[var(--accent-primary)]" />
                 ) : (
                   <Square className="w-4 h-4 text-[var(--text-tertiary)]" />
                 )}
-              </button>
+              </span>
             ) : (
               <span className="w-4 h-4" />
             )}
             <Folder className="w-4 h-4" />
             <span className="text-sm truncate">{folder.name}</span>
-          </div>,
+          </button>,
           ...(hasSub ? renderFolders(folder.children, projectId, depth + 1, spaceId) : [])
         ];
       });
@@ -302,21 +297,23 @@ export const MoveTablesModal = ({
               const spaceProjects = getProjects(space.id);
               return (
                 <div key={space.id}>
-                  <div
+                  <button
+                    type="button"
+                    aria-expanded={isSpaceExpanded}
                     className={`
-                      flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-[var(--border-secondary)]
+                      w-full text-left focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-primary)] flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-[var(--border-secondary)]
                       bg-[var(--bg-secondary)]
                       ${space.id === currentSpaceId ? 'ring-1 ring-inset ring-[var(--accent-primary)]/30' : ''}
                     `}
                     onClick={() => toggleSpaceExpand(space.id)}
                   >
-                    <button className="p-0.5">
+                    <span className="p-0.5">
                       {isSpaceExpanded ? (
                         <ChevronDown className="w-4 h-4 text-[var(--text-secondary)]" />
                       ) : (
                         <ChevronRight className="w-4 h-4 text-[var(--text-secondary)]" />
                       )}
-                    </button>
+                    </span>
                     <Globe className="w-4 h-4 text-[var(--accent-primary)]" />
                     <span className="text-lg">{space.icon}</span>
                     <span className="text-sm font-medium text-[var(--text-primary)]">{space.name}</span>
@@ -325,7 +322,7 @@ export const MoveTablesModal = ({
                         {tSafe('common.current', 'current')}
                       </span>
                     )}
-                  </div>
+                  </button>
 
                   {isSpaceExpanded && (
                     <div className="ml-4 border-l border-[var(--border-secondary)]">
@@ -361,6 +358,9 @@ export const MoveTablesModal = ({
                                 `}
                               >
                                 <button
+                                  type="button"
+                                  aria-label={project.name}
+                                  aria-pressed={isProjectSelected}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setSelectedSpaceId(space.id);
@@ -378,6 +378,9 @@ export const MoveTablesModal = ({
 
                                 {hasFolders ? (
                                   <button
+                                    type="button"
+                                    aria-label={project.name}
+                                    aria-expanded={isProjectExpanded}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setSelectedSpaceId(space.id);
@@ -397,13 +400,15 @@ export const MoveTablesModal = ({
                                   <span className="w-6" />
                                 )}
 
-                                <div
+                                <button
+                                  type="button"
+                                  aria-pressed={isProjectSelected}
                                   onClick={() => {
                                     setSelectedSpaceId(space.id);
                                     setSelectedProjectId(projectId);
                                     setSelectedFolderId(null);
                                   }}
-                                  className="flex-1 flex items-center gap-2"
+                                  className="flex-1 flex items-center gap-2 text-left focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
                                 >
                                   <Database className="w-4 h-4 text-[var(--accent-primary)]" />
                                   <span className="text-lg">{project.icon}</span>
@@ -411,7 +416,7 @@ export const MoveTablesModal = ({
                                     {project.name}
                                   </span>
                                   <span className="text-xs text-[var(--text-tertiary)]">(root)</span>
-                                </div>
+                                </button>
                               </div>
 
                               {hasFolders && isProjectExpanded && (

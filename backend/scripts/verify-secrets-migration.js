@@ -48,7 +48,7 @@ async function main() {
   for (const entry of TIER_1_SECRETS) {
     const env = envValue(entry.envFallback);
     const inVault = await adapter.query(
-      `SELECT id FROM _secrets WHERE key = $1 LIMIT 1`,
+      `SELECT id FROM _secrets WHERE key = $1 AND space_id = 11 LIMIT 1`,
       [entry.vaultKey]
     );
     const vaultHas = inVault.rowCount > 0;

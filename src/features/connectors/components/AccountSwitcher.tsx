@@ -27,13 +27,15 @@ export interface AccountSwitcherProps {
 
 const STATUS_DOT: Record<ConnectorStatus, string> = {
   active: 'bg-emerald-500',
+  disabled: 'bg-[var(--text-tertiary)]',
   pending: 'bg-amber-500',
   expired: 'bg-amber-500',
   error: 'bg-red-500',
   revoked: 'bg-red-500',
 };
 
-function accountName(a: SpaceConnector): string {
+/** Identity-first label (ADR-159): account owner name → label → email → CRM display name. */
+export function accountName(a: SpaceConnector): string {
   return a.account_name || a.account_label || a.email || a.display_name;
 }
 

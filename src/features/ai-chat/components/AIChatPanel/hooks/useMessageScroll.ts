@@ -46,15 +46,15 @@ export interface UseMessageScrollParams {
 
 export interface UseMessageScrollResult {
   /** Ref to attach to the messages container div (overflow-y) */
-  messagesContainerRef: RefObject<HTMLDivElement | null>;
+  messagesContainerRef: RefObject<HTMLDivElement>;
   /** Ref to attach to a sentinel div at the bottom of messages */
-  messagesEndRef: RefObject<HTMLDivElement | null>;
+  messagesEndRef: RefObject<HTMLDivElement>;
   /** Ref to attach to a sentinel div at the top of messages (for infinite scroll) */
-  loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
+  loadMoreSentinelRef: RefObject<HTMLDivElement>;
   /** Ref to the text input (for focus management) */
-  inputRef: RefObject<HTMLTextAreaElement | null>;
+  inputRef: RefObject<HTMLTextAreaElement>;
   /** Ref to the hidden file input */
-  fileInputRef: RefObject<HTMLInputElement | null>;
+  fileInputRef: RefObject<HTMLInputElement>;
   /** Programmatically scroll to the bottom of the messages container */
   scrollToBottom: (behavior?: ScrollBehavior) => void;
   /** Whether the user is currently near the bottom (for conditional auto-scroll) */

@@ -5,7 +5,7 @@
  * Handles createSpace, getSpaceById, getSpacesByUser, updateSpace, deleteSpace.
  */
 
-import { dbRun, dbGet, dbAll, toBool, safeJsonParse } from '../../database/connection.js';
+import { dbRun, dbGet, dbAll, toBool, safeJsonParse, withTransactionAsync } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
 import { checkUserSpaceAccess, checkUserAccessViaTableV2 } from './access.js';
 
@@ -164,12 +164,19 @@ export async function getSpacesByUser(userId, userRole = 'user') {
   let spacesParams;
   if (isPrivileged) {
     // Admins/owners: see everything (preserve prior behaviour).
+    // Count each child table once instead of rescanning it for every space.
     spacesSql = `
       SELECT
         s.*,
-        COALESCE((SELECT COUNT(*) FROM projects p WHERE p.space_id = s.id), 0) as projects_count,
-        COALESCE((SELECT COUNT(*) FROM dashboards d WHERE d.space_id = s.id), 0) as dashboards_count
+        COALESCE(p.projects_count, 0) as projects_count,
+        COALESCE(d.dashboards_count, 0) as dashboards_count
       FROM spaces s
+      LEFT JOIN (
+        SELECT space_id, COUNT(*) AS projects_count FROM projects GROUP BY space_id
+      ) p ON p.space_id = s.id
+      LEFT JOIN (
+        SELECT space_id, COUNT(*) AS dashboards_count FROM dashboards GROUP BY space_id
+      ) d ON d.space_id = s.id
       ORDER BY
         CASE s.type
           WHEN 'personal' THEN 1
@@ -599,17 +606,38 @@ export async function updateSpace(spaceId, updates) {
 }
 
 /**
- * Delete space by ID
+ * Delete an empty space and its empty default dashboards atomically.
  * @param {number} spaceId - Space ID
  * @returns {Promise<void>}
  */
 export async function deleteSpace(spaceId) {
-  // Verify space exists
-  const space = await getSpaceById(spaceId);
-  if (!space) {
-    throw new Error('Space not found');
-  }
+  await withTransactionAsync(async (trx) => {
+    // Match deleteEmptyDashboard's lock order; wait for in-flight widget writers.
+    const dashboards = await trx.all('SELECT id FROM dashboards WHERE space_id = ? ORDER BY id FOR UPDATE', [spaceId]);
+    const space = await trx.get('SELECT id FROM spaces WHERE id = ? FOR UPDATE', [spaceId]);
+    if (!space) throw new Error('Space not found');
 
-  // Delete space (CASCADE will handle projects and dashboards)
-  await dbRun('DELETE FROM spaces WHERE id = ?', [spaceId]);
+    for (const dashboard of dashboards) {
+      await trx.run(`
+        DELETE FROM dashboards d WHERE d.id = ? AND d.space_id = ?
+          AND d.is_default = ? AND d.project_id IS NULL AND d.user_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM widgets w WHERE w.dashboard_id = d.id
+              OR (w.owner_kind = 'dashboard' AND w.owner_id = d.id)
+          )
+      `, [dashboard.id, spaceId, toBool(true)]);
+    }
+
+    const deleted = await trx.get(`
+      DELETE FROM spaces s WHERE s.id = ?
+        AND NOT EXISTS (SELECT 1 FROM projects p WHERE p.space_id = s.id)
+        AND NOT EXISTS (SELECT 1 FROM dashboards d WHERE d.space_id = s.id)
+      RETURNING s.id
+    `, [spaceId]);
+    if (!deleted) {
+      throw Object.assign(new Error('Remove projects and dashboards before deleting this space'), {
+        code: 'SPACE_NOT_EMPTY'
+      });
+    }
+  });
 }

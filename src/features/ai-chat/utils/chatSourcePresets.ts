@@ -15,7 +15,7 @@ export interface ChatSourcePreset {
   emoji: string;
   kind: ChatSourceKind;
   applicable_table_ids: number[] | null;
-  mapping: Record<string, string>;
+  mapping: Record<string, string | undefined>;
 }
 
 export const CHAT_SOURCE_PRESETS: ChatSourcePreset[] = (presetsData.presets as ChatSourcePreset[]) || [];

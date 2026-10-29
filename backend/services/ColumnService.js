@@ -15,6 +15,9 @@ import {
   COLUMN_TYPES,
   COLUMN_TYPE_ALIASES,
   PROVISIONAL_COLUMN_TYPES,
+  CONTENT_KINDS,
+  CONTENT_MODES,
+  CONTACT_SOURCES,
   canonicalizeColumnType
 } from '../../shared/column-types.js';
 
@@ -25,6 +28,9 @@ export {
   COLUMN_TYPES,
   COLUMN_TYPE_ALIASES,
   PROVISIONAL_COLUMN_TYPES,
+  CONTENT_KINDS,
+  CONTENT_MODES,
+  CONTACT_SOURCES,
   canonicalizeColumnType
 };
 
@@ -100,9 +106,94 @@ export function validateColumnValue(column, value) {
       return validateOrder(value);
     case 'actor':
       return validateActor(value);
+    case 'content':
+      return validateContent(value);
+    case 'contact':
+      return validateContact(value, config);
     default:
       return true; // Other types validated separately
   }
+}
+
+const ADDRESS_NAME_TEMPLATE_MAX = 200; // ADR-0035-A §Amendment 1
+
+/**
+ * ADR-204 Stage 2: column `config` contract for the new keys. Returns the
+ * config to persist (defaults filled) or an error. Pure; used by every column
+ * writer (REST / MCP) so a column never lands without `config.content.version`
+ * / `config.contact.version`, and never with a mode the renderer does not know.
+ * @param {string} type canonical column type
+ * @param {object|null|undefined} config
+ * @returns {{ ok: true, normalized: object } | { ok: false, error: string }}
+ */
+export function validateColumnConfig(type, config) {
+  const cfg = config && typeof config === 'object' && !Array.isArray(config) ? config : {};
+  if (type === 'content') {
+    const content = { version: 1, mode: 'gallery', ...(isPlainObject(cfg.content) ? cfg.content : {}) };
+    if (content.version !== 1) return { ok: false, error: 'config.content.version must be 1' };
+    if (!CONTENT_MODES.includes(content.mode)) {
+      return { ok: false, error: `config.content.mode must be one of: ${CONTENT_MODES.join(', ')}` };
+    }
+    return { ok: true, normalized: { ...cfg, content } };
+  }
+  if (type === 'contact') {
+    const contact = { version: 1, ...(isPlainObject(cfg.contact) ? cfg.contact : {}) };
+    if (contact.version !== 1) return { ok: false, error: 'config.contact.version must be 1' };
+    return { ok: true, normalized: { ...cfg, contact } };
+  }
+  if (type === 'geo_point') {
+    // ADR-0035 S1.2. `raw_sibling` is the map/geo flag (the raw `lat, lng`
+    // column is synthesized client-side); `indexed` is stored, inert until P1c.
+    const geo = { version: 1, raw_sibling: false, indexed: false, ...(isPlainObject(cfg.geo) ? cfg.geo : {}) };
+    if (geo.version !== 1) return { ok: false, error: 'config.geo.version must be 1' };
+    for (const flag of ['raw_sibling', 'indexed']) {
+      if (typeof geo[flag] !== 'boolean') return { ok: false, error: `config.geo.${flag} must be a boolean` };
+    }
+    return { ok: true, normalized: { ...cfg, geo } };
+  }
+  if (type === 'address') {
+    // ADR-0035-A §Column Config. Shape only — whether `geo_column_id` really
+    // is a `geo_point` column of the same table is a DB question, answered by
+    // `assertAddressGeoLink` in columnCrudController on every REST write.
+    // `geocoder.*` is reserved for slice B: stored verbatim, nothing reads it.
+    const a = isPlainObject(cfg.address) ? cfg.address : {};
+    const geoId = a.geo_column_id == null ? null : Number(a.geo_column_id);
+    if (geoId !== null && !(Number.isInteger(geoId) && geoId > 0)) {
+      return { ok: false, error: 'config.address.geo_column_id must be a positive integer or null' };
+    }
+    // §Amendment 1: `name_template` ("{{key}}" row template for the cell label)
+    // is stored verbatim — the frontend renders it; the server never expands
+    // `{{…}}`, never checks the keys exist, never touches `formatted`.
+    if (a.name_template != null && typeof a.name_template !== 'string') {
+      return { ok: false, error: 'config.address.name_template must be a string or null' };
+    }
+    const name_template = a.name_template?.trim() || null;
+    if (name_template !== null && name_template.length > ADDRESS_NAME_TEMPLATE_MAX) {
+      return { ok: false, error: `config.address.name_template must be at most ${ADDRESS_NAME_TEMPLATE_MAX} characters` };
+    }
+    const g = isPlainObject(a.geocoder) ? a.geocoder : {};
+    const geocoder = { secret_key: g.secret_key ?? null, provider: g.provider ?? null };
+    for (const k of ['secret_key', 'provider']) {
+      if (geocoder[k] !== null && typeof geocoder[k] !== 'string') {
+        return { ok: false, error: `config.address.geocoder.${k} must be a string or null` };
+      }
+    }
+    return { ok: true, normalized: { ...cfg, address: { version: 1, geo_column_id: geoId, name_template, geocoder } } };
+  }
+  return { ok: true, normalized: config };
+}
+
+/**
+ * ADR-0035-A: the `geo_column_id` of an `address` column must point at a
+ * `geo_point` column of the SAME table. Returns `null` when the link is valid
+ * (or absent), otherwise the stable error code. `db` is `{ get }` — a
+ * transaction or the module-level `dbGet` wrapper.
+ */
+export async function assertAddressGeoLink(get, tableId, config) {
+  const geoId = config?.address?.geo_column_id;
+  if (geoId == null) return null;
+  const target = await get('SELECT type FROM table_columns WHERE id = ? AND table_id = ?', [geoId, tableId]);
+  return target?.type === 'geo_point' ? null : 'ADDRESS_GEO_LINK_INVALID';
 }
 
 // ADR-151: source enum for the `actor` type. `ai` is distinct from `api`
@@ -449,6 +540,69 @@ function validateOrder(value) {
   const num = Number(value);
   if (!Number.isFinite(num)) return false;
   return Number.isInteger(num); // P0: integer only (fractional indexing is P1)
+}
+
+// ===================================================================
+// ADR-204 Type: Content (unified media)
+// Cell shape: null | Array<{ url: string, kind: 'image'|'video'|'audio',
+//                            title?: string, performer?: string, poster?: string }>
+// Array order is display order. `[]` is not a valid stored value — an empty
+// content cell is null (contract: "Пустое новое значение — null").
+// Shape only: whether `url` really is a `kind` file is a DB question, answered
+// by column-adapters/media-kind.js on every write path (REST/MCP/import).
+// ===================================================================
+const OPTIONAL_CONTENT_STRINGS = ['title', 'performer', 'poster'];
+
+function isPlainObject(v) {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function validateContent(value) {
+  if (value === null || value === undefined) return true;
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every((item) =>
+    isPlainObject(item) &&
+    typeof item.url === 'string' && item.url.length > 0 &&
+    CONTENT_KINDS.includes(item.kind) &&
+    OPTIONAL_CONTENT_STRINGS.every((k) => item[k] === undefined || typeof item[k] === 'string')
+  );
+}
+
+// ===================================================================
+// ADR-204 Type: Contact (unified contact)
+// Cell shape: null | Array<
+//   { kind: 'external', fields: { email?, phone?, name?, website?: string } }
+// | { kind: 'linked', source: 'system'|'table', id: string|number, tableId?, idColumn? }>
+// `table` source requires tableId + idColumn. A single-value column (no
+// allowMultiple in config.contact or at config root — PersonColumnSettings
+// writes the root key) holds at most one element.
+// ===================================================================
+const EXTERNAL_CONTACT_FIELDS = ['email', 'phone', 'name', 'website'];
+
+function validateContactItem(item) {
+  if (!isPlainObject(item)) return false;
+  if (item.kind === 'external') {
+    if (!isPlainObject(item.fields)) return false;
+    const known = EXTERNAL_CONTACT_FIELDS.filter((k) => item.fields[k] !== undefined);
+    return known.length > 0 && known.every((k) => typeof item.fields[k] === 'string');
+  }
+  if (item.kind === 'linked') {
+    if (!CONTACT_SOURCES.includes(item.source)) return false;
+    if (typeof item.id !== 'string' && typeof item.id !== 'number') return false;
+    if (item.source === 'table') {
+      return Number.isInteger(item.tableId) && typeof item.idColumn === 'string' && item.idColumn.length > 0;
+    }
+    return true;
+  }
+  return false;
+}
+
+function validateContact(value, config) {
+  if (value === null || value === undefined) return true;
+  if (!Array.isArray(value) || value.length === 0) return false;
+  const multiple = config?.contact?.allowMultiple === true || config?.allowMultiple === true;
+  if (!multiple && value.length > 1) return false;
+  return value.every(validateContactItem);
 }
 
 // ===================================================================

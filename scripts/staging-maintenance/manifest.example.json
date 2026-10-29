@@ -1,0 +1,68 @@
+{
+  "mode": "review-only",
+  "candidate": "9ac8301d05ae623c27f8e97d7fe423abb4509ea7",
+  "holder": "sysadmin-3660",
+  "controller": "<PROD_IP>",
+  "target": "<DEV_IP>",
+  "database": "godcrm_test",
+  "controller_machine_id": "REQUIRES_PRIVATE_READBACK",
+  "target_machine_id": "REQUIRES_PRIVATE_READBACK",
+  "ingress_unit": "godcrm-staging-ingress.service",
+  "original_fingerprint": "REQUIRES_COMPLETE_IMMUTABLE_PAYLOAD_DIGEST",
+  "candidate_fingerprint": "REQUIRES_COMPLETE_BUILT_PAYLOAD_DIGEST",
+  "fingerprint_roots": [
+    "/root/production/business-crm"
+  ],
+  "hba_metadata": {
+    "uid": -1,
+    "gid": -1,
+    "mode": 0
+  },
+  "controls": {
+    "godcrm": "online",
+    "bdd-runner": "online",
+    "cron": "active",
+    "cleanup": "active",
+    "ingress": "inactive",
+    "refresh": "active"
+  },
+  "restore_order": [
+    "godcrm",
+    "bdd-runner",
+    "cleanup",
+    "cron",
+    "ingress",
+    "refresh"
+  ],
+  "ingress": {
+    "mode": "review-only",
+    "target": "<DEV_IP>",
+    "machine_id": "REQUIRED_FROM_PRIVATE_INVENTORY",
+    "nginx_uid": 33,
+    "nginx_sha256": "REQUIRED_FULL_NGINX_T_STDOUT_DIGEST",
+    "state_dir": "/root/backups/temp/REQUIRED_NEW_PRIVATE_SESSION_DIRECTORY",
+    "prerequisites_verified": false,
+    "candidate": "9ac8301d05ae623c27f8e97d7fe423abb4509ea7",
+    "recovery_infrastructure": "REQUIRES_FINAL_COMMITTED_SHA",
+    "ingress_unit": "godcrm-staging-ingress.service",
+    "installation": "BLOCKED_CHANNEL",
+    "retirement_applied": false,
+    "quiet_window_proven": false,
+    "unresolved": [
+      "Separate main integration, registry provisioning, installation authorization and final seal",
+      "Live nginx worker UIDs and complete config recheck; current/next app DB identity",
+      "Firewall ordering, DNAT/flowtable/routing bypass and listener identity at installation",
+      "Fresh cron retirement receipt; new recovery baseline must exclude retired sync",
+      "Cleanup self-SIGKILL policy: failed is not inactive; no reset/restart as diagnosis",
+      "Drain cron descendants, cleanup-stuck-vite and manual editor/SSH writers",
+      "Integrate control status readback into recovery adapter; systemd active alone is insufficient",
+      "Stable full payload fingerprints, coherent backup and isolated restore",
+      "Live rehearsal, restart/reboot behavior and alert delivery"
+    ]
+  },
+  "cleanup_quarantine": {
+    "status": "PROPOSED_NOT_APPROVED",
+    "policy": "CLEANUP-QUARANTINE.md",
+    "effect": "No failed-state exception is enabled; existing inactive assertion still blocks."
+  }
+}

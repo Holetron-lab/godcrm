@@ -8,6 +8,28 @@
  * On an already-clean snippet this is a cheap no-op (no tags, no entities).
  */
 
+/**
+ * Characters kept for the list row's body snippet. The row clamps to three
+ * lines (`line-clamp-3`), so this only has to comfortably exceed what three
+ * lines hold at the widest list; the stored `preview` column is 140 chars and
+ * fills one line at best.
+ */
+export const SNIPPET_MAX = 600;
+
+/**
+ * Snippet from a full body (list rows carry `body_html || body_text`): drops
+ * the non-content blocks a marketing mail opens with (`<style>`, `<script>`,
+ * `<head>`, comments) so CSS never leaks into the row, then strips tags,
+ * decodes entities, collapses whitespace and caps the length.
+ */
+export function bodySnippet(body: string): string {
+  if (!body) return '';
+  const withoutBlocks = body
+    .replace(/<(style|script|head|title)\b[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ');
+  return cleanPreview(withoutBlocks).replace(/\s+/g, ' ').trim().slice(0, SNIPPET_MAX);
+}
+
 /** Strip HTML tags + decode the common entities a mail body emits. */
 export function cleanPreview(raw: string): string {
   if (!raw) return '';

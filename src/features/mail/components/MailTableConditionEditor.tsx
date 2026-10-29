@@ -1,15 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useId, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button, Input, Select } from '@/shared/components/ui';
 import { tablesApi } from '@/features/tables/api/tablesApi';
 import { useAllTables } from '@/features/tables/hooks/useAllTables';
 import type { MailTableSource } from '../types';
-
-const FILTER_OP_OPTIONS = [
-  { label: 'равно', value: 'equals' as const },
-  { label: 'содержит', value: 'contains' as const },
-];
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 /**
  * ADR-173 ext — editor for an `op: 'in_table'` condition source. Mirrors the
@@ -34,6 +30,12 @@ export function MailTableConditionEditor({
   /** `undefined` clears the picked table+column (e.g. after changing space/project). */
   onChange: (next: MailTableSource | undefined) => void;
 }) {
+  const { t } = useLanguage();
+  const fieldId = useId();
+  const filterOpOptions = [
+    { label: t('mail.tableCondition.equals'), value: 'equals' as const },
+    { label: t('mail.tableCondition.contains'), value: 'contains' as const },
+  ];
   const { data: allTables, isLoading: tablesLoading } = useAllTables();
   const spaces = useMemo(() => allTables?.spacesWithTables ?? [], [allTables]);
   const flat = useMemo(() => allTables?.flat ?? [], [allTables]);
@@ -128,60 +130,60 @@ export function MailTableConditionEditor({
   return (
     <div className="flex flex-col gap-2 rounded-md border border-[var(--border-subtle,rgba(0,0,0,0.08))] bg-[var(--surface-subtle,rgba(0,0,0,0.02))] p-2">
       <div className="flex items-center gap-2">
-        <label className={rowLabel}>Спейс</label>
+        <label htmlFor={`${fieldId}-label-0`} className={rowLabel}>{t('mail.tableCondition.space')}</label>
         <div className="min-w-0 flex-1">
           {/* Locked to the label's own space — the backend resolver is scoped to
               it, so cross-space tables are disallowed by design. */}
-          <Select
+          <Select id={`${fieldId}-label-0`}
             value={spaceId != null ? String(spaceId) : ''}
             onChange={() => {}}
             options={spaceOptions}
             disabled
-            placeholder={tablesLoading ? 'Загрузка…' : 'Спейс ярлыка'}
+            placeholder={tablesLoading ? t('mail.common.loading') : t('mail.tableCondition.spacePlaceholder')}
           />
         </div>
       </div>
 
       <div className="flex items-center gap-2">
-        <label className={rowLabel}>Проект</label>
+        <label htmlFor={`${fieldId}-label-1`} className={rowLabel}>{t('mail.tableCondition.project')}</label>
         <div className="min-w-0 flex-1">
-          <Select
+          <Select id={`${fieldId}-label-1`}
             value={projectSel != null ? String(projectSel) : ''}
             onChange={pickProject}
             options={projectOptions}
             disabled={spaceObj == null}
-            placeholder={spaceObj == null ? 'Нет спейса' : 'Выберите проект'}
+            placeholder={spaceObj == null ? t('mail.tableCondition.noSpace') : t('mail.tableCondition.pickProject')}
           />
         </div>
       </div>
 
       <div className="flex items-center gap-2">
-        <label className={rowLabel}>Таблица</label>
+        <label htmlFor={`${fieldId}-label-2`} className={rowLabel}>{t('mail.tableCondition.table')}</label>
         <div className="min-w-0 flex-1">
-          <Select
+          <Select id={`${fieldId}-label-2`}
             value={tableSelValue}
             onChange={pickTable}
             options={tableOptions}
             disabled={projectSel == null}
-            placeholder={projectSel == null ? 'Сначала проект' : 'Выберите таблицу'}
+            placeholder={projectSel == null ? t('mail.tableCondition.projectFirst') : t('mail.tableCondition.pickTable')}
           />
         </div>
       </div>
 
       <div className="flex items-center gap-2">
-        <label className={rowLabel}>Колонка</label>
+        <label htmlFor={`${fieldId}-label-3`} className={rowLabel}>{t('mail.tableCondition.column')}</label>
         <div className="min-w-0 flex-1">
-          <Select
+          <Select id={`${fieldId}-label-3`}
             value={source?.column ?? ''}
             onChange={(v) => onChange({ ...(source as MailTableSource), column: v })}
             options={columnOptions}
             disabled={tableId == null}
             placeholder={
               tableId == null
-                ? 'Сначала таблица'
+                ? t('mail.tableCondition.tableFirst')
                 : columnsQuery.isLoading
-                  ? 'Загрузка…'
-                  : 'Колонка со значениями'
+                  ? t('mail.common.loading')
+                  : t('mail.tableCondition.valueColumn')
             }
           />
         </div>
@@ -195,37 +197,37 @@ export function MailTableConditionEditor({
           disabled={tableId == null}
           onClick={() => setShowFilter(true)}
         >
-          <Plus size={13} className="mr-1" /> Добавить фильтр
+          <Plus size={13} className="mr-1" /> {t('mail.tableCondition.addFilter')}
         </Button>
       ) : (
         <div className="flex items-center gap-2">
-          <label className={rowLabel}>Фильтр</label>
+          <label htmlFor={`${fieldId}-label-4`} className={rowLabel}>{t('mail.tableCondition.filter')}</label>
           <div className="w-32 flex-shrink-0">
-            <Select
+            <Select id={`${fieldId}-label-4`}
               value={source?.filter?.column ?? ''}
               onChange={(v) => setFilter({ column: v })}
               options={columnOptions}
-              placeholder="Колонка"
+              placeholder={t('mail.tableCondition.columnPlaceholder')}
             />
           </div>
           <div className="w-28 flex-shrink-0">
             <Select
               value={source?.filter?.op ?? 'equals'}
               onChange={(v) => setFilter({ op: v as 'equals' | 'contains' })}
-              options={FILTER_OP_OPTIONS}
+              options={filterOpOptions}
             />
           </div>
           <div className="min-w-0 flex-1">
             <Input
               value={source?.filter?.value ?? ''}
               onChange={(e) => setFilter({ value: e.target.value })}
-              placeholder="значение (напр. active)"
+              placeholder={t('mail.tableCondition.filterValue')}
             />
           </div>
           <Button
             variant="ghost"
             size="sm"
-            aria-label="Убрать фильтр"
+            aria-label={t('mail.tableCondition.removeFilter')}
             onClick={() => {
               setShowFilter(false);
               onChange({ ...(source as MailTableSource), filter: undefined });

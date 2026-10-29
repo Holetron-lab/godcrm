@@ -30,7 +30,7 @@
 process.env.POSTGRES_HOST = 'localhost';
 process.env.POSTGRES_DB   = 'godcrm_test';
 process.env.POSTGRES_USER = 'godcrm';
-process.env.POSTGRES_PASSWORD = process.env.POSTGRES_PASSWORD || 'godcrm_dev_2026';
+process.env.POSTGRES_PASSWORD = process.env.POSTGRES_PASSWORD || 'CHANGE_ME_LOCAL_DB_PASSWORD';
 process.env.POSTGRES_PORT = '5432';
 process.env.AGENT_RUN_DISPATCHER_ENABLED = 'false';   // we drive sweeps manually
 process.env.NODE_ENV = 'test';

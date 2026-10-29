@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * RowMutationBubble — Compact pill renderer for `content_type === 'row_mutation'`
  * system messages emitted by the row-mutation event log (ADR-0031 §A).
@@ -38,11 +39,11 @@ interface RowMutationMetadata {
   row_id?: number;
 }
 
-const formatTs = (raw?: string | Date): string => {
+const formatTs = (raw: string | Date | undefined, language: string): string => {
   if (!raw) return '';
   const d = typeof raw === 'string' ? new Date(raw) : raw;
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
 };
 
 const RowMutationChip: React.FC<{ ref_: RowRef }> = ({ ref_ }) => {
@@ -66,12 +67,14 @@ const RowMutationChip: React.FC<{ ref_: RowRef }> = ({ ref_ }) => {
 };
 
 const RowMutationPill: React.FC<{ message: ChatMessage }> = ({ message }) => {
+  const { language } = useLanguage();
   const meta = (message.metadata || {}) as RowMutationMetadata;
   const rowRef = meta.row_ref;
   const hasChip = !!(rowRef && (rowRef.table_id || rowRef.row_id));
   const ts = formatTs(
     (message as unknown as { created_at?: string }).created_at ||
       (message.timestamp as unknown as string | Date | undefined),
+    language,
   );
 
   // Actor identity is now rendered in the turn header (avatar + name + system

@@ -27,14 +27,12 @@ export function DocumentTicketsList({ projectId }: { projectId: number }) {
   const { data: ticketsData, isLoading: isLoadingRows } = useQuery({
     queryKey: ['tickets', projectId, ticketConfig?.table_id],
     queryFn: async () => {
-      const response = await apiClient.get(`/tables/${ticketConfig!.table_id}/rows?limit=5000`);
+      const response = await apiClient.get<{ data: { rows: TicketRow[] } }>(`/tables/${ticketConfig!.table_id}/rows?limit=5000`);
       return response.data;
     },
     enabled: !!ctx.selectedDocumentId && !!ticketConfig?.table_id,
     staleTime: 30_000,
   });
-
-  const allTickets: TicketRow[] = ticketsData?.rows || [];
 
   const documentTicketRefs = useMemo(() => {
     if (!ctx.selectedDocumentId) return new Set<number>();
@@ -47,13 +45,13 @@ export function DocumentTicketsList({ projectId }: { projectId: number }) {
 
   const documentTickets = useMemo(() => {
     if (!ticketConfig) return [];
-    const filtered = allTickets.filter(t => documentTicketRefs.has(t.id));
+    const filtered = (ticketsData?.rows || []).filter(t => documentTicketRefs.has(t.id));
     if (!ctx.searchQuery.trim()) return filtered;
     const q = ctx.searchQuery.toLowerCase();
     return filtered.filter((ticket: TicketRow) =>
       getTicketTitle(ticket, ticketConfig).toLowerCase().includes(q)
     );
-  }, [allTickets, documentTicketRefs, ctx.searchQuery, ticketConfig]);
+  }, [ticketsData?.rows, documentTicketRefs, ctx.searchQuery, ticketConfig]);
 
   const groupedTickets = useMemo(() => {
     const groups: Record<string, { sectionTitle: string; tickets: TicketRow[] }> = {};

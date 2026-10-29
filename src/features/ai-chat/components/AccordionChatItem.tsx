@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * AccordionChatItem - TASK-043
  * 
@@ -54,6 +55,7 @@ export function AccordionChatItem({
   onSelect,
   onDelete,
 }: AccordionChatItemProps) {
+  const { t, language } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   
   const participants = conversation.participants || [];
@@ -70,13 +72,13 @@ export function AccordionChatItem({
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
     
     if (diffDays === 0) {
-      return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
     } else if (diffDays === 1) {
-      return 'Вчера';
+      return t('aiChat.ui.yesterday');
     } else if (diffDays < 7) {
-      return date.toLocaleDateString('ru-RU', { weekday: 'short' });
+      return date.toLocaleDateString(language, { weekday: 'short' });
     } else {
-      return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+      return date.toLocaleDateString(language, { day: 'numeric', month: 'short' });
     }
   };
 
@@ -124,7 +126,7 @@ export function AccordionChatItem({
                 </>
               )}
               <span>•</span>
-              <span>{conversation.messagesCount} сообщ.</span>
+              <span>{t('aiChat.ui.messageCount', { count: conversation.messagesCount })}</span>
             </div>
           </div>
         </button>
@@ -144,7 +146,7 @@ export function AccordionChatItem({
                 ? "bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]"
                 : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
             )}
-            title={isExpanded ? 'Свернуть' : 'Показать участников'}
+            title={isExpanded ? t('aiChat.ui.collapse') : t('aiChat.ui.showParticipants')}
           >
             <Users className="w-3.5 h-3.5" />
             <span>{participantCount}</span>
@@ -171,7 +173,7 @@ export function AccordionChatItem({
       {isExpanded && participantCount > 0 && (
         <div className="bg-[var(--bg-tertiary)] border-t border-[var(--border-secondary)]">
           <div className="px-4 py-1.5 text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide">
-            Участники ({participantCount})
+            {t('aiChat.ui.participantCount', { count: participantCount })}
           </div>
           {participants.map(participant => {
             const isAgent = participant.user_type === 'agent';
@@ -193,7 +195,7 @@ export function AccordionChatItem({
                 </div>
                 {participant.role && participant.role !== 'member' && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--text-tertiary)]">
-                    {participant.role === 'admin' ? 'Админ' : participant.role}
+                    {participant.role === 'admin' ? t('spaces.types.admin') : participant.role}
                   </span>
                 )}
               </div>

@@ -1,14 +1,15 @@
 // ADR-0031 WP-24 — owner gate on POST /messages/move + /spawn-ticket.
 //
 // Covers the privilege bug fix: only the chat owner (conversations.created_by)
-// or the system admin override (req.user.role === 'admin') may move messages
-// out of a conversation. The legacy `req.user.role === 'owner'` global override
-// has been removed (it conflated chat ownership with a global role).
+// or an admin WITHIN THE CHAT'S SPACE may move messages out of a conversation.
+// The global users.role is not honored at all — neither 'owner' (the original
+// bug) nor 'admin'. The override is resolved through
+// canAdminister(callerId, { spaceId }) in EffectiveRoleService.
 //
 // Cases:
 //   1. not_owner_blocked — non-owner participant gets 403
 //   2. owner_passes — chat owner moves successfully
-//   3. admin_override — global admin moves successfully even if not the chat owner
+//   3. admin_override — a SPACE admin moves successfully even if not chat owner
 //   4. spawn_ticket_not_owner_blocked — same gate on /spawn-ticket
 //
 // Strategy: mock `chatShared.js` (so the heavy DB module isn't pulled in) and
@@ -23,6 +24,11 @@ import { Router } from 'express';
 const dbGetMock = vi.fn();
 const moveMessagesMock = vi.fn();
 const spawnTicketFromCriterionMock = vi.fn();
+// EffectiveRoleService was never mocked here, so the two "admin_override" cases
+// only ever passed a global role header and expected 200 — the pre-WP-24
+// behaviour that the regression case in this same file proves was removed on
+// purpose. Default false; each override case opts in explicitly.
+const canAdministerMock = vi.fn().mockResolvedValue(false);
 
 // requireAuth fake: pulls user from x-test-user-id / x-test-user-role headers.
 function fakeRequireAuth(req, _res, next) {
@@ -53,6 +59,10 @@ vi.mock('../chatShared.js', () => ({
   conversationLock: { acquire: async (_id, fn) => fn() },
   parseInvocationMentions: () => [],
   parseInvocationCommands: () => [],
+}));
+
+vi.mock('../../../../services/EffectiveRoleService.js', () => ({
+  canAdminister: (...args) => canAdministerMock(...args),
 }));
 
 vi.mock('../../../../services/messageMoveService.js', () => ({
@@ -100,6 +110,8 @@ describe('POST /messages/move — ADR-0031 WP-24 owner gate', () => {
     dbGetMock.mockReset();
     moveMessagesMock.mockReset();
     spawnTicketFromCriterionMock.mockReset();
+    canAdministerMock.mockReset();
+    canAdministerMock.mockResolvedValue(false);
   });
 
   it('not_owner_blocked: non-owner participant gets 403', async () => {
@@ -144,9 +156,29 @@ describe('POST /messages/move — ADR-0031 WP-24 owner gate', () => {
     }));
   });
 
-  it('admin_override: global admin moves successfully even if not chat owner', async () => {
-    // chat owner is 7; caller is admin user 99
-    dbGetMock.mockResolvedValueOnce({ created_by: 7 });
+  it('owner short-circuit: canAdminister is not consulted for the chat owner', async () => {
+    dbGetMock.mockResolvedValueOnce({ created_by: 7, space_id: 11 });
+    canAdministerMock.mockRejectedValueOnce(new Error('column "permission" does not exist'));
+    moveMessagesMock.mockResolvedValueOnce({
+      moved_count: 1,
+      source_message_ids: [101],
+      target_message_ids: [501],
+    });
+
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v3/chat/conversations/1/messages/move')
+      .set('x-test-user-id', '7')
+      .send({ target_conversation_id: 2, message_ids: [101] });
+
+    expect(res.status).toBe(200);
+    expect(canAdministerMock).not.toHaveBeenCalled();
+  });
+
+  it('admin_override: a SPACE admin moves successfully even if not chat owner', async () => {
+    // chat owner is 7, chat lives in space 11; caller 99 is an admin of that space.
+    dbGetMock.mockResolvedValueOnce({ created_by: 7, space_id: 11 });
+    canAdministerMock.mockResolvedValueOnce(true);
     moveMessagesMock.mockResolvedValueOnce({
       moved_count: 1,
       source_message_ids: [101],
@@ -157,13 +189,29 @@ describe('POST /messages/move — ADR-0031 WP-24 owner gate', () => {
     const res = await request(app)
       .post('/api/v3/chat/conversations/1/messages/move')
       .set('x-test-user-id', '99')
-      .set('x-test-user-role', 'admin')
       .send({ target_conversation_id: 2, message_ids: [101] });
 
     expect(res.status).toBe(200);
+    expect(canAdministerMock).toHaveBeenCalledWith(99, { spaceId: 11 });
     expect(moveMessagesMock).toHaveBeenCalledWith(expect.objectContaining({
       actorIsChatOwner: true,
     }));
+  });
+
+  it('global role "admin" alone is NOT honored — the override is space-scoped', async () => {
+    // Same caller, same chat, but no admin rights inside the chat's space.
+    dbGetMock.mockResolvedValueOnce({ created_by: 7, space_id: 11 });
+    canAdministerMock.mockResolvedValueOnce(false);
+
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v3/chat/conversations/1/messages/move')
+      .set('x-test-user-id', '99')
+      .set('x-test-user-role', 'admin')
+      .send({ target_conversation_id: 2, message_ids: [101] });
+
+    expect(res.status).toBe(403);
+    expect(moveMessagesMock).not.toHaveBeenCalled();
   });
 
   it('global role "owner" is NOT honored — only chat ownership counts (regression)', async () => {
@@ -236,8 +284,9 @@ describe('POST /spawn-ticket — ADR-0031 WP-24 owner gate', () => {
     }));
   });
 
-  it('spawn_ticket_admin_override: global admin spawns successfully', async () => {
-    dbGetMock.mockResolvedValueOnce({ created_by: 7 });
+  it('spawn_ticket_admin_override: a SPACE admin spawns successfully', async () => {
+    dbGetMock.mockResolvedValueOnce({ created_by: 7, space_id: 11 });
+    canAdministerMock.mockResolvedValueOnce(true);
     spawnTicketFromCriterionMock.mockResolvedValueOnce({
       ticket_id: 144001,
       ticket_conversation_id: 4501,
@@ -248,9 +297,24 @@ describe('POST /spawn-ticket — ADR-0031 WP-24 owner gate', () => {
     const res = await request(app)
       .post('/api/v3/chat/conversations/1/spawn-ticket')
       .set('x-test-user-id', '99')
-      .set('x-test-user-role', 'admin')
       .send({ ticket_data: { what: 'X', assigned_to: 7 } });
 
     expect(res.status).toBe(200);
+    expect(canAdministerMock).toHaveBeenCalledWith(99, { spaceId: 11 });
+  });
+
+  it('spawn_ticket: global role "admin" alone does not pass the gate', async () => {
+    dbGetMock.mockResolvedValueOnce({ created_by: 7, space_id: 11 });
+    canAdministerMock.mockResolvedValueOnce(false);
+
+    const app = buildApp();
+    const res = await request(app)
+      .post('/api/v3/chat/conversations/1/spawn-ticket')
+      .set('x-test-user-id', '99')
+      .set('x-test-user-role', 'admin')
+      .send({ ticket_data: { what: 'X', assigned_to: 7 } });
+
+    expect(res.status).toBe(403);
+    expect(spawnTicketFromCriterionMock).not.toHaveBeenCalled();
   });
 });

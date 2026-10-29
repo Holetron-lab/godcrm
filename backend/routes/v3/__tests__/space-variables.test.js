@@ -6,6 +6,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import request from 'supertest';
 import express from 'express';
 import spacesRoutes from '../spaces.js';
@@ -153,7 +154,7 @@ describe('Space Variables API (ADR-026)', () => {
 
     test('should return 404 for non-existent space', async () => {
       const response = await request(app)
-        .get('/api/v3/spaces/999999/variables')
+        .get(`/api/v3/spaces/${NON_EXISTENT_ID}/variables`)
         .expect(404);
 
       expect(response.body.success).toBe(false);

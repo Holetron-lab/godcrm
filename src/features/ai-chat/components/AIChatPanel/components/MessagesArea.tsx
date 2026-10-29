@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * MessagesArea — Chat messages display with infinite scroll.
  * ADR-119: Extracted from AIChatPanel.tsx JSX.
@@ -11,6 +12,7 @@ import { cn } from '@/shared/utils/cn';
 import { ChatTurn } from './ChatMessages/ChatTurn';
 import { ProcessingStatusBar, type ProcessingActiveAgent } from './ProcessingStatusBar';
 import { groupMessagesIntoTurns } from '../../../utils/groupMessagesIntoTurns';
+import { useMentionUsers } from '../../../components/MentionUsersContext';
 import type { ChatMessage } from '../../../types';
 import type { CheckboxClickInfo } from '@/shared/components/MarkdownPreview';
 
@@ -96,9 +98,9 @@ interface MessagesAreaProps {
   fetchFullMessage?: (messageId: number) => Promise<{ id: number; content: string; content_type: string } | null>;
   fetchToolSteps?: (afterId: number, beforeId: number) => Promise<ChatMessage[]>;
   // Forward highlight
-  forwardMessageIds?: Set<number>;
+  forwardMessageIds?: Set<string>;
   // Move highlight (cyan)
-  moveMessageIds?: Set<number>;
+  moveMessageIds?: Set<string>;
   // Forward messages (for continue agent)
   setForwardMessages?: (v: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   /** ADR-0031 §Z / WP-24: ChatLinkCard click — open another conversation. */
@@ -111,6 +113,7 @@ interface MessagesAreaProps {
 }
 
 function MessagesAreaImpl(props: MessagesAreaProps) {
+  const { t } = useLanguage();
   const {
     chatMode, chatPartner, displayMessages, markdownEnabled, isAgentProcessing,
     processingAgentName, processingStartedAt, activeAgents, stopAgent, messageReactions, quickEmojis,
@@ -121,7 +124,7 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
     dragOver, setDragOver, onDrop, isMobile, setActivePanel,
     hasOlderMessages, isFetchingOlderMessages, hasNextAIPage, isFetchingNextAIPage,
     showScrollToBottom, setShowScrollToBottom, newMessageCount, setNewMessageCount,
-    agentWorking, setAgentWorking,
+    setAgentWorking,
     activePollingError, activePollingStopped, activeReconnect,
     error, localError, fetchThinkingSteps, fetchToolStepsPreview, fetchFullMessage, fetchToolSteps,
     isLoadingMessages, forwardMessageIds, moveMessageIds, setInputValue, setForwardMessages,
@@ -135,10 +138,19 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
 
   // Memoize turn grouping — only recomputes when messages, reactions,
   // processing state, or user changes.
-  const turns = useMemo(
-    () => groupMessagesIntoTurns(displayMessages, messageReactions, isAgentProcessing, currentUserId),
-    [displayMessages, messageReactions, isAgentProcessing, currentUserId]
-  );
+  const { getByUserId, getByAgentId } = useMentionUsers();
+  const turns = useMemo(() => {
+    const enriched = displayMessages.map(message => {
+      const agentId = message.metadata?.agent_row_id || message.agentId;
+      const sender = (message.sender_id != null ? getByUserId(message.sender_id) : null)
+        || (agentId != null ? getByAgentId(agentId) : null);
+      if (sender?.type !== 'agent') return message;
+      return { ...message, agent_icon: message.agent_icon || sender.icon, agent_color: message.agent_color || sender.color };
+    });
+    // Lazy step groups (an interrupted agent has nothing else) resolve their
+    // colour/icon through the same directory as the real messages above.
+    return groupMessagesIntoTurns(enriched, messageReactions, isAgentProcessing, currentUserId, activeAgents, getByAgentId);
+  }, [displayMessages, messageReactions, isAgentProcessing, currentUserId, activeAgents, getByUserId, getByAgentId]);
 
   // Perf: the per-agent-turn "continue" / "name-click" handlers used to be
   // inline closures rebuilt on every render of this component. Because this
@@ -191,17 +203,21 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
 
   return (
     <>
-      {/* Messages scroll container */}
+      {/* Messages scroll container.
+          Native scroll anchoring stays ON (WP-3, bug 228711): while the user reads
+          above the fold, tool_result accordions collapsing / placeholders being
+          removed above the viewport must not move the text under their eyes.
+          Programmatic scroll-to-bottom in useScrollManagement is unaffected. */}
       <div
         ref={messagesContainerRef}
         className={cn(
-          'flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 min-h-0 overscroll-contain [overflow-anchor:none]',
+          'flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 min-h-0 overscroll-contain',
           'flex flex-col',
           isMobile && 'touch-pan-y',
           displayMessages.length === 0 && 'items-center justify-center',
           dragOver && 'bg-[var(--color-primary-500)]/5 ring-2 ring-inset ring-[var(--color-primary-500)]/50'
         )}
-        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain', overflowAnchor: 'none' as never }}
+        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', overscrollBehavior: 'contain' }}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
@@ -212,18 +228,17 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
             <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500/20 to-green-500/20 flex items-center justify-center mb-4 mx-auto">
               <Users className="w-10 h-10 text-blue-400" />
             </div>
-            <h3 className="font-medium text-[var(--text-primary)] mb-2">Выберите собеседника</h3>
-            <p className="text-sm text-[var(--text-tertiary)] mb-4">Выберите контакт из списка для начала разговора</p>
+            <h3 className="font-medium text-[var(--text-primary)] mb-2">{t('aiChat.ui.chooseSomeoneToChatWith')}</h3>
+            <p className="text-sm text-[var(--text-tertiary)] mb-4">{t('aiChat.ui.selectAContactFromTheListToStartAConversation')}</p>
             <button onClick={() => setActivePanel('contacts')}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors">
-              <Users className="w-4 h-4" />Открыть контакты
-            </button>
+              <Users className="w-4 h-4" />{t('aiChat.ui.openContacts')}</button>
           </div>
         ) : displayMessages.length === 0 ? (
           (isLoadingMessages || isAgentProcessing) ? (
             <div className="text-center px-6">
               <Loader2 className="w-8 h-8 animate-spin text-[var(--color-primary-500)] mx-auto mb-3" />
-              <p className="text-sm text-[var(--text-tertiary)]">{isAgentProcessing ? 'Агент работает...' : 'Загрузка сообщений...'}</p>
+              <p className="text-sm text-[var(--text-tertiary)]">{isAgentProcessing ? t('aiChat.ui.agentIsWorking') : t('aiChat.ui.loadingMessages')}</p>
             </div>
           ) : (
             <div className="text-center px-6">
@@ -233,9 +248,9 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
                  chatPartner?.type === 'group' ? <Users className="w-8 h-8 text-green-400" /> :
                  <MessageSquare className="w-8 h-8 text-[var(--text-tertiary)]" />}
               </div>
-              <h3 className="font-medium text-[var(--text-primary)] mb-2">Начните разговор</h3>
+              <h3 className="font-medium text-[var(--text-primary)] mb-2">{t('aiChat.ui.startAConversation')}</h3>
               <p className="text-sm text-[var(--text-tertiary)]">
-                {chatPartner ? `Чат с ${chatPartner.name}` : 'Выберите собеседника из контактов или AI агентов'}
+                {chatPartner ? t('aiChat.ui.chatWith', { name: chatPartner.name }) : t('aiChat.ui.chooseAContactOrAnAIAgentToChatWith')}
               </p>
             </div>
           )
@@ -245,10 +260,10 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
             <div ref={loadMoreSentinelRef} className="flex justify-center" style={{ minHeight: hasMore ? 40 : 1 }}>
               {hasMore && isLoadingOlder ? (
                 <div className="inline-flex items-center gap-2 px-4 py-2 text-xs text-[var(--text-tertiary)]">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Loading older messages...</span>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /><span>{t('aiChat.ui.loadingOlder')}</span>
                 </div>
               ) : hasMore ? (
-                <div className="py-2 text-xs text-[var(--text-quaternary)]">↑ Scroll up for older messages</div>
+                <div className="py-2 text-xs text-[var(--text-quaternary)]">{t('aiChat.ui.scrollForOlder')}</div>
               ) : null}
             </div>
 
@@ -256,6 +271,7 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
               <ChatTurn
                 key={turn.id}
                 messages={turn.messages}
+                planMessage={turn.planMessage}
                 turnType={turn.turnType}
                 senderName={turn.senderName}
                 markdownEnabled={markdownEnabled}
@@ -317,11 +333,6 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
       {/* Scroll-to-bottom arrow */}
       {showScrollToBottom && (
         <div className="absolute bottom-4 right-4 z-20 flex flex-col items-end gap-1.5">
-          {agentWorking && newMessageCount === 0 && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-lg text-[var(--text-secondary)] text-[11px]">
-              <Loader2 className="w-3 h-3 animate-spin text-[var(--color-primary-500)]" /><span>Agent working…</span>
-            </div>
-          )}
           <button onClick={() => { const c = messagesContainerRef.current; if (c) c.scrollTo({ top: c.scrollHeight, behavior: 'smooth' }); setShowScrollToBottom(false); setNewMessageCount(0); setAgentWorking(false); }}
             className="w-9 h-9 rounded-full bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-lg flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-all"
             title={newMessageCount > 0 ? `${newMessageCount} new message${newMessageCount > 1 ? 's' : ''}` : 'Scroll to bottom'}>
@@ -345,8 +356,7 @@ function MessagesAreaImpl(props: MessagesAreaProps) {
             {activePollingStopped && (
               <button onClick={activeReconnect}
                 className="px-3 py-1 rounded text-xs font-medium bg-yellow-500/20 hover:bg-yellow-500/30 transition-colors">
-                Reconnect
-              </button>
+                {t('aiChat.ui.reconnect')}</button>
             )}
           </div>
         </div>

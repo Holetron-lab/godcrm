@@ -4,7 +4,8 @@
  * Extracted from agent-execution-shared.js
  */
 
-import { dbGet, dbRun, isPostgres } from '../../../database/connection.js';
+import { z } from 'zod';
+import { dbGet, dbRun, isPostgres, withTransactionAsync } from '../../../database/connection.js';
 import { apiLogger } from '../../../utils/logger.js';
 
 // ─── setConversationProcessing() ──────────────────────────────
@@ -111,7 +112,7 @@ export async function setConversationProcessing(conversationId, isProcessing, ag
  *
  * Validates the tasks array, sanitises each task, then (when a conversationId
  * is provided) upserts a plan message in the conversation.  If a plan message
- * (content_type = 'plan') already exists for the conversation, it is updated
+ * (content_type = 'plan') already exists for the same agent and run, it is updated
  * in place.  Otherwise a new message row is inserted.
  *
  * When called without a conversationId the function performs validation only
@@ -124,11 +125,19 @@ export async function setConversationProcessing(conversationId, isProcessing, ag
  * @param {number|null} conversationId - Current conversation ID (null = validation-only)
  * @param {string} agentName - Name of the calling agent
  * @param {Object} [options] - Optional extra context
- * @param {number|null} [options.agentId] - Agent user/row ID
+ * @param {number} [options.agentId] - Agent registry row ID
+ * @param {number|null} [options.senderId] - Agent user ID
+ * @param {string} [options.runId] - Runtime-generated scope for this execution
  * @returns {Promise<string|{error: string}>} Human-readable progress string, or error object
  */
 export async function handleManagePlan(args, conversationId, agentName, options = {}) {
   const { tasks } = args || {};
+  const taskSchema = z.object({
+    id: z.number().finite(), title: z.string(), status: z.string(), note: z.unknown().optional(),
+  });
+  if (Array.isArray(tasks) && !z.array(taskSchema).safeParse(tasks).success) {
+    return { error: 'Task id must be a number; title and status must be strings' };
+  }
 
   // ── Validate input ──
   if (!Array.isArray(tasks) || tasks.length === 0) {
@@ -161,6 +170,13 @@ export async function handleManagePlan(args, conversationId, agentName, options 
     });
   }
 
+  if (new Set(validatedTasks.map(t => t.id)).size !== validatedTasks.length) {
+    return { error: 'Task ids must be unique' };
+  }
+  if (validatedTasks.filter(t => t.status === 'in_progress').length > 1) {
+    return { error: 'Only one task may be in_progress' };
+  }
+
   // ── Compute progress summary ──
   const completed = validatedTasks.filter(t => t.status === 'completed').length;
   const inProgress = validatedTasks.filter(t => t.status === 'in_progress').length;
@@ -170,11 +186,18 @@ export async function handleManagePlan(args, conversationId, agentName, options 
 
   // ── Persist to DB when conversationId is available ──
   if (conversationId) {
-    const { agentId = null } = options;
+    const { agentId, senderId = null, runId } = options;
+    if (!Number.isSafeInteger(agentId) || agentId <= 0 || typeof runId !== 'string' || !runId) {
+      return { error: 'Plan persistence requires agentId and runId from the runtime' };
+    }
 
     const contentJson = JSON.stringify({ tasks: validatedTasks });
     const metadataJson = JSON.stringify({
       agent: agentName,
+      agent_name: agentName,
+      agent_row_id: agentId,
+      run_id: runId,
+      ...(options.jobId != null ? { job_db_id: options.jobId } : {}),
       tool: 'manage_plan',
       version: 1,
       updated_at: new Date().toISOString()
@@ -182,35 +205,38 @@ export async function handleManagePlan(args, conversationId, agentName, options 
 
     const pg = isPostgres();
 
-    // Check for existing plan message in this conversation
-    const existingPlan = await dbGet(
-      pg
-        ? `SELECT id FROM messages WHERE conversation_id = $1 AND content_type = 'plan' ORDER BY id DESC LIMIT 1`
-        : `SELECT id FROM messages WHERE conversation_id = ? AND content_type = 'plan' ORDER BY id DESC LIMIT 1`,
-      [conversationId]
-    );
+    // Serialize create/update across MCP processes; two first writes must not create duplicates.
+    await withTransactionAsync(async trx => {
+      if (pg) await trx.get('SELECT id FROM conversations WHERE id = $1 FOR UPDATE', [conversationId]);
+      const existingPlan = await trx.get(
+        pg
+          ? `SELECT id FROM messages WHERE conversation_id = $1 AND content_type = 'plan' AND agent_id = $2 AND metadata->>'run_id' = $3 ORDER BY id DESC LIMIT 1`
+          : `SELECT id FROM messages WHERE conversation_id = ? AND content_type = 'plan' AND agent_id = ? AND json_extract(metadata, '$.run_id') = ? ORDER BY id DESC LIMIT 1`,
+        [conversationId, agentId, runId]
+      );
 
-    if (existingPlan) {
-      // UPDATE existing plan in-place — frontend polls for plan updates via content_type check
-      await dbRun(
-        pg
-          ? `UPDATE messages SET content = $1, metadata = $2, updated_at = NOW() WHERE id = $3`
-          : `UPDATE messages SET content = ?, metadata = ?, updated_at = datetime('now') WHERE id = ?`,
-        [contentJson, metadataJson, existingPlan.id]
-      );
-      apiLogger.info({ planId: existingPlan.id, progress: `${completed}/${total}` }, 'handleManagePlan: plan updated in-place');
-    } else {
-      // INSERT new plan message
-      await dbRun(
-        pg
-          ? `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, metadata, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`
-          : `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, metadata, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-        [conversationId, agentId || null, 'agent', 'tool_result', contentJson, 'plan', agentId || null, metadataJson]
-      );
-      apiLogger.info({ conversationId, progress: `${completed}/${total}` }, 'handleManagePlan: plan created');
-    }
+      if (existingPlan) {
+        // UPDATE existing plan in-place — frontend polls for plan updates via content_type check
+        await trx.run(
+          pg
+            ? `UPDATE messages SET content = $1, metadata = $2, updated_at = NOW() WHERE id = $3`
+            : `UPDATE messages SET content = ?, metadata = ?, updated_at = datetime('now') WHERE id = ?`,
+          [contentJson, metadataJson, existingPlan.id]
+        );
+        apiLogger.info({ planId: existingPlan.id, progress: `${completed}/${total}` }, 'handleManagePlan: plan updated in-place');
+      } else {
+        // INSERT new plan message
+        await trx.run(
+          pg
+            ? `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, metadata, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`
+            : `INSERT INTO messages (conversation_id, sender_id, sender_type, role, content, content_type, agent_id, metadata, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+          [conversationId, senderId, 'agent', 'tool_result', contentJson, 'plan', agentId, metadataJson]
+        );
+        apiLogger.info({ conversationId, progress: `${completed}/${total}` }, 'handleManagePlan: plan created');
+      }
+    });
   }
 
   // ── Build human-readable confirmation ──
@@ -222,4 +248,21 @@ export async function handleManagePlan(args, conversationId, agentName, options 
   const summary = parts.length > 0 ? parts.join(', ') : '0 tasks';
 
   return `Plan updated: ${summary}`;
+}
+
+/** MCP plans are bound to a live job by the launcher, never by tool arguments. */
+export async function handleMcpPlan(args, context = {}) {
+  const scope = z.object({ agentId: z.number().int().positive(), jobId: z.number().int().positive(), spaceId: z.number().int().positive() }).safeParse(context);
+  if (!scope.success) return { error: 'manage_plan requires a runtime-bound agent job' };
+  const { agentId, jobId, spaceId } = scope.data;
+  const job = await dbGet(
+    `SELECT j.conversation_id, j.agent_user_id, j.agent_name FROM agent_jobs j
+       JOIN conversations c ON c.id = j.conversation_id
+      WHERE j.id = ? AND j.agent_row_id = ? AND c.space_id = ? AND j.status = 'processing'`,
+    [jobId, agentId, spaceId]
+  );
+  if (!job) return { error: 'manage_plan requires the current active job in this space' };
+  return handleManagePlan(args, job.conversation_id, job.agent_name, {
+    agentId, senderId: job.agent_user_id, jobId, runId: `job:${jobId}`,
+  });
 }

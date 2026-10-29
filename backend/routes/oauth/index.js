@@ -17,6 +17,9 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { z } from 'zod';
+import forgejoAdmin from './forgejo.js';
+import penpotAdmin from './penpot.js';
 import { fileURLToPath } from 'url';
 import { dbGet, dbRun, dbAll } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
@@ -31,6 +34,7 @@ import {
   isRedirectUriAllowed,
   verifyClientSecret,
 } from '../../services/oidc/clientRegistry.js';
+import { getCookieValues, clearForeignSessionCookies } from '../v3/auth/authShared.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -72,6 +76,8 @@ try {
 }
 
 const router = express.Router();
+router.use(forgejoAdmin);
+router.use(penpotAdmin);
 
 // In-memory store for authorization codes (in production, use Redis or database)
 const authorizationCodes = new Map();
@@ -121,7 +127,7 @@ function generateAccessToken(user, clientId, scopes) {
  * @param {string[]} scopes - Requested scopes
  * @returns {string} - JWT ID token
  */
-function generateIdToken(user, clientId, scopes) {
+function generateIdToken(user, clientId, scopes, nonce) {
   const claims = {
     sub: String(user.id),
     iss: ISSUER,
@@ -129,6 +135,7 @@ function generateIdToken(user, clientId, scopes) {
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + TOKEN_TTL.ID_TOKEN,
   };
+  if (nonce !== undefined) claims.nonce = nonce;
 
   // Add profile claims if scope includes 'profile'
   if (scopes.includes('profile')) {
@@ -168,42 +175,57 @@ function extractBearerToken(req) {
 }
 
 /**
- * Extract token from cookie
+ * Every refresh-token cookie value the browser sent, in header order.
+ * Cookie name: godcrm_refresh (or REFRESH_COOKIE_NAME env var).
+ *
+ * A browser that also logged in on another *.godcrm.ai host carries a
+ * Domain=.godcrm.ai copy signed with that box's JWT_SECRET next to the
+ * host-only one; cookie-parser exposes only the first, so a single lookup
+ * bounced a logged-in user to /auth/login forever (chat 3660, Penpot SSO).
  * @param {Object} req - Express request
- * @returns {string|null} - Token or null
+ * @returns {string[]} - Cookie values (possibly empty)
  */
-function extractCookieToken(req) {
-  // Check for refresh token cookie (used by GOD CRM frontend)
-  // Cookie name: godcrm_refresh (or REFRESH_COOKIE_NAME env var)
+function extractCookieTokens(req) {
   const cookieName = process.env.REFRESH_COOKIE_NAME || 'godcrm_refresh';
-  return req.cookies?.[cookieName] || null;
+  const values = getCookieValues(req, cookieName);
+  if (values.length === 0 && req.cookies?.[cookieName]) return [req.cookies[cookieName]];
+  return values;
 }
 
 /**
  * Get authenticated user from request (Bearer token or cookie)
  * @param {Object} req - Express request
+ * @param {Object} [res] - Express response; when given, parent-domain copies of
+ *   the session cookies are evicted if any cookie value failed verification
  * @returns {Object|null} - Decoded token payload or null
  */
-function getAuthenticatedUser(req) {
+function getAuthenticatedUser(req, res) {
   // Try Bearer token first
   const bearerToken = extractBearerToken(req);
   if (bearerToken) {
     const decoded = verifyToken(bearerToken);
     if (decoded) return decoded;
   }
-  
-  // Try cookie token
-  const cookieToken = extractCookieToken(req);
-  if (cookieToken) {
-    const decoded = verifyToken(cookieToken);
-    if (decoded) return decoded;
+
+  // Try every cookie value: the first valid one wins, invalid ones are foreign
+  let decoded = null;
+  let rejected = 0;
+  for (const cookieToken of extractCookieTokens(req)) {
+    const candidate = verifyToken(cookieToken);
+    if (candidate) {
+      if (!decoded) decoded = candidate;
+    } else {
+      rejected += 1;
+    }
   }
-  
+  if (rejected > 0 && res) clearForeignSessionCookies(req, res);
+  if (decoded) return decoded;
+
   // Check if user is set by auth middleware (req.user)
   if (req.user && req.user.id) {
     return { id: req.user.id };
   }
-  
+
   return null;
 }
 
@@ -247,7 +269,12 @@ router.get('/authorize', async (req, res) => {
     state,
     code_challenge,
     code_challenge_method,
+    nonce,
   } = req.query;
+
+  if (!z.string().optional().safeParse(nonce).success) {
+    return res.status(400).json({ error: 'invalid_request', error_description: 'nonce must be a string' });
+  }
 
   apiLogger.debug({ client_id, redirect_uri, response_type, scope, code_challenge: !!code_challenge, code_challenge_method }, 'OIDC authorize request');
 
@@ -287,7 +314,7 @@ router.get('/authorize', async (req, res) => {
   }
 
   // Check if user is authenticated (via Bearer token OR cookie)
-  const authUser = getAuthenticatedUser(req);
+  const authUser = getAuthenticatedUser(req, res);
   if (!authUser) {
     // Redirect to login page with return URL
     const returnUrl = encodeURIComponent(req.originalUrl);
@@ -319,6 +346,7 @@ router.get('/authorize', async (req, res) => {
     expiresAt: Date.now() + TOKEN_TTL.AUTHORIZATION_CODE * 1000,
     codeChallenge: code_challenge || null,
     codeChallengeMethod: code_challenge_method || null,
+    nonce,
   });
 
   // Build redirect URL with code (normalize double slashes in path)
@@ -435,7 +463,10 @@ router.post('/token', async (req, res) => {
     };
 
     // Validate redirect_uri matches (normalized)
-    if (normalizeUri(codeData.redirectUri) !== normalizeUri(redirect_uri)) {
+    // Fleet clients use exact callbacks; preserve the legacy WA normalization.
+    if (client_id === 'forgejo' || client_id === 'penpot'
+      ? codeData.redirectUri !== redirect_uri
+      : normalizeUri(codeData.redirectUri) !== normalizeUri(redirect_uri)) {
       apiLogger.warn({
         stored: codeData.redirectUri,
         received: redirect_uri,
@@ -511,7 +542,7 @@ router.post('/token', async (req, res) => {
 
     // Generate tokens
     const accessToken = generateAccessToken(user, client_id, codeData.scopes);
-    const idToken = generateIdToken(user, client_id, codeData.scopes);
+    const idToken = generateIdToken(user, client_id, codeData.scopes, codeData.nonce);
 
     apiLogger.info({ userId: user.id, clientId: client_id }, 'OIDC tokens issued');
 

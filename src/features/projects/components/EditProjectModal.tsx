@@ -51,6 +51,7 @@ const ColorPicker = ({
   onChange: (color: string | null) => void;
   label?: string;
 }) => {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value || '');
 
@@ -124,7 +125,7 @@ const ColorPicker = ({
                     : 'linear-gradient(45deg, #666 25%, transparent 25%), linear-gradient(-45deg, #666 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #666 75%), linear-gradient(-45deg, transparent 75%, #666 75%)',
                   backgroundSize: c ? undefined : '4px 4px'
                 }}
-                title={c || 'Без цвета'}
+                title={c || t('projects.edit.noColor')}
               />
             ))}
           </div>
@@ -180,7 +181,7 @@ export const EditProjectModal = ({ open, onOpenChange, onDeleteClick, project }:
 
   const handleSubmit = () => {
     if (!name.trim()) {
-      setError('Название не может быть пустым');
+      setError(t('projects.edit.nameRequired'));
       return;
     }
 
@@ -201,7 +202,7 @@ export const EditProjectModal = ({ open, onOpenChange, onDeleteClick, project }:
         },
         onError: (err) => {
           logger.error('Failed to update project:', err);
-          setError('Не удалось обновить проект');
+          setError(t('projects.edit.updateFailed'));
         },
       }
     );
@@ -213,15 +214,15 @@ export const EditProjectModal = ({ open, onOpenChange, onDeleteClick, project }:
   };
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: 'display', label: 'Отображение' },
-    { id: 'access', label: 'Доступ' }
+    { id: 'display', label: t('projects.edit.tabDisplay') },
+    { id: 'access', label: t('projects.edit.tabAccess') }
   ];
 
   return (
-    <Modal 
-      open={open} 
-      onOpenChange={onOpenChange} 
-      title={`Редактирование проекта "${project.name}"`}
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('projects.edit.titleWithName', { name: project.name })}
       size="lg"
       fixedHeight={true}
       heightOffset={400}
@@ -314,9 +315,9 @@ export const EditProjectModal = ({ open, onOpenChange, onDeleteClick, project }:
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <ColorPicker label="Основной цвет" value={themePrimary} onChange={setThemePrimary} />
-                <ColorPicker label="Вторичный цвет" value={themeSecondary} onChange={setThemeSecondary} />
-                <ColorPicker label="Третичный цвет" value={themeTertiary} onChange={setThemeTertiary} />
+                <ColorPicker label={t('projects.edit.primaryColor')} value={themePrimary} onChange={setThemePrimary} />
+                <ColorPicker label={t('projects.edit.secondaryColor')} value={themeSecondary} onChange={setThemeSecondary} />
+                <ColorPicker label={t('projects.edit.tertiaryColor')} value={themeTertiary} onChange={setThemeTertiary} />
               </div>
 
               <div className="p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)]">
@@ -324,9 +325,9 @@ export const EditProjectModal = ({ open, onOpenChange, onDeleteClick, project }:
                   <div className="flex items-start gap-2">
                     <Globe className="w-4 h-4 mt-0.5 text-[var(--accent-primary)] flex-shrink-0" />
                     <div className="space-y-1">
-                      <div className="text-sm font-medium text-[var(--text-primary)]">Виден в публичном пространстве</div>
+                      <div className="text-sm font-medium text-[var(--text-primary)]">{t('projects.edit.publicVisible')}</div>
                       <p className="text-xs text-[var(--text-secondary)]">
-                        Если space опубликована, проект и его содержимое доступны read-only посетителям. Выключите, чтобы скрыть только этот проект.
+                        {t('projects.edit.publicVisibleDesc')}
                       </p>
                     </div>
                   </div>
@@ -349,7 +350,7 @@ export const EditProjectModal = ({ open, onOpenChange, onDeleteClick, project }:
           )}
           {activeTab === 'access' && !project.space_id && (
             <div className="flex items-center justify-center h-[300px] text-[var(--text-tertiary)]">
-              <p>Space ID не определен</p>
+              <p>{t('projects.edit.noSpace')}</p>
             </div>
           )}
         </div>

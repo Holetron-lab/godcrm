@@ -15,6 +15,7 @@ interface EnrichedConversation extends Conversation {
 
 export interface HistorySidebarProps {
   sidebarWidth: number;
+  onWidthChange: (width: number) => void;
   isResizing: boolean;
   onMouseDown: (e: React.MouseEvent) => void;
   onCollapse: () => void;
@@ -29,6 +30,7 @@ export interface HistorySidebarProps {
 
 export function HistorySidebar({
   sidebarWidth,
+  onWidthChange,
   isResizing,
   onMouseDown,
   onCollapse,
@@ -43,7 +45,14 @@ export function HistorySidebar({
   return (
     <>
       {/* Resize Handle */}
-      <div
+      <div role="slider" tabIndex={0} aria-label="Ширина истории" aria-orientation="horizontal"
+        aria-valuenow={sidebarWidth} aria-valuemin={200} aria-valuemax={500}
+        onKeyDown={e => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+          e.preventDefault();
+          onWidthChange(e.key === 'Home' ? 200 : e.key === 'End' ? 500
+            : Math.max(200, Math.min(500, sidebarWidth + (e.key === 'ArrowLeft' ? 20 : -20))));
+        }}
         onMouseDown={onMouseDown}
         className={cn(
           "w-1 cursor-col-resize hover:bg-[var(--color-primary-500)]/50 transition-colors flex items-center justify-center group",
@@ -77,7 +86,7 @@ export function HistorySidebar({
               <Loader2 className="w-5 h-5 animate-spin text-[var(--text-tertiary)]" />
             </div>
           ) : enrichedConversations.length === 0 ? (
-            <div className="text-sm text-[var(--text-tertiary)] text-center py-8">
+            <div className="text-sm text-[var(--text-secondary)] text-center py-8">
               Нет сохранённых чатов
             </div>
           ) : (

@@ -22,7 +22,8 @@ import {
   ArrowRight,
   Minus,
   Grip,
-  Palette,
+  SquaresUnite,
+  PanelTop,
   FolderTree,
   Map as MapIcon,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ import { useSchemaEditorStore } from '../../store/schemaEditorStore';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { Button } from '@/shared/components/ui/Button';
 import { LayoutSettingsModal, type LayoutSettings } from '../modals/LayoutSettingsModal';
+import { SchemaSearch } from './SchemaSearch';
 import { CreateTableModal } from '@/features/tables/components/CreateTableModal';
 import type { EdgeShapeType, LineStyleType, EndpointMarkerType } from '../../types/schema-editor.types';
 
@@ -81,6 +83,8 @@ export const EditorToolbar = ({
     setEdgeStyleConfig,
     showProjectBoundaries,
     toggleProjectBoundaries,
+    showWidgets,
+    toggleWidgets,
     navTree,
   } = useSchemaEditorStore();
 
@@ -173,7 +177,7 @@ export const EditorToolbar = ({
     const [tableIdStr, columnName] = selectedColumnKey.split(':');
     const tableId = parseInt(tableIdStr);
     const node = nodes.find(n => n.data.tableId === tableId);
-    if (!node) return null;
+    if (!node || node.type !== 'tableNode') return null;
     const column = node.data.columns.find(c => c.name === columnName);
     return {
       tableName: node.data.displayName || node.data.name,
@@ -193,9 +197,9 @@ export const EditorToolbar = ({
   };
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 h-[58px] border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
+    <div className="relative flex flex-wrap shrink-0 items-center justify-between gap-2 px-4 py-3 min-h-[58px] border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
       {/* Left actions */}
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-1">
         {/* New Table with Project Dropdown */}
         <div className="relative" ref={projectDropdownRef}>
           <button
@@ -297,10 +301,27 @@ export const EditorToolbar = ({
               ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]' 
               : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
           }`}
-          title="Обводка проектов"
+          title={t('schemaEditor.projectBoundaries')}
         >
-          <Palette className="w-4 h-4" />
+          <SquaresUnite className="w-4 h-4" />
         </button>
+
+        {/* Modules on the canvas (strips above their tables) */}
+        <button
+          onClick={toggleWidgets}
+          aria-pressed={showWidgets}
+          className={`p-2 rounded-md transition-colors ${
+            showWidgets
+              ? 'bg-purple-500/20 text-purple-500'
+              : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
+          }`}
+          title={t('schemaEditor.toggleWidgets')}
+        >
+          <PanelTop className="w-4 h-4" />
+        </button>
+
+        {/* Find a table and show it on the canvas */}
+        <SchemaSearch />
 
         {/* Bulk Selection Actions */}
         {selectedTables && selectedTables.size > 0 && (
@@ -341,18 +362,19 @@ export const EditorToolbar = ({
       </div>
 
       {/* Right - Selection info and Pending Connections */}
-      <div className="flex items-center gap-3 ml-auto">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-3 ml-auto">
         {/* Selected column info - static element to avoid toolbar shift */}
         {selectedInfo ? (
-          <div
+          <button
+            type="button"
             onClick={clearColumnSelection}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30 hover:bg-[var(--accent-primary)]/30 transition-colors cursor-pointer"
+            className="flex min-w-0 max-w-full items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] border border-[var(--accent-primary)]/30 hover:bg-[var(--accent-primary)]/30 transition-colors cursor-pointer"
             title={t('schemaEditor.clickToCancel')}
           >
             <MousePointer2 className="w-4 h-4" />
-            <span>{selectedInfo.tableName}.{selectedInfo.columnDisplayName}</span>
+            <span className="min-w-0 break-all">{selectedInfo.tableName}.{selectedInfo.columnDisplayName}</span>
             <X className="w-3.5 h-3.5 ml-1" />
-          </div>
+          </button>
         ) : (
           <div className="flex items-center gap-2 px-3 py-1.5 text-sm text-[var(--text-tertiary)]">
             <MousePointer2 className="w-4 h-4" />
@@ -361,8 +383,10 @@ export const EditorToolbar = ({
         )}
 
         {/* Pending Connections - static container with clickable area */}
-        <div className="relative">
-          <div
+        <div className="sm:relative">
+          <button
+            type="button"
+            aria-expanded={showPendingDropdown}
             onClick={() => setShowPendingDropdown(!showPendingDropdown)}
             className={`
               flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer
@@ -380,13 +404,12 @@ export const EditorToolbar = ({
               </span>
             )}
             <ChevronDown className="w-3.5 h-3.5 ml-1" />
-          </div>
+          </button>
 
           {/* Dropdown */}
           {showPendingDropdown && (
             <div
-              className="absolute top-full left-0 mt-1 w-80 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl z-50"
-              style={{ transform: 'translateX(-50px)' }}
+              className="absolute top-full left-2 right-2 mt-1 sm:left-auto sm:right-0 sm:w-80 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl z-50"
             >
               <div className="p-3 border-b border-[var(--border-primary)]">
                 <h3 className="text-sm font-medium text-[var(--text-primary)]">
@@ -451,7 +474,7 @@ export const EditorToolbar = ({
         <div className="w-px h-6 bg-[var(--border-primary)] mx-1" />
 
         {/* Tools: Line style + Shape + Mini map + Zoom slider */}
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {/* Line Style Selector */}
           <div className="relative">
             <button
@@ -569,6 +592,7 @@ export const EditorToolbar = ({
         open={showLayoutModal}
         onOpenChange={setShowLayoutModal}
         onApply={(settings) => onApplyLayout?.(settings)}
+        pinnedCount={nodes.filter((n) => n.type === 'tableNode' && n.data.isPinned).length}
       />
       
       {/* Create Table Modal */}

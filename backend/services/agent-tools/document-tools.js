@@ -167,6 +167,23 @@ async function resolveBinding(widget_id) {
   return { project_id, registry_table_id, folder_path, titleCol };
 }
 
+// Window the rendered markdown by `offset`/`max_chars` (characters). With no
+// window requested the result is returned untouched, so existing callers see
+// the exact same shape. `next_offset` is null once the tail has been served.
+function sliceMarkdown(result, offset, max_chars) {
+  const start = Math.max(0, Number(offset) || 0);
+  const cap = Number(max_chars);
+  if (start === 0 && !(cap > 0)) return result;
+  const total = result.markdown.length;
+  const end = cap > 0 ? Math.min(total, start + cap) : total;
+  return {
+    ...result,
+    markdown: result.markdown.slice(start, end),
+    markdown_total_chars: total,
+    next_offset: end < total ? end : null,
+  };
+}
+
 export const documentToolHandlers = {
   async list_documents({ widget_id, search, limit = 50, include_archived = false }) {
     const { registry_table_id, titleCol } = await resolveBinding(widget_id);
@@ -218,8 +235,8 @@ export const documentToolHandlers = {
     return { documents, total, widget_id, registry_table_id };
   },
 
-  async get_document_content({ widget_id, document_id }) {
-    const { registry_table_id, titleCol } = await resolveBinding(widget_id);
+  async get_document_content({ widget_id, document_id, format = 'full', offset = 0, max_chars }) {
+    const { registry_table_id } = await resolveBinding(widget_id);
 
     const doc = await dbGet(
       'SELECT id, data FROM table_rows WHERE id = ? AND table_id = ?',
@@ -246,6 +263,17 @@ export const documentToolHandlers = {
     const atoms = await loadDocumentAtoms(tableId);
     const markdown = atomsToMarkdown(atoms);
 
+    // format: 'markdown' — response-size control. `atoms` duplicates the
+    // rendered markdown, so a 90-atom doc came back at ~144K chars and hit the
+    // MCP tool-result limit. Markdown-only skips the atom payload and the
+    // widget inventory; `offset`/`max_chars` (below) page through the rest.
+    if (format === 'markdown') {
+      return sliceMarkdown(
+        { document: { id: doc.id, ...docData }, markdown, atom_count: atoms.length, table_id: tableId },
+        offset, max_chars
+      );
+    }
+
     // ADR-0005 §C-13 — flat inventory of every embedded widget-atom in this
     // document. Lossless: deleted target widgets/docs still appear with
     // `missing: true`. Failures are non-fatal so a broken inventory never
@@ -263,7 +291,7 @@ export const documentToolHandlers = {
       ? rawLog
       : (typeof rawLog === 'string' ? (parseRowData(rawLog) || []) : []);
 
-    return {
+    return sliceMarkdown({
       document: { id: doc.id, ...docData },
       atoms,
       markdown,
@@ -271,7 +299,7 @@ export const documentToolHandlers = {
       table_id: tableId,
       research_log: Array.isArray(research_log) ? research_log : [],
       widget_atoms,
-    };
+    }, offset, max_chars);
   },
 
   async create_document({ widget_id, title, icon = '📄', content, status = 'draft' }, userId) {

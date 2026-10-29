@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * RowPresetCard — T-141688 / ADR-0031 §Y / WP-22.
  *
@@ -98,6 +99,7 @@ export function RowPresetCard({
   onBindToChat,
   onAttachToMessage,
 }: RowPresetCardProps) {
+  const { t } = useLanguage();
   const { ref: ioRef, isInView } = useInView<HTMLDivElement>({ rootMargin: '200px 0px', enabled: true });
   const enabled = isInView && tableId > 0 && rowId > 0;
 
@@ -204,7 +206,7 @@ export function RowPresetCard({
       ) : isError ? (
         <div className="flex items-center gap-2 text-xs text-red-300">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="truncate">Не удалось загрузить строку #{rowId}</span>
+          <span className="truncate">{t('aiChat.ui.rowLoadFailed', { id: rowId })}</span>
         </div>
       ) : (
         <>
@@ -263,16 +265,16 @@ export function RowPresetCard({
 
           {/* Footer — 4 inline action icons */}
           <div className="flex items-center gap-1 pt-1">
-            <ActionIconButton title="Открыть карточку" onClick={onOpenDetail}>
+            <ActionIconButton title={t('aiChat.ui.openCard')} onClick={onOpenDetail}>
               <Eye className="w-3.5 h-3.5" />
             </ActionIconButton>
-            <ActionIconButton title="Открыть полный диалог" onClick={onOpenEdit}>
+            <ActionIconButton title={t('aiChat.ui.openFullConversation')} onClick={onOpenEdit}>
               <ExternalLink className="w-3.5 h-3.5" />
             </ActionIconButton>
-            <ActionIconButton title="Привязать к чату" onClick={onBindToChat}>
+            <ActionIconButton title={t('aiChat.ui.linkToChat')} onClick={onBindToChat}>
               <MessageCirclePlus className="w-3.5 h-3.5" />
             </ActionIconButton>
-            <ActionIconButton title="Прикрепить к сообщению" onClick={onAttachToMessage}>
+            <ActionIconButton title={t('rowActions.attachToMessage')} onClick={onAttachToMessage}>
               <Paperclip className="w-3.5 h-3.5" />
             </ActionIconButton>
             <span className="ml-auto text-[10px] text-[var(--text-tertiary)] truncate">

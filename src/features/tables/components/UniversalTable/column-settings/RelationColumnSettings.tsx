@@ -14,7 +14,7 @@ export const RelationColumnSettings: React.FC<ColumnSettingsProps> = ({
   firstRow,
 }) => {
   return (
-    <div className="space-y-4 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-4 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
         🔗 Настройки связи
       </h4>
@@ -240,7 +240,7 @@ export const RelationColumnSettings: React.FC<ColumnSettingsProps> = ({
             ⚠️ Таблица не выбрана
           </p>
           <p className="text-amber-600 dark:text-amber-300 mt-1">
-            Перейдите на вкладку "Источник данных" чтобы выбрать проект и таблицу для связи.
+            Перейдите на вкладку &quot;Источник данных&quot; чтобы выбрать проект и таблицу для связи.
           </p>
         </div>
       )}

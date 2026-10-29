@@ -35,9 +35,9 @@ interface UseScrollManagementParams {
   isAgentProcessing: boolean;
   /** When true — auto-scroll on ANY new messages (including tool_call / tool_result) */
   isOpen: boolean;
-  messagesEndRef: RefObject<HTMLDivElement | null>;
-  messagesContainerRef: RefObject<HTMLDivElement | null>;
-  loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
+  messagesEndRef: RefObject<HTMLDivElement>;
+  messagesContainerRef: RefObject<HTMLDivElement>;
+  loadMoreSentinelRef: RefObject<HTMLDivElement>;
   setShowScrollToBottom: (show: boolean) => void;
   setNewMessageCount: (fn: number | ((prev: number) => number)) => void;
   setAgentWorking: (working: boolean) => void;
@@ -90,17 +90,28 @@ export function useScrollManagement({
   const userSentStickyUntilRef = useRef(0);
   // Track conversation change timestamp — safety net uses this to decide if scroll-to-bottom is warranted
   const conversationChangedAtRef = useRef(0);
-  // Track upward scroll intent: while the user is touch-dragging away from the
-  // bottom, suppress auto-scroll so incoming agent messages don't yank the view
-  // back down within the AUTO_SCROLL_THRESHOLD zone (the "детач от низа" jitter).
+  // Upward scrolling detaches following until the reader returns to the bottom.
   const lastScrollTopRef = useRef(0);
-  const userScrollingUpUntilRef = useRef(0);
+
+  // Conversation identity as last seen by the reset effect below. chatPartnerId
+  // can change without a conversation switch (another agent joins a group chat);
+  // that must not count as "new conversation" while the user is reading above.
+  const prevConversationKeyRef = useRef<string | null>(null);
+  const conversationResetPendingRef = useRef(false);
 
   // LAYOUT EFFECT: Reset isFirstLoad on conversation change BEFORE the scroll layout effect fires.
   // BUG FIX: Previously this was a useEffect, which runs AFTER useLayoutEffect.
   // When switching conversations with cached data, the scroll layout effect checked isFirstLoad
   // before it was reset — causing scroll-to-bottom to be skipped entirely.
   useLayoutEffect(() => {
+    const conversationKey = `${currentConversationId ?? ''}:${userConversationId ?? ''}`;
+    const conversationChanged = prevConversationKeyRef.current !== conversationKey;
+    prevConversationKeyRef.current = conversationKey;
+    // WP-3 (bug 228711): a partner-only change while the user is scrolled up
+    // used to re-arm the first-load scroll loop (1.5 s of forced scroll-to-bottom).
+    // Same conversation + user reading above the threshold → leave them alone.
+    if (!conversationChanged && !isNearBottomRef.current) return;
+    conversationResetPendingRef.current = true;
     isFirstLoad.current = true;
     isNearBottomRef.current = true;
     isLoadingOlderRef.current = true; // Block IntersectionObserver until first scroll completes
@@ -111,11 +122,14 @@ export function useScrollManagement({
     // Reset scroll-direction tracker so a switch from a longer conversation
     // to a shorter one isn't misread as the user scrolling up.
     lastScrollTopRef.current = 0;
-    userScrollingUpUntilRef.current = 0;
   }, [currentConversationId, userConversationId, chatPartnerId]);
 
-  // State updates from conversation change (can stay as useEffect — not timing-critical)
+  // State updates from conversation change (can stay as useEffect — not timing-critical).
+  // Mirrors the layout effect above: skipped when that reset was skipped, so the
+  // "new messages" badge survives a partner-only change while reading above.
   useEffect(() => {
+    if (!conversationResetPendingRef.current) return;
+    conversationResetPendingRef.current = false;
     setNewMessageCount(0);
     setAgentWorking(false);
   }, [currentConversationId, userConversationId, chatPartnerId]);
@@ -125,10 +139,34 @@ export function useScrollManagement({
   // Covers the case where cached messages render instantly and useEffect scroll arrives too late.
   // Depends on isOpen so it also fires when the panel reopens with cached messages.
   useLayoutEffect(() => {
-    if (displayMessages.length > 0 && isFirstLoad.current) {
-      scrollContainerToBottom(messagesContainerRef.current);
+    if (!isOpen || !messagesContainerRef.current) return;
+    // A source switch can briefly clear the list after cached messages were
+    // shown. The incoming history is an initial load, not a new-message append.
+    if (displayMessages.length === 0) {
+      isFirstLoad.current = true;
+      return;
     }
-  }, [displayMessages, isOpen]);
+    const container = messagesContainerRef.current;
+    const pinBottom = () => {
+      if (!isNearBottomRef.current || (!isFirstLoad.current && isLoadingOlderRef.current)) return;
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && selection.anchorNode && container.contains(selection.anchorNode)) return;
+      scrollContainerToBottom(container);
+      // A shrinking bubble also moves scrollTop up; that is not a user gesture.
+      lastScrollTopRef.current = container.scrollTop;
+    };
+    pinBottom();
+
+    // Child-local updates (tool previews, images, accordions) can change height
+    // without a new displayMessages array. ResizeObserver runs before paint:
+    // keep the bottom fixed instead of animating toward it a few frames later.
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(pinBottom);
+    observer.observe(container);
+    const content = container.firstElementChild;
+    if (content) observer.observe(content);
+    return () => observer.disconnect();
+  }, [displayMessages, isOpen, isAgentProcessing, currentConversationId, userConversationId, chatPartnerId]);
 
   // Reset scroll when panel reopens (component returns null when closed,
   // but hooks persist — so isFirstLoad stays false for same conversation).
@@ -149,7 +187,6 @@ export function useScrollManagement({
       prevHumanVisibleCountRef.current = 0;
       prevScrollTriggerCountRef.current = 0;
       lastScrollTopRef.current = 0;
-      userScrollingUpUntilRef.current = 0;
       scrollContainerToBottom(messagesContainerRef.current);
     }
   }, [isOpen]);
@@ -191,36 +228,26 @@ export function useScrollManagement({
     let rafId: number | null = null;
     lastScrollTopRef.current = container.scrollTop;
     const handleScroll = () => {
+      // Update intent synchronously: an already queued scroll callback can run
+      // before a debounced listener, especially during mobile touch scrolling.
+      const currentScrollTop = container.scrollTop;
+      const distanceFromBottom = container.scrollHeight - currentScrollTop - container.clientHeight;
+      const wasNearBottom = isNearBottomRef.current;
+      if (distanceFromBottom <= 5) {
+        isNearBottomRef.current = true;
+      } else if (currentScrollTop < lastScrollTopRef.current - 2 ||
+                 distanceFromBottom > CHAT_CONFIG.AUTO_SCROLL_THRESHOLD) {
+        isNearBottomRef.current = false;
+        userJustSentRef.current = false;
+        userSentStickyUntilRef.current = 0;
+      }
+      lastScrollTopRef.current = currentScrollTop;
+      if (!wasNearBottom && isNearBottomRef.current) setNewMessageCount(0);
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-        const wasNearBottom = isNearBottomRef.current;
-        isNearBottomRef.current = distanceFromBottom <= CHAT_CONFIG.AUTO_SCROLL_THRESHOLD;
-        const shouldShow = distanceFromBottom > CHAT_CONFIG.SCROLL_BUTTON_THRESHOLD;
-        setShowScrollToBottom(shouldShow);
-        if (!wasNearBottom && isNearBottomRef.current) {
-          setNewMessageCount(0);
-        }
-        // Detect user-initiated upward scroll within the near-bottom zone.
-        // Programmatic scroll-to-bottom only INCREASES scrollTop, so any
-        // decrease must come from a touch/wheel gesture. Hold a 600ms grace
-        // window during which auto-scroll backs off — prevents the chat list
-        // from snapping back while the user is trying to read earlier messages.
-        const currentScrollTop = container.scrollTop;
-        if (currentScrollTop < lastScrollTopRef.current - 2) {
-          userScrollingUpUntilRef.current = Date.now() + 600;
-          userSentStickyUntilRef.current = 0;
-        }
-        lastScrollTopRef.current = currentScrollTop;
-        // If the user has scrolled clearly past the auto-scroll threshold,
-        // cancel the post-send sticky window. Otherwise polling-driven
-        // re-renders would keep forcing the chat back to the bottom for the
-        // full 5s window, preventing the user from reading earlier messages
-        // while an agent is processing.
-        if (distanceFromBottom > CHAT_CONFIG.AUTO_SCROLL_THRESHOLD) {
-          userSentStickyUntilRef.current = 0;
-        }
+        const distance = container.scrollHeight - container.scrollTop - container.clientHeight;
+        setShowScrollToBottom(!isNearBottomRef.current || distance > CHAT_CONFIG.SCROLL_BUTTON_THRESHOLD);
       });
     };
     container.addEventListener('scroll', handleScroll, { passive: true });
@@ -228,7 +255,7 @@ export function useScrollManagement({
       container.removeEventListener('scroll', handleScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, []);
+  }, [isOpen]);
 
   // Count only human-visible messages
   const countHumanVisible = useCallback((msgs: ChatMessage[]) => {
@@ -256,6 +283,8 @@ export function useScrollManagement({
 
   // Main auto-scroll effect
   useEffect(() => {
+    // Hidden panels retain their hooks but have no message DOM to position.
+    if (!isOpen || !messagesContainerRef.current) return;
     if (displayMessages.length > 0) {
       const prevCount = prevMessageCountRef.current;
       prevMessageCountRef.current = displayMessages.length;
@@ -263,10 +292,9 @@ export function useScrollManagement({
       const currentSource = (aiConversationMessages && aiConversationMessages.length > 0) ? 'hook' : 'context';
       prevMessageSourceRef.current = currentSource;
 
-      // Check if user just sent a message (last message is from user)
-      const lastMsg = displayMessages[displayMessages.length - 1];
+      // Only the explicit local send action may override the reading position.
       const isStickyActive = Date.now() < userSentStickyUntilRef.current;
-      const userSent = userJustSentRef.current || isStickyActive || (lastMsg?.role === 'user' && displayMessages.length > prevCount);
+      const userSent = userJustSentRef.current || isStickyActive;
 
       // If user just sent — always force scroll to bottom, ignore loading state.
       if (userSent) {
@@ -282,7 +310,7 @@ export function useScrollManagement({
         // Instant scroll to bottom — 'smooth' caused visible jump to top then back to bottom.
         scrollContainerToBottom(messagesContainerRef.current, 'instant');
         requestAnimationFrame(() => {
-          scrollContainerToBottom(messagesContainerRef.current, 'instant');
+          if (isNearBottomRef.current) scrollContainerToBottom(messagesContainerRef.current, 'instant');
         });
         return;
       }
@@ -360,39 +388,9 @@ export function useScrollManagement({
         return;
       }
 
-      // User is actively scrolling up — let them detach from the bottom
-      // even within AUTO_SCROLL_THRESHOLD. Don't increment the new-message
-      // counter: they haven't decided to leave yet, just exploring.
-      if (Date.now() < userScrollingUpUntilRef.current) {
-        return;
-      }
-
-      // Don't yank the viewport while the user is actively selecting text inside
-      // the message list. During agent processing new messages stream in every
-      // poll; auto-scrolling mid-selection shifts the content under the cursor
-      // and collapses the range — which reads as "text won't select / selection
-      // keeps resetting". Defer the scroll until the selection is released.
-      const sel = typeof window !== 'undefined' ? window.getSelection() : null;
-      const container = messagesContainerRef.current;
-      if (sel && !sel.isCollapsed && sel.rangeCount > 0 && container) {
-        const anchor = sel.anchorNode;
-        if (anchor && container.contains(anchor)) return;
-      }
-
-      // Scroll on: human-visible messages, OR any new messages during agent processing
-      // (tool_call/tool_result grow the chat but aren't in countScrollTrigger)
-      if (newScrollTrigger > 0 || (isAgentProcessing && totalNewCount > 0)) {
-        // Use instant scroll during the sticky window after user sent a message
-        // to avoid visible "jump" when server replaces optimistic message.
-        const behavior: ScrollBehavior = Date.now() < userSentStickyUntilRef.current ? 'instant' : 'smooth';
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            scrollContainerToBottom(messagesContainerRef.current, behavior);
-          });
-        });
-      }
+      // Positioning is handled before paint by the layout effect / resize observer.
     }
-  }, [displayMessages, aiConversationMessages, countHumanVisible, countScrollTrigger, isAgentProcessing]);
+  }, [displayMessages, aiConversationMessages, countHumanVisible, countScrollTrigger, isAgentProcessing, isOpen, currentConversationId, userConversationId, chatPartnerId]);
 
   // Keep refs for IntersectionObserver
   const hasMoreRef = useRef(false);
@@ -468,7 +466,7 @@ export function useScrollManagement({
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && isOpen && isNearBottomRef.current) {
         requestAnimationFrame(() => {
-          scrollContainerToBottom(messagesContainerRef.current);
+          if (isNearBottomRef.current) scrollContainerToBottom(messagesContainerRef.current);
         });
       }
     };
@@ -526,11 +524,11 @@ export function useScrollManagement({
     scrollContainerToBottom(container, behavior);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        scrollContainerToBottom(messagesContainerRef.current, behavior);
+        if (isNearBottomRef.current) scrollContainerToBottom(messagesContainerRef.current, behavior);
       });
     });
     setTimeout(() => {
-      scrollContainerToBottom(messagesContainerRef.current);
+      if (isNearBottomRef.current) scrollContainerToBottom(messagesContainerRef.current);
     }, 150);
   }, []);
 

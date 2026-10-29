@@ -46,9 +46,8 @@ export function DividerPreview({
   return (
     <div className="w-full p-1.5">
       <div
-        onClick={onClick}
         className={`
-          rounded-lg border border-dashed flex items-center cursor-pointer transition-all px-2
+          rounded-lg border border-dashed flex items-center transition-all px-2
           ${isSelected
             ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10'
             : 'border-[var(--border-primary)] hover:border-[var(--color-primary-400)]'}
@@ -57,6 +56,8 @@ export function DividerPreview({
         {/* Move arrows */}
         <div className="flex items-center gap-1 mr-2">
           <button
+            type="button"
+            aria-label="Переместить вверх"
             disabled={!canMoveUp}
             onClick={(e) => { e.stopPropagation(); onMoveUp(); }}
             className="p-1 rounded hover:bg-[var(--bg-tertiary)] disabled:opacity-30"
@@ -64,6 +65,8 @@ export function DividerPreview({
             <ArrowUp className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
           </button>
           <button
+            type="button"
+            aria-label="Переместить вниз"
             disabled={!canMoveDown}
             onClick={(e) => { e.stopPropagation(); onMoveDown(); }}
             className="p-1 rounded hover:bg-[var(--bg-tertiary)] disabled:opacity-30"
@@ -96,14 +99,24 @@ export function DividerPreview({
           )}
         </div>
 
-        <div className="flex-1 h-px bg-[var(--border-primary)] mx-2" />
-        <span className="text-[10px] text-[var(--text-tertiary)] py-2">
-          {isPageBreak ? 'Новая страница' : 'Разделитель'}
-        </span>
-        <div className="flex-1 h-px bg-[var(--border-primary)] mx-2" />
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={isPageBreak ? 'Выбрать: Новая страница' : 'Выбрать разделитель'}
+          aria-pressed={isSelected}
+          className="flex flex-1 items-center self-stretch rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
+        >
+          <span className="flex-1 h-px bg-[var(--border-primary)] mx-2" />
+          <span className="text-[10px] text-[var(--text-secondary)] py-2">
+            {isPageBreak ? 'Новая страница' : 'Разделитель'}
+          </span>
+          <span className="flex-1 h-px bg-[var(--border-primary)] mx-2" />
+        </button>
 
         {/* Delete button */}
         <button
+          type="button"
+          aria-label={isPageBreak ? 'Удалить разрыв страницы' : 'Удалить разделитель'}
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="p-1 rounded hover:bg-red-500/20 text-red-500 ml-2"
         >

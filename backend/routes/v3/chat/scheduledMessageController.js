@@ -8,6 +8,7 @@ import {
   success, created, error, badRequest, notFound, forbidden,
   requireAuth,
 } from './chatShared.js';
+import { parseAttachments } from './parseAttachments.js';
 import { sendScheduledMessage } from '../../../services/ScheduledMessageWorker.js';
 
 export default function registerScheduledMessageRoutes(router) {
@@ -224,7 +225,7 @@ function formatRow(row) {
     conversation_id: Number(row.conversation_id),
     sender_id: Number(row.sender_id),
     mentions: safeJsonParse(row.mentions) || [],
-    attachments: safeJsonParse(row.attachments) || [],
+    attachments: parseAttachments(row.attachments),
     metadata: safeJsonParse(row.metadata) || {},
   };
 }

@@ -50,6 +50,12 @@ npm-debug.log*
 Thumbs.db
 
 # Test
+/.cache/vitest/
+/.quality-gate-test-*
+/.staging-lease-test-*
+/.dev-operation-test-*
+/.deploy-failure-test-*
+/.runtime-check-test-*
 test-results/
 playwright-report/
 coverage/

@@ -5,12 +5,14 @@
  * It does exactly what the /send route used to do inline: mint a reply token
  * when composing against a CRM row, embed it in the subject, send over the
  * connector's SMTP creds, then persist a Sent copy in mail_messages (metadata
- * only for attachments — bytes stay out of the row, same as mig 081). Pulling
+ * and file references for attachments; bytes are in project/space files). Pulling
  * it into one function means the worker can replay a send with byte-identical
  * behavior instead of a copy-pasted second implementation.
  */
 
-import { dbGet } from '../../database/connection.js';
+import { dbGet, withTransactionAsync } from '../../database/connection.js';
+import { randomUUID } from 'node:crypto';
+import { storeMailAttachments } from './attachmentStorage.js';
 import SMTPService from '../SMTPService.js';
 import { generateReplyToken, embedReplyToken } from './replyToken.js';
 
@@ -52,23 +54,30 @@ export async function deliverMail({
   attachments = [],
   linkedTableId = null,
   linkedRowId = null,
+  inReplyToId = null,
+  projectId = null,
+  userId = null,
+  messageId = `<${randomUUID()}@godcrm.ai>`,
 }) {
   const { smtp_host, smtp_port, username, password } = conn.creds;
   if (!smtp_host || !username || !password) {
     throw new MailSendError('connector is missing SMTP host/username/password');
   }
 
+  const original = inReplyToId == null ? null : await dbGet(
+    'SELECT id, message_id FROM mail_messages WHERE id = ? AND space_id = ? AND connector_id = ?',
+    [inReplyToId, spaceId, conn.id]
+  );
+  if (inReplyToId != null && !original) throw new MailSendError('Reply message is not in this mailbox');
+
   const linked = Number.isFinite(linkedTableId) && Number.isFinite(linkedRowId);
   const replyToken = linked ? generateReplyToken() : null;
   const outSubject = linked ? embedReplyToken(subject, replyToken) : subject;
 
-  // Metadata-only projection persisted on the Sent copy (bytes stay out of the
-  // row — same rationale as migration 081).
-  const attachmentMeta = attachments.map((a) => ({
-    filename: a.filename,
-    contentType: a.contentType,
-    size: a.content.length,
-  }));
+  // Save bytes before SMTP: a storage failure must never be reported as a failed
+  // send after the remote server has already accepted the message.
+  const attachmentMeta = await storeMailAttachments({ spaceId, connectorId: conn.id,
+    messageId, attachments, projectId, userId });
 
   const transport = SMTPService.createTransport({
     host: smtp_host,
@@ -77,11 +86,14 @@ export async function deliverMail({
     password,
   });
   const info = await transport.sendMail({
+    messageId,
     from: username,
     to,
     cc: cc.length ? cc : undefined,
     bcc: bcc.length ? bcc : undefined,
     subject: outSubject,
+    inReplyTo: original?.message_id || undefined,
+    references: original?.message_id || undefined,
     text: html ? undefined : body || '',
     html: html ? body || '' : undefined,
     attachments: attachments.length ? attachments : undefined,
@@ -89,30 +101,38 @@ export async function deliverMail({
 
   // Persist a Sent copy so the UI reflects it immediately (imap_uid NULL → never
   // collides with a synced row; an IMAP-side APPEND is a later enhancement).
-  const sentRow = await dbGet(
-    `INSERT INTO mail_messages
-       (space_id, connector_id, folder, message_id, from_name, from_address,
-        to_addresses, subject, preview, body_text, body_html, date, is_read,
-        attachments, reply_token, linked_table_id, linked_row_id)
-     VALUES (?, ?, 'sent', ?, ?, ?, ?::jsonb, ?, ?, ?, ?, now(), true, ?::jsonb, ?, ?, ?)
-     RETURNING *`,
-    [
-      spaceId,
-      conn.id,
-      info?.messageId || null,
-      username,
-      username,
-      JSON.stringify(to),
-      outSubject,
-      String(body || '').replace(/\s+/g, ' ').slice(0, 140),
-      html ? null : body || '',
-      html ? body || '' : null,
-      JSON.stringify(attachmentMeta),
-      replyToken,
-      linked ? linkedTableId : null,
-      linked ? linkedRowId : null,
-    ]
-  );
+  const sentRow = await withTransactionAsync(async (tx) => {
+    const row = await tx.get(
+      `INSERT INTO mail_messages
+         (space_id, connector_id, folder, message_id, from_name, from_address,
+          to_addresses, subject, preview, body_text, body_html, date, is_read,
+          attachments, reply_token, linked_table_id, linked_row_id)
+       VALUES (?, ?, 'sent', ?, ?, ?, ?::jsonb, ?, ?, ?, ?, now(), true, ?::jsonb, ?, ?, ?)
+       RETURNING *`,
+      [
+        spaceId,
+        conn.id,
+        info?.messageId || messageId,
+        username,
+        username,
+        JSON.stringify(to),
+        outSubject,
+        String(body || '').replace(/\s+/g, ' ').slice(0, 140),
+        html ? null : body || '',
+        html ? body || '' : null,
+        JSON.stringify(attachmentMeta),
+        replyToken,
+        linked ? linkedTableId : null,
+        linked ? linkedRowId : null,
+      ]
+    );
+
+    if (original) await tx.run(
+      'UPDATE mail_messages SET replied_at = now(), updated_at = now() WHERE id = ? AND space_id = ? AND connector_id = ?',
+      [inReplyToId, spaceId, conn.id]
+    );
+    return row;
+  });
 
   return { info, sentRow, replyToken, linked };
 }

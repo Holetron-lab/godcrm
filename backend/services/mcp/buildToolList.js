@@ -13,7 +13,6 @@ import { AGENT_TOOLS } from '../agent-tools/tool-definitions.js';
 // Tools that only make sense inside the agent runtime (planning, conversation
 // context, sandboxed code, local file ops). Excluded from every MCP surface.
 export const SKIP_TOOLS = new Set([
-  'manage_plan',               // agent-internal planning
   'view_conversation_steps',   // needs conversation_id context
   'view_step_detail',          // needs message_id context
   'save_conversation_summary', // needs conversation context

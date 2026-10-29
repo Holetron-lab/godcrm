@@ -1,8 +1,11 @@
 import { useSortable } from '@dnd-kit/sortable';
+import { createContext } from 'react';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical } from 'lucide-react';
 import { flexRender, Header } from '@tanstack/react-table';
 import type { RowModel, ColumnModel } from '../../types/table.types';
+import { isSystemColumnId } from '../../utils/systemColumns';
+
+export const ColumnDragContext = createContext<Pick<ReturnType<typeof useSortable>, 'attributes' | 'listeners' | 'setActivatorNodeRef'> | null>(null);
 
 interface DraggableColumnHeaderProps {
   header: Header<RowModel, unknown>;
@@ -15,12 +18,13 @@ export const DraggableColumnHeader = ({ header, column, isFirst, rawMode }: Drag
   const {
     attributes,
     listeners,
+    setActivatorNodeRef,
     setNodeRef,
     transform,
     transition,
     isDragging,
     isOver
-  } = useSortable({ id: header.id });
+  } = useSortable({ id: header.id, disabled: isSystemColumnId(header.id) });
   
   const isFromSource = column?.is_from_source === true;
   const isIdColumn = column?.name?.toLowerCase() === 'id';
@@ -91,30 +95,29 @@ export const DraggableColumnHeader = ({ header, column, isFirst, rawMode }: Drag
       } ${isOver ? 'bg-[var(--color-primary-500)]/15' : ''}`}
     >
       <div className="flex items-center gap-1.5">
-        {/* Drag handle */}
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          className={`cursor-grab active:cursor-grabbing p-1 -ml-2 rounded transition-all duration-150 ${
-            isDragging 
-              ? 'text-[var(--color-primary-500)] scale-110'
-              : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
-          }`}
-          title="Перетащите для изменения порядка"
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        
         {/* Column header content */}
-        <span className="flex-1 truncate">
-          {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+        <span className="min-w-0 flex-1">
+          <ColumnDragContext.Provider value={{ attributes, listeners, setActivatorNodeRef }}>
+            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+          </ColumnDragContext.Provider>
         </span>
       </div>
       
       {/* Resize handle */}
       {header.column.getCanResize() && !isDragging && (
-        <div
+        <div role="slider" tabIndex={0} aria-label={`Ширина колонки ${column?.displayName || header.id}`}
+          aria-orientation="horizontal" aria-valuenow={header.column.getSize()}
+          aria-valuemin={header.column.columnDef.minSize ?? 20}
+          aria-valuemax={header.column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER}
+          onKeyDown={e => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(e.key)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const min = header.column.columnDef.minSize ?? 20;
+            const max = header.column.columnDef.maxSize ?? Number.MAX_SAFE_INTEGER;
+            const width = e.key === 'Home' ? min : Math.max(min, Math.min(max, header.column.getSize() + (e.key === 'ArrowRight' ? 10 : -10)));
+            header.getContext().table.setColumnSizing(previous => ({ ...previous, [header.column.id]: width }));
+          }}
           onMouseDown={header.getResizeHandler()}
           onTouchStart={header.getResizeHandler()}
           className={`absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none transition-colors ${

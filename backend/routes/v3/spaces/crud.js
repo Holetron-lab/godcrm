@@ -3,6 +3,7 @@
  * GET /, POST /, GET /:id, PUT /:id, PATCH /:id, DELETE /:id
  */
 
+import { z } from 'zod';
 import { createSpace, getSpacesByUser, getSpaceById, updateSpace, deleteSpace, checkUserSpaceAccess } from '../../../services/SpaceService.js';
 import { getProjectsBySpace, getProjectsBySpaceForUser } from '../../../services/ProjectService.js';
 import { getSpaceDashboard } from '../../../services/DashboardService.js';
@@ -207,7 +208,7 @@ import { success, created, error, badRequest, notFound } from '../../../utils/re
  *   delete:
  *     tags: [Spaces]
  *     summary: Delete space
- *     description: Deletes space with CASCADE delete of all projects, tables, and dashboards. Only owner or admin can delete.
+ *     description: Deletes an empty space together with empty default dashboards. Remove projects, other dashboards and widgets first. Only owner or admin can delete.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -222,6 +223,8 @@ import { success, created, error, badRequest, notFound } from '../../../utils/re
  *         description: Space deleted
  *       403:
  *         description: Forbidden - only owner or admin can delete
+ *       409:
+ *         description: Space still contains projects or dashboards (SPACE_NOT_EMPTY)
  *       404:
  *         description: Space not found
  */
@@ -437,7 +440,9 @@ export default function registerCrudRoutes(router) {
 
   router.delete('/:id', async (req, res) => {
     try {
-      const spaceId = parseInt(req.params.id);
+      const parsedId = z.coerce.number().int().positive().safe().safeParse(req.params.id);
+      if (!parsedId.success) return badRequest(res, 'Invalid space ID');
+      const spaceId = parsedId.data;
 
       const space = await getSpaceById(spaceId);
 
@@ -457,6 +462,7 @@ export default function registerCrudRoutes(router) {
 
       success(res, { message: 'Space deleted successfully' });
     } catch (err) {
+      if (err.code === 'SPACE_NOT_EMPTY') return error(res, err.code, err.message, 409);
       apiLogger.error('Error deleting space:', err);
       error(res, 'DELETE_ERROR', err.message, 500);
     }

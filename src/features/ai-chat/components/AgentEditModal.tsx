@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * AgentEditModal
  * Modal for editing AI agent settings
@@ -56,6 +57,7 @@ function normalizeQuickCommands(input: AIAgent['main_instructions']): QuickComma
 }
 
 export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModalProps) {
+  const { t } = useLanguage();
   const [formData, setFormData] = useState<AgentFormData>({
     name: '',
     description: '',
@@ -107,7 +109,7 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
       onSave?.();
       onClose();
     } catch (err) {
-      setError('Ошибка сохранения');
+      setError(t('aiChat.ui.couldNotSave'));
       logger.error('Failed to save agent:', err);
     } finally {
       setIsSaving(false);
@@ -142,24 +144,24 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
   if (!agent) return null;
 
   const invocationOptions: Array<{ value: InvocationMode; label: string; hint: string }> = [
-    { value: 'mention', label: '@mention', hint: '«@slug» — присоединяется к чату' },
-    { value: 'command', label: '/command', hint: '«/slug» — одноразовый, без участника' },
-    { value: 'both', label: 'Оба', hint: 'Реагирует на обе формы' },
+    { value: 'mention', label: '@mention', hint: t('aiChat.ui.slugJoinsTheChat') },
+    { value: 'command', label: '/command', hint: t('aiChat.ui.slugOnetimeInvocationWithoutJoining') },
+    { value: 'both', label: t('aiChat.ui.both'), hint: t('aiChat.ui.respondsToBothForms') },
   ];
 
   return (
     <Modal
       open={isOpen}
       onOpenChange={(open) => !open && onClose()}
-      title="Редактирование агента"
+      title={t('aiChat.ui.editAgent')}
       size="md"
       primaryAction={{
-        label: isSaving ? 'Сохранение...' : 'Сохранить',
+        label: isSaving ? t('aiChat.ui.saving') : t('aiChat.ui.save'),
         onClick: handleSave,
         variant: 'primary',
       }}
       secondaryAction={{
-        label: 'Отмена',
+        label: t('aiChat.ui.cancel'),
         onClick: onClose,
         variant: 'ghost',
       }}
@@ -175,8 +177,7 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
         <div className="flex gap-3">
           <div className="flex-shrink-0">
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-              Иконка
-            </label>
+              {t('aiChat.ui.icon')}</label>
             <input
               type="text"
               value={formData.icon}
@@ -187,12 +188,11 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
           </div>
           <div className="flex-1">
             <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-              Имя агента
-            </label>
+              {t('aiChat.ui.agentName')}</label>
             <Input
               value={formData.name}
               onChange={(e) => handleChange('name', e.target.value)}
-              placeholder="Например: Помощник"
+              placeholder={t('aiChat.ui.forExampleAssistant')}
             />
           </div>
         </div>
@@ -200,24 +200,22 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
         {/* Description */}
         <div>
           <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-            Описание
-          </label>
+            {t('aiChat.ui.description')}</label>
           <Input
             value={formData.description}
             onChange={(e) => handleChange('description', e.target.value)}
-            placeholder="Краткое описание агента"
+            placeholder={t('aiChat.ui.briefAgentDescription')}
           />
         </div>
 
         {/* System prompt */}
         <div>
           <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-            Системный промпт
-          </label>
+            {t('aiChat.ui.systemPrompt')}</label>
           <textarea
             value={formData.system_prompt}
             onChange={(e) => handleChange('system_prompt', e.target.value)}
-            placeholder="Инструкции для агента..."
+            placeholder={t('aiChat.ui.instructionsForTheAgent')}
             rows={6}
             className="w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 resize-none text-sm"
           />
@@ -226,8 +224,7 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
         {/* Invocation mode (ADR-0057) */}
         <div>
           <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-            Способ вызова
-          </label>
+            {t('aiChat.ui.invocationMethod')}</label>
           <div className="grid grid-cols-3 gap-2">
             {invocationOptions.map(opt => {
               const isActive = formData.invocation_mode === opt.value;
@@ -255,8 +252,7 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-xs font-medium text-[var(--text-secondary)]">
-              Быстрые команды
-              <span className="ml-1.5 text-[10px] text-[var(--text-tertiary)] font-normal">
+              {t('aiChat.ui.quickCommands')}<span className="ml-1.5 text-[10px] text-[var(--text-tertiary)] font-normal">
                 <code className="px-1 py-0.5 rounded bg-[var(--bg-tertiary)]">{`<</${agent.name?.toLowerCase().replace(/\s+/g, '-') || 'slug'}/N>>`}</code>
               </span>
             </label>
@@ -266,13 +262,12 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
               className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
             >
               <Plus className="w-3 h-3" />
-              Добавить
-            </button>
+              {t('aiChat.ui.add')}</button>
           </div>
 
           {formData.quick_commands.length === 0 ? (
             <div className="px-3 py-3 rounded-lg border border-dashed border-[var(--border-secondary)] text-xs text-[var(--text-tertiary)] text-center">
-              Нет быстрых команд. Добавь — и они будут доступны по <code>{`<</slug/0>>`}</code>, <code>{`<</slug/1>>`}</code>…
+              {t('aiChat.ui.noQuickCommandsYetAddOneToMakeItAvailableVia')}<code>{`<</slug/0>>`}</code>, <code>{`<</slug/1>>`}</code>…
             </div>
           ) : (
             <div className="space-y-2">
@@ -289,12 +284,12 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
                     <Input
                       value={cmd.label || ''}
                       onChange={(e) => updateQuickCommand(idx, { label: e.target.value })}
-                      placeholder="Метка (необязательно)"
+                      placeholder={t('aiChat.ui.labelOptional')}
                     />
                     <textarea
                       value={cmd.content}
                       onChange={(e) => updateQuickCommand(idx, { content: e.target.value })}
-                      placeholder="Текст команды — будет отправлен агенту как сообщение"
+                      placeholder={t('aiChat.ui.commandTextSentToTheAgentAsAMessage')}
                       rows={2}
                       className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 resize-none text-sm"
                     />
@@ -303,7 +298,7 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
                     type="button"
                     onClick={() => removeQuickCommand(idx)}
                     className="flex-shrink-0 p-1.5 rounded-md text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                    title="Удалить"
+                    title={t('aiChat.ui.delete')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -316,8 +311,8 @@ export function AgentEditModal({ isOpen, onClose, agent, onSave }: AgentEditModa
         {/* Active toggle */}
         <div className="flex items-center justify-between py-2">
           <div>
-            <div className="text-sm font-medium text-[var(--text-primary)]">Активен</div>
-            <div className="text-xs text-[var(--text-tertiary)]">Агент доступен для выбора</div>
+            <div className="text-sm font-medium text-[var(--text-primary)]">{t('aiChat.ui.activeLabel')}</div>
+            <div className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.agentIsAvailableForSelection')}</div>
           </div>
           <button
             type="button"

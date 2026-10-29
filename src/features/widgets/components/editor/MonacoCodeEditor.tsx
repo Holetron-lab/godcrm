@@ -1,6 +1,7 @@
 import Editor from '@monaco-editor/react';
-import type { OnMount } from '@monaco-editor/react';
+import type { OnMount, OnValidate } from '@monaco-editor/react';
 import { useRef } from 'react';
+import { useBundledMonaco } from '@/shared/hooks/useBundledMonaco';
 
 interface MonacoCodeEditorProps {
   code: string;
@@ -18,6 +19,7 @@ export function MonacoCodeEditor({
   readOnly = false,
 }: MonacoCodeEditorProps) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const monacoReady = useBundledMonaco();
 
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -25,7 +27,7 @@ export function MonacoCodeEditor({
     // Setup validation
     if (onError) {
       monaco.editor.onDidChangeMarkers(() => {
-        const markers = monaco.editor.getModelMarkers({});
+        const markers: Parameters<OnValidate>[0] = monaco.editor.getModelMarkers({});
         const errors = markers
           .filter((m) => m.severity === monaco.MarkerSeverity.Error)
           .map((m) => `Line ${m.startLineNumber}: ${m.message}`);
@@ -37,6 +39,8 @@ export function MonacoCodeEditor({
   const handleChange = (value: string | undefined) => {
     onChange(value || '');
   };
+
+  if (!monacoReady) return null;
 
   return (
     <Editor

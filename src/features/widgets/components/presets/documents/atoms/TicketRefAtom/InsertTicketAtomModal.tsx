@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 /**
  * InsertTicketAtomModal — `/ticket` slash-command insert UI for the
  * ticket-as-atom feature (ADR-0012 Phase 5 / M4 frontend).
@@ -54,6 +55,7 @@ export function InsertTicketAtomModal({ isOpen, onClose, anchor, defaultMode }: 
   const { createTicketRefAtom, isCreating } = useAtomMutations({ isReadOnly: ctx.isReadOnly });
 
   const [search, setSearch] = useState('');
+  const requestedFocusRef = useRequestedFocus<HTMLInputElement>(isOpen);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [mode, setMode] = useState<TicketRefMode>(defaultMode ?? 'live');
@@ -104,8 +106,7 @@ export function InsertTicketAtomModal({ isOpen, onClose, anchor, defaultMode }: 
     staleTime: 15_000,
   });
 
-  const tickets = ticketsQuery.data ?? [];
-  const filteredTickets = useMemo(() => tickets.slice(0, 10), [tickets]);
+  const filteredTickets = useMemo(() => (ticketsQuery.data ?? []).slice(0, 10), [ticketsQuery.data]);
 
   const handleInsert = async () => {
     if (!selectedTicketId) return;
@@ -191,7 +192,7 @@ export function InsertTicketAtomModal({ isOpen, onClose, anchor, defaultMode }: 
               placeholder="Поиск тикетов..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              autoFocus
+              ref={requestedFocusRef}
               className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm focus:outline-none focus:border-blue-500"
               data-testid="ticket-atom-search-input"
             />

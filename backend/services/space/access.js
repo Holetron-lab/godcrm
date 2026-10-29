@@ -188,9 +188,8 @@ export async function checkUserAccessViaTableV2(userId, accessControl) {
       return { allowed: true, accessLevel };
     }
 
-    // User is in the table with a role, but role not in mappings
-    // Default to viewer access (they were added to the table = intended to have access)
-    return { allowed: true, accessLevel: 'viewer' };
+    // Membership alone does not grant a role absent from the configured mapping.
+    return { allowed: false, accessLevel: null };
   }
 
   return { allowed: false, accessLevel: null };
@@ -298,30 +297,35 @@ export async function getUserAccessData(userId, accessControl) {
   const columnIdMap = {};
   for (const col of columns) {
     columnIdMap[col.column_name] = String(col.id);
+    columnIdMap[col.id] = col.column_name;
   }
 
   const rows = await dbAll(
     'SELECT data FROM table_rows WHERE table_id = ?',
     [usersTableId]
   );
+  const systemUser = await dbGet('SELECT id, email FROM users WHERE id = ?', [userId]);
 
   for (const row of rows) {
     const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
-    const rowUserId = data[userIdColumn];
+    const rowUserId = data[userIdColumn] ?? data[columnIdMap[userIdColumn]];
+    const userIdBound = rowUserId !== undefined && rowUserId !== null && rowUserId !== '';
+    const email = data.email ?? data[columnIdMap.email];
 
-    if (rowUserId === userId || String(rowUserId) === String(userId)) {
+    if (userIdBound ? String(rowUserId) === String(userId)
+      : typeof email === 'string' && typeof systemUser?.email === 'string' && email.toLowerCase() === systemUser.email.toLowerCase()) {
       // Helper to get array values from column by name or ID
       const getArrayValue = (colName) => {
         // Try column ID first
         const colId = columnIdMap[colName];
         if (colId && data[colId]) {
           const val = data[colId];
-          return Array.isArray(val) ? val : [];
+          return Array.isArray(val) ? val.map(String) : [];
         }
         // Try column name directly
         if (data[colName]) {
           const val = data[colName];
-          return Array.isArray(val) ? val : [];
+          return Array.isArray(val) ? val.map(String) : [];
         }
         return [];
       };

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useId, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { Modal, Button, Input, Select } from '@/shared/components/ui';
 import { Upload, Table, Link2, ChevronRight, ChevronLeft, Check, Loader2, Sparkles } from 'lucide-react';
@@ -27,6 +27,7 @@ interface MultiCSVImportModalProps {
 }
 
 export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVImportModalProps) => {
+  const fieldId = useId();
   const { t, language } = useLanguage();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -220,7 +221,7 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
           projectId
         });
         
-        const tableId = tableResponse.table.id;
+        const tableId = Number(tableResponse.table.id);
         createdTablesList.push({ id: tableId, name: file.tableDisplayName, fileId: file.id });
 
         if (file.showInMenu) {
@@ -253,7 +254,7 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
           
           try {
             const columnType = col.isRelation ? 'relation' : col.type;
-            await tablesApi.createColumn(tableId, {
+            await tablesApi.createColumn(String(tableId), {
               name: col.name,
               displayName: col.displayName,
               type: columnType,
@@ -316,7 +317,7 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
         });
         
         // Import rows
-        await tablesApi.importRows(createdTable.id, {
+        await tablesApi.importRows(String(createdTable.id), {
           rows,
           mode: 'add',
           idMapping: null,
@@ -363,11 +364,11 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
   // Render step content
   const renderUploadStep = () => (
     <div className="space-y-6">
-      <div 
-        className="border-2 border-dashed border-gray-600 rounded-xl p-12 text-center hover:border-primary-500 transition-colors cursor-pointer"
+      <label htmlFor="multi-csv-input"
+        className="block focus-within:ring-2 focus-within:ring-primary-500 border-2 border-dashed border-gray-600 rounded-xl p-12 text-center hover:border-primary-500 transition-colors cursor-pointer"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
-        onClick={() => document.getElementById('multi-csv-input')?.click()}
+
       >
         <input
           id="multi-csv-input"
@@ -375,7 +376,7 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
           accept=".csv"
           multiple
           onChange={handleFilesUpload}
-          className="hidden"
+          className="sr-only"
         />
         <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
         <p className="text-lg font-medium">Перетащите CSV файлы сюда</p>
@@ -383,7 +384,7 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
         <p className="text-xs text-gray-500 mt-4">
           Поддерживается множественный выбор • Связи между таблицами настраиваются на следующем шаге
         </p>
-      </div>
+      </label>
       
       {csvFiles.length > 0 && (
         <div className="space-y-2">
@@ -419,10 +420,10 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
           </div>
 
           <div className="flex items-start gap-3">
-            <div className="w-16">
-              <label className="block text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">
+            <div role="group" aria-labelledby={`${fieldId}-label-0`} className="w-16">
+              <span id={`${fieldId}-label-0`} className="block text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">
                 Иконка
-              </label>
+              </span>
               <EmojiPicker
                 value={currentFile.icon}
                 onChange={(emoji) => updateFile(currentFile.id, { icon: emoji })}
@@ -432,10 +433,10 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
               />
             </div>
             <div className="flex-1 min-w-0">
-              <label className="block text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">
+              <label htmlFor={`${fieldId}-label-1`} className="block text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">
                 Название
               </label>
-              <input
+              <input id={`${fieldId}-label-1`}
                 type="text"
                 value={currentFile.tableDisplayName}
                 onChange={(e) => updateFile(currentFile.id, { tableDisplayName: e.target.value })}
@@ -444,10 +445,10 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
               />
             </div>
             <div className="w-40">
-              <label className="block text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">
+              <label htmlFor={`${fieldId}-label-2`} className="block text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-1">
                 Системное имя
               </label>
-              <input
+              <input id={`${fieldId}-label-2`}
                 type="text"
                 value={currentFile.tableName}
                 onChange={(e) => updateFile(currentFile.id, { tableName: e.target.value })}
@@ -482,7 +483,6 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
                 <div className="grid grid-cols-12 gap-3 items-center">
                   <div className="col-span-3">
                     <Input
-                      size="sm"
                       value={col.displayName}
                       onChange={(e) => updateColumn(currentFile.id, col.csvColumn, { displayName: e.target.value })}
                       placeholder="Название"
@@ -490,7 +490,6 @@ export const MultiCSVImportModal = ({ open, onOpenChange, projectId }: MultiCSVI
                   </div>
                   <div className="col-span-3">
                     <Input
-                      size="sm"
                       value={col.name}
                       onChange={(e) => updateColumn(currentFile.id, col.csvColumn, { name: e.target.value })}
                       placeholder="key"

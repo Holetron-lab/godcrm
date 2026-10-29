@@ -9,6 +9,7 @@ import {
   JWT_SECRET, REFRESH_COOKIE_NAME, ACCESS_TOKEN_TTL,
   ACCESS_COOKIE_NAME,
   getRefreshCookieOptions, getAccessCookieOptions,
+  getCookieValues, clearForeignSessionCookies, toClearOptions,
   createAccessToken, createRefreshToken,
   requireAuth,
   dbGet, dbRun, authLogger, jwt
@@ -183,6 +184,8 @@ export default function registerCoreRoutes(router) {
       // Set refresh token cookie + access_token cookie (ADR-0016 — for <img> auth on /uploads)
       res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
       res.cookie(ACCESS_COOKIE_NAME, result.token, getAccessCookieOptions());
+      // Evict parent-domain copies left by another *.godcrm.ai box (chat 3660)
+      clearForeignSessionCookies(req, res);
 
       // Include refreshToken in body for mobile clients (they can't use httpOnly cookies).
       // Web clients still get the httpOnly cookie above for CSRF protection.
@@ -200,9 +203,13 @@ export default function registerCoreRoutes(router) {
 
   // POST /api/v2/auth/logout
   router.post('/logout', (req, res) => {
-    // Clear refresh + access cookies (no auth required - logout should always work)
-    res.clearCookie(REFRESH_COOKIE_NAME, getRefreshCookieOptions());
-    res.clearCookie(ACCESS_COOKIE_NAME, getAccessCookieOptions());
+    // Clear refresh + access cookies (no auth required - logout should always work).
+    // maxAge is dropped: Express 4 would turn it into a future Expires and keep an
+    // empty cookie alive for 30 days instead of deleting it.
+    res.clearCookie(REFRESH_COOKIE_NAME, toClearOptions(getRefreshCookieOptions()));
+    res.clearCookie(ACCESS_COOKIE_NAME, toClearOptions(getAccessCookieOptions()));
+    // ...and any parent-domain copies left by another *.godcrm.ai box
+    clearForeignSessionCookies(req, res);
 
     return respondSuccess(res, { status: 'logged_out' });
   });
@@ -232,17 +239,46 @@ export default function registerCoreRoutes(router) {
   // POST /api/v2/auth/refresh
   router.post('/refresh', async (req, res) => {
     try {
-      const refreshToken = req.cookies[REFRESH_COOKIE_NAME] || req.body.refreshToken;
+      // Every cookie value the browser sent, not just the first (chat 3660):
+      // a Domain=.godcrm.ai cookie from dev.godcrm.ai can precede the host-only
+      // one and is signed with another box's secret. Body token stays a fallback.
+      const candidates = getCookieValues(req, REFRESH_COOKIE_NAME);
+      if (req.body?.refreshToken) candidates.push(req.body.refreshToken);
 
-      if (!refreshToken) {
+      if (candidates.length === 0) {
         return respondError(res, 401, 'NO_REFRESH_TOKEN', 'Refresh token is missing');
       }
 
-      // Verify refresh token
-      const decoded = jwt.verify(refreshToken, JWT_SECRET);
+      let decoded = null;
+      let wrongType = false;
+      let lastError = null;
+      for (const candidate of candidates) {
+        try {
+          const payload = jwt.verify(candidate, JWT_SECRET);
+          if (payload.type === 'refresh') { decoded = payload; break; }
+          wrongType = true;
+        } catch (err) {
+          lastError = err;
+        }
+      }
 
-      if (decoded.type !== 'refresh') {
-        return respondError(res, 401, 'INVALID_TOKEN_TYPE', 'Invalid token type');
+      // Some value failed to verify: evict the parent-domain copies so the next
+      // request does not carry the foreign cookie again (no-op where this box
+      // issues domain cookies itself).
+      const failedCount = candidates.length - (decoded ? 1 : 0);
+      if (failedCount > 0 && clearForeignSessionCookies(req, res)) {
+        authLogger.warn({ host: req.hostname, candidates: candidates.length, recovered: !!decoded },
+          'Refresh: evicted parent-domain session cookies');
+      }
+
+      if (!decoded) {
+        if (lastError) {
+          authLogger.error({ err: lastError }, 'Token refresh error:', lastError);
+          return respondError(res, 401, 'INVALID_REFRESH_TOKEN', 'Refresh token is invalid or expired');
+        }
+        if (wrongType) {
+          return respondError(res, 401, 'INVALID_TOKEN_TYPE', 'Invalid token type');
+        }
       }
 
       // Get user from database

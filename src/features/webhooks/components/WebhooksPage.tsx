@@ -107,7 +107,7 @@ function CreateWebhookModal({ projectId, onClose, language }: CreateWebhookModal
                   ? 'border-primary-500 bg-primary-500/10' 
                   : 'border-[var(--border-primary)] hover:bg-[var(--bg-secondary)]'
               }`}>
-                <input
+                <input aria-label={t('Создать новую таблицу', 'Create new table')}
                   type="radio"
                   name="tableOption"
                   checked={tableOption === 'new'}
@@ -138,7 +138,7 @@ function CreateWebhookModal({ projectId, onClose, language }: CreateWebhookModal
                   ? 'border-primary-500 bg-primary-500/10' 
                   : 'border-[var(--border-primary)] hover:bg-[var(--bg-secondary)]'
               }`}>
-                <input
+                <input aria-label={t('Использовать существующую', 'Use existing table')}
                   type="radio"
                   name="tableOption"
                   checked={tableOption === 'existing'}
@@ -365,7 +365,7 @@ function LogEntry({ log, language }: { log: WebhookLog; language: string }) {
   let parsedPayload = null;
   try {
     parsedPayload = JSON.parse(log.payload);
-  } catch {}
+  } catch { /* Keep the JSON preview unavailable for a non-JSON payload. */ }
   
   return (
     <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg p-3">

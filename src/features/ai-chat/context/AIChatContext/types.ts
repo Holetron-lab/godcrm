@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { AIAgent, ChatMessage, ChatAttachment, AIChatState } from '../../types';
+import type { BoundRow } from '../../components/RowBindingV2';
 
 export interface Conversation {
   id: number;
@@ -55,6 +56,8 @@ export interface PendingTaskChat {
 }
 
 export interface AIChatContextValue extends AIChatState {
+  /** Unfiltered agent metadata for rendering historical mentions. */
+  mentionAgents: AIAgent[];
   // Chat panel controls
   openChat: () => void;
   closeChat: () => void;
@@ -97,7 +100,7 @@ export interface AIChatContextValue extends AIChatState {
   loadConversations: () => Promise<void>;
   selectConversation: (id: number) => Promise<{ title?: string | null; bound_table_id?: number | null; bound_row_id?: number | null } | void>;
   createNewConversation: () => Promise<void>;
-  deleteConversation: (id: number) => Promise<void>;
+  deleteConversation: (id: number) => Promise<boolean>;
   renameConversation: (id: number, title: string) => Promise<void>;
   isLoadingConversations: boolean;
 
@@ -118,10 +121,11 @@ export interface AIChatContextValue extends AIChatState {
   clearPendingTaskChat: () => void;
 
   // External row attachment — called from UniversalTable etc.
-  attachRowToChat: (row: { table_id: number; row_id: number; table_name?: string; table_icon?: string; row_title?: string }) => void;
-  attachRowToMessage: (row: { table_id: number; row_id: number; table_name?: string; table_icon?: string; row_title?: string }) => void;
-  pendingBoundRow: { table_id: number; row_id: number; table_name?: string; table_icon?: string; row_title?: string } | null;
-  pendingMessageRow: { table_id: number; row_id: number; table_name?: string; table_icon?: string; row_title?: string } | null;
+  // `BoundRow` also covers a mail message (`mailRef`, table_id 0) — ADR-158 §P5.
+  attachRowToChat: (row: BoundRow) => void;
+  attachRowToMessage: (row: BoundRow) => void;
+  pendingBoundRow: BoundRow | null;
+  pendingMessageRow: BoundRow | null;
   clearPendingBoundRow: () => void;
   clearPendingMessageRow: () => void;
 

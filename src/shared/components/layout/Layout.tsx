@@ -1,5 +1,6 @@
-import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
-import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import type { LayoutContentProps } from './layout.types';
+import { useMemo, useCallback, useState, useEffect, useRef, Suspense } from 'react';
+import { Link, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { useProjectsQuery } from '@/features/projects/hooks/useProjectsQuery';
@@ -23,7 +24,7 @@ import { useDesktopApp } from '@/shared/hooks/useDesktopApp';
 import { useHeaderLanguageSwitcher } from '@/shared/hooks/useHeaderLanguageSwitcher';
 import { readSidebarDefault } from '@/shared/hooks/useSidebarDefault';
 import { isDesktopApp, getPlatform } from '@/shared/types/electron.types';
-import { Menu, X, Mail } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { logger } from '@/shared/utils/logger';
 import { LayoutLoader } from './LayoutLoader';
 import { FullscreenToggle } from './FullscreenToggle';
@@ -70,35 +71,6 @@ export const Layout = () => {
     />
   );
 };
-
-interface LayoutContentProps {
-  t: (key: string) => string;
-  location: { pathname: string; search?: string };
-  currentProject: {
-    id: number;
-    name: string;
-    business_name?: string | null;
-    icon?: string | null;
-    logo?: string | null;
-    description?: string | null;
-    space_id?: number | null;
-  } | null;
-  projects: Array<{
-    id: number;
-    name: string;
-    icon?: string | null;
-    logo?: string | null;
-    space_id?: number | null;
-  }>;
-  spaces: Array<{
-    id: number;
-    name: string;
-    icon?: string | null;
-    type: string;
-    projects_count?: number;
-  }>;
-  selectProject: (id: number | null) => void;
-}
 
 const LayoutContent = ({
   t,
@@ -525,14 +497,18 @@ const LayoutContent = ({
 
     const widgetMatch = location.pathname.match(/^\/widgets\/(\d+)/);
     if (widgetMatch) {
-      if (loadedWidget && String(loadedWidget.id) === widgetMatch[1]) {
-        const widgetProjectId = (loadedWidget as any).project_id;
-        if (widgetProjectId) {
-          const project = projects.find(p => p.id === widgetProjectId);
-          if (project?.space_id) {
-            targetSpaceIdToExpand = project.space_id;
-            targetProjectIdToExpand = widgetProjectId;
-          }
+      // The widget arrives async (getWidgetById above). Until it matches the URL
+      // there is nothing to derive the target from — leave the tree as it is,
+      // otherwise it collapses on every widget click and re-expands a moment
+      // later, unmounting and refetching the project subtree.
+      if (!loadedWidget || String(loadedWidget.id) !== widgetMatch[1]) return;
+
+      const widgetProjectId = (loadedWidget as any).project_id;
+      if (widgetProjectId) {
+        const project = projects.find(p => p.id === widgetProjectId);
+        if (project?.space_id) {
+          targetSpaceIdToExpand = project.space_id;
+          targetProjectIdToExpand = widgetProjectId;
         }
       }
 
@@ -646,19 +622,6 @@ const LayoutContent = ({
           className="flex items-center gap-2 flex-shrink-0"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
-          <NavLink
-            to="/mail"
-            className={({ isActive }) =>
-              `p-2 rounded-md transition-colors ${
-                isActive
-                  ? 'bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
-                  : 'hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
-              }`
-            }
-            title={t('nav.mail') || 'Mail'}
-          >
-            <Mail className="w-4 h-4" />
-          </NavLink>
           <FullscreenToggle />
           {showHeaderLanguageSwitcher && <LanguageSwitcher />}
           <ThemeToggle />
@@ -692,7 +655,9 @@ const LayoutContent = ({
       <div className="flex flex-1 min-h-0 overflow-hidden relative">
         {/* Mobile overlay backdrop */}
         {isMobile && isSidebarOpen && (
-          <div
+          <button
+            type="button"
+            aria-label={t('common.close')}
             className="absolute inset-0 bg-black/50 z-20"
             onClick={() => setIsSidebarOpen(false)}
           />
@@ -739,6 +704,7 @@ const LayoutContent = ({
           isSidebarOpen={isSidebarOpen}
           isSidebarLocked={isSidebarLocked}
           sidebarWidth={sidebarWidth}
+          onWidthChange={setSidebarWidth}
           isResizing={isResizing}
           sidebarRef={sidebarRef}
           setIsSidebarOpen={setIsSidebarOpen}
@@ -754,7 +720,9 @@ const LayoutContent = ({
 
         {/* Main Content */}
         <main className="flex-1 min-w-0 min-h-0 w-full max-w-full overflow-auto bg-[var(--bg-primary)] p-[3px] sm:p-[6px] lg:p-[12px] 3xl:p-6">
-          <Outlet />
+          <Suspense fallback={<div role="status" className="p-4 text-sm text-[var(--text-secondary)]">{t('common.loading')}</div>}>
+            <Outlet />
+          </Suspense>
         </main>
 
         {/* AI Chat Panel v2 (ADR-024) */}

@@ -31,18 +31,19 @@ const googleAuthSchema = z.object({
 
 export const GoogleAuthSettings = () => {
   const user = useAuthStore((state) => state.user);
+  if (user?.role !== 'owner') return null;
+  return <GoogleAuthSettingsContent />;
+};
+
+const GoogleAuthSettingsContent = () => {
   const [status, setStatus] = useState<GoogleOAuthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Only owner can configure Google Auth
-  if (user?.role !== 'owner') {
-    return null;
-  }
 
-  const form = useForm<GoogleOAuthConfig>({
+  const form = useForm<z.input<typeof googleAuthSchema>>({
     resolver: zodResolver(googleAuthSchema),
     defaultValues: {
       clientId: '',

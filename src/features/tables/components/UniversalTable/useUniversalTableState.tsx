@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { logger } from '@/shared/utils/logger';
-import { ColumnDef, ColumnSizingState, SortingState, VisibilityState, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
+import { CellContext, ColumnDef, ColumnSizingState, HeaderContext, SortingState, VisibilityState, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { showToast } from '@/shared/hooks/useToast';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
@@ -10,24 +10,52 @@ import { useActiveTable } from '../../hooks/useTable';
 import { useColumnConfig } from '../../hooks/useColumnConfig';
 import { useOpenColumnSettingsListener } from './useOpenColumnSettingsListener';
 import { useTableData } from '../../hooks/useTableData';
-import { useRowMutations, getPendingValue } from '../../hooks/useRowMutations';
+import { useRowMutations } from '../../hooks/useRowMutations';
 import { useColumnMutations } from '../../hooks/useColumnMutations';
 import { useRowSelection } from '../../hooks/useRowSelection';
+import { summarizeRows, useTableSummary, type TableSummaryState } from '../../hooks/useTableSummary';
 import { useBulkReplace } from '../../hooks/useBulkReplace';
+import { fetchAllTableRows } from '../../utils/fetchAllTableRows';
 import { sortRowsWithSelection } from '../../utils/bulkReplaceUtils';
 import type { ColumnModel, RowModel, ColumnConfig, TableModel } from '../../types/table.types';
+import { useIsPublicReadOnly } from '@/features/public/PublicViewContext';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { apiClient } from '@/shared/utils/apiClient';
 import { useTablesStore } from '../../store/tablesStore';
-import { renderCellValue, parseMultiSelectValue } from './renderCellValue';
+import { renderCellValue } from './renderCellValue';
+import { useTableCellActions } from './useTableCellActions';
 import { useTableRowActions } from './useTableRowActions';
 import {
   buildSystemColumns,
   getSystemColumnRowField,
   isSystemColumnId,
+  setSystemColumnOverride,
   setSystemColumnVisibility,
 } from '../../utils/systemColumns';
+import { addressSortKey } from '../cells/AddressCell';
 import type { UniversalTableProps } from './types';
+import { filterTableRows } from './filterTableRows';
+import { getDefaultTableSort } from '../../utils/defaultTableSort';
+
+type UniversalCellMeta = {
+  render: (context: CellContext<RowModel, unknown>) => ReturnType<typeof renderCellValue>;
+  renderHeader: (context: HeaderContext<RowModel, unknown>) => React.ReactNode;
+};
+
+// Same type rules the toolbar (TableFilters) uses for search scope and group-by
+const isSearchableColumn = (column: ColumnModel) =>
+  ['text', 'number', 'email', 'url', 'phone', 'select', 'relation', 'textarea'].includes(column.type);
+const isGroupableColumn = (column: ColumnModel) =>
+  ['select', 'multi-select', 'multi_select'].includes(column.type);
+
+// flexRender treats a function as a component type. Keep that type stable while
+// reading the latest render inputs from the column definition on every render.
+const UniversalTableCell = (context: CellContext<RowModel, unknown>) =>
+  (context.column.columnDef.meta as UniversalCellMeta).render(context);
+// Same for headers: an inline header component would remount (and close its open menu)
+// every time columnDefs is rebuilt, e.g. when the server summary refreshes.
+const UniversalTableHeader = (context: HeaderContext<RowModel, unknown>) =>
+  (context.column.columnDef.meta as UniversalCellMeta).renderHeader(context);
 
 export const useUniversalTableState = ({
   table: externalTable,
@@ -38,6 +66,8 @@ export const useUniversalTableState = ({
   selectFilters = {},
   dateFilters = {},
   groupByColumn = null,
+  onSearchColumnsChange,
+  onGroupByColumnChange,
   addRowModalOpen = false,
   onCloseAddRowModal,
   onPaginationChange,
@@ -54,7 +84,6 @@ export const useUniversalTableState = ({
   onPrintOpenChange,
   spaceName,
   projectName,
-  showSummaryBar = false,
 }: UniversalTableProps = {}) => {
   const { t } = useLanguage();
 
@@ -66,73 +95,13 @@ export const useUniversalTableState = ({
   const columnsRaw = externalColumns || storeColumnsRaw || [];
   const allRows = externalRows || storeRows || [];
   const rowsVersion = useTablesStore((state) => state.rowsVersion);
+  // ADR-205: lens map delivered with the rows page; external rows carry none.
+  const relations = useTablesStore((state) => (externalRows || !table?.id ? undefined : state.relations[String(table.id)]));
 
   // Filter rows based on search query and filters
-  const rows = useMemo(() => {
-    const columnIdToName = columnsRaw.reduce((acc, col) => {
-      acc[col.id] = col.name;
-      return acc;
-    }, {} as Record<string, string>);
-
-    let filtered = allRows;
-
-    // Apply search filter
-    if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      filtered = filtered.filter(row => {
-        if (searchColumns.length > 0) {
-          return searchColumns.some(columnId => {
-            const value = row.data[columnId] ?? row.data[columnIdToName[columnId]];
-            return String(value ?? '').toLowerCase().includes(searchLower);
-          });
-        }
-        return Object.values(row.data).some(value =>
-          String(value).toLowerCase().includes(searchLower)
-        );
-      });
-    }
-
-    // Apply select filters
-    const activeSelectFilters = Object.entries(selectFilters).filter(([_, values]) => values.length > 0);
-    if (activeSelectFilters.length > 0) {
-      filtered = filtered.filter(row => {
-        return activeSelectFilters.every(([columnId, selectedValues]) => {
-          const cellValue = row.data[columnId] ?? row.data[columnIdToName[columnId]];
-          const parsedValues = parseMultiSelectValue(cellValue);
-          return parsedValues.some(v => selectedValues.includes(v));
-        });
-      });
-    }
-
-    // Apply date filters
-    const activeDateFilters = Object.entries(dateFilters).filter(([_, range]) => range.from || range.to);
-    if (activeDateFilters.length > 0) {
-      filtered = filtered.filter(row => {
-        return activeDateFilters.every(([columnId, range]) => {
-          const cellValue = row.data[columnId] ?? row.data[columnIdToName[columnId]];
-          if (!cellValue) return false;
-
-          const cellDate = new Date(String(cellValue));
-          if (isNaN(cellDate.getTime())) return false;
-
-          if (range.from) {
-            const fromDate = new Date(range.from);
-            if (cellDate < fromDate) return false;
-          }
-
-          if (range.to) {
-            const toDate = new Date(range.to);
-            toDate.setHours(23, 59, 59, 999);
-            if (cellDate > toDate) return false;
-          }
-
-          return true;
-        });
-      });
-    }
-
-    return filtered;
-  }, [allRows, searchQuery, searchColumns, selectFilters, dateFilters, rowsVersion]);
+  const rows = useMemo(() => filterTableRows(allRows, columnsRaw, {
+    searchQuery, searchColumns, selectFilters, dateFilters,
+  }), [allRows, searchQuery, searchColumns, selectFilters, dateFilters, rowsVersion]);
   const tableIdStr = String(table?.id ?? '');
   const rowsLimit = useTablesStore((state) => state.rowsLimit);
   const currentPage = useTablesStore((state) => state.currentPage);
@@ -151,18 +120,21 @@ export const useUniversalTableState = ({
   const importModalOpen = useTablesStore((state) => state.importModalOpen);
   const setImportModalOpen = useTablesStore((state) => state.setImportModalOpen);
   const [createColumnOpen, setCreateColumnOpen] = useState(false);
-  const [editingCell, setEditingCell] = useState<{ rowId: string; columnId: string } | null>(null);
-  const [draftValue, setDraftValue] = useState('');
+  const [columnInsertAt, setColumnInsertAt] = useState<{ id: string; side: 'left' | 'right' } | null>(null);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [localSorting, setLocalSorting] = useState<SortingState>([]);
+
+  const defaultSort = useMemo(() => getDefaultTableSort(columnsRaw), [columnsRaw]);
+  useEffect(() => setLocalSorting([]), [table?.id]);
 
   const effectiveSorting = useMemo(() => {
     if (useServerSorting && storeSortColumn && storeSortDirection) {
       return [{ id: storeSortColumn, desc: storeSortDirection === 'desc' }];
     }
-    return localSorting;
-  }, [useServerSorting, storeSortColumn, storeSortDirection, localSorting]);
+    if (localSorting.length > 0) return localSorting;
+    return defaultSort ? [{ id: defaultSort.column, desc: defaultSort.direction === 'desc' }] : [];
+  }, [useServerSorting, storeSortColumn, storeSortDirection, localSorting, defaultSort]);
 
   const prevColumnSizing = useRef<ColumnSizingState>({});
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
@@ -192,6 +164,30 @@ export const useUniversalTableState = ({
     isAllSelected,
     isIndeterminate
   } = useRowSelection();
+
+  // Server totals: the whole filtered table and the explicit selection are computed
+  // server-side, so they do not depend on how many pages are loaded (ticket 22367).
+  // A data-source table is aggregated in its source for the whole table only: its search
+  // and filters run in the browser, and its row ids are synthetic, so a filtered scope, a
+  // selection, or a source the server cannot aggregate fall back to the loaded rows.
+  const sourceTable = Boolean(table?.data_source_id);
+  const scoped = Boolean(searchQuery)
+    || Object.values(selectFilters ?? {}).some((values) => values.length > 0)
+    || Object.values(dateFilters ?? {}).some((range) => range?.from || range?.to);
+  const serverTableSummary = useTableSummary({
+    tableId: table?.id, columns: columnsRaw, searchQuery, searchColumns, selectFilters, dateFilters,
+    unsupported: sourceTable && scoped,
+  });
+  const serverSelectionSummary = useTableSummary({
+    tableId: table?.id, columns: columnsRaw, rowIds: Array.from(selectedRowIds),
+    enabled: selectedRowIds.size > 0, unsupported: sourceTable,
+  });
+  const tableSummary = useMemo<TableSummaryState>(() => (sourceTable && (scoped || serverTableSummary.status === 'unavailable')
+    ? { status: 'ready', scope: 'loaded', data: summarizeRows(columnsRaw, rows) }
+    : serverTableSummary), [sourceTable, scoped, columnsRaw, rows, serverTableSummary]);
+  const selectionSummary = useMemo<TableSummaryState>(() => (sourceTable
+    ? { status: 'ready', scope: 'loaded', data: summarizeRows(columnsRaw, rows.filter((row) => selectedRowIds.has(row.id))) }
+    : serverSelectionSummary), [sourceTable, columnsRaw, rows, selectedRowIds, serverSelectionSummary]);
 
   // Fetch space data for tickets_config (auto-routing)
   const { data: spaceData } = useQuery({
@@ -266,12 +262,14 @@ export const useUniversalTableState = ({
   }, []);
 
   const realColumns = columnsRaw as ColumnModel[];
+  // System columns live in localStorage; bump to rebuild them after a settings save.
+  const [systemColumnsVersion, bumpSystemColumns] = useReducer((n: number) => n + 1, 0);
   const columns = useMemo(
     () => [
       ...realColumns,
       ...buildSystemColumns({ tableId: table?.id, createdLabel: t('systemColumns.created'), updatedLabel: t('systemColumns.updated') }),
     ],
-    [realColumns, table?.id, t]
+    [realColumns, table?.id, t, systemColumnsVersion]
   );
   const rowMutation = useRowMutations(table?.id ?? null as any);
   const { visibilityMutation, widthMutation, settingsMutation, reorderMutation } = useColumnMutations(table?.id ?? null as any);
@@ -286,6 +284,17 @@ export const useUniversalTableState = ({
     return sortRowsWithSelection(rows, selectionSort, selectedRowIds);
   }, [rows, selectionSort, selectedRowIds]);
 
+  // Every row of the table in the current sort order (print, "all rows" replace) —
+  // the view only holds the loaded window.
+  const fetchAllRows = useCallback(() => {
+    const sort = effectiveSorting[0];
+    return fetchAllTableRows(tableIdStr, {
+      rawMode,
+      sortColumn: sort?.id ?? null,
+      sortDirection: sort ? (sort.desc ? 'desc' : 'asc') : null,
+    });
+  }, [tableIdStr, rawMode, effectiveSorting]);
+
   // Bulk replace hook
   const { executeBulkReplace, isProcessing: isBulkReplacing } = useBulkReplace({
     tableId: table?.id ?? null as any,
@@ -293,19 +302,30 @@ export const useUniversalTableState = ({
     rows: rows as any,
     selectedRowIds,
     filteredRowIds,
-    allRowIds
+    fetchAllRows
   });
 
   const createColumnMutation = useMutation({
-    mutationFn: async (data: { name: string; displayName: string; type: string; config?: Record<string, any> }) => {
-      if (!table?.id) throw new Error('No table selected');
+    mutationFn: async (data: { name: string; displayName: string; type: string; config?: Record<string, unknown> }) => {
+      if (!table?.id || !canManageColumns) throw new Error('Column creation is not allowed');
       const { tablesApi } = await import('../../api/tablesApi');
-      return tablesApi.createColumn(String(table.id), data);
+      const created: { id: string | number } = await tablesApi.createColumn(String(table.id), data);
+      if (!columnInsertAt) return true;
+      const ordered = [...realColumns].sort((a, b) => a.orderIndex - b.orderIndex);
+      const anchor = ordered.findIndex(col => col.id === columnInsertAt.id);
+      if (anchor === -1) return false;
+      const ids = ordered.map(col => col.id);
+      ids.splice(anchor + (columnInsertAt.side === 'right' ? 1 : 0), 0, String(created.id));
+      const results = await Promise.allSettled(ids.map((id, orderIndex) =>
+        ordered.find(col => col.id === id)?.orderIndex === orderIndex ? Promise.resolve() :
+          tablesApi.updateColumn(String(table.id), id, { orderIndex })));
+      return results.every(result => result.status === 'fulfilled');
     },
-    onSuccess: () => {
+    onSuccess: (positionSaved) => {
       queryClient.invalidateQueries({ queryKey: ['columns', table?.id] });
       setCreateColumnOpen(false);
-      setTimeout(() => { showToast('Колонка успешно создана', 'success'); }, 0);
+      setColumnInsertAt(null);
+      setTimeout(() => { showToast(positionSaved ? 'Колонка успешно создана' : 'Колонка создана, но её порядок не сохранён. Обновите таблицу и переместите колонку через меню.', positionSaved ? 'success' : 'error'); }, 0);
     },
     onError: (error: Error) => {
       logger.error('Create column error:', error);
@@ -341,6 +361,8 @@ export const useUniversalTableState = ({
     contextUserId !== null && Number(contextUserId) !== Number(viewerId ?? null);
 
   const canEditColumnSettings = tableRole === 'owner' || tableRole === 'admin';
+  const publicReadOnly = useIsPublicReadOnly();
+  const canManageColumns = canEditColumnSettings && !isReadOnlyContext && !readOnly && !publicReadOnly;
   const canEditCells = tableRole !== 'viewer';
   const isViewerRole = tableRole === 'viewer';
 
@@ -380,6 +402,41 @@ export const useUniversalTableState = ({
     return getDefaultColumnSize(column);
   };
 
+  const handleColumnReorder = useCallback(async (columnId: string, newIndex: number) => {
+    if (!canManageColumns || isSystemColumnId(columnId)) return; // system columns are fixed at the tail
+    const sortedColumns = columns.filter(col => !isSystemColumnId(col.id)).sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+    const oldIndex = sortedColumns.findIndex(col => col.id === columnId);
+    if (oldIndex === -1 || oldIndex === newIndex) return;
+    const movedColumn = sortedColumns[oldIndex];
+    sortedColumns.splice(oldIndex, 1);
+    sortedColumns.splice(newIndex, 0, movedColumn);
+    const results = await Promise.allSettled(sortedColumns.map((col, idx) =>
+      col.orderIndex === idx ? Promise.resolve() : reorderMutation.mutateAsync({ columnId: col.id, newIndex: idx })));
+    if (results.some(result => result.status === 'rejected')) showToast('Не удалось сохранить порядок колонок. Обновите таблицу и повторите перемещение.', 'error');
+  }, [columns, canManageColumns, reorderMutation]);
+
+  // Column-menu shortcuts (mirror the toolbar / settings drawer; same type rules as TableFilters)
+  const handleHideColumn = useCallback((columnId: string) => {
+    if (!canManageColumns || (table as TableModel)?.data_source_id) return;
+    setColumnVisibility((prev) => ({ ...prev, [columnId]: false }));
+    if (isSystemColumnId(columnId)) { setSystemColumnVisibility(table?.id, columnId, false); return; }
+    visibilityMutation.mutate({ columnId, isVisible: false });
+  }, [canManageColumns, table, visibilityMutation]);
+
+  const handleToggleColumnLock = useCallback((column: ColumnModel) => {
+    if (!canManageColumns || isSystemColumnId(column.id)) return;
+    settingsMutation.mutate({ columnId: column.id, payload: { isReadonly: !column.isReadonly } });
+  }, [canManageColumns, settingsMutation]);
+
+  const handleDeleteColumn = useCallback((column: ColumnModel) => {
+    if (!canManageColumns || isSystemColumnId(column.id) || column.is_locked || column.is_from_source) return;
+    if (!window.confirm(t('columnHeader.deleteConfirm', { column: column.displayName || column.name }))) return;
+    deleteColumnMutation.mutate(column.id);
+  }, [canManageColumns, deleteColumnMutation, t]);
+
+  // Primitive so a fresh `[]` default for searchColumns does not invalidate columnDefs each render
+  const scopedSearchColumnId = searchColumns.length === 1 ? searchColumns[0] : null;
+
   const columnDefs = useMemo<ColumnDef<RowModel, unknown>[]>(
     () => {
       const defs: ColumnDef<RowModel, unknown>[] = [];
@@ -403,23 +460,19 @@ export const useUniversalTableState = ({
         });
       }
 
+      const ordered = columns.filter(col => !isSystemColumnId(col.id)).sort((a, b) => a.orderIndex - b.orderIndex);
+      const visible = ordered.filter(col => columnVisibility[col.id] !== false && col.isVisible && col.id !== groupByColumn);
       columns.forEach((column: ColumnModel) => {
+        const visibleIndex = visible.findIndex(col => col.id === column.id);
+        const left = visible[visibleIndex - 1];
+        const right = visibleIndex >= 0 ? visible[visibleIndex + 1] : undefined;
         const isSys = isSystemColumnId(column.id);
-        const sizeConfig = isSys
-          ? { minSize: 110, maxSize: 110 }
-          : getColumnMinMaxSize(column);
+        const isSearchScoped = scopedSearchColumnId === column.id;
+        const isGrouped = groupByColumn === column.id;
+        const sizeConfig = getColumnMinMaxSize(column);
         defs.push({
           id: column.id,
-          header: ({ column: tableColumn }) => (
-            <ColumnHeader
-              column={column}
-              onOpenSettings={() => handleOpenColumnSettings(column.id)}
-              sortDirection={tableColumn.getIsSorted()}
-              onSort={() => tableColumn.toggleSorting()}
-              rawMode={rawMode}
-              disableSettings={!canEditColumnSettings}
-            />
-          ),
+          header: UniversalTableHeader,
           accessorFn: (row) => {
             const sysField = getSystemColumnRowField(column.id);
             if (sysField) {
@@ -428,15 +481,17 @@ export const useUniversalTableState = ({
             }
             return row.data[column.id] !== undefined ? row.data[column.id] : row.data[column.name];
           },
-          size: isSys ? 110 : getColumnSize(column),
+          size: getColumnSize(column),
           minSize: sizeConfig.minSize,
           maxSize: sizeConfig.maxSize,
-          cell: (ctx) => {
+          cell: UniversalTableCell,
+          meta: { render: (ctx: CellContext<RowModel, unknown>) => {
             const rowId = ctx.row.original.id;
             const isInlineExpanded = expandedInlineTables[rowId]?.columnId === column.id;
             const rowDataWithId = { ...ctx.row.original.data, id: rowId, row_id: rowId };
             return renderCellValue({
               column,
+              columns,
               value: ctx.getValue(),
               rowId,
               rowData: rowDataWithId,
@@ -451,18 +506,49 @@ export const useUniversalTableState = ({
               onAutomationTrigger: handleAutomationTrigger,
               rowMutation,
               rows,
-              tableId: table?.id
+              tableId: table?.id,
+              relations
             });
           },
-          enableResizing: !isSys,
+          renderHeader: ({ column: tableColumn }: HeaderContext<RowModel, unknown>) => (
+            <ColumnHeader
+              column={column}
+              onOpenSettings={() => handleOpenColumnSettings(column.id)}
+              sortDirection={tableColumn.getIsSorted()}
+              onSort={() => tableColumn.toggleSorting()}
+              rawMode={rawMode}
+              disableSettings={!canManageColumns}
+              onMoveLeft={!isSys && left ? () => { void handleColumnReorder(column.id, ordered.indexOf(left)); } : undefined}
+              onMoveRight={!isSys && right ? () => { void handleColumnReorder(column.id, ordered.indexOf(right)); } : undefined}
+              onAddColumn={isSys ? undefined : (side) => {
+                setColumnInsertAt({ id: column.id, side });
+                setCreateColumnOpen(true);
+              }}
+              onHide={() => handleHideColumn(column.id)}
+              onSearchHere={onSearchColumnsChange && !isSys && isSearchableColumn(column)
+                ? () => onSearchColumnsChange(isSearchScoped ? [] : [column.id])
+                : undefined}
+              isSearchScoped={isSearchScoped}
+              onGroupBy={onGroupByColumnChange && !isSys && isGroupableColumn(column)
+                ? () => onGroupByColumnChange(isGrouped ? null : column.id)
+                : undefined}
+              isGrouped={isGrouped}
+              onToggleLock={isSys ? undefined : () => handleToggleColumnLock(column)}
+              onDelete={isSys || column.is_locked || column.is_from_source ? undefined : () => handleDeleteColumn(column)}
+            />
+          ) } satisfies UniversalCellMeta,
+          enableResizing: true,
           enableSorting: true,
-          sortingFn: column.type === 'number' ? 'alphanumeric' : 'auto'
+          sortingFn: column.type === 'number' ? 'alphanumeric'
+            // ADR-0035-A: an address sorts alphabetically by its stored `formatted` line (client-side sort only).
+            : column.type === 'address' ? (a, b, id) => addressSortKey(a.getValue(id)).localeCompare(addressSortKey(b.getValue(id)))
+            : 'auto'
         });
       });
 
       return defs;
     },
-    [columns, handleOpenColumnSettings, rawMode, handleOpenNestedTable, expandedInlineTables, handleToggleInlineTable, rowMutation, rows]
+    [columns, columnVisibility, groupByColumn, scopedSearchColumnId, onSearchColumnsChange, onGroupByColumnChange, canManageColumns, handleColumnReorder, handleOpenColumnSettings, handleHideColumn, handleToggleColumnLock, handleDeleteColumn, rawMode, handleOpenNestedTable, expandedInlineTables, handleToggleInlineTable, rowMutation, rows, relations]
   );
 
   const data = useMemo(() => [...rows], [rows, rowsVersion]);
@@ -498,8 +584,7 @@ export const useUniversalTableState = ({
   }, [columns, table?.id]);
 
   const handleSortingChange = useCallback((updater: SortingState | ((old: SortingState) => SortingState)) => {
-    const currentSorting = useServerSorting ? effectiveSorting : localSorting;
-    const newSorting = typeof updater === 'function' ? updater(currentSorting) : updater;
+    const newSorting = typeof updater === 'function' ? updater(effectiveSorting) : updater;
     if (useServerSorting) {
       if (newSorting.length > 0) {
         const { id, desc } = newSorting[0];
@@ -510,7 +595,7 @@ export const useUniversalTableState = ({
     } else {
       setLocalSorting(newSorting);
     }
-  }, [useServerSorting, effectiveSorting, localSorting, setStoreSorting]);
+  }, [useServerSorting, effectiveSorting, setStoreSorting]);
 
   const tableInstance = useReactTable({
     data,
@@ -523,7 +608,8 @@ export const useUniversalTableState = ({
     onColumnSizingChange: setColumnSizing,
     onSortingChange: handleSortingChange,
     columnResizeMode: 'onChange',
-    manualSorting: useServerSorting,
+    // Keep loaded rows in saved order immediately after optimistic status edits.
+    manualSorting: useServerSorting && !defaultSort,
     meta: { rowsVersion }
   });
 
@@ -539,27 +625,14 @@ export const useUniversalTableState = ({
     Object.entries(columnSizing).forEach(([columnId, size]) => {
       const previous = prevColumnSizing.current[columnId];
       if (previous !== undefined && previous !== size && typeof size === 'number') {
-        widthMutation.mutate({ columnId, width: size });
+        if (isSystemColumnId(columnId)) setSystemColumnOverride(table?.id, columnId, { width: size });
+        else widthMutation.mutate({ columnId, width: size });
       }
     });
     prevColumnSizing.current = columnSizing;
   }, [columnSizing, table, tableInstance, widthMutation, isReadOnlyContext]);
 
-  const handleCellClick = useCallback((value: unknown, columnId: string, event?: React.MouseEvent) => {
-    if (!event?.ctrlKey && !event?.metaKey) return;
-    const column = columns.find((col: ColumnModel) => col.id === columnId);
-    if (column?.type === 'password') return;
-    if (column?.config?.copyable === false) return;
-    const textValue = value == null ? '' : String(value);
-    if (!textValue || textValue === '—' || textValue === '🔓 Not set') return;
-    navigator.clipboard.writeText(textValue).then(() => {
-      setTimeout(() => showToast('Copied to clipboard', 'success'), 0);
-    }).catch(() => {
-      setTimeout(() => showToast('Failed to copy', 'error'), 0);
-    });
-  }, [columns]);
-
-  const handleAddColumn = useCallback(() => { setCreateColumnOpen(true); }, []);
+  const handleAddColumn = useCallback(() => { if (!canManageColumns) return; setColumnInsertAt(null); setCreateColumnOpen(true); }, [canManageColumns]);
 
   const handleColumnVisibilityChange = (visibleIds: string[]) => {
     if (isReadOnlyContext || (table as TableModel)?.type === 'system' || (table as TableModel)?.data_source_id) return;
@@ -590,97 +663,14 @@ export const useUniversalTableState = ({
     if (isReadOnlyContext || (table as TableModel)?.data_source_id) return;
     setColumnSizing((prev) => ({ ...prev, [columnId]: width }));
     prevColumnSizing.current = { ...prevColumnSizing.current, [columnId]: width };
-    if (isSystemColumnId(columnId)) return; // no backend row to update
+    if (isSystemColumnId(columnId)) { setSystemColumnOverride(table?.id, columnId, { width }); return; }
     widthMutation.mutate({ columnId, width });
   };
 
-  const handleCellDoubleClick = (rowId: string, columnId: string, initialValue: unknown) => {
-    if (isReadOnlyContext || isViewerRole) return;
-    const column = columns.find((col: ColumnModel) => col.id === columnId);
-    if (!column) return;
-    if (column.name.toLowerCase() === 'id') return;
-    if ((column as any).is_external) return;
-    if (column.isReadonly) return;
-    if ((column as any)._readonly) return;
-    setEditingCell({ rowId, columnId });
-    // ADR-0017: JSON columns may store object/array directly — preserve via JSON.stringify
-    setDraftValue(column.type === 'json' && initialValue && typeof initialValue === 'object' ? JSON.stringify(initialValue, null, 2) : (initialValue ? String(initialValue) : ''));
-  };
-
-  const isCommittingRef = useRef(false);
-
-  const handleCommitEdit = (valueOverride?: string) => {
-    if (isCommittingRef.current) {
-      logger.debug('[UniversalTable] handleCommitEdit - already committing, skipping');
-      return;
-    }
-    const finalValue = valueOverride !== undefined ? valueOverride : draftValue;
-    if (!table || !editingCell || isReadOnlyContext) return;
-    const row = rows.find((item) => item.id === editingCell.rowId);
-    if (!row) return;
-    isCommittingRef.current = true;
-    const nextData = { ...row.data, [editingCell.columnId]: finalValue };
-    rowMutation.mutate({ rowId: editingCell.rowId, columnId: editingCell.columnId, value: finalValue, data: nextData });
-    setEditingCell(null);
-    setTimeout(() => { isCommittingRef.current = false; }, 100);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingCell(null);
-    setDraftValue('');
-  };
-
-  const handleCheckboxToggle = useCallback((
-    rowId: string, columnId: string, currentValue: unknown,
-    config?: { trueValue?: unknown; falseValue?: unknown }
-  ) => {
-    if (isReadOnlyContext || isViewerRole || !table) return;
-    const trueValue = config?.trueValue ?? 1;
-    const falseValue = config?.falseValue ?? 0;
-    const isChecked = currentValue === trueValue || currentValue === true || currentValue === 1 || currentValue === '1' || currentValue === 'true' || String(currentValue) === String(trueValue);
-    const newValue = isChecked ? falseValue : trueValue;
-    const row = rows.find((item) => item.id === rowId);
-    if (!row) return;
-    const nextData = { ...row.data, [columnId]: newValue };
-    rowMutation.mutate({ rowId, columnId, value: newValue, data: nextData });
-  }, [isReadOnlyContext, isViewerRole, table, rows, rowMutation]);
-
-  const handleNumberStep = useCallback((
-    rowId: string, columnId: string, currentValue: unknown, direction: 1 | -1,
-    config?: { step?: number; min?: number; max?: number }
-  ) => {
-    if (isReadOnlyContext || isViewerRole || !table) return;
-    const step = config?.step ?? 1;
-    const min = config?.min;
-    const max = config?.max;
-    const currentTableId = String(table.id);
-
-    let freshValue: unknown;
-    const pendingVal = getPendingValue(currentTableId, rowId, columnId);
-    if (pendingVal !== undefined) {
-      freshValue = pendingVal;
-    } else {
-      const storeRows = useTablesStore.getState().rows[currentTableId] ?? [];
-      const storeRow = storeRows.find((r) => String(r.id) === String(rowId));
-      if (storeRow?.data?.[columnId] !== undefined) {
-        freshValue = storeRow.data[columnId];
-      } else {
-        freshValue = currentValue;
-      }
-    }
-
-    const numValue = freshValue === null || freshValue === undefined || freshValue === '' ? 0 : Number(freshValue);
-    let newValue = (isNaN(numValue) ? 0 : numValue) + direction * step;
-    if (min !== undefined && newValue < min) newValue = min;
-    if (max !== undefined && newValue > max) newValue = max;
-
-    if (onLocalCellUpdate) { onLocalCellUpdate(rowId, columnId, newValue); }
-
-    const row = rows.find((item) => String(item.id) === String(rowId));
-    if (!row) return;
-    const nextData = { ...row.data, [columnId]: newValue };
-    rowMutation.mutate({ rowId, columnId, value: newValue, data: nextData });
-  }, [isReadOnlyContext, isViewerRole, table, rows, rowMutation, onLocalCellUpdate]);
+  const {
+    editingCell, draftValue, setDraftValue, handleCellClick, handleCellDoubleClick,
+    handleCommitEdit, handleCancelEdit, handleCheckboxToggle, handleNumberStep,
+  } = useTableCellActions({ table, columns, rows, rowMutation, isReadOnlyContext, isViewerRole, onLocalCellUpdate });
 
   const visibleColumnIds = Object.entries(columnVisibility)
     .filter(([, isVisible]) => isVisible !== false)
@@ -700,28 +690,20 @@ export const useUniversalTableState = ({
     reorderMutation.mutate({ columnId, newIndex: maxOrderIndex + 1 });
   }, [columns, columnVisibility, visibilityMutation, reorderMutation, table?.id]);
 
-  const handleColumnReorder = useCallback((columnId: string, newIndex: number) => {
-    if (isReadOnlyContext || isSystemColumnId(columnId)) return; // system columns are fixed at the tail
-    const sortedColumns = [...columns].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
-    const oldIndex = sortedColumns.findIndex(col => col.id === columnId);
-    if (oldIndex === -1 || oldIndex === newIndex) return;
-    const movedColumn = sortedColumns[oldIndex];
-    sortedColumns.splice(oldIndex, 1);
-    sortedColumns.splice(newIndex, 0, movedColumn);
-    sortedColumns.forEach((col, idx) => {
-      if (isSystemColumnId(col.id) || col.orderIndex === idx) return;
-      reorderMutation.mutate({ columnId: col.id, newIndex: idx });
-    });
-  }, [columns, isReadOnlyContext, reorderMutation]);
-
   const handleSaveColumnSettings = (columnId: string, payload: Partial<ColumnModel>) => {
     if (isReadOnlyContext) return;
     if (payload.isVisible !== undefined) {
       setColumnVisibility((prev) => ({ ...prev, [columnId]: payload.isVisible !== false }));
     }
     if (isSystemColumnId(columnId)) {
-      // System columns have no backend row; only visibility persists (in localStorage).
-      if (payload.isVisible !== undefined) setSystemColumnVisibility(table?.id, columnId, payload.isVisible !== false);
+      // No backend row: presentation persists in localStorage; key, type and read-only stay fixed.
+      const { displayName, width, config, isVisible } = payload;
+      setSystemColumnOverride(table?.id, columnId, { displayName, width, config, isVisible });
+      if (typeof width === 'number') {
+        setColumnSizing((prev) => ({ ...prev, [columnId]: width }));
+        prevColumnSizing.current = { ...prevColumnSizing.current, [columnId]: width };
+      }
+      bumpSystemColumns();
       setInspectorOpen(false); setActiveColumn(null);
       return;
     }
@@ -729,6 +711,13 @@ export const useUniversalTableState = ({
   };
 
   const handleLoadMore = () => {
+    if (isLoadingMore) return;
+    const pageQueries = queryClient.getQueryCache().findAll({ queryKey: ['rows', tableIdStr, currentPage] });
+    if (pageQueries.some(query => query.state.fetchStatus === 'fetching')) return;
+    if (pageQueries.some(query => query.state.status === 'error')) {
+      void queryClient.refetchQueries({ queryKey: ['rows', tableIdStr, currentPage], type: 'active' });
+      return;
+    }
     if (currentPage < totalPages) { setCurrentPage(currentPage + 1); }
   };
 
@@ -742,16 +731,17 @@ export const useUniversalTableState = ({
   const totalRows = useTablesStore((state) => state.totalRows[tableIdStr] ?? 0);
   const minLoadedPage = useTablesStore((state) => state.minLoadedPage);
   const rowsAbove = (minLoadedPage - 1) * rowsLimit;
-  const rowsBelow = Math.max(0, totalRows - rows.length);
+  // Rows after the loaded window: the window may start on a later page (?page=N / go-to-row).
+  const rowsBelow = Math.max(0, totalRows - rowsAbove - allRows.length);
   const canLoadMore = rowsBelow > 0;
   const canLoadPrevious = rowsAbove > 0;
 
   // Report pagination info to parent
   useEffect(() => {
     onPaginationChange?.({
-      rowsCount: rows.length, rowsLimit, currentPage, totalPages, canLoadMore
+      rowsCount: rows.length, rowsLimit, currentPage, totalPages, totalRows, canLoadMore, minLoadedPage
     });
-  }, [rows.length, rowsLimit, currentPage, totalPages, canLoadMore, onPaginationChange]);
+  }, [rows.length, rowsLimit, currentPage, totalPages, totalRows, canLoadMore, minLoadedPage, onPaginationChange]);
 
   useEffect(() => {
     if (onLoadMore) {
@@ -766,6 +756,7 @@ export const useUniversalTableState = ({
 
   return {
     table, columns, columnsRaw, rows, allRows, sortedRows, rowsVersion,
+    tableSummary, selectionSummary, relations,
     tableInstance, columnDefs,
     editingCell, draftValue, setDraftValue, columnVisibility, columnSizing,
     createColumnOpen, setCreateColumnOpen,
@@ -789,13 +780,13 @@ export const useUniversalTableState = ({
     handleCheckboxToggle, handleNumberStep, handleAddColumn,
     handleSaveColumnSettings, handleColumnVisibilityChange, handleToggleVisibility,
     handleWidthChange, handleColumnReorder, handleShowColumn, handleOpenColumnSettings,
-    handleLoadMore, handleLoadPrevious, handleRowsLimitChange,
+    handleLoadMore, handleLoadPrevious, handleRowsLimitChange, fetchAllRows,
     handleOpenNestedTable, handleToggleInlineTable, handleAutomationTrigger,
     // Row actions from extracted hook
     ...rowActions,
     isReadOnlyContext, isViewerRole, canEditColumnSettings, canEditCells,
     hiddenColumns, visibleColumnIds,
     rawMode, readOnly, compact, disableNestedModals, spaceId, spaceName, projectName,
-    showSummaryBar, addRowModalOpen, onCloseAddRowModal, groupByColumn,
+    addRowModalOpen, onCloseAddRowModal, groupByColumn,
   };
 };

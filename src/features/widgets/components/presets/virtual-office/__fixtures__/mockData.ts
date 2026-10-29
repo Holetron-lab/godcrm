@@ -238,8 +238,9 @@ export const mockVirtualOfficeWidget: Widget = {
   id: 200,
   dashboard_id: 1,
   source_widget_id: null,
+  is_module: false, module_id: null, sidebar_order: null, sidebar_icon: null, access_level: null, is_pinned: null,
   widget_type: 'preset',
-  preset_name: 'virtual_office' as any, // Will be added to PresetWidgetName
+  preset_name: 'virtual_office',
   code: null,
   code_version: 1,
   title: 'Virtual Office',

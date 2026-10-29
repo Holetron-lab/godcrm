@@ -20,9 +20,11 @@ import {
 } from '../chat/agent-execution-shared.js';
 import { logAgentActivity } from '../AgentActivityLogger.js';
 import { isShuttingDown } from './lifecycle.js';
-import { updateJobStatus, completeJob, failJob, updateJobAttempts, safeParse, mapTodoStatus, JOB_STATUS, JOB_TIMEOUT_MS, MAX_ATTEMPTS, TICKET_STATE } from './shared.js';
+import { updateJobStatus, failJob, updateJobAttempts, safeParse, mapTodoStatus, JOB_STATUS, JOB_TIMEOUT_MS, MAX_ATTEMPTS, TICKET_STATE } from './shared.js';
+import { reserveAgentJob, finishOrContinueJob } from './single-active.js';
 import { getJob } from './query.js';
 import { isAuthError, isAuthErrorBlock, extractRequestId } from './auth-error.js';
+import { resolveRunTimeoutMs } from '../agent-loop/run-timeout.js';
 
 // ADR-117: dynamic import of invocation-dispatcher to avoid circular load
 // (create.js -> dispatcher -> chatAgentExecution -> chatShared -> agent-execution-shared -> create.js).
@@ -61,6 +63,7 @@ export async function createAndDispatchJob({
   triggerMessageId = null,
   ticketId = null,
   statusMessageId = null,
+  createStatusPlaceholder = null,
   invocationType = null,
   // ADR-0057 WP-A: idempotent redispatch lineage. When set, the new job is
   // linked to the original via `recovered_from_job_id`, and the unique partial
@@ -72,12 +75,6 @@ export async function createAndDispatchJob({
   const agentRowId = agent.managed_by_agent_row_id || agent._agentConfig?.row_id || null;
   const agentUserId = agent.id || null;
   const agentName = agent.name || agent._agentConfig?.name || 'Unknown Agent';
-
-  // ADR-0057 Option 2 (2026-05-12): two same-named agents may run in parallel
-  // in the same conversation. The previous skip-guard (one-active-per-name) is
-  // gone. Accidental duplicates are still blocked by:
-  //   - invocation-dispatcher.js `_isDuplicate` 30s window (same source);
-  //   - WP-A advisory lock + recovery chain (restart-induced).
 
   // 1. Create the job row
   const timeoutAt = new Date(Date.now() + JOB_TIMEOUT_MS).toISOString();
@@ -93,46 +90,56 @@ export async function createAndDispatchJob({
   // ADR-0057 WP-A: persist lineage columns when supplied. On the unique-index
   // collision (idx_agent_jobs_recovery_chain) the DB throws 23505 and the
   // caller in lifecycle.js logs+aborts — exactly the idempotent behavior we want.
-  let result;
-  try {
-    result = await dbRun(
-      isPostgres()
-        ? `INSERT INTO agent_jobs
-           (conversation_id, agent_row_id, agent_user_id, agent_name, status,
-            trigger_message_id, trigger_user_id, context, max_attempts, timeout_at,
-            recovered_from_job_id, restart_attempt, created_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, $11, $12, NOW())
-           RETURNING id, job_id`
-        : `INSERT INTO agent_jobs
-           (conversation_id, agent_row_id, agent_user_id, agent_name, status,
-            trigger_message_id, trigger_user_id, context, max_attempts, timeout_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-      isPostgres()
-        ? [conversationId, agentRowId, agentUserId, agentName, JOB_STATUS.PENDING,
-           triggerMessageId, triggeredByUserId, contextData, MAX_ATTEMPTS, timeoutAt,
-           recoveredFromJobId, restartAttempt]
-        : [conversationId, agentRowId, agentUserId, agentName, JOB_STATUS.PENDING,
-           triggerMessageId, triggeredByUserId, contextData, MAX_ATTEMPTS, timeoutAt]
-    );
-  } catch (insertErr) {
-    if (insertErr.code === '23505' && recoveredFromJobId != null) {
-      apiLogger.info(
-        { conversationId, agentName, recoveredFromJobId, restartAttempt },
-        'AgentJobService: redispatch lost the race (unique chain collision) — peer is in flight, skipping'
+  const jobRow = await reserveAgentJob({
+    conversationId, agentRowId, agentUserId,
+    message: recoveredFromJobId != null ? null : { content: messageContent, attachments: options.attachments || [],
+      attachmentBaseUrl: options.attachmentBaseUrl || '', userId: triggeredByUserId,
+      triggerMessageId, invocationType },
+  }, async tx => {
+    let result;
+    try {
+      result = await tx.run(
+        isPostgres()
+          ? `INSERT INTO agent_jobs
+             (conversation_id, agent_row_id, agent_user_id, agent_name, status,
+              trigger_message_id, trigger_user_id, context, max_attempts, timeout_at,
+              recovered_from_job_id, restart_attempt, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::timestamptz, $11, $12, NOW())
+             RETURNING id, job_id`
+          : `INSERT INTO agent_jobs
+             (conversation_id, agent_row_id, agent_user_id, agent_name, status,
+              trigger_message_id, trigger_user_id, context, max_attempts, timeout_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        isPostgres()
+          ? [conversationId, agentRowId, agentUserId, agentName, JOB_STATUS.PENDING,
+             triggerMessageId, triggeredByUserId, contextData, MAX_ATTEMPTS, timeoutAt,
+             recoveredFromJobId, restartAttempt]
+          : [conversationId, agentRowId, agentUserId, agentName, JOB_STATUS.PENDING,
+             triggerMessageId, triggeredByUserId, contextData, MAX_ATTEMPTS, timeoutAt]
       );
-      return { jobId: null, id: null, skipped: true, reason: 'idempotent_recovery' };
+    } catch (insertErr) {
+      if (insertErr.code === '23505' && recoveredFromJobId != null) {
+        apiLogger.info(
+          { conversationId, agentName, recoveredFromJobId, restartAttempt },
+          'AgentJobService: redispatch lost the race (unique chain collision) — peer is in flight, skipping'
+        );
+        return { jobId: null, id: null, skipped: true, reason: 'idempotent_recovery' };
+      }
+      throw insertErr;
     }
-    throw insertErr;
-  }
 
-  // dbRun returns { changes, lastInsertRowid } — use lastInsertRowid to fetch the full row
-  const insertedId = result?.lastInsertRowid;
-  const jobRow = await dbGet(
-    isPostgres()
-      ? `SELECT id, job_id FROM agent_jobs WHERE id = $1`
-      : `SELECT id, job_id FROM agent_jobs WHERE id = ?`,
-    [insertedId]
-  );
+    // dbRun returns { changes, lastInsertRowid } — use lastInsertRowid to fetch the full row
+    const insertedId = result?.lastInsertRowid;
+    return tx.get(
+      isPostgres()
+        ? `SELECT id, job_id FROM agent_jobs WHERE id = $1`
+        : `SELECT id, job_id FROM agent_jobs WHERE id = ?`,
+      [insertedId]
+    );
+
+  });
+  if (jobRow.skipped) return jobRow;
+  if (createStatusPlaceholder) statusMessageId = await createStatusPlaceholder();
 
   const jobId = jobRow?.job_id;
   const jobDbId = jobRow?.id;
@@ -153,8 +160,9 @@ export async function createAndDispatchJob({
     conversation_id: conversationId,
   });
 
-  // 4. Dispatch the local worker (fire-and-forget)
-  processJobLocally(jobDbId, agent, conversationId, messageContent, options, ticketId, statusMessageId, triggeredByUserId).catch(err => {
+  // 4. Dispatch the local worker (fire-and-forget). invocation_type rides along
+  // so the worker can pick the D4 timeout for /command runs (Bug 1552/228714).
+  processJobLocally(jobDbId, agent, conversationId, messageContent, { ...options, invocation_type: invocationType || null }, ticketId, statusMessageId, triggeredByUserId).catch(err => {
     apiLogger.error({ err, jobId, jobDbId }, 'AgentJobService: Local worker failed');
   });
 
@@ -172,12 +180,18 @@ export async function createAndDispatchJob({
  * @param {Object} options - Execution options
  */
 async function processJobLocally(jobDbId, agent, conversationId, messageContent, options = {}, ticketId = null, statusMessageId = null, triggeredByUserId = null) {
-  const { agent_mode = 'agent', thinking_enabled = false, attachments = [], attachmentBaseUrl = '' } = options;
+  const { agent_mode = 'agent', thinking_enabled = false, attachments = [], attachmentBaseUrl = '', invocation_type = null } = options;
   const _startTime = Date.now();
 
   try {
     // Mark job as processing
     await updateJobStatus(jobDbId, JOB_STATUS.PROCESSING);
+    // A failed attempt clears processing; every retry must restore the live state.
+    await setConversationProcessing(
+      conversationId, true,
+      agent.name || agent._agentConfig?.name || 'AI Agent',
+      agent.managed_by_agent_row_id || agent._agentConfig?.row_id || null,
+    );
 
     // Update agent status placeholder if available
     if (statusMessageId) {
@@ -203,10 +217,10 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
 
     // Resolve provider
     const resolved = await resolveAgentProvider(agentConfig);
-    const { isClaudeCode } = detectProvider(resolved.provider, resolved.model);
+    const { isClaudeCode, isCodex, isKimi, isCliAgent } = detectProvider(resolved.provider, resolved.model);
 
-    if (!isClaudeCode) {
-      throw new Error(`AgentJobService: Expected claude-code provider but got ${resolved.provider}`);
+    if (!isCliAgent) {
+      throw new Error(`AgentJobService: Expected a CLI provider (claude-code|codex|kimi-code) but got ${resolved.provider}`);
     }
 
     // Load conversation history
@@ -264,11 +278,15 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
       skills: injectedSkills,
       // ADR-113 follow-up (#81861): builder names the planning tool that exists in
       // this host — claude-code → TodoWrite, native loop → manage_plan.
-      // This path is always claude-code (asserted above), so isClaudeCode is true here.
+      // Since the codex provider landed this path is CLI-but-not-always-claude-code,
+      // so the real flag has to be passed through: Codex uses the runtime-bound
+      // CRM MCP manage_plan tool; Claude retains the TodoWrite bridge.
       isClaudeCode,
+      planRunId: `job:${jobDbId}`,
+      planAgentId: agent.managed_by_agent_row_id || agentConfig.row_id,
     }, 'account');
 
-    // Build messages array for executeClaudeCode
+    // Build messages array for the CLI executor
     const messages = [
       ...formattedHistory,
       { role: 'user', content: enrichedMessage }
@@ -279,7 +297,8 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
     const senderId = agent.id || null;
     const agentName = agent.name || agent._agentConfig?.name || 'AI Agent';
 
-    // Import executeClaudeCode directly from the default export
+    // Import the CLI executor set directly from the default export
+    // (executeClaudeCode / executeCodexCli / executeKimiCli)
     const aiExecutionService = (await import('../labs/ai-execution-service.js')).default;
 
     // Save step messages as they come in (real-time streaming)
@@ -299,6 +318,7 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
     // Track tool counts for status placeholder updates
     let _toolsUsed = 0;
     let _toolsCompleted = 0;
+    let planWrites = Promise.resolve();
 
     const onEvent = (event) => {
       // Count all events for diagnostics
@@ -345,7 +365,7 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
               }));
               if (tasks.length > 0) {
                 apiLogger.info({ taskCount: tasks.length, conversationId, agentName }, 'AgentJobService: DEBUG calling handleManagePlan');
-                handleManagePlan({ tasks }, conversationId, agentName, { agentId: senderId })
+                planWrites = planWrites.then(() => handleManagePlan({ tasks }, conversationId, agentName, { agentId: agentRowId, senderId, jobId: jobDbId, runId: `job:${jobDbId}` }))
                   .then(result => apiLogger.info({ result, conversationId }, 'AgentJobService: DEBUG handleManagePlan succeeded'))
                   .catch(err => apiLogger.error({ err, jobDbId, block: 'TodoWrite_plan_bridge' }, 'AgentJobService: Failed to bridge TodoWrite to plan'));
               }
@@ -454,7 +474,9 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
       }
     };
 
-    // Call executeClaudeCode directly — it spawns the Claude CLI process
+    // Call the CLI executor directly — it spawns the agent CLI process.
+    // executeCodexCli translates codex's JSONL into the same stream-json event
+    // shape onEvent above already parses, so only the function differs.
     // Pass maxTurns from agent config (maxSteps / max_iterations / max_turns)
     const agentMaxTurns = Number(agentConfig.maxSteps) || Number(agentConfig.max_steps) || Number(agentConfig.max_turns) || Number(agentConfig.max_iterations) || 0;
 
@@ -475,7 +497,13 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
       }
     };
 
-    const result = await aiExecutionService.executeClaudeCode({
+    const runCli = isCodex
+      ? aiExecutionService.executeCodexCli
+      : isKimi
+        ? aiExecutionService.executeKimiCli
+        : aiExecutionService.executeClaudeCode;
+
+    const result = await runCli({
       model: resolved.model,
       messages,
       systemPrompt,
@@ -483,10 +511,15 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
       maxTurns: agentMaxTurns || undefined,
       onEvent,
       onSpawn,
+      jobId: jobDbId,
       // ADR-0053 Phase C3: hook context for _command_policies resolver.
       agentId: agentRowId,
       spaceId: convForSpace?.space_id || null,
+      // Bug 1552/228714: agent row `run_timeout_min`, else 10 min for /command, 30 otherwise.
+      runTimeoutMs: resolveRunTimeoutMs(agentConfig, invocation_type),
     });
+
+    await planWrites;
 
     // Save the final response
     const responseContent = result?.content || '';
@@ -641,7 +674,7 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
     }
 
     // Mark job completed
-    await completeJob(jobDbId, responseContent, {
+    const pending = await finishOrContinueJob(jobDbId, responseContent, {
       tokens: result?.usage || {},
       cost_usd: result?.costUsd || 0,
       model: _actualModel,
@@ -649,6 +682,15 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
       requested_model: resolved.model || null,
       duration_ms: Date.now() - _startTime,
     });
+
+    if (pending.length) {
+      // The prior CLI has exited. Continue this job sequentially with updated
+      // chat history; never create a parallel worker or a second job row.
+      return processJobLocally(jobDbId, agent, conversationId,
+        pending.map(message => message.content).join('\n\n'),
+        { ...options, attachments: pending.flatMap(message => message.attachments || []) },
+        ticketId, statusMessageId, triggeredByUserId);
+    }
 
     // Finalize agent status placeholder
     if (statusMessageId) {
@@ -796,7 +838,7 @@ async function processJobLocally(jobDbId, agent, conversationId, messageContent,
       await updateJobAttempts(jobDbId, job.attempts + 1);
       // Retry after a brief delay
       setTimeout(() => {
-        processJobLocally(jobDbId, agent, conversationId, messageContent, options).catch(retryErr => {
+        processJobLocally(jobDbId, agent, conversationId, messageContent, options, ticketId, statusMessageId, triggeredByUserId).catch(retryErr => {
           apiLogger.error({ retryErr, jobDbId }, 'AgentJobService: Retry also failed');
         });
       }, 5000); // 5 second delay before retry

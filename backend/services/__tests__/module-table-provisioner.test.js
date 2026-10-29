@@ -9,11 +9,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const mockDbRun = vi.fn();
 const mockDbGet = vi.fn();
+const mockDbAll = vi.fn();
 const mockWithTransactionAsync = vi.fn();
 
 vi.mock('../../database/connection.js', () => ({
   dbRun: (...a) => mockDbRun(...a),
   dbGet: (...a) => mockDbGet(...a),
+  dbAll: (...a) => mockDbAll(...a),
   sqlNow: () => 'NOW()',
   withTransactionAsync: (...a) => mockWithTransactionAsync(...a),
 }));
@@ -44,6 +46,7 @@ const BLUEPRINT = {
 beforeEach(() => {
   mockDbRun.mockReset();
   mockDbGet.mockReset();
+  mockDbAll.mockReset();
   mockWithTransactionAsync.mockReset();
 });
 
@@ -110,6 +113,60 @@ describe('provisionModuleTables', () => {
     expect(mockDbRun).not.toHaveBeenCalled();
   });
 
+  it('never opens a transaction of its own when called without trx (back-compat)', async () => {
+    mockDbGet.mockResolvedValue(undefined);
+    mockDbRun.mockImplementation(() => Promise.resolve({ lastInsertRowid: 101 }));
+
+    await provisionModuleTables(7814, BLUEPRINT, { userId: 1 });
+
+    // legacy path: autocommit helpers only, no BEGIN — existing callers keep their behaviour
+    expect(mockWithTransactionAsync).not.toHaveBeenCalled();
+    expect(mockDbGet).toHaveBeenCalled();
+    expect(mockDbRun).toHaveBeenCalled();
+  });
+
+  // ADR-200 W2: before reconcile, an existing table was reused sight unseen — a module that
+  // added a field in v2 could never roll it onto an installation that already had the table.
+  it('reconcile: false (default) never even looks at the columns of an existing table', async () => {
+    mockDbGet.mockResolvedValue({ id: 555 });
+
+    const mapping = await provisionModuleTables(7814, BLUEPRINT, { userId: 1 });
+
+    expect(mockDbAll).not.toHaveBeenCalled();
+    expect(mockDbRun).not.toHaveBeenCalled();
+    expect(mapping.schemes.columns_added).toEqual([]);
+  });
+
+  it('reconcile: true appends only the MISSING columns, after the current max order_index', async () => {
+    mockDbGet.mockResolvedValue({ id: 555 });
+    mockDbAll.mockResolvedValue([{ column_name: 'name', order_index: 4 }]); // graph_json missing
+    mockDbRun.mockResolvedValue({ lastInsertRowid: 1 });
+
+    const mapping = await provisionModuleTables(7814, BLUEPRINT, { userId: 1, reconcile: true });
+
+    expect(mapping.schemes.created).toBe(false);
+    expect(mapping.schemes.columns_added).toEqual(['graph_json']);
+    expect(mockDbRun).toHaveBeenCalledTimes(1);
+    const [sql, params] = mockDbRun.mock.calls[0];
+    expect(sql).toMatch(/INSERT INTO table_columns/i);
+    expect(params[1]).toBe('graph_json');
+    expect(params[4]).toBe(5); // appended after order_index 4, not colliding with the layout
+  });
+
+  it('reconcile is add-only: nothing is dropped, retyped, or re-inserted when all columns exist', async () => {
+    mockDbGet.mockResolvedValue({ id: 555 });
+    mockDbAll.mockResolvedValue([
+      { column_name: 'name', order_index: 1 },
+      { column_name: 'graph_json', order_index: 2 },
+      { column_name: 'user_added_field', order_index: 3 }, // not in the blueprint — must survive
+    ]);
+
+    const mapping = await provisionModuleTables(7814, BLUEPRINT, { userId: 1, reconcile: true });
+
+    expect(mapping.schemes.columns_added).toEqual([]);
+    expect(mockDbRun).not.toHaveBeenCalled(); // no INSERT, no UPDATE, no DELETE
+  });
+
   it('rejects a non-ASCII (Cyrillic) column_name — enforces English-by-default', async () => {
     mockDbGet.mockResolvedValue(undefined);
     mockDbRun.mockResolvedValue({ lastInsertRowid: 1 });
@@ -128,7 +185,7 @@ describe('provisionModuleTables', () => {
 });
 
 const SEED_BLUEPRINT = {
-  key: 'my_module',
+  key: 'sc_sim',
   tables: BLUEPRINT.tables,
   seed: [
     {
@@ -175,7 +232,7 @@ describe('seedModuleRows', () => {
   it('dedups duplicate rows within a single seed batch', async () => {
     const store = installFakeTransaction();
     const dupBlueprint = {
-      key: 'my_module',
+      key: 'sc_sim',
       seed: [{
         table: 'schemes',
         key: ['name'],
@@ -254,5 +311,134 @@ describe('seedModuleRows', () => {
     const second = await seedModuleRows(MAPPING, SEED_BLUEPRINT, { userId: 9, trx });
     expect(second.schemes).toEqual({ seeded: 0, reused: 2 });
     expect(store).toHaveLength(2);
+  });
+});
+
+// ADR-200 W1 — the composition the seedModuleRows JSDoc has always prescribed but which was
+// physically un-callable until provisionModuleTables learned to accept a trx:
+//   withTransactionAsync(trx => { provisionModuleTables(..., { trx }); seedModuleRows(map, bp, { trx }); })
+// A transactional store: writes land in a pending buffer and are only merged into `committed`
+// when the callback resolves — a throw discards them, exactly like a ROLLBACK.
+function installTransactionalStore() {
+  const committed = { tables: [], columns: [], rows: [] };
+  let seq = 500;
+
+  const makeTrx = (pending) => ({
+    get: async (sql, params) => {
+      if (/SELECT id FROM universal_tables/i.test(sql)) {
+        const [projectId, name] = params;
+        const hit = [...committed.tables, ...pending.tables]
+          .find((t) => t.project_id === projectId && t.name === name);
+        return hit ? { id: hit.id } : undefined;
+      }
+      return undefined;
+    },
+    all: async (sql, params) => {
+      if (/SELECT data FROM table_rows WHERE table_id = \?/i.test(sql)) {
+        return [...committed.rows, ...pending.rows]
+          .filter((r) => r.table_id === params[0])
+          .map((r) => ({ data: r.data }));
+      }
+      return [];
+    },
+    run: async (sql, params) => {
+      if (/INSERT INTO universal_tables/i.test(sql)) {
+        const [project_id, name] = params;
+        const id = ++seq;
+        pending.tables.push({ id, project_id, name });
+        return { lastInsertRowid: id, changes: 1 };
+      }
+      if (/INSERT INTO table_columns/i.test(sql)) {
+        const [table_id, column_name] = params;
+        // injected mid-transaction failure (see the atomicity test)
+        if (column_name === 'boom') throw new Error('column insert exploded');
+        pending.columns.push({ table_id, column_name });
+        return { lastInsertRowid: ++seq, changes: 1 };
+      }
+      if (/INSERT INTO table_rows/i.test(sql)) {
+        const [table_id, base_id, data, created_by] = params;
+        pending.rows.push({ table_id, base_id, data, created_by });
+        return { lastInsertRowid: ++seq, changes: 1 };
+      }
+      return { changes: 0 };
+    },
+  });
+
+  mockWithTransactionAsync.mockImplementation(async (cb) => {
+    const pending = { tables: [], columns: [], rows: [] };
+    const out = await cb(makeTrx(pending)); // throws → nothing merged (ROLLBACK)
+    committed.tables.push(...pending.tables);
+    committed.columns.push(...pending.columns);
+    committed.rows.push(...pending.rows);
+    return out;
+  });
+
+  return committed;
+}
+
+const TWO_TABLE_BLUEPRINT = {
+  key: 'sample',
+  tables: [
+    BLUEPRINT.tables[0],
+    {
+      key: 'runs',
+      name: 'sim_runs',
+      display_name: 'Прогоны',
+      columns: [
+        { column_name: 'label', display_name: 'Метка', type: 'text' },
+        { column_name: 'boom', display_name: 'Взрыв', type: 'text' }, // the fake trx throws here
+      ],
+    },
+  ],
+};
+
+describe('provisionModuleTables + seedModuleRows — atomic composition (ADR-200 W1)', () => {
+  it('provisions inside a caller-supplied trx without opening its own or touching autocommit', async () => {
+    const committed = installTransactionalStore();
+
+    const mapping = await mockWithTransactionAsync(async (trx) =>
+      provisionModuleTables(7814, BLUEPRINT, { userId: 1, trx })
+    );
+
+    expect(mapping.schemes.created).toBe(true);
+    expect(committed.tables).toHaveLength(1);
+    expect(committed.columns.map((c) => c.column_name)).toEqual(['name', 'graph_json']);
+    // every statement went through the handle — not one autocommit escaped the transaction
+    expect(mockDbGet).not.toHaveBeenCalled();
+    expect(mockDbRun).not.toHaveBeenCalled();
+  });
+
+  it('composes provision + seed in ONE transaction (the JSDoc contract, now callable)', async () => {
+    const committed = installTransactionalStore();
+
+    const out = await mockWithTransactionAsync(async (trx) => {
+      const mapping = await provisionModuleTables(7814, SEED_BLUEPRINT, { userId: 7, trx });
+      const counts = await seedModuleRows(mapping, SEED_BLUEPRINT, { userId: 7, trx });
+      return { mapping, counts };
+    });
+
+    expect(out.counts.schemes).toEqual({ seeded: 2, reused: 0 });
+    expect(committed.tables).toHaveLength(1);
+    expect(committed.columns).toHaveLength(2);
+    expect(committed.rows).toHaveLength(2);
+    // seed did NOT open a second transaction of its own — one BEGIN for the whole install
+    expect(mockWithTransactionAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves nothing behind when a column fails on the SECOND table — no half-provisioned module', async () => {
+    const committed = installTransactionalStore();
+
+    await expect(
+      mockWithTransactionAsync(async (trx) => {
+        const mapping = await provisionModuleTables(7814, TWO_TABLE_BLUEPRINT, { userId: 1, trx });
+        return seedModuleRows(mapping, TWO_TABLE_BLUEPRINT, { userId: 1, trx });
+      })
+    ).rejects.toThrow(/column insert exploded/);
+
+    // the FIRST table and its columns were already written when the second blew up —
+    // the transaction discards them too. AC#1: no orphan table, no orphan columns, no rows.
+    expect(committed.tables).toEqual([]);
+    expect(committed.columns).toEqual([]);
+    expect(committed.rows).toEqual([]);
   });
 });

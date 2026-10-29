@@ -40,6 +40,21 @@ export const telegramToolHandlers = {
         return { success: true, message_id: sent.messageId, destination, text_length: text.length };
       }
 
+      // ── Private chat by numeric chat_id (e.g. "tg:423753027") ──────────
+      // On-request reports to a person's DM. Telegram only lets the bot write
+      // to users who pressed /start on it; that refusal comes back verbatim.
+      if (destination.startsWith('tg:')) {
+        const chatId = destination.slice('tg:'.length);
+        if (!/^-?\d+$/.test(chatId)) return { error: `"${destination}" is not a numeric Telegram chat id (use "tg:<chat_id>")` };
+        let sent = await sendMessage(chatId, text, options);
+        if (!sent.success && parse_mode) {
+          aiLogger.warn({ destination, error: sent.error }, 'Telegram: Markdown failed, retrying plain');
+          sent = await sendMessage(chatId, text, {});
+        }
+        if (!sent.success) return { error: sent.error || 'Failed to send private message' };
+        return { success: true, message_id: sent.messageId, destination, text_length: text.length };
+      }
+
       let result;
 
       if (destination === 'channel') {

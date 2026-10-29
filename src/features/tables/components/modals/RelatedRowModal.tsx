@@ -6,7 +6,7 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { FieldRenderer } from './FieldRenderer';
 import { FormBuilder, type FormTypeValue } from '../FormBuilder';
 import { DynamicFormRenderer } from '../FormBuilder/DynamicFormRenderer';
-import { useFormConfig, useSaveFormConfig } from '../../hooks/useFormConfig';
+import { useFormConfig, useSaveFormConfig, storedFormTypes } from '../../hooks/useFormConfig';
 import { apiClient } from '@/shared/utils/apiClient';
 import { tablesApi } from '../../api/tablesApi';
 import type { ColumnModel } from '../../types/table.types';
@@ -55,7 +55,7 @@ export const RelatedRowModal = ({
   const { data: tableInfo, isLoading: isLoadingTableInfo } = useQuery({
     queryKey: ['related-table-info', tableId],
     queryFn: async () => {
-      const response = await apiClient.request<{ success: boolean; data: { id: number; name: string; description?: string } }>(
+      const response = await apiClient.request<{ success: boolean; data: { id: number; name: string; displayName?: string; display_name?: string; description?: string } }>(
         `/tables/${tableId}`
       );
       return response.data;
@@ -67,16 +67,14 @@ export const RelatedRowModal = ({
   const { data: columnsData, isLoading: isLoadingColumns } = useQuery({
     queryKey: ['related-table-columns', tableId],
     queryFn: async () => {
-      const response = await apiClient.request<{ data: ColumnModel[] }>(
-        `/tables/${tableId}/columns`
-      );
-      return response.data;
+      const response = await tablesApi.getColumns(String(tableId));
+      return response.columns;
     },
     enabled: isOpen && !!tableId,
   });
 
   // Load row data
-  const { data: rowData, isLoading: isLoadingRow, error: rowError } = useQuery({
+  const { data: rowData, isLoading: isLoadingRow, error: rowError } = useQuery<Record<string, unknown>>({
     queryKey: ['related-row', tableId, rowId, valueColumn],
     queryFn: async () => {
       const response = await apiClient.request<{ 
@@ -117,13 +115,14 @@ export const RelatedRowModal = ({
       }
       
       // Return the data object
-      return foundRow.data || foundRow;
+      const data = foundRow.data;
+      return data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : foundRow;
     },
     enabled: isOpen && !!tableId && !!rowId,
   });
 
   const columns = columnsData || [];
-  const tableName = tableInfo?.displayName || tableInfo?.name || 'Таблица';
+  const tableName = tableInfo?.displayName || tableInfo?.display_name || tableInfo?.name || 'Таблица';
   const isLoadingTable = isLoadingTableInfo || isLoadingColumns;
 
 
@@ -194,7 +193,7 @@ export const RelatedRowModal = ({
       
       // Use actualRowId (the real database ID) for the API call
       const idToUpdate = actualRowId || rowId;
-      await tablesApi.updateRow(Number(tableId), idToUpdate, dataToSubmit);
+      await tablesApi.updateRow(String(tableId), idToUpdate, dataToSubmit);
       
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['related-row', tableId, rowId] });
@@ -377,6 +376,7 @@ export const RelatedRowModal = ({
           columns={columns}
           initialConfig={formConfig}
           initialFormType="edit_row"
+          initialFormTypes={storedFormTypes(formConfigData?.data)}
           tableName={tableName}
           tableId={typeof tableId === 'string' ? parseInt(tableId) : Number(tableId)}
           sampleData={rowData || {}}

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useId } from 'react';
 import type { FormField } from '../../types/form-config.types';
 import type { ColumnModel, ColumnOption } from '../../types/table.types';
 import { useRelationOptions } from '../../hooks/useRelationOptions';
@@ -44,28 +44,16 @@ export function FieldPreviewReadonly({
   sampleValue?: unknown;
   relationOptions?: ColumnOption[];
 }) {
+  const inputId = useId();
   if (!column) return null;
 
   const displayName = field.label || column.displayName || column.name;
 
   // Width calculation
-  const widthStyle = useMemo(() => {
-    switch (field.width) {
-      case 'quarter': return { width: '25%' };
-      case 'third': return { width: '33.333%' };
-      case 'half': return { width: '50%' };
-      case 'full':
-      default: return { width: '100%' };
-    }
-  }, [field.width]);
+  const widthStyle = { width: { quarter: '25%', third: '33.333%', half: '50%', full: '100%', auto: '100%' }[field.width] };
 
   // Get options - either from column config or from relation
-  const options = useMemo(() => {
-    if (relationOptions && relationOptions.length > 0) {
-      return relationOptions;
-    }
-    return column.config?.options || [];
-  }, [column.config?.options, relationOptions]);
+  const options = relationOptions?.length ? relationOptions : (column.config?.options || []);
 
   // Find label for current value (for select/relation)
   const getDisplayValue = (val: unknown): string => {
@@ -84,10 +72,10 @@ export function FieldPreviewReadonly({
       case 'checkbox':
         return (
           <div className="flex items-center justify-between gap-2">
-            <label className="text-sm font-medium text-[var(--text-primary)] truncate">
+            <label htmlFor={inputId} className="text-sm font-medium text-[var(--text-primary)] truncate">
               {displayName}
             </label>
-            <input
+            <input id={inputId} aria-label={displayName}
               className="w-5 h-5 rounded border-[var(--border-primary)] text-[var(--color-primary-500)] focus:ring-[var(--color-primary-500)] flex-shrink-0"
               type="checkbox"
               checked={Boolean(sampleValue)}
@@ -99,7 +87,7 @@ export function FieldPreviewReadonly({
       case 'select':
       case 'multi-select':
         return (
-          <select
+          <select id={inputId} aria-label={displayName}
             className={baseInputClass}
             defaultValue={sampleValue as string || ''}
           >
@@ -113,7 +101,7 @@ export function FieldPreviewReadonly({
       case 'relation':
         // For relation - show select with loaded options
         return (
-          <select
+          <select id={inputId} aria-label={displayName}
             className={baseInputClass}
             defaultValue={sampleValue as string || ''}
           >
@@ -138,7 +126,7 @@ export function FieldPreviewReadonly({
         const strVal = sampleValue ? String(sampleValue) : '';
         if (!strVal.includes('T') || strVal.endsWith('T00:00:00') || strVal.endsWith('T00:00')) {
           return (
-            <input
+            <input id={inputId} aria-label={displayName}
               type="date"
               className={baseInputClass}
               defaultValue={formatDate(sampleValue)}
@@ -155,7 +143,7 @@ export function FieldPreviewReadonly({
           return !isNaN(d.getTime()) ? d.toISOString().slice(0, 16) : '';
         };
         return (
-          <input
+          <input id={inputId} aria-label={displayName}
             type="datetime-local"
             className={baseInputClass}
             defaultValue={formatDateTime(sampleValue)}
@@ -165,7 +153,7 @@ export function FieldPreviewReadonly({
 
       case 'number':
         return (
-          <input
+          <input id={inputId} aria-label={displayName}
             type="number"
             className={baseInputClass}
             placeholder={placeholder}
@@ -175,7 +163,7 @@ export function FieldPreviewReadonly({
 
       case 'email':
         return (
-          <input
+          <input id={inputId} aria-label={displayName}
             type="email"
             className={baseInputClass}
             placeholder={placeholder}
@@ -185,7 +173,7 @@ export function FieldPreviewReadonly({
 
       case 'url':
         return (
-          <input
+          <input id={inputId} aria-label={displayName}
             type="url"
             className={baseInputClass}
             placeholder={compact ? displayName : 'https://...'}
@@ -195,7 +183,7 @@ export function FieldPreviewReadonly({
 
       case 'phone':
         return (
-          <input
+          <input id={inputId} aria-label={displayName}
             type="tel"
             className={baseInputClass}
             placeholder={compact ? displayName : '+7 (999) 123-45-67'}
@@ -208,7 +196,7 @@ export function FieldPreviewReadonly({
 
       case 'password':
         return (
-          <input
+          <input id={inputId} aria-label={displayName}
             type="password"
             className={baseInputClass}
             placeholder="••••••••"
@@ -218,8 +206,18 @@ export function FieldPreviewReadonly({
 
       case 'text':
       default:
+        if (field.expandable) {
+          return (
+            <textarea id={inputId} aria-label={displayName}
+              className={`${baseInputClass} resize-y`}
+              placeholder={placeholder}
+              rows={field.rows && field.rows > 0 ? field.rows : 3}
+              defaultValue={sampleValue !== undefined && sampleValue !== null ? String(sampleValue) : ''}
+            />
+          );
+        }
         return (
-          <input
+          <input id={inputId} aria-label={displayName}
             type="text"
             className={baseInputClass}
             placeholder={placeholder}
@@ -257,7 +255,7 @@ export function FieldPreviewReadonly({
       <div>
         {/* Label */}
         <div className="px-3 pt-1 pb-1">
-          <label className="text-sm font-medium text-[var(--text-primary)]">
+          <label htmlFor={inputId} className="text-sm font-medium text-[var(--text-primary)]">
             {displayName}
           </label>
         </div>

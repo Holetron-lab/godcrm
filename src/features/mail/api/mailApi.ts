@@ -8,7 +8,7 @@
  * The server already returns rows in the `MailMessage` shape (toMailMessage),
  * so the presentational panes consume this verbatim — no client-side mapping.
  */
-import { apiClient } from '@/shared/utils/apiClient';
+import { apiClient, getBaseUrlSync } from '@/shared/utils/apiClient';
 import type {
   MailAttachment,
   MailFolder,
@@ -56,9 +56,51 @@ export interface MailSendInput {
   body: string;
   html?: boolean;
   attachments?: MailAttachment[];
+  /** Reply mode: the message being answered — the server stamps its `replied_at`. */
+  in_reply_to_id?: number;
 }
 
 export const mailApi = {
+  /**
+   * ADR-158 §P5 — bytes of one attachment (by index into `message.attachments`).
+   * Plain URL, not a fetch: it feeds `<img src>` thumbnails and `<a download>`,
+   * which authenticate with the `access_token` cookie like `/uploads`.
+   * `download` forces `Content-Disposition: attachment`.
+   */
+  attachmentUrl(spaceId: number, msgId: string, index: number, download = false): string {
+    const base = `${getBaseUrlSync()}/spaces/${spaceId}/mail/messages/${msgId}/attachments/${index}`;
+    return download ? `${base}?download=1` : base;
+  },
+
+  /**
+   * User folders (Archive is seeded as one, so it can be renamed; Spam etc. are
+   * created here). System folders (inbox/sent/drafts/trash) are not editable.
+   * The folder list itself still comes from `folders()`.
+   */
+  userFolders: {
+    async create(spaceId: number, name: string): Promise<MailFolder> {
+      const r = await apiClient.post<SuccessEnvelope<{ folder: MailFolder }>>(
+        `/spaces/${spaceId}/mail/folders`,
+        { name }
+      );
+      return r.data.folder;
+    },
+    async rename(spaceId: number, id: MailFolderId, name: string): Promise<MailFolder> {
+      const r = await apiClient.patch<SuccessEnvelope<{ folder: MailFolder }>>(
+        `/spaces/${spaceId}/mail/folders/${id}`,
+        { name }
+      );
+      return r.data.folder;
+    },
+    /** Messages inside go back to Inbox server-side. */
+    async remove(spaceId: number, id: MailFolderId): Promise<{ deleted: true; id: MailFolderId }> {
+      const r = await apiClient.delete<SuccessEnvelope<{ deleted: true; id: MailFolderId }>>(
+        `/spaces/${spaceId}/mail/folders/${id}`
+      );
+      return r.data;
+    },
+  },
+
   async folders(spaceId: number, connectorId: number | null): Promise<MailFolder[]> {
     // `connector_id` picks the mailbox (account switcher); omitted → most recent active.
     const q = connectorId ? `?connector_id=${connectorId}` : '';
@@ -71,11 +113,12 @@ export const mailApi = {
   async messages(
     spaceId: number,
     folder: MailFolderId,
-    connectorId: number | null
+    connectorId: number | null,
+    offset = 0
   ): Promise<MailMessage[]> {
     const q = connectorId ? `&connector_id=${connectorId}` : '';
     const r = await apiClient.get<SuccessEnvelope<{ messages: MailMessage[] }>>(
-      `/spaces/${spaceId}/mail/messages?folder=${folder}${q}`
+      `/spaces/${spaceId}/mail/messages?folder=${folder}&limit=50&offset=${offset}${q}`
     );
     return r.data.messages;
   },

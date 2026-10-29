@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useLanguage, type LanguageContextValue } from '@/shared/i18n/LanguageContext';
 import { FileText, PenLine, Save, Clock, CalendarClock, SendHorizonal, Trash2 } from 'lucide-react';
 import { DropdownMenu, Modal, Input, Button } from '@/shared/components/ui';
 import type { DropdownMenuItem } from '@/shared/components/ui/DropdownMenu';
@@ -81,17 +82,17 @@ function quotedHtml(text: string): string {
   return esc ? `<br><br>${esc}` : '';
 }
 
-/** Human fire time for the scheduled-edit banner: "сегодня/завтра в HH:MM" or "D mon в HH:MM". */
-function formatFireTime(iso: string): string {
+/** Human fire time for the scheduled-edit banner: "today/tomorrow at HH:MM" or "D mon at HH:MM". */
+function formatFireTime(iso: string, t: LanguageContextValue['t'], locale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const now = new Date();
-  const time = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
-  if (d.toDateString() === now.toDateString()) return `сегодня в ${time}`;
+  const time = d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return t('mail.reply.today', { time });
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
-  if (d.toDateString() === tomorrow.toDateString()) return `завтра в ${time}`;
-  return `${d.toLocaleDateString('ru', { day: 'numeric', month: 'short' })} в ${time}`;
+  if (d.toDateString() === tomorrow.toDateString()) return t('mail.reply.tomorrow', { time });
+  return t('mail.reply.onDate', { date: d.toLocaleDateString(locale, { day: 'numeric', month: 'short' }), time });
 }
 
 /** A signature block: a blank line, then the (escaped) signature text. */
@@ -141,6 +142,8 @@ function htmlToText(html: string): string {
  * refresh.
  */
 export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, onSent, fill = false }: MailReplyBarProps) {
+  const { t, language } = useLanguage();
+  const templateNameId = useId();
   const [attachments, setAttachments] = useState<File[]>([]);
   // Set while files are being base64-encoded, so Send shows progress and can't
   // double-fire before the payload is ready.
@@ -272,7 +275,7 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
       setEncoding(true);
       encoded = await filesToAttachments(attachments);
     } catch (err) {
-      setEncodeError((err as Error)?.message || 'Failed to read an attachment');
+      setEncodeError((err as Error)?.message || t('mail.reply.readAttachmentFailed'));
       return null;
     } finally {
       setEncoding(false);
@@ -280,12 +283,15 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
 
     return {
       to,
-      subject: subject.trim() || (mode === 'reply' && message ? `Re: ${message.subject}` : '(без темы)'),
+      subject: subject.trim() || (mode === 'reply' && message ? `Re: ${message.subject}` : t('mail.common.noSubject')),
       // Reply glues the quoted thread under the user's HTML; forward/new already
       // carry their full body in the editor.
       body: `${body}${seed.quoteOnSend}`,
       html: true,
       attachments: encoded,
+      // Tells the server which message this answers → it stamps `replied_at`
+      // on the original (the "Отвечено" mark in the list).
+      ...(mode === 'reply' && message ? { in_reply_to_id: Number(message.id) } : {}),
     };
   };
 
@@ -406,7 +412,7 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
       setEncoding(true);
       encoded = await filesToAttachments(attachments);
     } catch (err) {
-      setEncodeError((err as Error)?.message || 'Failed to read an attachment');
+      setEncodeError((err as Error)?.message || t('mail.reply.readAttachmentFailed'));
       return;
     } finally {
       setEncoding(false);
@@ -433,24 +439,24 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
 
   const missingToError = missingTo
     ? !to.length
-      ? 'Укажите получателя'
+      ? t('mail.reply.missingTo')
       : to.some((a) => !isValidEmail(a))
-        ? 'Проверьте адрес получателя'
+        ? t('mail.reply.invalidTo')
         : undefined
     : undefined;
   const serverError =
     encodeError ??
     missingToError ??
     (send.isError
-      ? (send.error as { message?: string })?.message || 'Failed to send — check the mailbox connection.'
+      ? (send.error as { message?: string })?.message || t('mail.reply.sendFailed')
       : schedule.isError
-        ? (schedule.error as { message?: string })?.message || 'Не удалось запланировать — проверьте подключение ящика.'
+        ? (schedule.error as { message?: string })?.message || t('mail.reply.scheduleFailed')
         : saveDraft.isError
-          ? (saveDraft.error as { message?: string })?.message || 'Не удалось сохранить черновик.'
+          ? (saveDraft.error as { message?: string })?.message || t('mail.reply.draftFailed')
           : updateScheduled.isError
-            ? (updateScheduled.error as { message?: string })?.message || 'Не удалось сохранить изменения — возможно, письмо уже отправляется.'
+            ? (updateScheduled.error as { message?: string })?.message || t('mail.reply.updateFailed')
             : cancelScheduled.isError
-              ? (cancelScheduled.error as { message?: string })?.message || 'Не удалось отменить отправку.'
+              ? (cancelScheduled.error as { message?: string })?.message || t('mail.reply.cancelFailed')
               : undefined);
 
   // Insert a signature at the end of the body; apply a template's subject (only
@@ -490,14 +496,14 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
         value: t.id,
         onSelect: () => applyTemplate(t),
       }))
-    : [{ label: 'Нет шаблонов — добавьте в настройках', value: '__empty', onSelect: () => {} }];
+    : [{ label: t('mail.reply.noTemplates'), value: '__empty', onSelect: () => {} }];
   const signatureItems: DropdownMenuItem[] = library.signatures.length
     ? library.signatures.map((s) => ({
         label: s.icon ? `${s.icon} ${s.name}` : s.name,
         value: s.id,
         onSelect: () => insertSignature(s),
       }))
-    : [{ label: 'Нет подписей — добавьте в настройках', value: '__empty', onSelect: () => {} }];
+    : [{ label: t('mail.reply.noSignatures'), value: '__empty', onSelect: () => {} }];
 
   const pickerBtn = 'flex flex-shrink-0 items-center gap-1 rounded px-1.5 py-1 text-xs text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]';
   const toolbarExtra = (
@@ -506,9 +512,9 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
         align="start"
         side="top"
         trigger={
-          <button type="button" title="Вставить шаблон" aria-label="Вставить шаблон" className={pickerBtn}>
+          <button type="button" title={t('mail.reply.insertTemplate')} aria-label={t('mail.reply.insertTemplate')} className={pickerBtn}>
             <FileText className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Шаблон</span>
+            <span className="hidden sm:inline">{t('mail.reply.template')}</span>
           </button>
         }
         items={templateItems}
@@ -517,9 +523,9 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
         align="start"
         side="top"
         trigger={
-          <button type="button" title="Вставить подпись" aria-label="Вставить подпись" className={pickerBtn}>
+          <button type="button" title={t('mail.reply.insertSignature')} aria-label={t('mail.reply.insertSignature')} className={pickerBtn}>
             <PenLine className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Подпись</span>
+            <span className="hidden sm:inline">{t('mail.reply.signature')}</span>
           </button>
         }
         items={signatureItems}
@@ -531,19 +537,19 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
   const openTimePicker = () => setScheduleOpen(true);
   const scheduledMenuItems: DropdownMenuItem[] = [
     {
-      label: 'Отправить сейчас',
+      label: t('mail.reply.sendNow'),
       value: 'send-now',
       icon: <SendHorizonal className="h-4 w-4" />,
       onSelect: handleSendNow,
     },
     {
-      label: 'Изменить время…',
+      label: t('mail.reply.changeTime'),
       value: 'reschedule-time',
       icon: <CalendarClock className="h-4 w-4" />,
       onSelect: openTimePicker,
     },
     {
-      label: 'Отменить отправку',
+      label: t('mail.reply.cancelScheduled'),
       value: 'cancel-scheduled',
       icon: <Trash2 className="h-4 w-4" />,
       onSelect: handleCancelScheduled,
@@ -555,7 +561,7 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
   const composerActionProps = isScheduledEdit
     ? {
         onSend: handleReschedule,
-        sendLabel: 'Сохранить',
+        sendLabel: t('mail.common.save'),
         sendIcon: <Save className="h-4 w-4" />,
         menuItems: scheduledMenuItems,
         sending: send.isPending || updateScheduled.isPending || cancelScheduled.isPending || encoding,
@@ -569,14 +575,14 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
       };
 
   const placeholder = !connectorId
-    ? 'Подключите почтовый ящик, чтобы отправить'
+    ? t('mail.reply.placeholderNoMailbox')
     : mode === 'new'
-      ? 'Текст письма…'
+      ? t('mail.reply.placeholderNew')
       : mode === 'scheduled'
-        ? 'Текст отложенного письма…'
+        ? t('mail.reply.placeholderScheduled')
         : mode === 'forward'
-          ? 'Добавьте сообщение к пересылаемому письму…'
-          : `Ответ для ${to[0] || 'отправителя'}…`;
+          ? t('mail.reply.placeholderForward')
+          : t('mail.reply.placeholderReply', { to: to[0] || t('mail.reply.sender') });
 
   return (
     <div className={fill ? 'flex min-h-0 flex-1 flex-col bg-[var(--bg-primary)]' : 'flex-shrink-0 bg-[var(--bg-primary)]'}>
@@ -594,6 +600,9 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
         onAttachmentsChange={setAttachments}
         placeholder={placeholder}
         fill={fill}
+        // A docked reply starts as a one-line bar and is dragged/expanded into the
+        // full composer; forward / scheduled need To/Subject, so they open in full.
+        collapsible={!fill && mode === 'reply'}
         toolbarExtra={toolbarExtra}
         header={
           // To / Subject fields above the body input — editable inline for every mode.
@@ -607,13 +616,13 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
                   type="button"
                   onClick={openTimePicker}
                   className="min-w-0 truncate text-left text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
-                  title="Изменить время отправки"
+                  title={t('mail.reply.changeSendTime')}
                 >
-                  Уйдёт{' '}
+                  {t('mail.reply.goesOut')}{' '}
                   <span className="font-medium text-[var(--text-primary)]">
-                    {scheduledAt ? formatFireTime(scheduledAt) : '—'}
+                    {scheduledAt ? formatFireTime(scheduledAt, t, language) : '—'}
                   </span>
-                  <span className="ml-1 text-[var(--text-tertiary)]">· изменить</span>
+                  <span className="ml-1 text-[var(--text-tertiary)]">{t('mail.reply.edit')}</span>
                 </button>
                 {dirty && (
                   <span
@@ -621,13 +630,13 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
                     role="status"
                   >
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    Не сохранено
+                    {t('mail.reply.unsaved')}
                   </span>
                 )}
               </div>
             )}
             <div className="flex items-start gap-2 px-3 py-1.5 text-sm">
-              <span className="w-14 flex-shrink-0 pt-1 text-xs text-[var(--text-tertiary)]">Кому</span>
+              <span className="w-14 flex-shrink-0 pt-1 text-xs text-[var(--text-tertiary)]">{t('mail.reply.to')}</span>
               <RecipientInput
                 value={to}
                 onChange={(next) => {
@@ -636,20 +645,19 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
                 }}
                 disabled={!connectorId}
                 placeholder="name@example.com"
-                ariaLabel="Кому"
-                autoFocus={mode !== 'reply'}
+                ariaLabel={t('mail.reply.to')}
                 invalid={!!missingToError}
               />
             </div>
             <label className="flex items-center gap-2 px-3 py-1.5 text-sm">
-              <span className="w-14 flex-shrink-0 text-xs text-[var(--text-tertiary)]">Тема</span>
+              <span className="w-14 flex-shrink-0 text-xs text-[var(--text-tertiary)]">{t('mail.reply.subject')}</span>
               <input
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 disabled={!connectorId}
-                placeholder="Тема письма"
-                aria-label="Тема письма"
+                placeholder={t('mail.reply.subjectPlaceholder')}
+                aria-label={t('mail.reply.subjectPlaceholder')}
                 className="min-w-0 flex-1 bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] disabled:cursor-not-allowed"
               />
             </label>
@@ -661,48 +669,48 @@ export function MailReplyBar({ message, scheduled, mode, spaceId, connectorId, o
         open={templateModalOpen}
         onOpenChange={setTemplateModalOpen}
         size="md"
-        title="Сохранить как шаблон"
-        description="Всё подставлено из письма — поправьте при необходимости. Шаблон доступен из меню «Шаблон» и в настройках почты."
+        title={t('mail.reply.saveTemplateTitle')}
+        description={t('mail.reply.saveTemplateDescription')}
         footer={
           <>
             <Button variant="secondary" onClick={() => setTemplateModalOpen(false)}>
-              Отмена
+              {t('mail.common.cancel')}
             </Button>
             <Button variant="primary" disabled={!templateName.trim()} onClick={saveTemplate}>
-              Сохранить
+              {t('mail.common.save')}
             </Button>
           </>
         }
       >
         <div className="flex flex-col gap-3">
           <Input
-            label="Название шаблона"
+            id={templateNameId}
+            label={t('mail.reply.templateName')}
             value={templateName}
             onChange={(e) => setTemplateName(e.target.value)}
-            placeholder="Например: Приветствие клиента"
-            autoFocus
+            placeholder={t('mail.reply.templateNamePlaceholder')}
             onKeyDown={(e) => {
               // Enter in the single-line name field saves; the textarea keeps Enter.
               if (e.key === 'Enter' && templateName.trim()) saveTemplate();
             }}
           />
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-[var(--text-secondary)]">Тема</span>
+            <span className="text-sm text-[var(--text-secondary)]">{t('mail.reply.subject')}</span>
             <input
               value={templateSubject}
               onChange={(e) => setTemplateSubject(e.target.value)}
-              placeholder="Тема письма"
-              aria-label="Тема шаблона"
+              placeholder={t('mail.reply.subjectPlaceholder')}
+              aria-label={t('mail.reply.templateSubject')}
               className={templateFieldClass}
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-sm text-[var(--text-secondary)]">Текст</span>
+            <span className="text-sm text-[var(--text-secondary)]">{t('mail.reply.text')}</span>
             <textarea
               value={templateBody}
               onChange={(e) => setTemplateBody(e.target.value)}
-              placeholder="Текст письма…"
-              aria-label="Текст шаблона"
+              placeholder={t('mail.reply.textPlaceholder')}
+              aria-label={t('mail.reply.templateBody')}
               rows={8}
               className={`${templateFieldClass} resize-y`}
             />

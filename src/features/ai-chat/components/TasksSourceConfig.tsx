@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * TasksSourceConfig Component
  * ADR-024: Configure source table for Tasks tab
@@ -54,6 +55,7 @@ export function TasksSourceConfigModal({
   onBindRow,
   onUnbindRow
 }: TasksSourceConfigProps) {
+  const { t } = useLanguage();
   const { data: allTablesData, isLoading } = useAllTables();
   
   // Selected project and table
@@ -155,7 +157,7 @@ export function TasksSourceConfigModal({
   // Get first display column from row
   const getRowDisplayValue = (row: { id: number; data: Record<string, unknown> }) => {
     const data = row.data;
-    return String(data['name'] || data['title'] || data['Название'] || data['Name'] || `#${row.id}`);
+    return String(data['name'] || data['title'] || data[t('aiChat.ui.name')] || data['Name'] || `#${row.id}`);
   };
 
   return (
@@ -164,7 +166,7 @@ export function TasksSourceConfigModal({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-secondary)]">
           <h3 className="font-semibold text-[var(--text-primary)]">
-            {showRowBinding ? 'Привязать к записи' : 'Источник записей'}
+            {showRowBinding ? t('aiChat.ui.linkToRecordLabel') : t('aiChat.ui.recordSource')}
           </h3>
           <button
             onClick={showRowBinding ? () => setShowRowBinding(false) : onClose}
@@ -179,7 +181,7 @@ export function TasksSourceConfigModal({
           <div className="px-4 py-2 bg-green-500/10 border-b border-[var(--border-secondary)]">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs text-[var(--text-tertiary)] mb-1">Привязано к записи:</div>
+                <div className="text-xs text-[var(--text-tertiary)] mb-1">{t('aiChat.ui.linkedToRecord')}</div>
                 <div className="flex items-center gap-2 text-sm text-green-400">
                   <Link2 className="w-4 h-4" />
                   <span>{boundRow.displayValue}</span>
@@ -190,7 +192,7 @@ export function TasksSourceConfigModal({
                 <button
                   onClick={onUnbindRow}
                   className="p-1.5 rounded hover:bg-red-500/20 text-red-400"
-                  title="Отвязать"
+                  title={t('aiChat.ui.unlink')}
                 >
                   <Unlink className="w-4 h-4" />
                 </button>
@@ -207,8 +209,7 @@ export function TasksSourceConfigModal({
               {/* Table selector for binding */}
               <div>
                 <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                  Таблица
-                </label>
+                  {t('columnSettings.relation.table')}</label>
                 <select
                   value={bindingTableId || ''}
                   onChange={(e) => {
@@ -217,7 +218,7 @@ export function TasksSourceConfigModal({
                   }}
                   className="w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
                 >
-                  <option value="">— Выберите таблицу —</option>
+                  <option value="">{t('columnSettings.relation.selectTable')}</option>
                   {(allTablesData?.spacesWithTables || []).map((space) => (
                     <optgroup key={space.id} label={`${space.icon || '⚙️'} ${space.name}`}>
                       {space.projects.flatMap((project) =>
@@ -240,7 +241,7 @@ export function TasksSourceConfigModal({
                     type="text"
                     value={rowSearchQuery}
                     onChange={(e) => setRowSearchQuery(e.target.value)}
-                    placeholder="Поиск записей..."
+                    placeholder={t('aiChat.ui.searchRecords')}
                     className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
                   />
                 </div>
@@ -255,7 +256,7 @@ export function TasksSourceConfigModal({
                     </div>
                   ) : bindingRows.length === 0 ? (
                     <div className="py-6 text-center text-sm text-[var(--text-tertiary)]">
-                      {rowSearchQuery ? 'Ничего не найдено' : 'Нет записей'}
+                      {rowSearchQuery ? t('columnSettings.nothingFound') : t('kanban.noRecords')}
                     </div>
                   ) : (
                     bindingRows.map((row) => (
@@ -305,11 +306,9 @@ export function TasksSourceConfigModal({
                         </div>
                         <div className="text-left">
                           <div className="text-sm font-medium text-[var(--text-primary)]">
-                            Привязать к записи
-                          </div>
+                            {t('aiChat.ui.linkToRecordLabel')}</div>
                           <div className="text-xs text-[var(--text-tertiary)]">
-                            Связать чат с существующей записью
-                          </div>
+                            {t('aiChat.ui.linkChatToAnExistingRecord')}</div>
                         </div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-[var(--text-tertiary)]" />
@@ -320,7 +319,7 @@ export function TasksSourceConfigModal({
                   {onBindRow && (
                     <div className="flex items-center gap-3">
                       <div className="flex-1 h-px bg-[var(--border-secondary)]" />
-                      <span className="text-xs text-[var(--text-tertiary)]">или</span>
+                      <span className="text-xs text-[var(--text-tertiary)]">{t('auth.login.orDivider')}</span>
                       <div className="flex-1 h-px bg-[var(--border-secondary)]" />
                     </div>
                   )}
@@ -328,14 +327,13 @@ export function TasksSourceConfigModal({
                   {/* Project selector with optgroups by Space */}
                   <div>
                     <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                      Источник задач — Проект
-                    </label>
+                      {t('aiChat.ui.taskSourceProject')}</label>
                     <select
                       value={selectedProjectId ? String(selectedProjectId) : ''}
                       onChange={(e) => handleProjectChange(e.target.value)}
                       className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
                     >
-                      <option value="">— Выберите проект —</option>
+                      <option value="">{t('columnSettings.relation.selectProject')}</option>
                       {(allTablesData?.spacesWithTables || []).map((space) => (
                         <optgroup key={space.id} label={`${space.icon || '⚙️'} ${space.name}`}>
                           {space.projects.map((project) => (
@@ -351,8 +349,7 @@ export function TasksSourceConfigModal({
                   {/* Table selector */}
                   <div>
                     <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-                      Таблица
-                    </label>
+                      {t('columnSettings.relation.table')}</label>
                     <select
                       value={selectedTableId || ''}
                       onChange={(e) => handleTableChange(e.target.value)}
@@ -362,7 +359,7 @@ export function TasksSourceConfigModal({
                         !selectedProjectId && "opacity-50 cursor-not-allowed"
                       )}
                     >
-                      <option value="">— Выберите таблицу —</option>
+                      <option value="">{t('columnSettings.relation.selectTable')}</option>
                       {projectTables.map((table) => (
                         <option key={table.id} value={table.id}>
                           {table.icon || '📋'} {table.displayName}
@@ -379,7 +376,7 @@ export function TasksSourceConfigModal({
                         <span>
                           {(() => {
                             const table = allTablesData?.flat.find(t => t.id === selectedTableId);
-                            if (!table) return 'Таблица выбрана';
+                            if (!table) return t('aiChat.ui.tableSelected');
                             return `${table.icon || '📋'} ${table.displayName}`;
                           })()}
                         </span>
@@ -398,7 +395,7 @@ export function TasksSourceConfigModal({
             onClick={showRowBinding ? () => setShowRowBinding(false) : onClose}
             className="px-3 py-1.5 rounded-lg text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
           >
-            {showRowBinding ? 'Назад' : 'Отмена'}
+            {showRowBinding ? t('aiChat.ui.back') : t('aiChat.ui.cancel')}
           </button>
           
           {showRowBinding ? (
@@ -425,8 +422,7 @@ export function TasksSourceConfigModal({
                   : "opacity-50 cursor-not-allowed"
               )}
             >
-              Привязать
-            </button>
+              {t('aiChat.ui.link')}</button>
           ) : (
             <button
               onClick={handleSave}
@@ -438,8 +434,7 @@ export function TasksSourceConfigModal({
                   : "opacity-50 cursor-not-allowed"
               )}
             >
-              Сохранить
-            </button>
+              {t('aiChat.ui.save')}</button>
           )}
         </div>
       </div>

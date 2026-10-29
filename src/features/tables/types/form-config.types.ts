@@ -82,7 +82,17 @@ export interface FormField {
   // Text field specific
   expandable?: boolean;  // Auto-expand textarea
   rows?: number;         // Default height in rows (for textarea)
+  // Public form link (/forms/:tableId): the value may be passed in the URL
+  // (?<column_name>=…). Off by default so a link cannot preset arbitrary fields.
+  urlParam?: boolean;
 }
+
+/**
+ * Who may open the form link — same scale as space visibility (ADR-105):
+ * internal = people with access to the table, open = any signed-in GOD CRM
+ * user, external = anyone with the link.
+ */
+export type FormAccess = 'internal' | 'open' | 'external';
 
 export type FormElement = FormField | FormDivider | FormTextBlock | FormPageBreak;
 
@@ -125,6 +135,7 @@ export interface FormConfig {
     modalSize?: ModalSize; // Modal dialog size (sm, md, lg, xl, 2xl, full)
     submitButtonText?: string;
     cancelButtonText?: string;
+    access?: FormAccess;   // Form link access (default: internal)
   };
 }
 
@@ -132,6 +143,7 @@ export interface FormConfigResponse {
   id: number;
   tableId: number;
   formType: 'edit' | 'add';
+  formTypes?: string[];  // Every form type stored for the table (add_row / edit_row / custom)
   name?: string;
   config: FormConfig;
   isDefault: boolean;

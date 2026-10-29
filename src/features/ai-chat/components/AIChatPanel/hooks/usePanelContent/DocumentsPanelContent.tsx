@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /** DocumentsPanelContent — chip-style documents panel.
  *
  * Mirrors TasksPanelContent verbatim: single header row (search + filter
@@ -10,6 +11,8 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { X, FileText, Search, Plus } from 'lucide-react';
 import { apiClient } from '@/shared/utils/apiClient';
 import { useTableColumns } from '@/features/tables/hooks/useTableColumns';
+import { DocumentViewerModal } from '@/features/widgets/components/presets/documents/content/DocumentViewerModal';
+import type { DocumentRegistryItem } from '@/features/widgets/types/documents.types';
 import { AddRowModal } from '@/features/tables/components/modals/AddRowModal';
 import { BindableRowsList } from '../../components/BindableRowsList';
 import { RowPickerFilters, RowPickerFiltersToggle, type FilterMap } from '../../../RowBindingV2.RowList.Filters';
@@ -32,7 +35,9 @@ function readField(data: Record<string, unknown>, col: string): unknown {
 }
 
 export function DocumentsPanelContent(d: PanelContentDeps) {
+  const { t, language } = useLanguage();
   const qc = useQueryClient();
+  const [viewDocument, setViewDocument] = useState<DocumentRegistryItem | null>(null);
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<FilterMap>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -117,17 +122,17 @@ export function DocumentsPanelContent(d: PanelContentDeps) {
         <div className="px-3 py-2 border-b border-[var(--border-secondary)] bg-[var(--bg-tertiary)] flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
             <FileText className="w-3.5 h-3.5" />
-            <span>Документы</span>
+            <span>{t('aiChat.ui.documents')}</span>
           </div>
           <button
             onClick={() => d.setActivePanel('none')}
             className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
-            title="Закрыть"
+            title={t('aiChat.ui.close')}
           >
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">Источник документов не настроен</div>
+        <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{t('aiChat.ui.documentSourceIsNotConfigured')}</div>
       </div>
     );
   }
@@ -153,7 +158,7 @@ export function DocumentsPanelContent(d: PanelContentDeps) {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск документов..."
+              placeholder={t('aiChat.ui.searchDocuments')}
               className="w-full pl-7 pr-7 py-1 text-xs rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
             />
             {search && (
@@ -175,7 +180,7 @@ export function DocumentsPanelContent(d: PanelContentDeps) {
           <button
             type="button"
             onClick={() => setAddModalOpen(true)}
-            title="Создать документ"
+            title={t('documents.createDocument')}
             className="p-1 rounded transition-colors text-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/10"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -194,7 +199,7 @@ export function DocumentsPanelContent(d: PanelContentDeps) {
       <BindableRowsList
         source={{
           tableId: docs.tableId,
-          tableName: docs.tableName || 'Документы',
+          tableName: docs.tableName || t('aiChat.ui.documents'),
           tableIcon: docs.tableIcon,
           iconColumn: docs.iconColumn,
           displayColumn: docs.displayColumn,
@@ -203,6 +208,15 @@ export function DocumentsPanelContent(d: PanelContentDeps) {
           priorityColumn: docs.priorityColumn,
           categoryColumn: docs.categoryColumn,
         }}
+        onViewRow={row => setViewDocument({
+          id: row.id,
+          name: String(row.data.name || row.data[docs.displayColumn || 'name'] || `#${row.id}`),
+          slug: String(row.data.slug || ''),
+          table_id: Number(row.data.content_table_id || row.data.table_id) || 0,
+          icon: String(row.data.icon || docs.tableIcon || '📄'),
+          description: typeof row.data.description === 'string' ? row.data.description : undefined,
+          category: typeof row.data.category === 'string' ? row.data.category : undefined,
+        })}
         rows={rows}
         isLoading={isLoading}
         hasMore={hasNextPage}
@@ -221,13 +235,14 @@ export function DocumentsPanelContent(d: PanelContentDeps) {
         onTogglePanelMode={d.togglePanelMode}
       />
 
+      {viewDocument && <DocumentViewerModal doc={viewDocument} registryTableId={docs.tableId} language={language} onClose={() => setViewDocument(null)} />}
       <AddRowModal
         isOpen={addModalOpen}
         onClose={() => setAddModalOpen(false)}
         onConfirm={handleCreateConfirm}
         columns={columns as Parameters<typeof AddRowModal>[0]['columns']}
         tableId={docs.tableId}
-        tableName={docs.tableName || 'Документы'}
+        tableName={docs.tableName || t('aiChat.ui.documents')}
       />
     </div>
   );

@@ -2,6 +2,7 @@
  * A single user row in the SpaceAccessManager table.
  */
 
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React from 'react';
 import {
   Trash2,
@@ -12,11 +13,11 @@ import {
 } from 'lucide-react';
 import type { UserAccessLevel } from '@/shared/types/user-access.types';
 import {
-  ACCESS_LEVEL_LABELS,
+  ACCESS_LEVEL_VALUES,
   ACCESS_LEVEL_COLORS
 } from '@/shared/types/user-access.types';
 import type { SpaceUserRow } from './types';
-import { LEVEL_LABELS, LEVEL_COLORS, LEVEL_ICONS } from './constants';
+import { LEVEL_COLORS, LEVEL_ICONS } from './constants';
 import { getLevelIcon, getGranularCounts, getPermissionLevel } from './utils';
 import { GranularAccessDetails } from './GranularAccessDetails';
 
@@ -43,6 +44,7 @@ export const UserRow = ({
   onUpdateRole,
   onDeleteUser
 }: UserRowProps) => {
+  const { t } = useLanguage();
   const roleValue = user.role as UserAccessLevel;
   const roleColor = ACCESS_LEVEL_COLORS[roleValue] || '#6b7280';
   const permLevel = getPermissionLevel(user);
@@ -64,7 +66,7 @@ export const UserRow = ({
           </div>
           <div className="min-w-0">
             <div className="text-sm font-medium text-[var(--text-primary)] truncate">
-              {user.name}
+              {user.name || t('userAccess.panel.unknownUser')}
             </div>
             {user.system_user_id && (
               <div className="text-[10px] text-[var(--text-tertiary)]">
@@ -74,7 +76,7 @@ export const UserRow = ({
           </div>
           {!user.active && (
             <span className="px-1.5 py-0.5 text-[10px] rounded bg-red-500/20 text-red-400 shrink-0">
-              Неактивен
+              {t('userAccess.panel.inactive')}
             </span>
           )}
         </div>
@@ -85,10 +87,11 @@ export const UserRow = ({
         </div>
 
         {/* Role cell: dropdown */}
-        <div className="w-28">
+        <div className="w-36">
           {isManageable ? (
             <div className="relative">
               <select
+                aria-label={t('userAccess.panel.roleFor', { name: user.name })}
                 value={roleValue || 'viewer'}
                 onChange={(e) => onUpdateRole(user.row_id, e.target.value as UserAccessLevel)}
                 disabled={updatingRoleRowId === user.row_id}
@@ -120,7 +123,7 @@ export const UserRow = ({
               style={{ backgroundColor: `${roleColor}20`, color: roleColor }}
             >
               {getLevelIcon(roleValue)}
-              <span>{ACCESS_LEVEL_LABELS[roleValue] || roleValue}</span>
+              <span>{roleValue in ACCESS_LEVEL_VALUES ? t(`userAccess.roles.${roleValue}`) : roleValue}</span>
             </div>
           )}
         </div>
@@ -129,7 +132,7 @@ export const UserRow = ({
         <div className="w-24 flex justify-center">
           <span className={`inline-flex items-center gap-1 px-1.5 py-1 text-[10px] font-medium rounded border ${LEVEL_COLORS[permLevel.level]}`}>
             {LEVEL_ICONS[permLevel.level]}
-            {LEVEL_LABELS[permLevel.level]}
+            {t(`userAccess.panel.levels.${permLevel.level}`)}
             {!permLevel.isDirect && (
               <ArrowDown className="w-2.5 h-2.5" />
             )}
@@ -148,7 +151,8 @@ export const UserRow = ({
                   ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10'
                   : 'text-[var(--text-tertiary)] hover:text-[var(--accent-primary)] hover:bg-[var(--bg-tertiary)]'
               }`}
-              title={`${counts.total} гранулярных правил`}
+              title={t('userAccess.panel.granularRules', { count: counts.total })}
+              aria-expanded={isExpanded}
             >
               <Layers className="w-4 h-4" />
             </button>
@@ -159,7 +163,7 @@ export const UserRow = ({
               onClick={() => onDeleteUser(user.row_id, user.name)}
               disabled={isDeletingUser === user.row_id}
               className="p-1.5 text-[var(--text-tertiary)] hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors disabled:opacity-50"
-              title="Удалить"
+              title={t('userAccess.panel.deleteUser')}
             >
               {isDeletingUser === user.row_id ? (
                 <Loader2 className="w-4 h-4 animate-spin" />

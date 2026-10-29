@@ -1,9 +1,11 @@
 import { Bot, Layers, Atom, Eye, FileStack, ZoomIn, ZoomOut } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useDocumentsContext } from '../DocumentsContext';
 
 export function ToolbarViewActions() {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
 
   return (
     <>
@@ -15,7 +17,7 @@ export function ToolbarViewActions() {
             "p-1.5 rounded-md",
             "hover:bg-[var(--bg-tertiary)]"
           )}
-          title="Настройка AI агентов"
+          title={t('documents.configureAgents')}
         >
           <Bot className="w-4 h-4" />
         </button>
@@ -31,7 +33,7 @@ export function ToolbarViewActions() {
               ? "bg-[var(--color-primary-500)] text-white"
               : "hover:bg-[var(--bg-tertiary)]"
           )}
-          title={ctx.structureMode ? "Режим просмотра" : "Режим структуры"}
+          title={ctx.structureMode ? t('documents.viewMode') : t('documents.structureMode')}
         >
           <Layers className="w-4 h-4" />
         </button>
@@ -55,7 +57,7 @@ export function ToolbarViewActions() {
               ? "bg-purple-500 text-white"
               : "hover:bg-[var(--bg-tertiary)]"
           )}
-          title="Панель атомов"
+          title={t('documents.atomsPanel')}
         >
           <Atom className="w-4 h-4" />
         </button>
@@ -70,7 +72,7 @@ export function ToolbarViewActions() {
               "px-2 py-1 text-xs transition-colors",
               ctx.previewMode === 'strip' ? 'bg-[var(--color-primary-500)] text-white' : 'hover:bg-[var(--bg-secondary)]'
             )}
-            title="С рамкой"
+            title={t('documents.previewStrip')}
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="8" y1="4" x2="8" y2="20" />
@@ -83,7 +85,7 @@ export function ToolbarViewActions() {
               "px-2 py-1 text-xs transition-colors",
               ctx.previewMode === 'pages' ? 'bg-[var(--color-primary-500)] text-white' : 'hover:bg-[var(--bg-secondary)]'
             )}
-            title="Постранично"
+            title={t('documents.previewPages')}
           >
             <FileStack className="w-4 h-4" />
           </button>
@@ -93,7 +95,7 @@ export function ToolbarViewActions() {
               "px-2 py-1 text-xs transition-colors",
               ctx.previewMode === 'none' ? 'bg-[var(--color-primary-500)] text-white' : 'hover:bg-[var(--bg-secondary)]'
             )}
-            title="Без рамки"
+            title={t('documents.previewNone')}
           >
             <Eye className="w-4 h-4" />
           </button>
@@ -102,12 +104,12 @@ export function ToolbarViewActions() {
 
       {/* Content Scale */}
       {ctx.selectedDocument && (
-        <div className="flex items-center gap-1 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-primary)] px-1" title="Масштаб текста (влияет на печать)">
-          <span className="text-[10px] text-[var(--text-tertiary)] px-1">Текст</span>
+        <div className="flex items-center gap-1 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-primary)] px-1" title={t('documents.contentScale')}>
+          <span className="text-[10px] text-[var(--text-tertiary)] px-1">{t('documents.levels.text')}</span>
           <button
             onClick={() => ctx.setContentScale(Math.max(50, ctx.contentScale - 10))}
             className="p-1 hover:bg-[var(--bg-secondary)] rounded"
-            title="Уменьшить текст"
+            title={t('documents.decreaseText')}
           >
             <ZoomOut className="w-3.5 h-3.5" />
           </button>
@@ -115,7 +117,7 @@ export function ToolbarViewActions() {
           <button
             onClick={() => ctx.setContentScale(Math.min(150, ctx.contentScale + 10))}
             className="p-1 hover:bg-[var(--bg-secondary)] rounded"
-            title="Увеличить текст"
+            title={t('documents.increaseText')}
           >
             <ZoomIn className="w-3.5 h-3.5" />
           </button>

@@ -64,6 +64,7 @@ export const AUDIT_EXEMPT_TOOLS = new Set([
   'list_tables',
   'memory_recall',
   'memory_rooms',
+  'ops_grant_info',
   'printer_files',
   'printer_status',
   'printer_temperatures',

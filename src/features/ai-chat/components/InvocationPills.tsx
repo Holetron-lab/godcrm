@@ -1,14 +1,16 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * InvocationPills - ADR-116: Structured Invocation Tokens
  *
- * MentionPill:  renders <<@slug>> as a styled pill/chip (blue bg, user icon)
- * CommandPill:  renders <</slug>> as a styled command pill (purple bg, bot icon)
+ * MentionPill:  renders <<@slug>> as a styled pill/chip (agent accent fill)
+ * CommandPill:  renders <</slug>> as a styled command pill (agent accent fill)
  *
- * Plain @slug and /slug render as subtle reference highlights (not pills).
+ * Plain @slug renders as an outlined reference without an invocation action.
  */
 
 import React from 'react';
 import { Bot, User } from 'lucide-react';
+import { Avatar } from '@/shared/components/ui/Avatar';
 import { cn } from '@/shared/utils/cn';
 import { MentionTooltip } from './MentionTooltip';
 import { useMentionUsers } from './MentionUsersContext';
@@ -16,25 +18,28 @@ import { useMentionUsers } from './MentionUsersContext';
 // ── Custom event for pill click → insert into chat input ─────────────────────
 export const PILL_INSERT_EVENT = 'pill-invoke-insert';
 
-/**
- * Builds a tinted pill style from an agent's accent color.
- * Accepts hex (#rgb / #rrggbb); falls back to the raw value as text color so
- * named colors still work. Background is the same color at ~13% alpha.
- */
-function colorTintStyle(color: string): React.CSSProperties {
-  const hex = color.trim();
-  const isHex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex);
-  return isHex
-    ? { color: hex, backgroundColor: `${hex}22`, borderColor: `${hex}40` }
-    : { color: hex };
+/** Use the agent accent for invocation fills and reference outlines. */
+function colorTintStyle(color: string, reference = false): React.CSSProperties {
+  const accent = color.trim();
+  const hex = /^#[0-9a-f]{3}$/i.test(accent)
+    ? '#' + [...accent.slice(1)].map(char => char + char).join('')
+    : accent;
+  return {
+    borderColor: accent,
+    borderWidth: 0,
+    boxShadow: reference ? `inset 0 0 0 0.5px ${accent}` : undefined,
+    backgroundColor: reference ? 'transparent' : /^#[0-9a-f]{6}$/i.test(hex)
+      ? `${hex}33`
+      : `color-mix(in srgb, ${accent} 20%, transparent)`,
+  };
 }
 
 /** Public version — can be called from MarkdownPreview safety-net click handler */
-export function handlePillClickExternal(token: string) {
-  handlePillClick(token);
+export function handlePillClickExternal(token: string, t: (key: string) => string) {
+  handlePillClick(token, t);
 }
 
-function handlePillClick(token: string, onClick?: (token: string) => void) {
+function handlePillClick(token: string, t: (key: string) => string, onClick?: (token: string) => void) {
   if (onClick) {
     onClick(token);
     return;
@@ -44,11 +49,11 @@ function handlePillClick(token: string, onClick?: (token: string) => void) {
   const handled = !window.dispatchEvent(event); // returns false if preventDefault was called
   if (handled) {
     // Chat open — token was inserted into input
-    showPillToast('Вставлено в инпут');
+    showPillToast(t('aiChat.ui.insertedInInput'));
   } else {
     // No chat open — copy to clipboard
     navigator.clipboard.writeText(token).then(() => {
-      showPillToast('Скопировано');
+      showPillToast(t('aiChat.ui.copied'));
     }).catch(() => {});
   }
 }
@@ -70,46 +75,48 @@ interface MentionPillProps {
   /** Optional click handler */
   onClick?: (token: string) => void;
   className?: string;
+  reference?: boolean;
 }
 
 /**
  * Renders a structured invocation mention (<<@slug>>) as a styled pill.
- * Blue background with user icon.
+ * Uses the agent accent; references keep only the outline.
  */
-export const MentionPill: React.FC<MentionPillProps> = ({ slug, onClick, className }) => {
+export const MentionPill: React.FC<MentionPillProps> = ({ slug, onClick, className, reference = false }) => {
+  const { t } = useLanguage();
   const { getBySlug } = useMentionUsers();
   const info = getBySlug(slug);
-  const color = info?.color;
-  // When the mention resolves to an agent we know, tint the pill with its accent
-  // color and show its emoji icon; otherwise keep the generic blue/user fallback.
-  const tinted = color ? colorTintStyle(color) : undefined;
+  const color = info?.color || '#3B82F6';
+  // Keep a visible fallback while agent metadata is unavailable.
+  const tinted = colorTintStyle(color, reference);
+  const Tag = reference ? 'span' : 'button';
 
   return (
     <MentionTooltip slug={slug}>
-      <span
-        role="button"
-        tabIndex={0}
-        onClick={(e) => {
+      <Tag
+        type={reference ? undefined : "button"}
+        onClick={reference ? undefined : (e) => {
           e.preventDefault();
           e.stopPropagation();
-          handlePillClick(`<<@${slug}>>`, onClick);
+          handlePillClick(`<<@${slug}>>`, t, onClick);
         }}
         style={tinted}
         className={cn(
           'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full',
-          'text-xs font-medium',
-          !tinted && 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30',
-          'cursor-pointer transition-colors',
+          'text-xs font-medium border text-[var(--text-primary)]',
+          !reference && 'cursor-pointer hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
           'align-middle leading-tight',
           className
         )}
-        title={`Invocation: @${slug}`}
+        title={t(reference ? 'aiChat.ui.mentionReference' : 'aiChat.ui.mentionInvocation', { name: slug })}
       >
         {info?.icon
-          ? <span className="text-[11px] leading-none flex-shrink-0">{info.icon}</span>
+          ? /^(\/|https?:\/\/|data:)/.test(info.icon)
+            ? <Avatar url={info.icon} name={info.name} size={14} color={info.color} />
+            : <span className="text-[11px] leading-none flex-shrink-0">{info.icon}</span>
           : <User className="w-3 h-3 flex-shrink-0" />}
         <span>@{slug}</span>
-      </span>
+      </Tag>
     </MentionTooltip>
   );
 };
@@ -126,40 +133,41 @@ interface CommandPillProps {
 
 /**
  * Renders a structured invocation command (<</slug>>) as a styled pill.
- * Purple background with bot icon.
+ * Uses the same agent accent as mention invocations.
  */
 export const CommandPill: React.FC<CommandPillProps> = ({ slug, onClick, className }) => {
+  const { t } = useLanguage();
   const { getBySlug } = useMentionUsers();
   const info = getBySlug(slug);
-  const color = info?.color;
-  const tinted = color ? colorTintStyle(color) : undefined;
+  const color = info?.color || '#8B5CF6';
+  const tinted = colorTintStyle(color);
 
   return (
     <MentionTooltip slug={slug}>
-      <span
-        role="button"
-        tabIndex={0}
+      <button
+        type="button"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          handlePillClick(`<</${slug}>>`, onClick);
+          handlePillClick(`<</${slug}>>`, t, onClick);
         }}
         style={tinted}
         className={cn(
           'inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full',
-          'text-xs font-medium',
-          !tinted && 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30',
-          'cursor-pointer transition-colors',
+          'text-xs font-medium border text-[var(--text-primary)]',
+          'cursor-pointer hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
           'align-middle leading-tight',
           className
         )}
-        title={`Invocation: /${slug}`}
+        title={t('aiChat.ui.commandInvocation', { name: slug })}
       >
         {info?.icon
-          ? <span className="text-[11px] leading-none flex-shrink-0">{info.icon}</span>
+          ? /^(\/|https?:\/\/|data:)/.test(info.icon)
+            ? <Avatar url={info.icon} name={info.name} size={14} color={info.color} />
+            : <span className="text-[11px] leading-none flex-shrink-0">{info.icon}</span>
           : <Bot className="w-3 h-3 flex-shrink-0" />}
         <span>/{slug}</span>
-      </span>
+      </button>
     </MentionTooltip>
   );
 };

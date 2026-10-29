@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useCallback } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { apiClient } from '@/shared/utils/apiClient';
@@ -38,10 +39,11 @@ export function useSendMessage({
   currentConversationIdRef,
   loadConversations,
 }: UseSendMessageOptions) {
+  const { t } = useLanguage();
   const sendMessage = useCallback(
     async (content: string, attachments?: File[], modelId?: number, mentions?: Mention[], useAgentMode?: boolean, systemPromptPrefix?: string, subAgentRowIds?: number[], rowAttachments?: Array<{ id: string; name: string; type: string; size: number; rowReference: { table_id: number; row_id: number; table_name: string; table_icon?: string; row_title?: string } }>, convBoundRow?: { table_id: number; row_id: number }, replyTo?: ReplyTo) => {
       if (!currentAgent || !spaceId) {
-        setError('No agent selected or space not found');
+        setError(t('aiChat.ui.noAgentOrSpace'));
         return;
       }
 
@@ -53,11 +55,15 @@ export function useSendMessage({
       let uploadedAttachments: { id: string; name: string; type: string; size: number; url?: string; preview?: string }[] | undefined;
       if (attachments && attachments.length > 0) {
         try {
-          // ADR-0016 §Phase 5: chat attachments are visible to any logged-in
-          // user (including the agent) — mark them `internal` so fileGuard
-          // doesn't 401 the <img src="/uploads/...">.
-          const uploadResult = await filesApi.upload(attachments, { spaceId, visibility: 'internal' });
+          const conversationId = currentConversationIdRef.current;
+          if (!conversationId) throw new Error(t('aiChat.ui.attachmentSpaceUnknown'));
+          const response = await apiClient.get<{ data: { space_id: number | null } }>(`/chat/conversations/${conversationId}`);
+          if (!response.data.space_id) throw new Error(t('aiChat.ui.attachmentSpaceUnknown'));
+          const uploadResult = await filesApi.upload(attachments, { spaceId: response.data.space_id });
           const uploadedFiles: FileModel[] = Array.isArray(uploadResult) ? uploadResult : [uploadResult];
+          if (uploadedFiles.length !== attachments.length || uploadedFiles.some(file => !file?.url)) {
+            throw new Error(t('aiChat.ui.attachmentUploadFailed'));
+          }
 
           uploadedAttachments = attachments.map((file, idx) => {
             const uploaded = uploadedFiles[idx];
@@ -72,15 +78,9 @@ export function useSendMessage({
             };
           });
         } catch (uploadErr) {
-          logger.error('[AI Chat] File upload failed, sending without URLs:', uploadErr);
-          // Fallback: send attachments without URLs (old behavior)
-          uploadedAttachments = attachments.map((file) => ({
-            id: `att_${Date.now()}_${file.name}`,
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined
-          }));
+          logger.error('[AI Chat] File upload failed:', uploadErr);
+          setError(t('aiChat.ui.attachmentUploadFailed'));
+          throw uploadErr;
         }
       }
 
@@ -195,9 +195,10 @@ export function useSendMessage({
         if (runAsAgent) {
           setIsAgentProcessing(false);
         }
+        throw err;
       }
     },
-    [currentAgent, spaceId, messages, agentMode, labId, loadConversations, setMessages, setIsLoading, setIsStreaming, setError, setIsAgentProcessing, setCurrentConversationId, currentConversationIdRef]
+    [t, currentAgent, spaceId, messages, agentMode, labId, loadConversations, setMessages, setIsLoading, setIsStreaming, setError, setIsAgentProcessing, setCurrentConversationId, currentConversationIdRef]
   );
 
   return sendMessage;

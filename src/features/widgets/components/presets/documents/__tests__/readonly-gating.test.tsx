@@ -1,3 +1,4 @@
+import { LanguageProvider } from '@/shared/i18n/LanguageContext';
 /**
  * ADR-0060 P6/P — read-only fail-closed gating for DocumentsWidget.
  *
@@ -83,6 +84,7 @@ import { AgentsModal } from '../modals/AgentsModal';
 
 describe('ADR-0060 P6/P — UI hide on read-only', () => {
   beforeEach(() => {
+    localStorage.setItem('god-crm-language', 'ru');
     apiPost.mockClear();
     apiPut.mockClear();
     apiPatch.mockClear();
@@ -91,7 +93,7 @@ describe('ADR-0060 P6/P — UI hide on read-only', () => {
   it('ToolbarViewActions hides AI Agents trigger when isReadOnly=true', () => {
     (baseCtx as { isReadOnly: boolean }).isReadOnly = true;
     try {
-      render(<ToolbarViewActions />);
+      render(<ToolbarViewActions />, { wrapper: LanguageProvider });
       // Bot icon button uses title="Настройка AI агентов" — should not render.
       expect(screen.queryByTitle('Настройка AI агентов')).toBeNull();
     } finally {
@@ -101,14 +103,14 @@ describe('ADR-0060 P6/P — UI hide on read-only', () => {
 
   it('ToolbarViewActions shows AI Agents trigger when isReadOnly=false', () => {
     (baseCtx as { isReadOnly: boolean }).isReadOnly = false;
-    render(<ToolbarViewActions />);
+    render(<ToolbarViewActions />, { wrapper: LanguageProvider });
     expect(screen.getByTitle('Настройка AI агентов')).toBeInTheDocument();
   });
 
   it('ToolbarAtomsModeActions hides AI Agents trigger when isReadOnly=true', () => {
     (baseCtx as { isReadOnly: boolean }).isReadOnly = true;
     try {
-      render(<ToolbarAtomsModeActions />);
+      render(<ToolbarAtomsModeActions />, { wrapper: LanguageProvider });
       expect(screen.queryByTitle('AI Агенты')).toBeNull();
     } finally {
       (baseCtx as { isReadOnly: boolean }).isReadOnly = false;
@@ -118,6 +120,7 @@ describe('ADR-0060 P6/P — UI hide on read-only', () => {
 
 describe('ADR-0060 P6/P — handler fail-closed', () => {
   beforeEach(() => {
+    localStorage.setItem('god-crm-language', 'ru');
     apiPost.mockClear();
     apiPut.mockClear();
     apiPatch.mockClear();
@@ -155,7 +158,8 @@ describe('ADR-0060 P6/P — provider mutation wrapping contract', () => {
     // Replicate the helper inline so we test the contract independently of
     // module loading order (the provider's actual helper is a closure).
     const isReadOnly = true;
-    const inner = vi.fn(async () => ({ id: 1 }));
+    const inner = vi.fn<(params: { documentId: number; item: Record<string, unknown> }) => Promise<{ id: number }>>()
+      .mockResolvedValue({ id: 1 });
     const wrap = <TArgs extends unknown[], TResult>(
       label: string,
       fn: (...args: TArgs) => TResult | Promise<TResult>,
@@ -169,14 +173,15 @@ describe('ADR-0060 P6/P — provider mutation wrapping contract', () => {
     };
 
     const guardedAddItem = wrap('addItem', inner);
-    await expect(guardedAddItem({ documentId: 1, item: {} } as never))
+    await expect(guardedAddItem({ documentId: 1, item: {} }))
       .rejects.toThrow(/read-only \(addItem\)/);
     expect(inner).not.toHaveBeenCalled();
   });
 
   it('denyInReadOnly passes through when isReadOnly=false', async () => {
     const isReadOnly = false;
-    const inner = vi.fn(async () => ({ id: 1 }));
+    const inner = vi.fn<(params: { documentId: number; item: Record<string, unknown> }) => Promise<{ id: number }>>()
+      .mockResolvedValue({ id: 1 });
     const wrap = <TArgs extends unknown[], TResult>(
       label: string,
       fn: (...args: TArgs) => TResult | Promise<TResult>,
@@ -190,7 +195,7 @@ describe('ADR-0060 P6/P — provider mutation wrapping contract', () => {
     };
 
     const guardedAddItem = wrap('addItem', inner);
-    await expect(guardedAddItem({ documentId: 1, item: {} } as never))
+    await expect(guardedAddItem({ documentId: 1, item: {} }))
       .resolves.toEqual({ id: 1 });
     expect(inner).toHaveBeenCalledTimes(1);
   });

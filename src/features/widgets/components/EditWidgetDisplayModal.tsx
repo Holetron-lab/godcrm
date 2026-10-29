@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -30,6 +30,7 @@ export const EditWidgetDisplayModal = ({
   tableId,
   onDeleteClick
 }: EditWidgetDisplayModalProps) => {
+  const fieldId = useId();
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState(currentTitle);
@@ -181,10 +182,10 @@ export const EditWidgetDisplayModal = ({
         )}
 
         <div className="grid gap-4 grid-cols-[auto,1fr] items-end">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+          <div role="group" aria-labelledby={`${fieldId}-label-0`}>
+            <span id={`${fieldId}-label-0`} className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
               Иконка
-            </label>
+            </span>
           <EmojiPicker
             value={icon}
             onChange={(value) => {

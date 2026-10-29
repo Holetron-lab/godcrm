@@ -83,12 +83,12 @@ async function executeTicket(ticket, _activeJobs) {
     // 6. Resolve provider and detect type
     const resolved = await sharedResolveAgentProvider(agentConfig);
     const agentRowId = AGENT_USER_TO_ROW[agentUserId] || null;
-    const { isClaudeCode } = detectProvider(resolved.provider, resolved.model);
+    const { isCliAgent } = detectProvider(resolved.provider, resolved.model);
 
     let responseText;
 
-    if (isClaudeCode) {
-      // ── Claude Code agents: async dispatch via AgentJobService ──
+    if (isCliAgent) {
+      // ── CLI agents (claude-code / codex): async dispatch via AgentJobService ──
       apiLogger.info({
         ticket_id: ticket.id,
         agentName,

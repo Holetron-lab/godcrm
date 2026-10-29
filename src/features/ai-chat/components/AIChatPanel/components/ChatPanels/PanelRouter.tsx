@@ -125,6 +125,10 @@ export const PanelRouter: React.FC<PanelRouterProps> = ({
       if (!settingsProps) return null;
       return <SettingsPanel {...settingsProps} />;
 
+    case 'documents':
+      // Documents are supplied through the override slot.
+      return null;
+
     default: {
       // Exhaustive check — TypeScript will warn if a PanelTab case is missing
       const _exhaustive: never = activePanel;

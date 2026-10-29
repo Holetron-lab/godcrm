@@ -18,6 +18,11 @@ const smtpSchema = z.object({
 
 export const SMTPConfigurator = () => {
   const user = useAuthStore((state) => state.user);
+  if (user?.role !== 'owner') return null;
+  return <SMTPConfiguratorContent />;
+};
+
+const SMTPConfiguratorContent = () => {
   const [status, setStatus] = useState<'unknown' | 'configured' | 'pending'>('unknown');
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,12 +30,8 @@ export const SMTPConfigurator = () => {
   const [step, setStep] = useState<'form' | 'verify'>('form');
   const [verificationCode, setVerificationCode] = useState('');
 
-  // Only owner can configure SMTP
-  if (user?.role !== 'owner') {
-    return null;
-  }
 
-  const form = useForm<SMTPConfig>({
+  const form = useForm<z.input<typeof smtpSchema>, unknown, SMTPConfig>({
     resolver: zodResolver(smtpSchema),
     defaultValues: { host: '', port: 587, user: '', password: '', from: '' }
   });

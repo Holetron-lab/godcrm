@@ -11,19 +11,25 @@ interface NumberWidgetProps {
 export function NumberWidget({ widget, data }: NumberWidgetProps) {
   const config = widget.config || {};
   const aggregation = config.aggregation || 'count';
-  const column = config.column;
+  const column = config.column ?? '';
   const filter = config.filter;
   const prefix = config.prefix || '';
   const suffix = config.suffix || '';
   const compareWith = config.compareWith; // 'yesterday', 'last_week', etc.
   
   const value = useMemo(() => {
-    let filteredData = data;
+    if (aggregation === 'count' && !filter) return data.length;
+    const rows = data.map(row => {
+      const nested = row.data;
+      return nested && typeof nested === 'object' && !Array.isArray(nested)
+        ? nested as Record<string, unknown>
+        : row;
+    });
+    let filteredData = rows;
     
     // Apply filter if exists
     if (filter) {
-      filteredData = data.filter(row => {
-        const rowData = row.data || row;
+      filteredData = rows.filter(rowData => {
         if (filter.column && filter.value !== undefined) {
           return rowData[filter.column] === filter.value;
         }
@@ -39,20 +45,23 @@ export function NumberWidget({ widget, data }: NumberWidgetProps) {
         return filteredData.length;
       case 'sum':
         return filteredData.reduce((acc, row) => {
-          const val = Number((row.data || row)[column]) || 0;
+          const val = Number(row[column]) || 0;
           return acc + val;
         }, 0);
-      case 'avg':
+      case 'avg': {
         if (filteredData.length === 0) return 0;
         const sum = filteredData.reduce((acc, row) => {
-          const val = Number((row.data || row)[column]) || 0;
+          const val = Number(row[column]) || 0;
           return acc + val;
         }, 0);
         return Math.round((sum / filteredData.length) * 10) / 10;
+      }
       case 'min':
-        return Math.min(...filteredData.map(row => Number((row.data || row)[column]) || 0));
+        if (filteredData.length === 0) return 0;
+        return Math.min(...filteredData.map(row => Number(row[column]) || 0));
       case 'max':
-        return Math.max(...filteredData.map(row => Number((row.data || row)[column]) || 0));
+        if (filteredData.length === 0) return 0;
+        return Math.max(...filteredData.map(row => Number(row[column]) || 0));
       default:
         return filteredData.length;
     }

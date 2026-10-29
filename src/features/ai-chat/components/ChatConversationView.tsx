@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatConversationView Component
  * ADR-024: Telegram-like Conversation View
@@ -141,6 +142,7 @@ export function ChatConversationView({
   pinCapReached,
   onClearPinCapNotice,
 }: ChatConversationViewProps) {
+  const { t, language } = useLanguage();
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [mentionedUsers, setMentionedUsers] = useState<MentionUser[]>([]);
@@ -151,7 +153,7 @@ export function ChatConversationView({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const authUser = useAuthStore((s) => s.user);
 
-  const formatTime = (date: Date) => date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (date: Date) => date.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
 
   const handleSubmit = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -168,10 +170,10 @@ export function ChatConversationView({
     let finalContent = trimmedInput;
     if (hasForwards) {
       const forwardBlocks = pendingForwards.map(fw => {
-        const senderName = fw.sender?.name || (fw.role === 'user' ? 'User' : 'Agent');
+        const senderName = fw.sender?.name || (fw.role === 'user' ? t('aiChat.ui.user') : t('aiChat.ui.agent'));
         const time = fw.timestamp ? formatTime(fw.timestamp) : '';
         const dateStr = fw.timestamp
-          ? fw.timestamp.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+          ? fw.timestamp.toLocaleDateString(language, { day: '2-digit', month: '2-digit', year: 'numeric' })
           : '';
         const cleanContent = fw.content
           .replace(/<<@([a-z0-9_-]+)>>/gi, '@$1')
@@ -236,19 +238,19 @@ export function ChatConversationView({
   const renderStatus = () => {
     if (!chat) return null;
     if (isTyping) {
-      return <span className="text-[var(--color-primary-500)]">{typingAgentName ? `${typingAgentName} думает...` : 'печатает...'}</span>;
+      return <span className="text-[var(--color-primary-500)]">{typingAgentName ? t('aiChat.ui.agentThinking', { name: typingAgentName }) : t('aiChat.ui.typing')}</span>;
     }
     if (chat.type === 'agent') {
       return <span className="text-[var(--text-tertiary)]">{chat.agentModel || 'AI Agent'}</span>;
     }
     if (chat.type === 'group' && chat.participantsCount) {
-      return <span className="text-[var(--text-tertiary)]">{chat.participantsCount} участников</span>;
+      return <span className="text-[var(--text-tertiary)]">{t('aiChat.ui.participantCount', { count: chat.participantsCount })}</span>;
     }
     if (chat.status === 'online') {
-      return <span className="text-green-500">онлайн</span>;
+      return <span className="text-green-500">{t('aiChat.ui.online')}</span>;
     }
     if (chat.lastSeen) {
-      return <span className="text-[var(--text-tertiary)]">был(а) {formatTime(chat.lastSeen)}</span>;
+      return <span className="text-[var(--text-tertiary)]">{t('aiChat.ui.lastSeen')}{' '}{formatTime(chat.lastSeen)}</span>;
     }
     return null;
   };
@@ -261,8 +263,8 @@ export function ChatConversationView({
           <div className="w-20 h-20 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center mx-auto mb-4">
             <Bot className="w-10 h-10 text-[var(--text-tertiary)]" />
           </div>
-          <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">Выберите чат</h3>
-          <p className="text-sm text-[var(--text-tertiary)]">Выберите чат из списка слева или создайте новый</p>
+          <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">{t('aiChat.ui.selectAChat')}</h3>
+          <p className="text-sm text-[var(--text-tertiary)]">{t('aiChat.ui.selectAChatFromTheListOnTheLeftOrCreateANewOne')}</p>
         </div>
       </div>
     );
@@ -282,40 +284,50 @@ export function ChatConversationView({
           </button>
         )}
 
-        <div className="relative flex-shrink-0 w-10 h-10 cursor-pointer" onClick={onOpenSettings}>
-          {chat.avatar ? (
-            <img src={chat.avatar} alt={chat.title} className="w-full h-full rounded-full object-cover" />
-          ) : (
-            <div className={cn(
-              'w-full h-full rounded-full flex items-center justify-center text-white',
-              chat.type === 'agent' ? 'bg-gradient-to-br from-purple-500 to-purple-600' :
-              chat.type === 'group' ? 'bg-gradient-to-br from-green-500 to-green-600' :
-              'bg-gradient-to-br from-blue-500 to-blue-600'
-            )}>
-              {chat.icon ? <span className="text-lg">{chat.icon}</span> :
-               chat.type === 'agent' ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
-            </div>
-          )}
-          {chat.status === 'online' && (
-            <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-[var(--bg-primary)] rounded-full" />
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpenSettings}>
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-[var(--text-primary)] truncate">{chat.title}</span>
-            {chat.type === 'agent' && (
-              <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">AI</span>
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          disabled={!onOpenSettings}
+          aria-label={`${t('aiChat.ui.chatSettings')}: ${chat.title}`}
+          className="flex flex-1 min-w-0 items-center gap-3 rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary-500)] disabled:cursor-default"
+        >
+          <span className="relative block flex-shrink-0 w-10 h-10">
+            {chat.avatar ? (
+              <img src={chat.avatar} alt={chat.title} className="w-full h-full rounded-full object-cover" />
+            ) : (
+              <span className={cn(
+                'w-full h-full rounded-full flex items-center justify-center text-white',
+                chat.type === 'agent' ? 'bg-gradient-to-br from-purple-500 to-purple-600' :
+                chat.type === 'group' ? 'bg-gradient-to-br from-green-500 to-green-600' :
+                'bg-gradient-to-br from-blue-500 to-blue-600'
+              )}>
+                {chat.icon ? <span className="text-lg">{chat.icon}</span> :
+                 chat.type === 'agent' ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
+              </span>
             )}
-          </div>
-          <div className="text-xs">{renderStatus()}</div>
-        </div>
+            {chat.status === 'online' && (
+              <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-[var(--bg-primary)] rounded-full" />
+            )}
+          </span>
+
+          <span className="block flex-1 min-w-0">
+            <span className="flex items-center gap-2">
+              <span className="font-medium text-[var(--text-primary)] truncate">{chat.title}</span>
+              {chat.type === 'agent' && (
+                <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">AI</span>
+              )}
+            </span>
+            <span className="block text-xs">{renderStatus()}</span>
+          </span>
+        </button>
 
         <div className="flex items-center gap-1">
           <button
+            type="button"
+            disabled={!onOpenSettings}
             onClick={onOpenSettings}
             className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-            title="Настройки чата"
+            title={t('aiChat.ui.chatSettings')}
           >
             <MoreVertical className="w-5 h-5" />
           </button>
@@ -335,6 +347,10 @@ export function ChatConversationView({
               detail: { chatId: currentConversationId || chat.id, messageId },
             }),
           );
+        }}
+        onForward={(messageId) => {
+          const message = messages.find(item => item.id === messageId);
+          if (message) handleForward(message);
         }}
         onUnpin={onUnpinMessage}
         capReached={pinCapReached}
@@ -368,7 +384,7 @@ export function ChatConversationView({
         <div className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)] border-t border-[var(--border-secondary)]">
           <div className="flex-1 min-w-0 border-l-2 border-[var(--color-primary-500)] pl-2">
             <div className="text-xs font-medium text-[var(--color-primary-500)]">
-              {replyTo.sender?.name || (replyTo.role === 'user' ? 'Вы' : chat.title)}
+              {replyTo.sender?.name || (replyTo.role === 'user' ? t('aiChat.ui.you') : chat.title)}
             </div>
             <div className="text-xs text-[var(--text-secondary)] truncate">{replyTo.content}</div>
           </div>
@@ -389,7 +405,7 @@ export function ChatConversationView({
                   key={fw.id}
                   className="flex items-center gap-1 px-2 py-1 bg-orange-500/15 text-orange-300 rounded-full text-xs flex-shrink-0"
                 >
-                  <span className="font-medium">{fw.sender?.name || 'User'}</span>
+                  <span className="font-medium">{fw.sender?.name || t('aiChat.ui.user')}</span>
                   <span className="text-orange-300/60 max-w-[60px] truncate">{fw.content.slice(0, 10)}</span>
                   <span className="text-orange-300/40 text-[10px]">{formatTime(fw.timestamp)}</span>
                   <button
@@ -403,16 +419,16 @@ export function ChatConversationView({
             ) : (
               <div className="flex items-center gap-1 text-xs text-orange-300">
                 {pendingForwards.slice(0, 3).map(fw => (
-                  <span key={fw.id} className="font-medium">{fw.sender?.name || 'User'}</span>
+                  <span key={fw.id} className="font-medium">{fw.sender?.name || t('aiChat.ui.user')}</span>
                 ))}
-                <span className="text-orange-300/60">+{pendingForwards.length - 3} ({pendingForwards.length} сообщ.)</span>
+                <span className="text-orange-300/60">+{pendingForwards.length - 3} ({t('aiChat.ui.messageCount', { count: pendingForwards.length })})</span>
               </div>
             )}
           </div>
           <button
             onClick={() => setPendingForwards([])}
             className="p-1 rounded text-[var(--text-tertiary)] hover:text-red-400 flex-shrink-0"
-            title="Убрать все"
+            title={t('aiChat.ui.removeAll')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -440,13 +456,12 @@ export function ChatConversationView({
         style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0px))' }}
       >
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
-          <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}
-            accept="image/*,.pdf,.txt,.md,.json,.csv,.doc,.docx,.xls,.xlsx,.stl" />
+          <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors flex-shrink-0"
-            title="Прикрепить файл"
+            title={t('aiChat.ui.attachFile')}
           >
             <Paperclip className="w-5 h-5" />
           </button>
@@ -464,7 +479,7 @@ export function ChatConversationView({
               }}
               availableUsers={mentionUsers}
               availableAgents={mentionAgents}
-              placeholder="Сообщение... (@ или / для вызова агента)"
+              placeholder={t('aiChat.ui.messageOrToInvokeAnAgent')}
               disabled={isSending}
               className="bg-[var(--bg-tertiary)] rounded-2xl px-4 py-2"
             />
@@ -479,7 +494,7 @@ export function ChatConversationView({
                 ? 'bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-600)]'
                 : 'bg-[var(--bg-tertiary)] text-[var(--text-tertiary)]'
             )}
-            title="Отправить"
+            title={t('aiChat.ui.send')}
           >
             {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
           </button>

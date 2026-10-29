@@ -3,7 +3,7 @@
  * Supports formulas {{column_key}} for all types
  * Extracted from ColumnSettingsDrawer for modularity
  */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { Input, Checkbox } from '@/shared/components/ui';
 import type { ColumnModel } from '@/features/tables/types/table.types';
 import type { ColumnType } from '@/shared/types';
@@ -26,6 +26,8 @@ interface FancySelectProps {
 export const FancySelect = ({ label, value, onChange, options, placeholder = '— Not selected —', searchPlaceholder = 'Search...', notFoundText = 'Nothing found', disabled }: FancySelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const fieldId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -36,10 +38,24 @@ export const FancySelect = ({ label, value, onChange, options, placeholder = '�
   const selectedOption = options.find(opt => opt.value === value);
 
   useEffect(() => {
-    if (isOpen) {
-      searchRef.current?.focus();
+    if (!isOpen) return;
+    if (disabled) {
+      setIsOpen(false);
+      setSearch('');
+      return;
     }
-  }, [isOpen]);
+    searchRef.current?.focus();
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !containerRef.current?.contains(event.target as Node)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setIsOpen(false);
+      setSearch('');
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('keydown', handleEscape, true);
+    return () => document.removeEventListener('keydown', handleEscape, true);
+  }, [isOpen, disabled]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -56,39 +72,52 @@ export const FancySelect = ({ label, value, onChange, options, placeholder = '�
     onChange(optValue);
     setIsOpen(false);
     setSearch('');
+    triggerRef.current?.focus();
   };
 
   return (
-    <div className="space-y-1" ref={containerRef}>
-      <label className="block text-sm font-medium text-[var(--text-secondary)]">{label}</label>
+    <div className="space-y-1" ref={containerRef} onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) {
+        setIsOpen(false);
+        setSearch('');
+      }
+    }}>
+      <label htmlFor={fieldId} className="block text-sm font-medium text-[var(--text-secondary)]">{label}</label>
       <div className="relative">
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] transition text-left"
+          id={fieldId}
+          ref={triggerRef}
+          disabled={disabled}
+          aria-expanded={isOpen}
+          aria-describedby={`${fieldId}-value`}
+          aria-controls={isOpen ? `${fieldId}-options` : undefined}
+          onClick={() => { setIsOpen(!isOpen); setSearch(''); }}
+          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)] transition text-left focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {selectedOption ? (
             <span
-              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+              id={`${fieldId}-value`}
+              className="text-[var(--text-primary)] inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
               style={{
                 backgroundColor: `${selectedOption.color || getDefaultColor(options.indexOf(selectedOption))}20`,
-                color: selectedOption.color || getDefaultColor(options.indexOf(selectedOption)),
                 border: `1px solid ${selectedOption.color || getDefaultColor(options.indexOf(selectedOption))}40`
               }}
             >
               {selectedOption.label}
             </span>
           ) : (
-            <span className="text-sm text-[var(--text-tertiary)]">{placeholder}</span>
+            <span id={`${fieldId}-value`} className="text-sm text-[var(--text-secondary)]">{placeholder}</span>
           )}
-          <ChevronDown className={`w-4 h-4 text-[var(--text-tertiary)] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-4 h-4 text-[var(--text-secondary)] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {isOpen && (
-          <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[var(--bg-primary)] rounded-lg shadow-xl border border-[var(--border-primary)] overflow-hidden">
+          <div id={`${fieldId}-options`} className="absolute z-50 top-full left-0 right-0 mt-1 bg-[var(--bg-primary)] rounded-lg shadow-xl border border-[var(--border-primary)] overflow-hidden">
             <div className="p-2 border-b border-[var(--border-secondary)]">
               <input
                 ref={searchRef}
+                aria-label={`${label}: ${searchPlaceholder}`}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -98,40 +127,43 @@ export const FancySelect = ({ label, value, onChange, options, placeholder = '�
             </div>
             <div className="max-h-[200px] overflow-y-auto py-1">
               {/* Опция "Не выбрано" */}
-              <div
+              <button
+                type="button"
+                aria-pressed={value == null}
                 onClick={() => handleSelect(null)}
-                className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--bg-secondary)] ${!value ? 'bg-primary-50' : ''}`}
+                className={`w-full text-left flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-primary-500)] ${value == null ? 'bg-[var(--bg-secondary)]' : ''}`}
               >
-                <div className="w-4">{!value && <Check className="w-4 h-4 text-[var(--color-primary-500)]" />}</div>
-                <span className="text-sm text-[var(--text-tertiary)]">{placeholder}</span>
-              </div>
+                <span className="w-4 shrink-0">{value == null && <Check className="w-4 h-4 text-[var(--color-primary-500)]" />}</span>
+                <span className="text-sm text-[var(--text-secondary)]">{placeholder}</span>
+              </button>
 
               {filteredOptions.map((opt, index) => {
                 const isSelected = opt.value === value;
                 const color = opt.color || getDefaultColor(index);
                 return (
-                  <div
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
                     key={opt.value}
                     onClick={() => handleSelect(opt.value)}
-                    className={`flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--bg-secondary)] ${isSelected ? 'bg-primary-50' : ''}`}
+                    className={`w-full text-left flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--bg-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-primary-500)] ${isSelected ? 'bg-[var(--bg-secondary)]' : ''}`}
                   >
-                    <div className="w-4">{isSelected && <Check className="w-4 h-4 text-[var(--color-primary-500)]" />}</div>
+                    <span className="w-4 shrink-0">{isSelected && <Check className="w-4 h-4 text-[var(--color-primary-500)]" />}</span>
                     <span
-                      className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+                      className="text-[var(--text-primary)] inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
                       style={{
                         backgroundColor: `${color}20`,
-                        color: color,
                         border: `1px solid ${color}40`
                       }}
                     >
                       {opt.label}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
 
               {filteredOptions.length === 0 && search && (
-                <div className="px-3 py-4 text-center text-sm text-[var(--text-tertiary)]">
+                <div className="px-3 py-4 text-center text-sm text-[var(--text-secondary)]">
                   {notFoundText}
                 </div>
               )}

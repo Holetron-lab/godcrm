@@ -4,7 +4,7 @@
  * Used by SpaceConnectorsTab as the body of expandable chip rows
  * (chevron-disclosure pattern). Replaces the AddConnectorModal popup.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useId, useEffect, useMemo, useState } from 'react';
 import { ExternalLink, Loader2, ChevronDown, ChevronRight, KeyRound } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
@@ -45,6 +45,7 @@ export function BrandedProviderForm({
   onCollapse: () => void;
   onOAuthLaunched: (typeSlug: string) => void;
 }) {
+  const fieldId = useId();
   const [displayName, setDisplayName] = useState(selected.display_name);
   const [scopes, setScopes] = useState<string[]>(selected.scopes_default);
   const [busy, setBusy] = useState(false);
@@ -114,10 +115,11 @@ export function BrandedProviderForm({
   return (
     <div className="space-y-3 p-3 bg-[var(--bg-tertiary)]/50 rounded-b-lg border-x border-b border-[var(--border-primary)]">
       <div>
-        <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-0`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
           Display name
         </label>
         <input
+          id={`${fieldId}-0`}
           type="text"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
@@ -127,10 +129,10 @@ export function BrandedProviderForm({
       </div>
 
       {allScopeValues.length > 0 && (
-        <div>
-          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+        <div role="group" aria-labelledby={`${fieldId}-group-132`}>
+          <span id={`${fieldId}-group-132`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
             Scopes
-          </label>
+          </span>
           <div className="space-y-0.5 p-2 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-md max-h-40 overflow-y-auto">
             {allScopeValues.map((value) => {
               const choice = selected.scopes_choices.find((c) => c.value === value);
@@ -175,14 +177,15 @@ export function BrandedProviderForm({
         {advancedOpen && (
           <div className="p-3 space-y-2 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]/40">
             <p className="text-[11px] text-[var(--text-tertiary)] leading-relaxed">
-              Leave blank to use the server's pre-configured client.
+              Leave blank to use the server&apos;s pre-configured client.
               Provide BOTH fields together to override — credentials are encrypted at rest.
             </p>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-1`} className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1">
                 Client ID
               </label>
               <input
+                id={`${fieldId}-1`}
                 type="text"
                 value={overrideClientId}
                 onChange={(e) => setOverrideClientId(e.target.value)}
@@ -192,10 +195,11 @@ export function BrandedProviderForm({
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-2`} className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1">
                 Client Secret
               </label>
               <input
+                id={`${fieldId}-2`}
                 type="password"
                 value={overrideClientSecret}
                 onChange={(e) => setOverrideClientSecret(e.target.value)}
@@ -232,6 +236,7 @@ export function CustomTypeForm({
   onOAuthLaunched: (typeSlug: string) => void;
   onApiKeyCreated: (connector: SpaceConnector) => void;
 }) {
+  const fieldId = useId();
   const [displayName, setDisplayName] = useState('');
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -305,10 +310,11 @@ export function CustomTypeForm({
   return (
     <div className="space-y-3 p-3 bg-[var(--bg-tertiary)]/50 rounded-b-lg border-x border-b border-[var(--border-primary)]">
       <div>
-        <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-3`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
           Display name
         </label>
         <input
+          id={`${fieldId}-3`}
           type="text"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
@@ -340,6 +346,7 @@ function FieldInput({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const fieldId = useId();
   const inputType =
     field.type === 'password'
       ? 'password'
@@ -348,11 +355,12 @@ function FieldInput({
         : 'text';
   return (
     <div>
-      <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+      <label htmlFor={fieldId} className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
         {field.label}
         {field.required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       <input
+        id={fieldId}
         type={inputType}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -387,7 +395,7 @@ function FormActions({
         type="button"
         onClick={onSubmit}
         disabled={busy}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary-600 hover:bg-primary-700 text-white dark:text-slate-950 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {busy ? (
           <Loader2 className="w-3.5 h-3.5 animate-spin" />

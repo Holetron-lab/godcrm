@@ -1,7 +1,9 @@
-// Типы триггеров
-export type TriggerType = 
-  | 'column_change'    // При изменении значения колонки
+// Типы триггеров.
+// Движок (backend/services/AutomationTriggerService.js) исполняет row_create, row_update и schedule.
+// `column_change` удалён (чат 3660, 2026-10-20): он эквивалентен row_update + watch_field.
+export type TriggerType =
   | 'row_create'       // При создании строки
+  | 'row_update'       // При изменении строки (движок: AutomationTriggerService.fireRowUpdateTriggers)
   | 'row_delete'       // При удалении строки
   | 'button_click'     // При нажатии кнопки
   | 'schedule';        // По расписанию
@@ -33,11 +35,11 @@ export type ConditionOperator =
 
 // Конфигурация триггера
 export interface TriggerConfig {
-  // Для column_change
-  columnId?: string;
-  fromValue?: string;
-  toValue?: string;
-  
+  // Для row_update — ключ колонки (column_name), изменение которой запускает автоматизацию,
+  // и опциональное значение, при котором срабатывать
+  watch_field?: string;
+  equals?: unknown;
+
   // Для button_click
   buttonColumnId?: string;
   

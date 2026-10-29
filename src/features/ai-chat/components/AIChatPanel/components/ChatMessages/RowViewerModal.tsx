@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * RowViewerModal — Self-loading modal that fetches row data and renders it in
  * either a kanban-style CardDetailModal (mode='view', default) or an
@@ -8,7 +9,8 @@
  * the rich left-sidebar / right-content layout kicks in.
  */
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { Loader2 } from 'lucide-react';
 import { apiClient } from '@/shared/utils/apiClient';
 import { EditRowModal } from '@/features/tables/components/modals/EditRowModal';
@@ -38,10 +40,12 @@ const RowViewerModal = ({
   onAttachToChat,
   onAttachToMessage,
 }: RowViewerModalProps) => {
+  const { t } = useLanguage();
   const [rowData, setRowData] = useState<Record<string, unknown>>({});
   const [tableName, setTableName] = useState('');
   const [loadingRow, setLoadingRow] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   // Loads tableColumns + relationData (with caching across the app).
   const {
@@ -118,7 +122,7 @@ const RowViewerModal = ({
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
         <div className="bg-[var(--bg-primary)] rounded-lg p-6 flex items-center gap-3">
           <Loader2 className="w-5 h-5 animate-spin text-[var(--color-primary-500)]" />
-          <span className="text-sm text-[var(--text-secondary)]">Loading row data...</span>
+          <span className="text-sm text-[var(--text-secondary)]">{t('aiChat.ui.loadingRowData')}</span>
         </div>
       </div>
     );
@@ -126,17 +130,33 @@ const RowViewerModal = ({
 
   if (error) {
     return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={onClose}>
-        <div className="bg-[var(--bg-primary)] rounded-lg p-6 max-w-sm" onClick={e => e.stopPropagation()}>
-          <p className="text-sm text-red-400 mb-3">{error}</p>
+      <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50" />
+          <Dialog.Content
+            aria-modal="true"
+            aria-describedby={undefined}
+            onOpenAutoFocus={() => {
+              returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              returnFocusRef.current?.focus();
+            }}
+            className="fixed left-1/2 top-1/2 z-[60] -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-sm max-h-[90dvh] overflow-y-auto bg-[var(--bg-primary)] rounded-lg p-6"
+          >
+          <Dialog.Title asChild>
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>
+          </Dialog.Title>
           <button
+            type="button"
             onClick={onClose}
             className="px-3 py-1.5 rounded text-xs bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
           >
-            Close
-          </button>
-        </div>
-      </div>
+            {t('aiChat.ui.close')}</button>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     );
   }
 

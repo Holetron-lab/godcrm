@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React from 'react';
 import {
   Users,
@@ -102,6 +103,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   setContactsSearch,
   setHistorySearch
 }) => {
+  const { t } = useLanguage();
   return (
     <div className="border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
       {/* Row 1: Unified toolbar — no mode toggle, all tabs visible */}
@@ -109,7 +111,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         {/* Left: All panel tabs in one row */}
         <ToolbarButton
           icon={<Zap className="w-4 h-4" />}
-          label="Агенты"
+          label={t('aiChat.ui.agents')}
           active={activePanel === 'ai-agents' || (activePanel === 'none' && chatPartner?.type === 'agent')}
           onClick={() => {
             setChatMode('ai');
@@ -119,7 +121,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         />
         <ToolbarButton
           icon={<Inbox className="w-4 h-4" />}
-          label="Входящие"
+          label={t('aiChat.ui.inbox')}
           active={activePanel === 'inbox'}
           onClick={() => {
             setChatMode('people');
@@ -131,7 +133,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         />
         <ToolbarButton
           icon={<Users className="w-4 h-4" />}
-          label="Контакты"
+          label={t('aiChat.ui.contacts')}
           active={activePanel === 'contacts'}
           onClick={() => {
             setChatMode('people');
@@ -142,7 +144,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         {/* History button removed — replaced by enhanced Inbox (Ticket #81448) */}
         <ToolbarButton
           icon={<ListTodo className="w-4 h-4" />}
-          label="Задачи"
+          label={t('aiChat.ui.tasks')}
           active={activePanel === 'tasks'}
           onClick={() => togglePanel('tasks')}
         />
@@ -153,24 +155,24 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         {onSummary && (
           <ToolbarButton
             icon={<FileText className="w-4 h-4" />}
-            label="Сводка чата"
+            label={t('aiChat.ui.chatSummary')}
             onClick={onSummary}
           />
         )}
         <ToolbarButton
           icon={<Settings className="w-4 h-4" />}
-          label="Настройки"
+          label={t('aiChat.ui.settings')}
           active={activePanel === 'settings'}
           onClick={() => togglePanel('settings')}
         />
         <ToolbarButton
           icon={<Plus className="w-4 h-4" />}
-          label="Новый чат"
+          label={t('aiChat.ui.newChat')}
           onClick={() => createNewConversation()}
         />
         <ToolbarButton
           icon={<X className="w-4 h-4" />}
-          label="Закрыть"
+          label={t('aiChat.ui.close')}
           onClick={closeChat}
         />
       </div>
@@ -225,7 +227,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           ) : (
             <div className="flex items-center gap-2">
               <span className="font-medium text-sm text-[var(--text-primary)]">
-                {chatPartner?.name || 'Новый чат'}
+                {chatPartner?.name || t('aiChat.ui.newChat')}
               </span>
             </div>
           )}
@@ -242,7 +244,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           )}
           {chatParticipants.length > 0 && (
             <div className="text-[10px] text-[var(--text-tertiary)]">
-              {chatParticipants.length} участник{chatParticipants.length === 1 ? '' : chatParticipants.length < 5 ? 'а' : 'ов'}
+              {t('aiChat.ui.participantCount', { count: chatParticipants.length })}
             </div>
           )}
         </div>
@@ -272,13 +274,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             {conversationMode === 'solo' ? (
               <>
                 <Bot className="w-3 h-3" />
-                AI Mode
-              </>
+                {t('aiChat.ui.aiMode')}</>
             ) : (
               <>
                 <Users className="w-3 h-3" />
-                Group
-              </>
+                {t('aiChat.ui.group')}</>
             )}
           </span>
         )}
@@ -289,7 +289,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             onClick={onReconnect}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
             title={pollingError}
-            aria-label="Reconnect to chat"
+            aria-label={t('aiChat.ui.reconnectToChat')}
           >
             <Zap className="w-3 h-3" />
             {pollingError.includes('reconnect') ? 'Reconnect' : 'Connection issue'}
@@ -328,8 +328,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 if (activePanel === 'contacts') setContactsSearch(e.target.value);
               }}
               placeholder={
-                activePanel === 'contacts' ? 'Поиск контактов...' :
-                'Поиск...'
+                activePanel === 'contacts' ? t('aiChat.ui.searchContacts') :
+                t('aiChat.ui.search')
               }
               className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] border-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
             />

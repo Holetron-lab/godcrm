@@ -182,6 +182,30 @@ const formatForDisplay = (date: Date, showTime: boolean, displayFormat: string |
     return timeStr ? `${dateStr} ${timeStr}` : dateStr;
   }
 
+  // Datetime-mode formats offered by DateColumnSettings (datetime_default = the default branch below)
+  const pad = (n: number) => String(n).padStart(2, '0');
+  switch (displayFormat) {
+    case 'datetime_short':
+      return `${date.toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' })} ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`;
+    case 'datetime_iso':
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    case 'datetime_seconds':
+      return `${date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+    case 'time_only':
+      return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    case 'time_seconds':
+      return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    // Date-only views of a datetime value: time stays stored, just not shown
+    case 'date_only':
+      return date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
+    case 'date_short':
+      return date.toLocaleDateString(locale, { year: 'numeric', month: '2-digit', day: '2-digit' });
+    case 'date_full':
+      return date.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
+    default:
+      break;
+  }
+
   // Default format
   const dateStr = date.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
   const timeStr = showTime ? date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
@@ -249,7 +273,8 @@ export const DateCell = ({ value, showTime = false, dateFormat, displayFormat, r
       return <span className="text-[var(--text-tertiary)]">Invalid date</span>;
     }
 
-    const displayStr = formatForDisplay(date, showTime, displayFormat, language);
+    // Mode "date" on a datetime column hides the stored time in the cell; the editor still writes it
+    const displayStr = formatForDisplay(date, showTime && effectiveMode !== 'date', displayFormat, language);
 
     // If format mismatch, show warning with update button
     if (formatMismatch && onUpdateFormat) {

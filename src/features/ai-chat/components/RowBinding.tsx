@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * RowBinding Component
  * ADR-024: Chat & Message Architecture
@@ -74,6 +75,7 @@ export function RowBinding({
   onUnbind,
   className
 }: RowBindingProps) {
+  const { t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTableId, setSelectedTableId] = useState<number | null>(defaultTableId ?? null);
@@ -139,7 +141,7 @@ export function RowBinding({
 
     const table = tables.find(t => t.id === row.table_id);
     onBind(row.table_id, row.id, {
-      tableName: table?.name || 'Unknown',
+      tableName: table?.name || t('aiChat.ui.unknownTable'),
       rowTitle: getRowDisplayValue(row, table)
     });
 
@@ -210,7 +212,7 @@ export function RowBinding({
           {boundRows.length > 0 ? (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-[var(--color-primary-600)]">
-                {boundRows.length} привязка(ок)
+                {t('aiChat.ui.linkCount', { count: boundRows.length })}
               </span>
               {boundRows.slice(0, 2).map((br, idx) => (
                 <span 
@@ -228,8 +230,7 @@ export function RowBinding({
             </div>
           ) : (
             <span className="text-sm text-[var(--text-tertiary)]">
-              Привязать к записи...
-            </span>
+              {t('aiChat.ui.linkToRecord')}</span>
           )}
         </div>
         
@@ -245,7 +246,7 @@ export function RowBinding({
           {/* Bound Rows List */}
           {boundRows.length > 0 && (
             <div className="mb-3">
-              <div className="text-xs font-medium text-[var(--text-tertiary)] mb-1.5">Привязанные записи</div>
+              <div className="text-xs font-medium text-[var(--text-tertiary)] mb-1.5">{t('aiChat.ui.linkedRecords')}</div>
               <div className="space-y-1">
                 {boundRows.map((br, idx) => (
                   <div
@@ -278,7 +279,7 @@ export function RowBinding({
           {/* Add New Binding */}
           {canAddMore && spaceId && (
             <div>
-              <div className="text-xs font-medium text-[var(--text-tertiary)] mb-1.5">Добавить привязку</div>
+              <div className="text-xs font-medium text-[var(--text-tertiary)] mb-1.5">{t('aiChat.ui.addLink')}</div>
               
               {/* Table Selector */}
               <div className="relative mb-2">
@@ -289,7 +290,7 @@ export function RowBinding({
                   <div className="flex items-center gap-2">
                     <Table2 className="w-4 h-4 text-[var(--text-tertiary)]" />
                     <span className={selectedTable ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"}>
-                      {selectedTable ? `${selectedTable.icon || '📋'} ${selectedTable.name}` : 'Выберите таблицу'}
+                      {selectedTable ? `${selectedTable.icon || '📋'} ${selectedTable.name}` : t('aiChat.ui.selectATableLabel')}
                     </span>
                   </div>
                   <ChevronDown className={cn(
@@ -306,8 +307,7 @@ export function RowBinding({
                       </div>
                     ) : tables.length === 0 ? (
                       <div className="py-3 text-center text-xs text-[var(--text-tertiary)]">
-                        Нет таблиц
-                      </div>
+                        {t('aiChat.ui.noTables')}</div>
                     ) : (
                       tables.map(table => (
                         <button
@@ -336,7 +336,7 @@ export function RowBinding({
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Поиск записей..."
+                      placeholder={t('aiChat.ui.searchRecords')}
                       className="w-full pl-8 pr-3 py-2 text-sm rounded border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]"
                     />
                     {searchQuery && (
@@ -356,7 +356,7 @@ export function RowBinding({
                       </div>
                     ) : tableRows.length === 0 ? (
                       <div className="py-4 text-center text-xs text-[var(--text-tertiary)]">
-                        {searchQuery ? 'Не найдено' : 'Нет записей'}
+                        {searchQuery ? t('aiChat.contacts.notFound') : t('kanban.noRecords')}
                       </div>
                     ) : (
                       tableRows.map(row => {
@@ -379,8 +379,7 @@ export function RowBinding({
                             </span>
                             {bound && (
                               <span className="text-[10px] text-[var(--text-tertiary)]">
-                                привязано
-                              </span>
+                                {t('aiChat.ui.linked')}</span>
                             )}
                           </button>
                         );
@@ -395,15 +394,14 @@ export function RowBinding({
           {/* Max bindings reached */}
           {!canAddMore && (
             <div className="text-xs text-[var(--text-tertiary)] text-center py-2">
-              Достигнут лимит привязок ({maxBindings})
+              {t('aiChat.ui.linkLimit', { count: maxBindings })}
             </div>
           )}
 
           {/* No space selected */}
           {!spaceId && (
             <div className="text-xs text-[var(--text-tertiary)] text-center py-2">
-              Выберите Space в настройках чата
-            </div>
+              {t('aiChat.ui.selectASpaceInChatSettings')}</div>
           )}
 
           {/* Close Button */}
@@ -411,8 +409,7 @@ export function RowBinding({
             onClick={() => setIsExpanded(false)}
             className="w-full mt-3 px-3 py-1.5 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors"
           >
-            Свернуть
-          </button>
+            {t('aiChat.ui.collapse')}</button>
         </div>
       )}
     </div>

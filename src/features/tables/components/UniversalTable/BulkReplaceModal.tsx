@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Replace, Loader2, AlertCircle, CheckCircle, ChevronUp, ChevronDown } from 'lucide-react';
 import { Button, Modal } from '@/shared/components/ui';
 import { cn } from '@/shared/utils/cn';
@@ -21,6 +22,10 @@ interface BulkReplaceModalProps {
   selectedRowIds: Set<string | number>;
   filteredRowIds: (string | number)[];
   allRowIds: (string | number)[];
+  /** Server-side row count: the "all rows" badge must reflect the table, not the loaded window. */
+  totalRows: number;
+  /** Loads the whole table once the "all rows" scope is chosen. */
+  fetchAllRows: () => Promise<RowModel[]>;
   onReplace: (config: BulkReplaceConfig) => Promise<BulkReplaceResult>;
   tableInfo?: {
     name: string;
@@ -40,6 +45,8 @@ export const BulkReplaceModal = ({
   selectedRowIds,
   filteredRowIds,
   allRowIds,
+  totalRows,
+  fetchAllRows,
   onReplace,
   tableInfo
 }: BulkReplaceModalProps) => {
@@ -62,7 +69,20 @@ export const BulkReplaceModal = ({
   const [result, setResult] = useState<BulkReplaceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewExpanded, setPreviewExpanded] = useState(false);
-  
+
+  // "All rows" is the whole table; `rows` is only the loaded, UI-filtered window.
+  const allRowsQuery = useQuery({
+    queryKey: ['bulk-replace-all-rows', tableInfo?.id ?? null],
+    queryFn: fetchAllRows,
+    enabled: open && targetScope === 'all',
+    staleTime: 0,
+  });
+  const isLoadingAllRows = targetScope === 'all' && allRowsQuery.isFetching;
+  const scopeRows = useMemo(
+    () => (targetScope === 'all' ? allRowsQuery.data ?? [] : rows),
+    [targetScope, allRowsQuery.data, rows]
+  );
+
   // Reset form when modal opens
   useEffect(() => {
     if (open) {
@@ -98,40 +118,35 @@ export const BulkReplaceModal = ({
     useRegex
   }), [targetScope, columnId, operationType, findValue, replaceValue, prependValue, appendValue, formulaValue, caseSensitive, useRegex]);
   
+  const targetIds = useMemo(() => getTargetRowIds(targetScope, {
+    selected: selectedRowIds,
+    filtered: filteredRowIds,
+    all: scopeRows.map(r => r.id)
+  }), [targetScope, selectedRowIds, filteredRowIds, scopeRows]);
+
   // Calculate preview
   const { preview, totalChanges } = useMemo(() => {
     if (!columnId || !open) return { preview: [], totalChanges: 0 };
-    
+
     // Skip preview for clear operation without find value
     if (operationType === 'clear') {
-      const targetIds = getTargetRowIds(targetScope, {
-        selected: selectedRowIds,
-        filtered: filteredRowIds,
-        all: allRowIds
-      });
       return { preview: [], totalChanges: targetIds.size };
     }
-    
+
     // Skip preview if no find value for replace
     if (operationType === 'replace' && !findValue) {
       return { preview: [], totalChanges: 0 };
     }
-    
-    const targetIds = getTargetRowIds(targetScope, {
-      selected: selectedRowIds,
-      filtered: filteredRowIds,
-      all: allRowIds
-    });
-    
-    return generateReplacePreview(config, rows, columns, targetIds, 10);
-  }, [config, rows, columns, targetScope, selectedRowIds, filteredRowIds, allRowIds, open, columnId, operationType, findValue]);
-  
+
+    return generateReplacePreview(config, scopeRows, columns, targetIds, 10);
+  }, [config, scopeRows, columns, targetIds, open, columnId, operationType, findValue]);
+
   // Get counts for scope options
   const scopeCounts = useMemo(() => ({
     selected: selectedRowIds.size,
     filtered: filteredRowIds.length,
-    all: allRowIds.length
-  }), [selectedRowIds.size, filteredRowIds.length, allRowIds.length]);
+    all: allRowsQuery.data?.length ?? (totalRows || allRowIds.length)
+  }), [selectedRowIds.size, filteredRowIds.length, allRowsQuery.data, totalRows, allRowIds.length]);
   
   // Filterable columns (exclude readonly, button, etc)
   const editableColumns = useMemo(() => {
@@ -180,8 +195,6 @@ export const BulkReplaceModal = ({
   
   // Get rows for preview based on scope
   const previewRows = useMemo(() => {
-    if (rows.length === 0) return [];
-    
     if (targetScope === 'selected' && selectedRowIds.size > 0) {
       return rows.filter(r => selectedRowIds.has(r.id));
     }
@@ -189,8 +202,8 @@ export const BulkReplaceModal = ({
       const filteredSet = new Set(filteredRowIds);
       return rows.filter(r => filteredSet.has(r.id));
     }
-    return rows;
-  }, [rows, targetScope, selectedRowIds, filteredRowIds]);
+    return scopeRows;
+  }, [rows, scopeRows, targetScope, selectedRowIds, filteredRowIds]);
   
   // Current preview row with bounds check
   const currentPreviewRow = useMemo(() => {
@@ -233,7 +246,7 @@ export const BulkReplaceModal = ({
       <Button
         variant="primary"
         onClick={handleReplace}
-        disabled={isProcessing || totalChanges === 0}
+        disabled={isProcessing || isLoadingAllRows || totalChanges === 0}
         data-testid="replace-all-button"
       >
         {isProcessing ? (
@@ -261,7 +274,9 @@ export const BulkReplaceModal = ({
       heightOffset={200}
       footer={modalFooter}
     >
-      <div className="flex flex-col gap-4 h-full">
+      {/* Content-sized: the Modal body scrolls. A fixed h-full chain let the
+          flex-1 form shrink under its inputs and the preview overlap them. */}
+      <div className="flex flex-col gap-4">
         {/* Scope selector */}
           <div>
             <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
@@ -306,10 +321,25 @@ export const BulkReplaceModal = ({
                 </label>
               ))}
             </div>
+            {isLoadingAllRows && (
+              <p role="status" className="flex items-center gap-2 mt-2 text-xs text-[var(--text-tertiary)]">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                {t('bulkReplace.loadingAllRows')}
+              </p>
+            )}
+            {targetScope === 'all' && allRowsQuery.isError && (
+              <p role="alert" className="flex items-center gap-2 mt-2 text-xs text-red-500">
+                <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />
+                {t('bulkReplace.errLoadAllRows')}
+                <button type="button" onClick={() => allRowsQuery.refetch()} className="underline hover:text-red-600">
+                  {t('bulkReplace.retry')}
+                </button>
+              </p>
+            )}
           </div>
-          
+
           <hr className="border-[var(--border-primary)]" />
-          
+
           {/* Column selector */}
           <div>
             <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
@@ -375,7 +405,7 @@ export const BulkReplaceModal = ({
           
           {/* Replace form */}
           {operationType === 'replace' && (
-            <div className="flex-1 min-h-0 flex flex-col gap-4">
+            <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                   {t('bulkReplace.findLabel')}
@@ -457,7 +487,7 @@ export const BulkReplaceModal = ({
 
           {/* Add Text form (prefix + suffix) */}
           {operationType === 'addText' && (
-            <div className="flex-1 min-h-0 flex flex-col gap-4">
+            <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                   {t('bulkReplace.prependLabel')}
@@ -516,7 +546,7 @@ export const BulkReplaceModal = ({
 
           {/* Formula form */}
           {operationType === 'formula' && (
-            <div className="flex-1 min-h-0 flex flex-col gap-4">
+            <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                   {t('bulkReplace.formulaLabel')}
@@ -614,11 +644,11 @@ export const BulkReplaceModal = ({
                           {t('bulkReplace.previewRowPrefix').replace('{index}', String(item.rowIndex))}
                         </span>
                         <span className="ml-2 text-red-500 line-through">
-                          "{String(item.currentValue || '')}"
+                          &quot;{String(item.currentValue || '')}&quot;
                         </span>
                         <span className="mx-2 text-[var(--text-tertiary)]">→</span>
                         <span className="text-green-500">
-                          "{String(item.newValue || '')}"
+                          &quot;{String(item.newValue || '')}&quot;
                         </span>
                       </div>
                     ))}

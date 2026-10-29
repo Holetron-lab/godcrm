@@ -224,7 +224,7 @@ export function useConversationSSE(
         for (const msg of genuinelyNew) {
           if (msg.contentType !== 'agent_status' && msg.senderType !== 'agent' && msg.role !== 'assistant') continue;
           anyAgentMsg = true;
-          const senderName = (msg as Record<string, unknown>).sender_name as string | undefined
+          const senderName = msg.sender_name
             || (msg.metadata as Record<string, unknown> | undefined)?.agent_name as string | undefined;
           const slug = slugifyAgentName(senderName);
           if (slug) incomingSlugs.add(slug);

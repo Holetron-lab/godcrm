@@ -2,7 +2,7 @@
  * CreateProjectModal - Modal for creating a new project in space
  */
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/shared/components/ui/Modal';
 import { Input } from '@/shared/components/ui/Input';
@@ -26,6 +26,7 @@ const PROJECT_TYPES = [
 ];
 
 export const CreateProjectModal = ({ spaceId, onSuccess }: CreateProjectModalProps) => {
+  const fieldId = useId();
   const queryClient = useQueryClient();
   const { createProjectModalOpen, closeCreateProjectModal } = useSpaceManagerStore();
   
@@ -99,23 +100,23 @@ export const CreateProjectModal = ({ spaceId, onSuccess }: CreateProjectModalPro
         
         {/* Name */}
         <div>
-          <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+          <label htmlFor={`${fieldId}-name`} className="block text-sm font-medium text-[var(--text-primary)] mb-2">
             Name
           </label>
-          <Input
+          <Input id={`${fieldId}-name`}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Project name"
-            autoFocus
           />
         </div>
         
         {/* Description */}
         <div>
-          <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+          <label htmlFor={`${fieldId}-0`} className="block text-sm font-medium text-[var(--text-primary)] mb-2">
             Description
           </label>
           <textarea
+            id={`${fieldId}-0`}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Optional description..."
@@ -132,10 +133,10 @@ export const CreateProjectModal = ({ spaceId, onSuccess }: CreateProjectModalPro
         </div>
         
         {/* Type */}
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+        <div role="group" aria-labelledby={`${fieldId}-group-137`}>
+          <span id={`${fieldId}-group-137`} className="block text-sm font-medium text-[var(--text-primary)] mb-2">
             Type
-          </label>
+          </span>
           <div className="grid grid-cols-2 gap-2">
             {PROJECT_TYPES.map(pt => (
               <button

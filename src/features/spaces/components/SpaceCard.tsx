@@ -5,6 +5,8 @@ import type { SpaceModel, UsersByRoles, SpaceProject, SpaceUser } from '../types
 import type { SpaceCardSize, SpaceCardHeight, SpaceCardSettings } from '../types/spaceCardSettings.types';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { DropdownMenu } from '@/shared/components/ui/DropdownMenu';
+import { hasPrivilegedAccess, useSpaceAccessLevelSync } from '../hooks/useSpaceAccessLevel';
+import type { UserAccessLevel } from '@/shared/types/user-access.types';
 
 interface SpaceCardProps {
   space: SpaceModel;
@@ -65,8 +67,13 @@ export const SpaceCard = ({
   const showDescription = cardSettings?.showDescription ?? true;
 
   // User access level from space or prop
-  const accessLevel = userAccessLevel || (space as any).user_access_level || 'viewer';
-  const canManage = accessLevel === 'owner' || accessLevel === 'admin';
+  // WP-5 (1552/228713): resolved through the shared access hook — backend
+  // `user_access_level` first (the creator arrives as `owner_owner`, which the
+  // old `owner || admin` check silently excluded), then ownership, then the
+  // global role. Owners lost the "+ project" button on their own card.
+  const resolvedAccessLevel = useSpaceAccessLevelSync(space);
+  const accessLevel: UserAccessLevel = userAccessLevel || resolvedAccessLevel;
+  const canManage = hasPrivilegedAccess(accessLevel);
 
   // Get actual users by roles from space or prop
   const roles = usersByRole || space.users_by_roles || { owners: 1, admins: 0, editors: 0, viewers: 0 };
@@ -96,11 +103,6 @@ export const SpaceCard = ({
     } else {
       navigate(`/spaces/${space.id}/dashboard`);
     }
-  };
-
-  const handleMenuClick = (e: MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
   };
 
   const handleCreateProject = (e: MouseEvent) => {
@@ -176,16 +178,16 @@ export const SpaceCard = ({
   const renderInfoModule = () => (
     <div className="relative flex flex-col h-full p-3">
       {/* Menu button - always in top-right of info module */}
-      <div onClick={handleMenuClick} className="absolute top-2 right-2 z-10">
+      <div className="absolute top-2 right-2 z-20">
         <DropdownMenu
           trigger={
-            <span
-              role="button"
-              tabIndex={0}
+            <button
+              type="button"
+              aria-label={`${t('spaces.menu.actions')} ${space.name}`}
               className="flex h-6 w-6 items-center justify-center rounded-md transition-all hover:bg-[var(--bg-tertiary)] cursor-pointer"
             >
               <MoreVertical className="h-4 w-4 text-[var(--text-tertiary)]" />
-            </span>
+            </button>
           }
           items={menuItems}
         />
@@ -267,7 +269,7 @@ export const SpaceCard = ({
           </span>
         </div>
         
-        <div className="flex-1 overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-[var(--border-primary)] scrollbar-track-transparent">
+        <div className="relative z-20 flex-1 overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-[var(--border-primary)] scrollbar-track-transparent">
           {projects.length > 0 ? (
             projects.map((project: SpaceProject) => (
               <button
@@ -312,7 +314,7 @@ export const SpaceCard = ({
           </span>
         </div>
         
-        <div className="flex-1 overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-[var(--border-primary)] scrollbar-track-transparent">
+        <div className="relative z-20 flex-1 overflow-y-auto space-y-0.5 scrollbar-thin scrollbar-thumb-[var(--border-primary)] scrollbar-track-transparent">
           {users.length > 0 ? (
             users.map((user: SpaceUser) => (
               <button
@@ -324,7 +326,7 @@ export const SpaceCard = ({
                   {user.name?.charAt(0)?.toUpperCase() || '?'}
                 </div>
                 <span className="text-[var(--text-secondary)] truncate flex-1">{user.name}</span>
-                <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${roleColors[user.role] || 'bg-gray-400'}`} />
+                <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${(user.role && roleColors[user.role]) || 'bg-gray-400'}`} />
               </button>
             ))
           ) : (
@@ -375,15 +377,6 @@ export const SpaceCard = ({
   return (
     <div className="h-full w-full min-w-0">
       <div
-        role="button"
-        tabIndex={0}
-        onClick={handleClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleClick();
-          }
-        }}
         className={`
           group relative w-full h-full overflow-hidden rounded-xl border cursor-pointer
           transition-all duration-300 ease-out text-left
@@ -394,13 +387,19 @@ export const SpaceCard = ({
           }
         `}
       >
+        <button
+          type="button"
+          onClick={handleClick}
+          aria-label={`${t('common.open')} ${space.name}`}
+          className="absolute inset-0 z-10 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-primary-500)]"
+        />
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-[var(--color-primary-100)]/20 opacity-0 transition-opacity duration-300 group-hover:opacity-100 pointer-events-none" />
 
         {/* Grid of modules — minmax(0,1fr) lets modules shrink instead of
             forcing the card wider than its slot. */}
         <div
-          className="relative h-full grid gap-0"
+          className="relative h-full grid gap-0 [&_button]:relative [&_button]:z-20"
           style={innerGridStyle}
         >
           {Array.from({ length: moduleCount }, (_, i) => (

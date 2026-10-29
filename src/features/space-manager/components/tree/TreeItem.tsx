@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 /**
  * TreeItem - Sortable tree item component
  */
@@ -56,6 +57,7 @@ const TYPE_ICONS: Record<string, string> = {
 export const TreeItem = ({ node, depth, isExpanded, hasChildren }: TreeItemProps) => {
   const [showActions, setShowActions] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const requestedFocusRef = useRequestedFocus<HTMLInputElement>(isEditing);
   const [editName, setEditName] = useState(node.name);
   const [editDescription, setEditDescription] = useState(String((node.data as Record<string, unknown>)?.description || ''));
   const [editIcon, setEditIcon] = useState(node.icon || '📁');
@@ -239,10 +241,9 @@ export const TreeItem = ({ node, depth, isExpanded, hasChildren }: TreeItemProps
   
   return (
     <div className="flex flex-col">
-      <div
+      <div role="presentation"
         ref={setNodeRef}
         style={style}
-        {...attributes}
         onClick={handleClick}
         className={`
           group flex items-center gap-1 py-1.5 pr-2 rounded-lg cursor-pointer
@@ -280,12 +281,12 @@ export const TreeItem = ({ node, depth, isExpanded, hasChildren }: TreeItemProps
         
         {/* Drag Handle */}
         {node.type !== 'project' && (
-          <div
+          <button type="button" aria-label={`Переместить ${node.name}`} {...attributes}
             {...listeners}
             className="opacity-0 group-hover:opacity-50 hover:!opacity-100 cursor-grab active:cursor-grabbing p-1"
           >
             <GripVertical className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-          </div>
+          </button>
         )}
         {node.type === 'project' && <div className="w-[22px]" />}
       
@@ -340,13 +341,13 @@ export const TreeItem = ({ node, depth, isExpanded, hasChildren }: TreeItemProps
       
       {/* Name + ID + Description */}
       <div className="flex-1 min-w-0 flex items-center gap-1.5">
-        <span className={`
+        <button type="button" aria-pressed={isSelected} className={`
           text-sm truncate
           ${node.type === 'project' ? 'font-semibold' : ''}
           ${isSelected ? 'text-[var(--accent-primary)]' : 'text-[var(--text-primary)]'}
         `}>
           {node.name}
-        </span>
+        </button>
         
         {/* ID badge for all items except virtual folders */}
         {!node.id.startsWith('virtual:') && (
@@ -355,7 +356,7 @@ export const TreeItem = ({ node, depth, isExpanded, hasChildren }: TreeItemProps
           }`}>
             ({parseItemId(node.id).numericId})
             {/* Table key */}
-            {node.type === 'table' && (node.data as Record<string, unknown>)?.name && (
+            {node.type === 'table' && Boolean((node.data as Record<string, unknown>)?.name) && (
               <span className="ml-1 text-cyan-500 font-mono">
                 {String((node.data as Record<string, unknown>).name)}
               </span>
@@ -364,7 +365,7 @@ export const TreeItem = ({ node, depth, isExpanded, hasChildren }: TreeItemProps
         )}
         
         {/* Description with ellipsis */}
-        {(node.data as Record<string, unknown>)?.description && (
+        {Boolean((node.data as Record<string, unknown>)?.description) && (
           <span className="text-xs text-[var(--text-tertiary)] truncate opacity-70 hidden sm:inline">
             {String((node.data as Record<string, unknown>).description)}
           </span>
@@ -460,7 +461,7 @@ export const TreeItem = ({ node, depth, isExpanded, hasChildren }: TreeItemProps
       {showActions && (
         <div 
           className="mx-1 mb-1 p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-secondary)]"
-          onClick={(e) => e.stopPropagation()}
+
         >
           {isEditing ? (
             /* Edit Mode */
@@ -506,7 +507,7 @@ export const TreeItem = ({ node, depth, isExpanded, hasChildren }: TreeItemProps
                     onChange={(e) => setEditName(e.target.value)}
                     className="w-full px-2 py-1 text-sm font-medium text-[var(--text-primary)] bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)]"
                     placeholder="Name..."
-                    autoFocus
+                    ref={requestedFocusRef}
                   />
                   <input
                     type="text"
@@ -577,21 +578,21 @@ export const TreeItem = ({ node, depth, isExpanded, hasChildren }: TreeItemProps
                   </div>
                   
                   {/* Table key */}
-                  {node.type === 'table' && (node.data as Record<string, unknown>)?.name && (
+                  {node.type === 'table' && Boolean((node.data as Record<string, unknown>)?.name) && (
                     <div className="text-xs text-cyan-500 font-mono mb-1">
                       key: {String((node.data as Record<string, unknown>).name)}
                     </div>
                   )}
                   
                   {/* Description */}
-                  {(node.data as Record<string, unknown>)?.description && (
+                  {Boolean((node.data as Record<string, unknown>)?.description) && (
                     <p className="text-xs text-[var(--text-secondary)] mb-1">
                       {String((node.data as Record<string, unknown>).description)}
                     </p>
                   )}
                   
                   {/* Created date */}
-                  {(node.data as Record<string, unknown>)?.created_at && (
+                  {Boolean((node.data as Record<string, unknown>)?.created_at) && (
                     <p className="text-[10px] text-[var(--text-tertiary)]">
                       Created: {new Date(String((node.data as Record<string, unknown>).created_at)).toLocaleDateString()}
                     </p>

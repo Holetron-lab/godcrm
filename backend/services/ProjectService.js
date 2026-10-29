@@ -252,19 +252,27 @@ export async function updateProject(projectId, updates) {
 }
 
 /**
- * Delete project
+ * Delete an empty project; retain nonempty parents even when cascade FKs are absent.
  * @param {number} projectId - Project ID
  * @returns {Promise<void>}
  */
 export async function deleteProject(projectId) {
-  // Verify project exists
-  const project = await getProjectById(projectId);
-  if (!project) {
-    throw new Error('Project not found');
-  }
+  await withTransactionAsync(async (trx) => {
+    const project = await trx.get('SELECT id FROM projects WHERE id = ? FOR UPDATE', [projectId]);
+    if (!project) throw new Error('Project not found');
 
-  // Delete project (CASCADE will handle tables and dashboards)
-  await dbRun('DELETE FROM projects WHERE id = ?', [projectId]);
+    const deleted = await trx.get(`
+      DELETE FROM projects p WHERE p.id = ?
+        AND NOT EXISTS (SELECT 1 FROM universal_tables t WHERE t.project_id = p.id)
+        AND NOT EXISTS (SELECT 1 FROM dashboards d WHERE d.project_id = p.id)
+      RETURNING p.id
+    `, [projectId]);
+    if (!deleted) {
+      throw Object.assign(new Error('Remove tables and dashboards before deleting this project'), {
+        code: 'PROJECT_NOT_EMPTY'
+      });
+    }
+  });
 }
 
 /**

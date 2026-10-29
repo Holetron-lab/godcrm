@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ContextSettingsSection Component
  * ADR-110 Phase 1: Context Settings UI (AC11-AC12)
@@ -189,6 +190,7 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
   isSaving,
   disabled = false,
 }) => {
+  const { t } = useLanguage();
   // Parse the raw value into a typed object
   const [settings, setSettings] = useState<ContextSettings>(() =>
     parseContextSettings(rawSettings)
@@ -276,7 +278,7 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
       <div className="border-t border-[var(--border-secondary)] pt-2">
         <SectionHeader
           icon={<Layers className="w-3.5 h-3.5" />}
-          title="Context Depth"
+          title={t('aiChat.ui.contextDepth')}
           subtitle="What gets included in the conversation window"
           expanded={expandedSections.context_depth}
           onToggle={() => toggleSection('context_depth')}
@@ -286,21 +288,21 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
             <CheckboxRow
               checked={true}
               onChange={() => {}}
-              label="Messages only (Level 1)"
+              label={t('aiChat.ui.contextMessagesOnly')}
               hint="~baseline tokens"
               disabled={true}
             />
             <CheckboxRow
               checked={levels.thinking}
               onChange={(v) => updateContextLevels({ thinking: v })}
-              label="+ Reasoning chains (Level 2)"
+              label={t('aiChat.ui.contextReasoning')}
               hint="~+20% tokens"
               disabled={disabled}
             />
             {levels.thinking && (
               <div className="pl-5 pb-1">
                 <NumberInput
-                  label="Preview chars:"
+                  label={t('aiChat.ui.previewChars')}
                   value={levels.thinking_preview_chars}
                   onChange={(v) => updateContextLevels({ thinking_preview_chars: v })}
                   min={0}
@@ -313,14 +315,14 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
             <CheckboxRow
               checked={levels.tool_summaries}
               onChange={(v) => updateContextLevels({ tool_summaries: v })}
-              label="+ Tool summaries (Level 3)"
+              label={t('aiChat.ui.contextToolSummaries')}
               hint="~+30% tokens"
               disabled={disabled}
             />
             {levels.tool_summaries && (
               <div className="pl-5 pb-1">
                 <NumberInput
-                  label="Preview chars:"
+                  label={t('aiChat.ui.previewChars')}
                   value={levels.tool_preview_chars}
                   onChange={(v) => updateContextLevels({ tool_preview_chars: v })}
                   min={0}
@@ -333,7 +335,7 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
             <CheckboxRow
               checked={levels.full_tool_results}
               onChange={(v) => updateContextLevels({ full_tool_results: v })}
-              label="+ Full tool results (Level 4)"
+              label={t('aiChat.ui.contextFullTools')}
               hint="~+200% tokens — use with caution"
               disabled={disabled}
             />
@@ -361,17 +363,15 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
           </div>
           <div className="flex-1 min-w-0">
             <span className="text-xs font-medium text-[var(--text-secondary)]">
-              Auto-Summary
-            </span>
+              {t('aiChat.ui.autoSummary')}</span>
             <span className="block text-[10px] text-[var(--text-tertiary)]">
-              Compress old messages into summaries
-            </span>
+              {t('aiChat.ui.compressMessages')}</span>
           </div>
         </label>
         {summary.enabled && (
           <div className="pl-7 pb-2 space-y-2">
             <NumberInput
-              label="Chunk size:"
+              label={t('aiChat.ui.chunkSize')}
               value={summary.chunk_size}
               onChange={(v) => updateAutoSummary({ chunk_size: v })}
               min={3}
@@ -379,7 +379,7 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
               disabled={disabled}
             />
             <NumberInput
-              label="Keep recent:"
+              label={t('aiChat.ui.keepRecent')}
               value={summary.keep_recent}
               onChange={(v) => updateAutoSummary({ keep_recent: v })}
               min={1}
@@ -389,7 +389,7 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
             <CheckboxRow
               checked={summary.inject_in_system}
               onChange={(v) => updateAutoSummary({ inject_in_system: v })}
-              label="Inject summaries into system prompt"
+              label={t('aiChat.ui.injectSummaries')}
               disabled={disabled}
             />
           </div>
@@ -416,17 +416,15 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
           </div>
           <div className="flex-1 min-w-0">
             <span className="text-xs font-medium text-[var(--text-secondary)]">
-              Vector Memory
-            </span>
+              {t('aiChat.ui.vectorMemory')}</span>
             <span className="block text-[10px] text-[var(--text-tertiary)]">
-              Semantic retrieval from past conversations
-            </span>
+              {t('aiChat.ui.semanticRetrieval')}</span>
           </div>
         </label>
         {vector.enabled && (
           <div className="pl-7 pb-2 space-y-2">
             <NumberInput
-              label="Top-K results:"
+              label={t('aiChat.ui.topKResults')}
               value={vector.top_k}
               onChange={(v) => updateVectorSearch({ top_k: v })}
               min={1}
@@ -434,7 +432,7 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
               disabled={disabled}
             />
             <NumberInput
-              label="Similarity threshold:"
+              label={t('aiChat.ui.similarityThreshold')}
               value={vector.similarity_threshold}
               onChange={(v) => updateVectorSearch({ similarity_threshold: v })}
               min={0}
@@ -459,8 +457,7 @@ export const ContextSettingsSection: React.FC<ContextSettingsSectionProps> = ({
             ) : (
               <Save className="w-3.5 h-3.5" />
             )}
-            Save Context Settings
-          </button>
+            {t('aiChat.ui.saveContext')}</button>
         </div>
       )}
     </div>

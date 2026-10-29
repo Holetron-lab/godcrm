@@ -31,7 +31,7 @@ export const ToastContainer = () => {
           <button
             key={toast.id}
             type="button"
-            className={`rounded-lg px-4 py-3 text-sm text-white shadow-lg transition-all ${
+            className={`px-4 py-3 text-sm text-white shadow-lg transition-all ${
               toast.type === 'success'
                 ? 'bg-green-500'
                 : toast.type === 'error'
@@ -68,7 +68,7 @@ function ChatToast({ toast, onClick, onDismiss }: ChatToastProps) {
 
   return (
     <div
-      className="flex items-start gap-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] px-3 py-2.5 shadow-lg text-left cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors"
+      className="flex items-start gap-3 bg-[var(--bg-secondary)] border border-[var(--border-primary)] px-3 py-2.5 shadow-lg text-left cursor-pointer hover:bg-[var(--bg-tertiary)] transition-colors"
       style={{ borderLeft: `4px solid ${accent}` }}
       onClick={onClick}
       onKeyDown={(e) => {

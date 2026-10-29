@@ -1,3 +1,4 @@
+import { MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, SIDEBAR_WIDTH_KEY } from './sidebar/constants';
 /**
  * Documents Sidebar - thin container. Composition of sub-components lives in ./sidebar/.
  */
@@ -7,8 +8,8 @@ import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/shared/utils/cn';
 import { apiClient } from '@/shared/utils/apiClient';
 import { useDocumentsContext } from './DocumentsContext';
-import { useTicketConfig } from './content/ticketUtils';
-import type { ColumnModel } from '@/features/tables/types/table.types';
+import { useTicketConfig, type TicketRow } from './content/ticketUtils';
+import { tablesApi } from '@/features/tables/api/tablesApi';
 import {
   CATEGORIES_VISIBLE_KEY,
   SidebarDocList,
@@ -36,7 +37,7 @@ export function DocumentsSidebar() {
   const { data: ticketsCountData } = useQuery({
     queryKey: ['tickets', ctx.projectId, sidebarTicketConfig?.table_id],
     queryFn: async () => {
-      const response = await apiClient.get(`/tables/${sidebarTicketConfig!.table_id}/rows?limit=5000`);
+      const response = await apiClient.get<{ data: { rows: TicketRow[] } }>(`/tables/${sidebarTicketConfig!.table_id}/rows?limit=5000`);
       return response.data;
     },
     enabled: !!sidebarTicketConfig?.table_id,
@@ -46,15 +47,12 @@ export function DocumentsSidebar() {
   const { data: ticketsColumnsData } = useQuery({
     queryKey: ['table-columns', sidebarTicketConfig?.table_id],
     queryFn: async () => {
-      const response = await apiClient.get(`/tables/${sidebarTicketConfig!.table_id}/columns`);
-      return (response as { data?: { columns?: ColumnModel[] } }).data?.columns
-        || (response as { data?: ColumnModel[] }).data
-        || [];
+      const response = await tablesApi.getColumns(String(sidebarTicketConfig!.table_id));
+      return response.columns;
     },
     enabled: !!sidebarTicketConfig?.table_id,
     staleTime: 60_000,
   });
-  const ticketsColumns: ColumnModel[] = (ticketsColumnsData as ColumnModel[]) || [];
 
   // Same registry-relation scan as `TicketsListView.registryRelationColumns`:
   // any relation column on tickets pointing to this widget's registry table
@@ -65,7 +63,7 @@ export function DocumentsSidebar() {
     if (!ctx.registryTableId) return [] as string[];
     const targetId = Number(ctx.registryTableId);
     const cols: string[] = [];
-    for (const col of ticketsColumns) {
+    for (const col of ticketsColumnsData || []) {
       const cfg = (typeof col.config === 'string'
         ? (() => { try { return JSON.parse(col.config as unknown as string); } catch { return {}; } })()
         : (col.config || {})) as {
@@ -81,7 +79,7 @@ export function DocumentsSidebar() {
       }
     }
     return cols;
-  }, [ticketsColumns, ctx.registryTableId]);
+  }, [ticketsColumnsData, ctx.registryTableId]);
 
   // Document-scoped counter — counts a ticket if it EXISTS in the tickets
   // table AND any of these match: an atom in this doc references it (legacy
@@ -179,7 +177,16 @@ export function DocumentsSidebar() {
       <SidebarFooterStats />
 
       {!ctx.isMobile && (
-        <div
+        <div role="slider" tabIndex={0} aria-label="Ширина списка документов" aria-orientation="horizontal"
+          aria-valuenow={ctx.sidebarWidth} aria-valuemin={MIN_SIDEBAR_WIDTH} aria-valuemax={MAX_SIDEBAR_WIDTH}
+          onKeyDown={e => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+            e.preventDefault();
+            const width = e.key === 'Home' ? MIN_SIDEBAR_WIDTH : e.key === 'End' ? MAX_SIDEBAR_WIDTH
+              : Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, ctx.sidebarWidth + (e.key === 'ArrowRight' ? 20 : -20)));
+            ctx.setSidebarWidth(width);
+            localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+          }}
           className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-500/50 active:bg-blue-500 transition-colors z-20"
           onMouseDown={handleResizeStart}
         />

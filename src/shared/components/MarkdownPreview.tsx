@@ -13,11 +13,12 @@
  * @see src/shared/config/systemVariables.ts for available system variables
  */
 
-import { memo, useState, useRef, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { memo, useState, useRef, useCallback, createContext, useContext } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useNavigate } from 'react-router-dom';
 import { SafeChatImage } from './SafeChatImage';
+import { SocialMediaLink } from './SocialMediaLink';
 import { Copy, Check } from 'lucide-react';
 import { substituteAllVariables } from '../config/systemVariables';
 import {
@@ -48,8 +49,8 @@ function convertInvocationTokensToLinks(text: string): string {
       return part
         .replace(/<<@([a-z0-9][a-z0-9_-]*)>>/gi, (_, slug) => `[@${slug}](mention:${slug.toLowerCase()})`)
         .replace(/<<\/([a-z0-9][a-z0-9_-]*)>>/gi, (_, slug) => `[/${slug}](command:${slug.toLowerCase()})`)
-        // Plain @slug → same mention pill (only after whitespace/start, avoid emails and already-converted links)
-        .replace(/(^|[\s\n])@([a-z0-9][a-z0-9_-]*)\b/gi, (_, pre, slug) => `${pre}[@${slug}](mention:${slug.toLowerCase()})`);
+        // Plain @slug → outlined reference (only after whitespace/start, avoid emails and already-converted links)
+        .replace(/(^|[\s\n])@([a-z0-9][a-z0-9_-]*)\b/gi, (_, pre, slug) => `${pre}[@${slug}](reference:${slug.toLowerCase()})`);
     })
     .join('');
 }
@@ -138,7 +139,7 @@ function SpoilerText({ children }: { children: React.ReactNode }) {
   const t = (ru: string, en: string) => (language === 'ru' ? ru : en);
   const [revealed, setRevealed] = useState(false);
   return (
-    <span
+    <button type="button" aria-expanded={revealed}
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRevealed(prev => !prev); }}
       className={revealed
         ? 'bg-[var(--bg-tertiary)] rounded px-0.5 cursor-pointer transition-all'
@@ -146,12 +147,14 @@ function SpoilerText({ children }: { children: React.ReactNode }) {
       title={revealed ? t('Нажмите чтобы скрыть', 'Click to hide') : t('Нажмите чтобы раскрыть', 'Click to reveal')}
     >
       {children}
-    </span>
+    </button>
   );
 }
 
 interface MarkdownPreviewProps {
   content: string;
+  /** Rich external links in chat; document Markdown keeps ordinary links. */
+  mediaLinks?: boolean;
   className?: string;
   style?: React.CSSProperties;
   /** Variables to substitute in content. Use buildSystemVariables() or useSystemVariables() hook. */
@@ -166,8 +169,294 @@ interface MarkdownPreviewProps {
   currentUser?: CheckboxUser;
 }
 
-function MarkdownPreviewImpl({ content, className = '', style, variables, widgetId, onContentChange, onCheckboxClick, currentUser }: MarkdownPreviewProps) {
-  const navigate = useNavigate();
+// Stable component types preserve text DOM nodes and browser selection across
+// parent refreshes. Checkbox context keeps handlers current without remounting.
+const CheckboxContext = createContext<{
+  checkboxIndexRef: React.MutableRefObject<number>;
+  isInteractive: boolean;
+  handleCheckboxToggle: (index: number) => void;
+}>({ checkboxIndexRef: { current: 0 }, isInteractive: false, handleCheckboxToggle: () => {} });
+const MediaLinksContext = createContext(false);
+
+const markdownComponents: Components = {
+  // Custom heading styles - use em for scalability
+  h1: ({ children }) => (
+    <h1 className="font-bold text-[var(--text-primary)] border-b border-[var(--border-primary)] pb-2 mb-4" style={{ fontSize: '1.5em' }}>
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="font-semibold text-[var(--text-primary)] border-b border-[var(--border-secondary)] pb-1 mb-3 mt-6" style={{ fontSize: '1.3em' }}>
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="font-semibold text-[var(--text-primary)] mb-2 mt-4" style={{ fontSize: '1.15em' }}>
+      {children}
+    </h3>
+  ),
+  h4: ({ children }) => (
+    <h4 className="font-semibold text-[var(--text-primary)] mb-2 mt-3" style={{ fontSize: '1.05em' }}>
+      {children}
+    </h4>
+  ),
+
+  // Paragraphs - inherit font size
+  p: ({ children }) => (
+    <p className="text-[var(--text-secondary)] mb-3 leading-relaxed" style={{ fontSize: '1em' }}>
+      {children}
+    </p>
+  ),
+
+  // Links - handle internal widget/table/space links + invocation pills
+  a: function MarkdownLink({ href, children }) {
+    const navigate = useNavigate();
+    const mediaLinks = useContext(MediaLinksContext);
+    const finalHref = href || '';
+
+    // Invocation token pills (converted from <<@slug>> / <</slug>>)
+    if (finalHref.startsWith('reference:')) {
+      return <MentionPill slug={finalHref.slice(10)} reference />;
+    }
+    if (finalHref.startsWith('mention:')) {
+      const slug = finalHref.slice(8);
+      return <MentionPill slug={slug} />;
+    }
+    if (finalHref.startsWith('command:')) {
+      const slug = finalHref.slice(8);
+      return <CommandPill slug={slug} />;
+    }
+
+    // Spoiler text (converted from ||text||)
+    if (finalHref.startsWith('spoiler:')) {
+      return <SpoilerText>{children}</SpoilerText>;
+    }
+
+    // Internal links - use React Router navigation
+    if (finalHref.startsWith('/widgets/') || finalHref.startsWith('/tables/') || finalHref.startsWith('/spaces/')) {
+      return (
+        <a
+          href={finalHref}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            navigate(finalHref);
+          }}
+          className="text-[var(--color-primary-500)] hover:underline cursor-pointer"
+        >
+          {children}
+        </a>
+      );
+    }
+
+    // External links - open in new tab
+    if (mediaLinks) return <SocialMediaLink href={finalHref}>{children}</SocialMediaLink>;
+    return (
+      <a
+        href={finalHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="text-[var(--color-primary-500)] hover:underline"
+      >
+        {children}
+      </a>
+    );
+  },
+
+  // Lists - inherit font size
+  ul: ({ children }) => (
+    <ul className="list-disc list-inside text-[var(--text-secondary)] mb-3 space-y-1" style={{ fontSize: '1em' }}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="list-decimal list-inside text-[var(--text-secondary)] mb-3 space-y-1" style={{ fontSize: '1em' }}>
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => (
+    <li className="text-[var(--text-secondary)]" style={{ fontSize: '1em' }}>
+      {children}
+    </li>
+  ),
+
+  // Code blocks - keep relative sizing
+  code: ({ className: codeClassName, children, ...props }) => {
+    const isInline = !codeClassName;
+    const codeContent = String(children).replace(/\n$/, '');
+    const lines = codeContent.split('\n');
+    const hasMultipleLines = lines.length > 1;
+
+    // Detect ASCII art/diagrams - box drawing characters
+    const hasBoxChars = /[┌┐└┘│─├┤┬┴┼╭╮╰╯║═╔╗╚╝╠╣╦╩╬]/.test(codeContent);
+
+    // Detect code-like patterns (JSON, objects, arrays, etc.)
+    const looksLikeCode = (
+      // JSON/object patterns
+      /^\s*[[{]/.test(codeContent) ||
+      // Key-value patterns (quotes with colons)
+      /"[^"]+"\s*:/.test(codeContent) ||
+      // Programming constructs
+      /^(const|let|var|function|class|import|export|return|if|for|while)\s/.test(codeContent) ||
+      // Has consistent indentation (2+ spaces at start of multiple lines)
+      lines.filter(l => /^  +\S/.test(l)).length >= 2
+    );
+
+    // Detect table-like structures with pipes or dashes
+    const hasTableChars = /[|+][-=]+[|+]/.test(codeContent) || /^\s*\|/.test(codeContent);
+
+    const needsMonospace = hasBoxChars || looksLikeCode || hasTableChars || hasMultipleLines;
+
+    if (isInline) {
+      return (
+        <code className="px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--color-primary-600)] font-mono break-all" style={{ fontSize: '0.9em' }}>
+          {children}
+        </code>
+      );
+    }
+
+    // All code blocks get proper monospace treatment
+    if (needsMonospace || !codeClassName) {
+      return (
+        <code
+          className="block p-4 rounded-lg bg-[var(--bg-tertiary)] overflow-x-auto text-[var(--text-secondary)]"
+          style={{
+            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+            whiteSpace: 'pre',
+            lineHeight: 1.5,
+            fontSize: '0.9em',
+          }}
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    }
+
+    return (
+      <code
+        className={`block p-4 rounded-lg bg-[var(--bg-tertiary)] font-mono overflow-x-auto ${codeClassName}`}
+        style={{ whiteSpace: 'pre', fontSize: '0.9em' }}
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
+  pre: ({ children }) => <CodeBlockWithCopy>{children}</CodeBlockWithCopy>,
+
+  // Tables - use em for font sizes
+  table: ({ children }) => (
+    <div className="overflow-x-auto mb-4 max-w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <table
+        className="border border-[var(--border-primary)] rounded-lg"
+        style={{ fontSize: '1em', minWidth: 'max-content', borderCollapse: 'separate', borderSpacing: 0 }}
+      >
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }) => (
+    <thead className="bg-[var(--bg-secondary)]">
+      {children}
+    </thead>
+  ),
+  th: ({ children }) => (
+    <th
+      className="px-3 py-2 sm:px-4 text-left font-semibold text-[var(--text-primary)] border-b border-[var(--border-primary)]"
+      style={{ fontSize: '1em', wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'nowrap' }}
+    >
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td
+      className="px-3 py-2 sm:px-4 text-[var(--text-secondary)] border-b border-[var(--border-secondary)] align-top"
+      style={{ fontSize: '1em', wordBreak: 'normal', overflowWrap: 'normal' }}
+    >
+      {children}
+    </td>
+  ),
+  tr: ({ children }) => (
+    <tr className="hover:bg-[var(--bg-secondary)] transition-colors">
+      {children}
+    </tr>
+  ),
+
+  // Blockquote
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-[var(--color-primary-500)] pl-4 py-1 my-4 bg-[var(--bg-secondary)] rounded-r-lg">
+      {children}
+    </blockquote>
+  ),
+
+  // Horizontal rule
+  hr: () => (
+    <hr className="my-6 border-[var(--border-primary)]" />
+  ),
+
+  // Strong/Bold
+  strong: ({ children }) => (
+    <strong className="font-semibold text-[var(--text-primary)]">
+      {children}
+    </strong>
+  ),
+
+  // Emphasis/Italic
+  em: ({ children }) => (
+    <em className="italic text-[var(--text-secondary)]">
+      {children}
+    </em>
+  ),
+
+  // Strikethrough (GFM)
+  del: ({ children }) => (
+    <del className="line-through text-[var(--text-tertiary)]">
+      {children}
+    </del>
+  ),
+
+  // Images — wrapped in SafeChatImage to lazy-load, async-decode,
+  // and gate oversized inline data: URLs behind a click-to-reveal
+  // placeholder. Prevents a single multi-MB base64 image from
+  // freezing chat scroll / streaming re-renders.
+  img: ({ src, alt }) => (
+    <SafeChatImage
+      src={src}
+      alt={alt}
+      className="max-w-full h-auto rounded-lg shadow-sm my-4"
+    />
+  ),
+
+  // Checkbox (GFM task lists) — interactive when onContentChange provided
+  input: function MarkdownInput({ type, checked }) {
+    const { checkboxIndexRef, isInteractive, handleCheckboxToggle } = useContext(CheckboxContext);
+    if (type === 'checkbox') {
+      const currentIndex = checkboxIndexRef.current++;
+
+      return (
+        <input
+          type="checkbox"
+          checked={checked}
+          readOnly={!isInteractive}
+          onChange={isInteractive ? () => handleCheckboxToggle(currentIndex) : undefined}
+          onClick={isInteractive ? (e) => e.stopPropagation() : undefined}
+          className={`mr-2 rounded border-[var(--border-primary)] ${
+            isInteractive
+              ? 'cursor-pointer hover:ring-2 hover:ring-[var(--color-primary-500)] hover:ring-offset-1 transition-shadow accent-[var(--color-primary-500)]'
+              : ''
+          }`}
+          style={isInteractive ? { pointerEvents: 'auto' } : undefined}
+        />
+      );
+    }
+    return <input type={type} />;
+  },
+};
+
+function MarkdownPreviewImpl({ content, mediaLinks = false, className = '', style, variables, widgetId, onContentChange, onCheckboxClick, currentUser }: MarkdownPreviewProps) {
+  const { t } = useLanguage();
   const checkboxIndexRef = useRef(0);
 
   // Build combined variables (support legacy widgetId prop)
@@ -245,21 +534,23 @@ function MarkdownPreviewImpl({ content, className = '', style, variables, widget
       e.preventDefault();
       e.stopPropagation();
       const slug = href.slice(8);
-      handlePillClickExternal(`<<@${slug}>>`);
+      handlePillClickExternal(`<<@${slug}>>`, t);
     } else if (href.startsWith('command:')) {
       e.preventDefault();
       e.stopPropagation();
       const slug = href.slice(8);
-      handlePillClickExternal(`<</${slug}>>`);
+      handlePillClickExternal(`<</${slug}>>`, t);
     }
-  }, []);
+  }, [t]);
 
   return (
-    <div
+    <div role="presentation"
       className={`markdown-preview prose max-w-none dark:prose-invert overflow-hidden break-words ${className}`}
       style={{ fontSize: 'inherit', textIndent: 0, wordBreak: 'break-word', overflowWrap: 'anywhere', ...style }}
       onClick={handleContainerClick}
     >
+      <CheckboxContext.Provider value={{ checkboxIndexRef, isInteractive: !!(onContentChange || onCheckboxClick), handleCheckboxToggle }}>
+      <MediaLinksContext.Provider value={mediaLinks}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={(url) => {
@@ -268,279 +559,12 @@ function MarkdownPreviewImpl({ content, className = '', style, variables, widget
           // Default sanitization for all other URLs
           return url;
         }}
-        components={{
-          // Custom heading styles - use em for scalability
-          h1: ({ children }) => (
-            <h1 className="font-bold text-[var(--text-primary)] border-b border-[var(--border-primary)] pb-2 mb-4" style={{ fontSize: '1.5em' }}>
-              {children}
-            </h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="font-semibold text-[var(--text-primary)] border-b border-[var(--border-secondary)] pb-1 mb-3 mt-6" style={{ fontSize: '1.3em' }}>
-              {children}
-            </h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="font-semibold text-[var(--text-primary)] mb-2 mt-4" style={{ fontSize: '1.15em' }}>
-              {children}
-            </h3>
-          ),
-          h4: ({ children }) => (
-            <h4 className="font-semibold text-[var(--text-primary)] mb-2 mt-3" style={{ fontSize: '1.05em' }}>
-              {children}
-            </h4>
-          ),
-
-          // Paragraphs - inherit font size
-          p: ({ children }) => (
-            <p className="text-[var(--text-secondary)] mb-3 leading-relaxed" style={{ fontSize: '1em' }}>
-              {children}
-            </p>
-          ),
-
-          // Links - handle internal widget/table/space links + invocation pills
-          a: ({ href, children }) => {
-            const finalHref = href || '';
-
-            // Invocation token pills (converted from <<@slug>> / <</slug>>)
-            if (finalHref.startsWith('mention:')) {
-              const slug = finalHref.slice(8);
-              return <MentionPill slug={slug} />;
-            }
-            if (finalHref.startsWith('command:')) {
-              const slug = finalHref.slice(8);
-              return <CommandPill slug={slug} />;
-            }
-
-            // Spoiler text (converted from ||text||)
-            if (finalHref.startsWith('spoiler:')) {
-              return <SpoilerText>{children}</SpoilerText>;
-            }
-
-            // Internal links - use React Router navigation
-            if (finalHref.startsWith('/widgets/') || finalHref.startsWith('/tables/') || finalHref.startsWith('/spaces/')) {
-              return (
-                <a
-                  href={finalHref}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    navigate(finalHref);
-                  }}
-                  className="text-[var(--color-primary-500)] hover:underline cursor-pointer"
-                >
-                  {children}
-                </a>
-              );
-            }
-
-            // External links - open in new tab
-            return (
-              <a
-                href={finalHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="text-[var(--color-primary-500)] hover:underline"
-              >
-                {children}
-              </a>
-            );
-          },
-
-          // Lists - inherit font size
-          ul: ({ children }) => (
-            <ul className="list-disc list-inside text-[var(--text-secondary)] mb-3 space-y-1" style={{ fontSize: '1em' }}>
-              {children}
-            </ul>
-          ),
-          ol: ({ children }) => (
-            <ol className="list-decimal list-inside text-[var(--text-secondary)] mb-3 space-y-1" style={{ fontSize: '1em' }}>
-              {children}
-            </ol>
-          ),
-          li: ({ children }) => (
-            <li className="text-[var(--text-secondary)]" style={{ fontSize: '1em' }}>
-              {children}
-            </li>
-          ),
-
-          // Code blocks - keep relative sizing
-          code: ({ className: codeClassName, children, ...props }) => {
-            const isInline = !codeClassName;
-            const codeContent = String(children).replace(/\n$/, '');
-            const lines = codeContent.split('\n');
-            const hasMultipleLines = lines.length > 1;
-
-            // Detect ASCII art/diagrams - box drawing characters
-            const hasBoxChars = /[┌┐└┘│─├┤┬┴┼╭╮╰╯║═╔╗╚╝╠╣╦╩╬]/.test(codeContent);
-
-            // Detect code-like patterns (JSON, objects, arrays, etc.)
-            const looksLikeCode = (
-              // JSON/object patterns
-              /^\s*[\[{]/.test(codeContent) ||
-              // Key-value patterns (quotes with colons)
-              /"[^"]+"\s*:/.test(codeContent) ||
-              // Programming constructs
-              /^(const|let|var|function|class|import|export|return|if|for|while)\s/.test(codeContent) ||
-              // Has consistent indentation (2+ spaces at start of multiple lines)
-              lines.filter(l => /^  +\S/.test(l)).length >= 2
-            );
-
-            // Detect table-like structures with pipes or dashes
-            const hasTableChars = /[|+][-=]+[|+]/.test(codeContent) || /^\s*\|/.test(codeContent);
-
-            const needsMonospace = hasBoxChars || looksLikeCode || hasTableChars || hasMultipleLines;
-
-            if (isInline) {
-              return (
-                <code className="px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--color-primary-600)] font-mono break-all" style={{ fontSize: '0.9em' }}>
-                  {children}
-                </code>
-              );
-            }
-
-            // All code blocks get proper monospace treatment
-            if (needsMonospace || !codeClassName) {
-              return (
-                <code
-                  className="block p-4 rounded-lg bg-[var(--bg-tertiary)] overflow-x-auto text-[var(--text-secondary)]"
-                  style={{
-                    fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
-                    whiteSpace: 'pre',
-                    lineHeight: 1.5,
-                    fontSize: '0.9em',
-                  }}
-                  {...props}
-                >
-                  {children}
-                </code>
-              );
-            }
-
-            return (
-              <code
-                className={`block p-4 rounded-lg bg-[var(--bg-tertiary)] font-mono overflow-x-auto ${codeClassName}`}
-                style={{ whiteSpace: 'pre', fontSize: '0.9em' }}
-                {...props}
-              >
-                {children}
-              </code>
-            );
-          },
-          pre: ({ children }) => <CodeBlockWithCopy>{children}</CodeBlockWithCopy>,
-
-          // Tables - use em for font sizes
-          table: ({ children }) => (
-            <div className="overflow-x-auto mb-4 max-w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
-              <table
-                className="border border-[var(--border-primary)] rounded-lg"
-                style={{ fontSize: '1em', minWidth: 'max-content', borderCollapse: 'separate', borderSpacing: 0 }}
-              >
-                {children}
-              </table>
-            </div>
-          ),
-          thead: ({ children }) => (
-            <thead className="bg-[var(--bg-secondary)]">
-              {children}
-            </thead>
-          ),
-          th: ({ children }) => (
-            <th
-              className="px-3 py-2 sm:px-4 text-left font-semibold text-[var(--text-primary)] border-b border-[var(--border-primary)]"
-              style={{ fontSize: '1em', wordBreak: 'normal', overflowWrap: 'normal', whiteSpace: 'nowrap' }}
-            >
-              {children}
-            </th>
-          ),
-          td: ({ children }) => (
-            <td
-              className="px-3 py-2 sm:px-4 text-[var(--text-secondary)] border-b border-[var(--border-secondary)] align-top"
-              style={{ fontSize: '1em', wordBreak: 'normal', overflowWrap: 'normal' }}
-            >
-              {children}
-            </td>
-          ),
-          tr: ({ children }) => (
-            <tr className="hover:bg-[var(--bg-secondary)] transition-colors">
-              {children}
-            </tr>
-          ),
-
-          // Blockquote
-          blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-[var(--color-primary-500)] pl-4 py-1 my-4 bg-[var(--bg-secondary)] rounded-r-lg">
-              {children}
-            </blockquote>
-          ),
-
-          // Horizontal rule
-          hr: () => (
-            <hr className="my-6 border-[var(--border-primary)]" />
-          ),
-
-          // Strong/Bold
-          strong: ({ children }) => (
-            <strong className="font-semibold text-[var(--text-primary)]">
-              {children}
-            </strong>
-          ),
-
-          // Emphasis/Italic
-          em: ({ children }) => (
-            <em className="italic text-[var(--text-secondary)]">
-              {children}
-            </em>
-          ),
-
-          // Strikethrough (GFM)
-          del: ({ children }) => (
-            <del className="line-through text-[var(--text-tertiary)]">
-              {children}
-            </del>
-          ),
-
-          // Images — wrapped in SafeChatImage to lazy-load, async-decode,
-          // and gate oversized inline data: URLs behind a click-to-reveal
-          // placeholder. Prevents a single multi-MB base64 image from
-          // freezing chat scroll / streaming re-renders.
-          img: ({ src, alt }) => (
-            <SafeChatImage
-              src={src}
-              alt={alt}
-              className="max-w-full h-auto rounded-lg shadow-sm my-4"
-            />
-          ),
-
-          // Checkbox (GFM task lists) — interactive when onContentChange provided
-          input: ({ type, checked }) => {
-            if (type === 'checkbox') {
-              const currentIndex = checkboxIndexRef.current++;
-              const isInteractive = !!(onContentChange || onCheckboxClick);
-
-              return (
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  readOnly={!isInteractive}
-                  onChange={isInteractive ? () => handleCheckboxToggle(currentIndex) : undefined}
-                  onClick={isInteractive ? (e) => e.stopPropagation() : undefined}
-                  className={`mr-2 rounded border-[var(--border-primary)] ${
-                    isInteractive
-                      ? 'cursor-pointer hover:ring-2 hover:ring-[var(--color-primary-500)] hover:ring-offset-1 transition-shadow accent-[var(--color-primary-500)]'
-                      : ''
-                  }`}
-                  style={isInteractive ? { pointerEvents: 'auto' } : undefined}
-                />
-              );
-            }
-            return <input type={type} />;
-          },
-        }}
+        components={markdownComponents}
       >
         {processedContent}
       </ReactMarkdown>
+      </MediaLinksContext.Provider>
+      </CheckboxContext.Provider>
     </div>
   );
 }

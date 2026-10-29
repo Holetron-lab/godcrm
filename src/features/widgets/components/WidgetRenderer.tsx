@@ -9,13 +9,13 @@ import { TimelineWidget } from './presets/TimelineWidget';
 import { DataSourcesWidget } from './presets/DataSourcesWidget';
 import { TaskListWidget } from './presets/TaskListWidget';
 import { AIAgentsWidget } from './presets/AIAgentsWidget';
+import { AgentRowWidget } from './presets/AgentRowWidget';
 import { DocumentsWidget } from './presets/DocumentsWidget';
 import { LabsWidget } from './presets/LabsWidget';
 import { VirtualOfficeWidget } from './presets/virtual-office';
 import { TerminalWidget } from './presets/TerminalWidget';
 import { AutopilotDashboardWidget } from './presets/AutopilotDashboardWidget';
 import { PesDashboardWidget } from './presets/PesDashboardWidget';
-import { Neo16Widget } from './presets/Neo16Widget';
 import { TicketsListPreset } from './presets/tickets-list/TicketsListPreset';
 import { WelcomeDashboardWidget } from './presets/WelcomeDashboardWidget';
 import { getWidgetPreset } from '../registry/modulePresetRegistry';
@@ -55,6 +55,8 @@ export function WidgetRenderer({ widget, data = [] }: WidgetRendererProps) {
         return <TaskListWidget {...presetProps} />;
       case 'ai_agents':
         return <AIAgentsWidget {...presetProps} />;
+      case 'agent_row':
+        return <AgentRowWidget {...presetProps} />;
       case 'documents':
       case 'documents_v4':  // Legacy alias
         return <DocumentsWidget {...presetProps} />;
@@ -68,8 +70,6 @@ export function WidgetRenderer({ widget, data = [] }: WidgetRendererProps) {
         return <AutopilotDashboardWidget {...presetProps} />;
       case 'pes_dashboard':
         return <PesDashboardWidget {...presetProps} />;
-      case '16neo':
-        return <Neo16Widget {...presetProps} />;
       case 'tickets_list':
         return <TicketsListPreset {...presetProps} />;
       case 'welcome_dashboard':
@@ -81,7 +81,7 @@ export function WidgetRenderer({ widget, data = [] }: WidgetRendererProps) {
           <div className="flex items-center justify-center h-full text-gray-400">
             <div className="text-center">
               <p className="text-4xl mb-2">{widget.icon}</p>
-              <p className="text-sm">Widget "{widget.preset_name}" not implemented yet</p>
+              <p className="text-sm">Widget &quot;{widget.preset_name}&quot; not implemented yet</p>
             </div>
           </div>
         );

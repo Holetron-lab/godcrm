@@ -1,10 +1,7 @@
 // ADR-151 — buildOrderClause shared helper.
 //
-// These assertions pin the EXACT output strings against the literals that
-// previously lived inline at each call site. Because every swap (list
-// controller + doc controllers) replaces a literal with a helper call that
-// produces a character-identical string, string-equality here is a complete
-// proof that the refactor is behavior-preserving — no DB round-trip required.
+// Pin both modes; the guarded expression must survive connection.js bind
+// conversion. Real SQL and pagination coverage lives in row-list-sorting.test.js.
 
 process.env.TEST_MODE = 'true';
 
@@ -12,18 +9,18 @@ import { describe, test, expect } from 'vitest';
 import { buildOrderClause } from '../services/orderClause.js';
 
 describe('buildOrderClause: generic list path (guarded)', () => {
-  test('reproduces the inline regex-guarded NULLS LAST clause byte-for-byte', () => {
-    // Was inline in tableRowListController.js (ADR-151 Slice A).
+  test('uses a numeric guard safe for connection.js placeholder conversion', () => {
+    // No '?' inside the SQL regex: the adapter treats it as a bind marker.
     expect(buildOrderClause('order', { mode: 'guarded', tieBreak: 'created_at DESC' }))
       .toBe(
-        "(CASE WHEN data::jsonb->>'order' ~ '^-?[0-9]+(\\.[0-9]+)?$' " +
+        "(CASE WHEN data::jsonb->>'order' ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' " +
         "THEN (data::jsonb->>'order')::numeric END) ASC NULLS LAST, created_at DESC"
       );
   });
 
   test('guarded is the default mode', () => {
     expect(buildOrderClause('order')).toBe(
-      "(CASE WHEN data::jsonb->>'order' ~ '^-?[0-9]+(\\.[0-9]+)?$' " +
+      "(CASE WHEN data::jsonb->>'order' ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' " +
       "THEN (data::jsonb->>'order')::numeric END) ASC NULLS LAST, created_at DESC"
     );
   });

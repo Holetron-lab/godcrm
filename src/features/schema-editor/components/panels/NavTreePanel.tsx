@@ -19,6 +19,7 @@ import { CreateFolderModal } from './CreateFolderModal';
 import { useNavTreeData } from './useNavTreeData';
 import { useProjectSelection } from './useProjectSelection';
 import { usePanelResize } from './usePanelResize';
+import { MIN_WIDTH, MAX_WIDTH } from './navTreeTypes';
 import type { NavTreePanelProps } from './navTreeTypes';
 
 export const NavTreePanel = ({ className = '', onClose }: NavTreePanelProps) => {
@@ -52,7 +53,7 @@ export const NavTreePanel = ({ className = '', onClose }: NavTreePanelProps) => 
     handleToggleSelect,
     handleToggleProjectSelect,
   } = useProjectSelection();
-  const { panelRef, panelWidth, isResizing, handleMouseDown } = usePanelResize();
+  const { panelRef, panelWidth, setPanelWidth, isResizing, handleMouseDown } = usePanelResize();
 
   const handleExpandAll = useCallback(() => {
     navTree.forEach((project) => {
@@ -69,6 +70,14 @@ export const NavTreePanel = ({ className = '', onClose }: NavTreePanelProps) => 
       }
     });
   }, [navTree, expandedProjects]);
+
+  // Fold only the tables opened into their columns; projects and folders stay as they are.
+  const handleCollapseTables = useCallback(() => {
+    const { expandedFolders, toggleFolderExpanded } = useSchemaEditorStore.getState();
+    expandedFolders.forEach((id) => {
+      if (id.startsWith('table:')) toggleFolderExpanded(id);
+    });
+  }, []);
 
   const handleToggleAllVisibility = useCallback(() => {
     if (allVisible) {
@@ -148,6 +157,7 @@ export const NavTreePanel = ({ className = '', onClose }: NavTreePanelProps) => 
         onToggleSortMode={() => setSortMode(!sortMode)}
         onExpandAll={handleExpandAll}
         onCollapseAll={handleCollapseAll}
+        onCollapseTables={handleCollapseTables}
         t={t}
       />
 
@@ -199,7 +209,14 @@ export const NavTreePanel = ({ className = '', onClose }: NavTreePanelProps) => 
       </div>
 
       {/* Resize Handle */}
-      <div
+      <div role="slider" tabIndex={0} aria-label="Ширина дерева" aria-orientation="horizontal"
+        aria-valuenow={panelWidth} aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH}
+        onKeyDown={e => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+          e.preventDefault();
+          setPanelWidth(e.key === 'Home' ? MIN_WIDTH : e.key === 'End' ? MAX_WIDTH
+            : Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, panelWidth + (e.key === 'ArrowRight' ? 20 : -20))));
+        }}
         onMouseDown={handleMouseDown}
         className={`absolute top-0 right-0 w-1.5 h-full cursor-ew-resize hover:bg-[var(--accent-primary)]/30 transition-colors ${
           isResizing ? 'bg-[var(--accent-primary)]/50' : ''

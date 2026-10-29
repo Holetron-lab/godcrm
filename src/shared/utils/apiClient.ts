@@ -156,9 +156,24 @@ const internalFetch = async <T>(path: string, options: RequestOptions = {}): Pro
   if (!response.ok) {
     const errorText = await response.text();
     const contentType = response.headers.get('content-type') ?? '';
-    const sanitizedError = contentType.includes('text/html')
+    let sanitizedError = contentType.includes('text/html')
       ? `Request failed (${response.status})`
       : errorText;
+    if (!contentType.includes('text/html')) {
+      try {
+        const body: unknown = JSON.parse(errorText);
+        sanitizedError = `Request failed (${response.status})`;
+        if (body && typeof body === 'object') {
+          const error = 'error' in body ? body.error : undefined;
+          const nestedMessage = error && typeof error === 'object' && 'message' in error ? error.message : undefined;
+          const message = [nestedMessage, error, 'message' in body ? body.message : undefined]
+            .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+          if (message) sanitizedError = message;
+        }
+      } catch {
+        // Non-JSON responses keep the existing plain-text fallback.
+      }
+    }
     throw new Error(sanitizedError || 'Request failed');
   }
 

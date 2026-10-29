@@ -53,8 +53,8 @@ export function useWebhooks(projectId: number) {
   return useQuery({
     queryKey: ['webhooks', projectId],
     queryFn: async () => {
-      const response = await apiClient.get(`/api/v3/projects/${projectId}/webhooks`);
-      return response.data as Webhook[];
+      const response = await apiClient.get<{ data: Webhook[] }>(`/api/v3/projects/${projectId}/webhooks`);
+      return response.data;
     },
     enabled: !!projectId,
     refetchInterval: 30000, // Refetch every 30s to show new logs
@@ -65,8 +65,8 @@ export function useWebhookLogs(webhookId: number, limit = 50) {
   return useQuery({
     queryKey: ['webhook-logs', webhookId, limit],
     queryFn: async () => {
-      const response = await apiClient.get(`/api/v3/webhooks/${webhookId}/logs?limit=${limit}`);
-      return response.data as WebhookLog[];
+      const response = await apiClient.get<{ data: WebhookLog[] }>(`/api/v3/webhooks/${webhookId}/logs?limit=${limit}`);
+      return response.data;
     },
     enabled: !!webhookId,
     refetchInterval: 10000, // Refetch every 10s
@@ -78,8 +78,8 @@ export function useCreateWebhook() {
   
   return useMutation({
     mutationFn: async ({ projectId, data }: { projectId: number; data: CreateWebhookDto }) => {
-      const response = await apiClient.post(`/api/v3/projects/${projectId}/webhooks`, data);
-      return response.data as Webhook;
+      const response = await apiClient.post<{ data: Webhook }>(`/api/v3/projects/${projectId}/webhooks`, data);
+      return response.data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['webhooks', variables.projectId] });
@@ -92,9 +92,9 @@ export function useUpdateWebhook() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<Webhook> }) => {
-      const response = await apiClient.patch(`/api/v3/webhooks/${id}`, data);
-      return response.data as Webhook;
+    mutationFn: async ({ id, data }: { id: number; data: { name?: string; isActive?: boolean } }) => {
+      const response = await apiClient.patch<{ data: Webhook }>(`/api/v3/webhooks/${id}`, data);
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });

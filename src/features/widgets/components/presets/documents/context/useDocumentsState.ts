@@ -13,8 +13,12 @@ interface UseDocumentsStateArgs {
 }
 
 export function useDocumentsState({ storageKey, config, documents, isInitialized, compact = false }: UseDocumentsStateArgs) {
+  // Resolve the incoming link before syncing selection back to the URL.
+  const [pendingDocSlug, setPendingDocSlug] = useState(() =>
+    typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('doc'),
+  );
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !pendingDocSlug) {
       const saved = sessionStorage.getItem(`${storageKey}-doc`);
       return saved ? parseInt(saved, 10) : null;
     }
@@ -40,7 +44,6 @@ export function useDocumentsState({ storageKey, config, documents, isInitialized
     if (typeof window === 'undefined') return null;
     return sessionStorage.getItem(langOverrideKey);
   });
-  const currentLanguage = langOverride ?? globalLanguage;
   const setCurrentLanguage = useCallback((lang: string) => {
     if (typeof window === 'undefined') return;
     if (lang === globalLanguage) {
@@ -55,6 +58,13 @@ export function useDocumentsState({ storageKey, config, documents, isInitialized
     { code: 'en', name: 'English', is_default: true },
     { code: 'ru', name: 'Русский' },
   ];
+  // Resolve during render so the selector, content reads and writes agree even
+  // before effects run or when asynchronously loaded widget languages change.
+  const currentLanguage = [langOverride, globalLanguage].find(
+    code => availableLanguages.some(language => language.code === code),
+  ) ?? availableLanguages.find(language => language.is_default)?.code
+    ?? availableLanguages[0]?.code
+    ?? globalLanguage;
 
   const [showTranslationMissingModal, setShowTranslationMissingModal] = useState(false);
   const [translationMissingLang, setTranslationMissingLang] = useState<string | null>(null);
@@ -89,6 +99,14 @@ export function useDocumentsState({ storageKey, config, documents, isInitialized
   );
 
   useEffect(() => {
+    if (pendingDocSlug) {
+      if (!isInitialized || documents.length === 0) return;
+      const target = documents.find(d => d.slug === pendingDocSlug);
+      setSelectedDocumentId(target?.id ?? null);
+      setPendingDocSlug(null);
+      return;
+    }
+
     if (selectedDocument?.slug) {
       const url = new URL(window.location.href);
       url.searchParams.set('doc', selectedDocument.slug);
@@ -98,20 +116,7 @@ export function useDocumentsState({ storageKey, config, documents, isInitialized
       url.searchParams.delete('doc');
       window.history.replaceState({}, '', url.toString());
     }
-  }, [selectedDocument?.slug, selectedDocumentId]);
-
-  useEffect(() => {
-    if (!isInitialized || documents.length === 0) return;
-
-    const url = new URL(window.location.href);
-    const docKey = url.searchParams.get('doc');
-    if (docKey && !selectedDocumentId) {
-      const doc = documents.find(d => d.slug === docKey);
-      if (doc) {
-        setSelectedDocumentId(doc.id);
-      }
-    }
-  }, [isInitialized, documents, selectedDocumentId]);
+  }, [pendingDocSlug, isInitialized, documents, selectedDocument?.slug, selectedDocumentId]);
 
   useEffect(() => {
     const url = new URL(window.location.href);

@@ -6,7 +6,7 @@ export interface Automation {
   description?: string;
   table_id: number;
   is_active: boolean;
-  trigger_type: 'column_change' | 'row_create' | 'row_delete' | 'button_click' | 'schedule';
+  trigger_type: 'row_create' | 'row_update' | 'row_delete' | 'button_click' | 'schedule';
   trigger_config: Record<string, unknown>;
   action_type: 'webhook' | 'api_sync' | 'update_field' | 'create_row' | 'delete_row' | 'notification' | 'n8n';
   action_config: Record<string, unknown>;

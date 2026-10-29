@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ColumnModel, PersonalSpaceSummary, RowModel, TableModel } from '../types/table.types';
+import type { RelationsMap } from '../utils/resolveLens';
 
 // ADR-0011: verification gate modal state — opened when backend returns 409
 // VERIFICATION_REQUIRED or 403 VERIFICATION_IMMUTABLE during a row update.
@@ -19,6 +20,8 @@ interface TablesState {
   tables: TableModel[];
   columns: Record<string, ColumnModel[]>;
   rows: Record<string, RowModel[]>;
+  /** ADR-205: relation lens map per table (column_name → key → related row), from GET /rows?include=relations. */
+  relations: Record<string, RelationsMap>;
   tableRoles: Record<string, string>; // User role per table (owner/admin/editor/viewer)
   rowsVersion: number; // Increment on every row update to trigger re-renders
   successCells: Set<string>; // Keys of cells that just saved successfully (rowId-columnId)
@@ -51,6 +54,8 @@ interface TablesActions {
   upsertColumn: (tableId: string, column: ColumnModel) => void;
   setRows: (tableId: string, rows: RowModel[]) => void;
   appendRows: (tableId: string, rows: RowModel[]) => void;
+  /** Replace (page 1) or merge (next pages, single-row refresh) the lens map of a table. */
+  setRelations: (tableId: string, relations: RelationsMap | undefined, mode?: 'replace' | 'merge') => void;
   selectTable: (tableId: string | null) => void;
   setContextUserId: (userId: number | null) => void;
   updateCell: (tableId: string, rowId: string, columnId: string, value: unknown) => void;
@@ -80,6 +85,7 @@ export const useTablesStore = create<TablesState & TablesActions>((set) => ({
   tables: [],
   columns: {},
   rows: {},
+  relations: {},
   tableRoles: {},
   rowsVersion: 0,
   successCells: new Set<string>(),
@@ -165,6 +171,19 @@ export const useTablesStore = create<TablesState & TablesActions>((set) => ({
       };
     });
   },
+  setRelations: (tableId, relations, mode = 'replace') =>
+    set((state) => {
+      const incoming = relations ?? {};
+      if (mode === 'replace') {
+        return { relations: { ...state.relations, [tableId]: incoming } };
+      }
+      const current = state.relations[tableId] ?? {};
+      const merged: RelationsMap = { ...current };
+      for (const [column, map] of Object.entries(incoming)) {
+        merged[column] = { ...(current[column] ?? {}), ...map };
+      }
+      return { relations: { ...state.relations, [tableId]: merged } };
+    }),
   selectTable: (tableId) => set({ activeTableId: tableId }),
   setContextUserId: (userId) => set({ contextUserId: userId }),
   updateCell: (tableId, rowId, columnId, value) =>

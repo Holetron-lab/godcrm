@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { expect } from '@playwright/test';
+import { createFixtureServer, openFixture } from './browser-fixture.mjs';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const artifacts = await mkdtemp(join(tmpdir(), 'text-block-settings-'));
+const entry = 'src/tests/text-block-settings-fixture/index.html';
+const server = await createFixtureServer({ root, artifacts, entry });
+let browser;
+try {
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  for (const width of [1440, 390]) for (const theme of ['light', 'dark']) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    const close = page.getByRole('button', { name: 'Закрыть настройки текстового блока' });
+    const fixture = await openFixture({ server, page, entry: `${entry}?theme=${theme}`, ready: close });
+    await expect(page.getByRole('button', { name: 'Переместить вверх' })).toBeDisabled();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Переместить вниз' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel('События')).toHaveText('down');
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('spinbutton')).toBeFocused();
+    await page.getByRole('spinbutton').fill('3');
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel('События')).toHaveText('down,order');
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Удалить', exact: true })).toBeFocused();
+    await page.keyboard.press('Space');
+    await page.keyboard.press('Tab');
+    await expect(close).toBeFocused();
+    assert.notEqual(await close.evaluate(el => getComputedStyle(el).outlineStyle), 'none');
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel('События')).toHaveText('down,order,delete,close');
+    const widths = page.getByRole('group', { name: 'Ширина' });
+    await expect(widths.getByRole('button', { name: '100%', pressed: true })).toBeVisible();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('combobox', { name: 'Тип контента' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(widths.getByRole('button', { name: '100%' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Space');
+    await expect(widths.getByRole('button', { name: '50%', pressed: true })).toBeFocused();
+    await page.getByRole('combobox', { name: 'Тип контента' }).selectOption('html');
+    await page.getByRole('textbox', { name: 'Содержимое (HTML)' }).fill('<p>Новая инструкция</p>');
+    await expect(page.getByLabel('События')).toHaveText('down,order,delete,close,width,contentType,content');
+    await page.addScriptTag({ content: await readFile(join(root, 'node_modules/axe-core/axe.min.js'), 'utf8') });
+    const violations = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations);
+    await writeFile(join(artifacts, `${width}-${theme}-axe.json`), JSON.stringify(violations, null, 2));
+    await page.screenshot({ path: join(artifacts, `${width}-${theme}.png`), fullPage: true });
+    assert.deepEqual(violations.map(({ id }) => id), []);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    assert.equal(await page.locator('button button, button input, button textarea').count(), 0);
+    await fixture.assertStable();
+    process.stdout.write(`${width} ${theme}: keyboard, focus, order, form safety, labels, width, axe PASS\n`);
+    await page.close();
+  }
+} finally { await browser?.close(); await server.close(); process.stdout.write(`Artifacts: ${artifacts}\n`); }

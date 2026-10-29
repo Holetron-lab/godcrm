@@ -1,6 +1,6 @@
 import { Modal, Button } from '@/shared/components/ui';
 import { Download, FileSpreadsheet } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useId } from 'react';
 import { cn } from '@/shared/utils/cn';
 import type { ColumnModel, RowModel } from '../../types/table.types';
 
@@ -18,7 +18,7 @@ interface ExportCSVModalProps {
   columns: ColumnModel[];
   filteredRows: RowModel[];
   allRows: RowModel[];
-  selectedRowIds?: Set<string>;
+  selectedRowIds?: Set<string | number>;
   onExportFiltered: (settings: ExportSettings) => void;
   onExportAll: (settings: ExportSettings) => void;
   onExportSelected?: (settings: ExportSettings) => void;
@@ -36,6 +36,7 @@ export const ExportCSVModal = ({
   onExportAll,
   onExportSelected
 }: ExportCSVModalProps) => {
+  const groupId = useId();
   const selectedCount = selectedRowIds?.size || 0;
   const hasSelection = selectedCount > 0;
   const hasFilters = filteredRows.length !== allRows.length;
@@ -84,10 +85,10 @@ export const ExportCSVModal = ({
     <Modal open={isOpen} onOpenChange={(open) => !open && onClose()} title="Экспорт в CSV" size="md">
       <div className="space-y-6">
         {/* Scope selector - radio buttons like BulkReplaceModal */}
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+        <fieldset className="min-w-0">
+          <legend className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
             Применить к:
-          </label>
+          </legend>
           <div className="space-y-2">
             {scopeOptions.map(option => (
               <label 
@@ -102,7 +103,7 @@ export const ExportCSVModal = ({
               >
                 <input
                   type="radio"
-                  name="exportScope"
+                  name={`${groupId}-exportScope`}
                   value={option.value}
                   checked={scope === option.value}
                   onChange={() => option.count > 0 && setScope(option.value)}
@@ -123,15 +124,15 @@ export const ExportCSVModal = ({
               </label>
             ))}
           </div>
-        </div>
+        </fieldset>
         
         <hr className="border-[var(--border-primary)]" />
         
         {/* Column Headers Format - radio buttons in grid */}
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+        <fieldset className="min-w-0">
+          <legend className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
             Заголовки колонок:
-          </label>
+          </legend>
           <div className="grid grid-cols-2 gap-2">
             {[
               { value: false, label: 'Названия', hint: 'Имя, Email, Статус' },
@@ -148,25 +149,25 @@ export const ExportCSVModal = ({
               >
                 <input
                   type="radio"
-                  name="columnHeaders"
+                  name={`${groupId}-columnHeaders`}
                   checked={useColumnKeys === option.value}
                   onChange={() => setUseColumnKeys(option.value)}
                   className="w-4 h-4 text-[var(--color-primary-500)]"
                 />
-                <div>
-                  <span className="text-sm text-[var(--text-primary)]">{option.label}</span>
+                <span className="text-sm text-[var(--text-primary)]">
+                  {option.label}
                   <span className="block text-xs text-[var(--text-tertiary)]">{option.hint}</span>
-                </div>
+                </span>
               </label>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         {/* Data Format - radio buttons in grid */}
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+        <fieldset className="min-w-0">
+          <legend className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
             Формат данных:
-          </label>
+          </legend>
           <div className="grid grid-cols-2 gap-2">
             {[
               { value: false, label: 'Форматированный', hint: 'Да/Нет, 01.01.2026' },
@@ -183,19 +184,19 @@ export const ExportCSVModal = ({
               >
                 <input
                   type="radio"
-                  name="dataFormat"
+                  name={`${groupId}-dataFormat`}
                   checked={useRawFormat === option.value}
                   onChange={() => setUseRawFormat(option.value)}
                   className="w-4 h-4 text-[var(--color-primary-500)]"
                 />
-                <div>
-                  <span className="text-sm text-[var(--text-primary)]">{option.label}</span>
+                <span className="text-sm text-[var(--text-primary)]">
+                  {option.label}
                   <span className="block text-xs text-[var(--text-tertiary)]">{option.hint}</span>
-                </div>
+                </span>
               </label>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         <hr className="border-[var(--border-primary)]" />
 
@@ -224,7 +225,7 @@ export const ExportCSVModal = ({
 // Helper function to format a cell value for display
 const formatCellValue = (
   value: unknown,
-  column: ColumnModel,
+  column: Omit<ColumnModel, 'type'> & { type: string },
   useRawFormat: boolean
 ): string => {
   if (value === null || value === undefined) return '';

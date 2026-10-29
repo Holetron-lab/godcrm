@@ -23,15 +23,15 @@ export const TimeColumnSettings: React.FC<ColumnSettingsProps> = ({
   };
 
   return (
-    <div className="space-y-4 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-4 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
         <Clock className="w-4 h-4" />
         Настройки времени
       </h4>
 
       {/* Формат времени */}
-      <div className="space-y-2">
-        <label className="text-sm text-[var(--text-secondary)]">Формат отображения</label>
+      <fieldset className="space-y-2">
+        <legend className="text-sm text-[var(--text-secondary)]">Формат отображения</legend>
         <div className="flex gap-2">
           <button
             type="button"
@@ -56,7 +56,7 @@ export const TimeColumnSettings: React.FC<ColumnSettingsProps> = ({
             12-часовой (2:30 PM)
           </button>
         </div>
-      </div>
+      </fieldset>
 
       {/* Примеры отображения */}
       <div className="space-y-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">

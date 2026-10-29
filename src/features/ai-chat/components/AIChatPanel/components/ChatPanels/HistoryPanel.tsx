@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * @deprecated Ticket #81442: HistoryPanel is deprecated and no longer rendered.
  * All chat history is now shown in InboxPanel with unified filters (Ticket #81444).
@@ -50,6 +51,7 @@ export function HistoryPanel({
   onConversationSelect,
   onDeleteConversation
 }: HistoryPanelProps) {
+  const { t } = useLanguage();
   // Filter conversations based on search
   const filteredConversations = conversations.filter(conv => {
     if (!historySearch) return true;
@@ -63,14 +65,16 @@ export function HistoryPanel({
     switch (sortOption) {
       case 'alphabet':
         return (a.title || '').localeCompare(b.title || '');
-      case 'participants':
-        const aCount = (a as any).participants?.length || 0;
-        const bCount = (b as any).participants?.length || 0;
-        return bCount - aCount;
-      case 'space':
-        const aSpace = (a as any).spaceName || '';
-        const bSpace = (b as any).spaceName || '';
-        return aSpace.localeCompare(bSpace);
+      case 'participants': {
+          const aCount = (a as any).participants?.length || 0;
+          const bCount = (b as any).participants?.length || 0;
+          return bCount - aCount;
+      }
+      case 'space': {
+          const aSpace = (a as any).spaceName || '';
+          const bSpace = (b as any).spaceName || '';
+          return aSpace.localeCompare(bSpace);
+      }
       case 'date':
       default:
         return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
@@ -96,7 +100,7 @@ export function HistoryPanel({
         <button
           onClick={() => setActivePanel('none')}
           className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors"
-          title="Закрыть"
+          title={t('aiChat.ui.close')}
         >
           <X className="w-4 h-4" />
         </button>
@@ -110,7 +114,7 @@ export function HistoryPanel({
             type="text"
             value={historySearch}
             onChange={(e) => setHistorySearch(e.target.value)}
-            placeholder="Поиск в истории..."
+            placeholder={t('aiChat.ui.searchHistory')}
             className="w-full pl-8 pr-3 py-1.5 text-sm bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)]"
           />
         </div>
@@ -124,7 +128,7 @@ export function HistoryPanel({
           </div>
         ) : sortedConversations.length === 0 ? (
           <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-            {historySearch ? 'Не найдено' : 'Нет истории чатов'}
+            {historySearch ? t('aiChat.contacts.notFound') : t('aiChat.ui.noChatHistory')}
           </div>
         ) : (
           sortedConversations.map(conv => (

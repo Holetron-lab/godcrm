@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useId, useEffect, useMemo, useState } from 'react';
 import { ColumnSettingsProps } from './types';
+import type { JsonColumnConfig } from '../../../types/table.types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 type JsonMode = 'code' | 'tree' | 'form';
 
@@ -8,11 +10,11 @@ const DEFAULT_MODE: JsonMode = 'code';
 const DEFAULT_PRETTY = true;
 const DEFAULT_PREVIEW_LINES = 3;
 
-const MODES: Array<{ value: JsonMode; label: string; hint: string }> = [
-  { value: 'code', label: 'Код', hint: 'Текстовый JSON-редактор' },
-  { value: 'tree', label: 'Дерево', hint: 'Иерархический просмотр' },
-  { value: 'form', label: 'Форма', hint: 'По шаблону (если задан)' },
-];
+const MODES: JsonMode[] = ['code', 'tree', 'form'];
+
+type JsonCellView = NonNullable<JsonColumnConfig['cellView']>;
+const DEFAULT_CELL_VIEW: JsonCellView = 'preview';
+const CELL_VIEWS: JsonCellView[] = ['preview', 'table'];
 
 /**
  * ADR-0017 Phase 2 — настройки колонки типа `json`.
@@ -20,11 +22,14 @@ const MODES: Array<{ value: JsonMode; label: string; hint: string }> = [
  * показывает inline-ошибку; родительский drawer прерывает Save.
  */
 export const JsonColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setDraft }) => {
+  const { t } = useLanguage();
+  const fieldId = useId();
   const json = draft.config?.json ?? {};
   const template = json.template ?? DEFAULT_TEMPLATE;
   const defaultMode: JsonMode = (json.defaultMode as JsonMode) ?? DEFAULT_MODE;
   const prettyInCell = json.prettyInCell ?? DEFAULT_PRETTY;
   const previewLines = json.previewLines ?? DEFAULT_PREVIEW_LINES;
+  const cellView: JsonCellView = json.cellView ?? DEFAULT_CELL_VIEW;
 
   const [localTemplate, setLocalTemplate] = useState<string>(template);
 
@@ -52,6 +57,7 @@ export const JsonColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setDr
           defaultMode: prev.config?.json?.defaultMode ?? DEFAULT_MODE,
           prettyInCell: prev.config?.json?.prettyInCell ?? DEFAULT_PRETTY,
           previewLines: prev.config?.json?.previewLines ?? DEFAULT_PREVIEW_LINES,
+          cellView: prev.config?.json?.cellView ?? DEFAULT_CELL_VIEW,
           ...patch,
         },
       },
@@ -76,29 +82,36 @@ export const JsonColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setDr
     }
   };
 
+  const radioClass = (checked: boolean) =>
+    `flex items-center gap-2 px-3 py-2 rounded border cursor-pointer text-sm ${
+      checked
+        ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-50)] dark:bg-primary-900'
+        : 'border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]'
+    }`;
+
   return (
     <div className="space-y-4">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
-        🧬 Настройки JSON
+        🧬 {t('columnSettings.json.title')}
       </h4>
 
       {/* Шаблон */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-sm font-medium text-[var(--text-secondary)]">
-            Шаблон (JSON)
+          <label htmlFor={`${fieldId}-template`} className="text-sm font-medium text-[var(--text-secondary)]">
+            {t('columnSettings.json.template')}
           </label>
           <button
             type="button"
             onClick={handlePrettify}
             disabled={Boolean(templateError) || !localTemplate.trim()}
             className="text-xs px-2 py-1 rounded border border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Pretty-print"
+            title={t('columnSettings.json.formatHint')}
           >
-            Форматировать
+            {t('columnSettings.json.format')}
           </button>
         </div>
-        <textarea
+        <textarea id={`${fieldId}-template`}
           value={localTemplate}
           onChange={(e) => handleTemplateChange(e.target.value)}
           spellCheck={false}
@@ -110,47 +123,72 @@ export const JsonColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setDr
         />
         {templateError ? (
           <p className="text-xs text-red-500" data-testid="json-template-error">
-            ⚠️ Невалидный JSON: {templateError}
+            ⚠️ {t('columnSettings.json.invalid', { error: templateError })}
           </p>
         ) : (
           <p className="text-xs text-[var(--text-tertiary)]">
-            Опционально. Используется как заготовка при создании новой записи (Phase 3).
+            {t('columnSettings.json.templateHint')}
           </p>
         )}
       </div>
 
       {/* Default mode */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-[var(--text-secondary)]">
-          Режим редактора по умолчанию
-        </label>
+      <fieldset className="min-w-0 space-y-2">
+        <legend className="text-sm font-medium text-[var(--text-secondary)]">
+          {t('columnSettings.json.defaultMode')}
+        </legend>
         <div className="flex flex-wrap gap-2">
           {MODES.map(mode => (
             <label
-              key={mode.value}
-              className={`flex items-center gap-2 px-3 py-2 rounded border cursor-pointer text-sm ${
-                defaultMode === mode.value
-                  ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-50)] dark:bg-primary-100'
-                  : 'border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)]'
-              }`}
-              title={mode.hint}
+              key={mode}
+              className={radioClass(defaultMode === mode)}
+              title={t(`columnSettings.json.modes.${mode}Hint`)}
             >
               <input
                 type="radio"
-                name="json-default-mode"
-                value={mode.value}
-                checked={defaultMode === mode.value}
-                onChange={() => updateJson({ defaultMode: mode.value })}
+                name={`${fieldId}-default-mode`}
+                value={mode}
+                checked={defaultMode === mode}
+                onChange={() => updateJson({ defaultMode: mode })}
                 className="accent-[var(--color-primary-500)]"
               />
-              <span>{mode.label}</span>
+              <span>{t(`columnSettings.json.modes.${mode}`)}</span>
             </label>
           ))}
         </div>
         <p className="text-xs text-[var(--text-tertiary)]">
-          Какой режим открывается при клике в ячейку (Phase 3).
+          {t('columnSettings.json.defaultModeHint')}
         </p>
-      </div>
+      </fieldset>
+
+      {/* Cell view */}
+      <fieldset className="min-w-0 space-y-2">
+        <legend className="text-sm font-medium text-[var(--text-secondary)]">
+          {t('columnSettings.json.cellView')}
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {CELL_VIEWS.map(view => (
+            <label
+              key={view}
+              className={radioClass(cellView === view)}
+              title={t(`columnSettings.json.views.${view}Hint`)}
+            >
+              <input
+                type="radio"
+                name={`${fieldId}-cell-view`}
+                value={view}
+                checked={cellView === view}
+                onChange={() => updateJson({ cellView: view })}
+                className="accent-[var(--color-primary-500)]"
+              />
+              <span>{t(`columnSettings.json.views.${view}`)}</span>
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-[var(--text-tertiary)]">
+          {t('columnSettings.json.cellViewHint')}
+        </p>
+      </fieldset>
 
       {/* Pretty in cell */}
       <div className="space-y-2">
@@ -162,17 +200,17 @@ export const JsonColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setDr
             className="accent-[var(--color-primary-500)]"
           />
           <span className="text-sm text-[var(--text-primary)]">
-            Форматировать JSON в превью ячейки
+            {t('columnSettings.json.prettyInCell')}
           </span>
         </label>
       </div>
 
       {/* Preview lines */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-[var(--text-secondary)]">
-          Строк в превью ячейки
+        <label htmlFor={`${fieldId}-previewLines`} className="text-sm font-medium text-[var(--text-secondary)]">
+          {t('columnSettings.json.previewLines')}
         </label>
-        <input
+        <input id={`${fieldId}-previewLines`}
           type="number"
           min={1}
           max={10}
@@ -187,7 +225,7 @@ export const JsonColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setDr
           className="w-24 px-2 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
         />
         <p className="text-xs text-[var(--text-tertiary)]">
-          Сколько строк JSON показывать в ячейке (1–10). Остальное — «…».
+          {t('columnSettings.json.previewLinesHint')}
         </p>
       </div>
     </div>

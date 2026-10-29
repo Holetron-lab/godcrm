@@ -5,7 +5,8 @@
  * of a class with the same method signatures as the original monolith.
  */
 
-import { VALID_TYPES, get, list, create, update, delete_, testConnection, validateConfig, getDecryptedPassword } from './crud.js';
+import { VALID_TYPES, get, list, create, update, delete_, validateConfig, getDecryptedPassword } from './crud.js';
+import { testConnection } from './mysql.js';
 import { listTables, listTableColumns, queryTable, queryRowById } from './queries.js';
 import { createDataSourcesProject, addToDatabasesTable, importExternalTables } from './import.js';
 

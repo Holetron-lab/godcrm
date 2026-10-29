@@ -35,6 +35,8 @@ export const CreateProjectModal = ({ open, onOpenChange, onCreated, spaceId }: C
   }, [open, spaceId]);
 
   const handleSubmit = () => {
+    if (createProject.isPending) return;
+
     if (!form.name.trim()) {
       setError(t('projects.errors.nameRequired'));
       return;
@@ -75,7 +77,8 @@ export const CreateProjectModal = ({ open, onOpenChange, onCreated, spaceId }: C
       size="md"
       primaryAction={{
         label: createProject.isPending ? t('projects.modalSubmitting') : t('projects.modalSubmit'),
-        onClick: handleSubmit
+        onClick: handleSubmit,
+        disabled: createProject.isPending
       }}
       secondaryAction={{
         label: t('common.cancel'),

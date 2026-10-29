@@ -3,7 +3,7 @@
  * Contains: God badge, hierarchy info, context panel, table/column selectors, role mappings
  */
 
-import React from 'react';
+import React, { useId } from 'react';
 import {
   Crown,
   Settings,
@@ -85,6 +85,7 @@ export const AccessSettingsTab = ({
   setCustomMappingLevel,
   getAvailableLevels,
 }: AccessSettingsTabProps) => {
+  const fieldId = useId();
   const { language } = useLanguage();
   const t = (ru: string, en: string) => (language === 'ru' ? ru : en);
   return (
@@ -326,7 +327,7 @@ export const AccessSettingsTab = ({
                 className="flex items-center gap-2 p-2 rounded-md bg-[var(--bg-primary)]"
               >
                 <code className="flex-1 px-2 py-1 text-sm bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]">
-                  "{mapping.columnValue}"
+                  &quot;{mapping.columnValue}&quot;
                 </code>
                 <span className="text-[var(--text-tertiary)]">→</span>
                 <div
@@ -355,8 +356,9 @@ export const AccessSettingsTab = ({
           {/* Add new mapping */}
           <div className="flex items-end gap-2">
             <div className="flex-1">
-              <label className="block text-xs text-[var(--text-tertiary)] mb-1">Column value</label>
+              <label htmlFor={`${fieldId}-0`} className="block text-xs text-[var(--text-tertiary)] mb-1">Column value</label>
               <input
+                id={`${fieldId}-0`}
                 type="text"
                 value={customMappingValue}
                 onChange={(e) => setCustomMappingValue(e.target.value)}
@@ -365,8 +367,8 @@ export const AccessSettingsTab = ({
               />
             </div>
             <div className="flex-1">
-              <label className="block text-xs text-[var(--text-tertiary)] mb-1">Access level</label>
-              <select
+              <label htmlFor={`${fieldId}-access-level`} className="block text-xs text-[var(--text-tertiary)] mb-1">Access level</label>
+              <select id={`${fieldId}-access-level`}
                 value={customMappingLevel}
                 onChange={(e) => setCustomMappingLevel(e.target.value as UserAccessLevel)}
                 className="w-full px-2 py-1.5 text-sm rounded-md border bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/50"

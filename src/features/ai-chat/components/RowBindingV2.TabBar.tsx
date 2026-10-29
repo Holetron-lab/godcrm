@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * RowBindingTabBar — horizontal tab strip for RowBindingV2.
  * Tabs: Tickets (tasksSource) → Documents (favorite) → custom favorites,
@@ -44,6 +45,7 @@ export function RowBindingTabBar({
   showOtherTab,
   onClose,
 }: RowBindingTabBarProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex items-stretch border-b border-[var(--border-secondary)] bg-[var(--bg-tertiary)]">
       {/* ── Scrollable tabs (browser-tab style) ── */}
@@ -86,7 +88,7 @@ export function RowBindingTabBar({
           {showOtherTab && (
             <button
               onClick={() => setActiveTab('other')}
-              title="Другая таблица"
+              title={t('aiChat.ui.otherTable')}
               className={cn(
                 'flex items-center px-2 py-1.5 whitespace-nowrap transition-colors border-b-2 self-stretch',
                 activeTab === 'other' ? TAB_CLS_ACTIVE : TAB_CLS_INACTIVE
@@ -98,7 +100,7 @@ export function RowBindingTabBar({
           {onClose && (
             <button
               onClick={onClose}
-              title="Закрыть"
+              title={t('aiChat.ui.close')}
               className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
             >
               <X className="w-3.5 h-3.5" />

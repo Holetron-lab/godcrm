@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Atom, ArrowRight } from 'lucide-react';
 import { useDocumentsContext } from '../../DocumentsContext';
 import { useDocumentUpdate } from '../hooks/useDocumentUpdate';
@@ -12,6 +13,7 @@ interface AtomPreviewSectionProps {
 
 export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPreviewSectionProps) {
   const ctx = useDocumentsContext();
+  const fieldId = useId();
   const updateItem = useDocumentUpdate(item.id, tableId);
 
   if (item.level === 'text') {
@@ -42,21 +44,23 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
 
           <div className="space-y-3">
             <div>
-              <label className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">base_id</label>
-              <input
+              <label htmlFor={`${fieldId}-key`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">Ключ атома</label>
+              <input id={`${fieldId}-key`}
                 type="text"
-                value={item.atom_ref || ''}
+                aria-label="Ключ атома"
+                value={ctx.allAtoms.find(atom => atom.id === item.atom_ref)?.key || ''}
+                disabled={!item.atom_ref || ctx.isReadOnly}
                 placeholder={transliterate(getParentHeading() || 'atom') + '-' + item.id}
                 onChange={async (e) => {
-                  const newValue = e.target.value ? transliterate(e.target.value) : null;
-                  await updateItem({ atom_ref: newValue });
+                  if (!item.atom_ref) return;
+                  await ctx.updateAtom({ atomId: item.atom_ref, data: { key: transliterate(e.target.value) } });
                 }}
                 className="w-full px-2 py-1.5 rounded text-xs bg-[var(--bg-tertiary)] border border-[var(--border-primary)] font-mono"
               />
             </div>
             <div>
-              <label className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">Название атома</label>
-              <input
+              <label htmlFor={`${fieldId}-title`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">Название атома</label>
+              <input id={`${fieldId}-title`}
                 type="text"
                 value={item.atom_title || ''}
                 placeholder={getParentHeading() || 'Заголовок атома...'}
@@ -67,8 +71,8 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
               />
             </div>
             <div>
-              <label className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">Комментарий атома</label>
-              <textarea
+              <label htmlFor={`${fieldId}-comment`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">Комментарий атома</label>
+              <textarea id={`${fieldId}-comment`}
                 value={item.atom_comment || ''}
                 placeholder="Описание или пометка..."
                 rows={2}
@@ -116,21 +120,24 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
 
           <div className="space-y-3">
             <div>
-              <label className="block text-[10px] uppercase text-purple-400 mb-1">base_id</label>
-              <input
+              <label htmlFor={`${fieldId}-key`} className="block text-[10px] uppercase text-purple-400 mb-1">Ключ атома</label>
+              <input id={`${fieldId}-key`}
                 type="text"
-                value={item.atom_ref || ''}
+                aria-label="Ключ атома"
+                value={ctx.allAtoms.find(atom => atom.id === item.atom_ref)?.key || ''}
+                disabled={!item.atom_ref || ctx.isReadOnly}
                 placeholder="unique-atom-key"
                 onChange={async (e) => {
-                  await updateItem({ atom_ref: transliterate(e.target.value) });
+                  if (!item.atom_ref) return;
+                  await ctx.updateAtom({ atomId: item.atom_ref, data: { key: transliterate(e.target.value) } });
                 }}
                 className="w-full px-2 py-1.5 rounded text-xs bg-[var(--bg-primary)] border border-purple-500/30 font-mono"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase text-purple-400 mb-1">Название</label>
-              <input
+              <label htmlFor={`${fieldId}-title`} className="block text-[10px] uppercase text-purple-400 mb-1">Название</label>
+              <input id={`${fieldId}-title`}
                 type="text"
                 value={item.atom_title || ''}
                 placeholder="Название атома"
@@ -142,8 +149,8 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase text-purple-400 mb-1">Содержимое ({ctx.currentLanguage.toUpperCase()})</label>
-              <textarea
+              <label htmlFor={`${fieldId}-content`} className="block text-[10px] uppercase text-purple-400 mb-1">Содержимое ({ctx.currentLanguage.toUpperCase()})</label>
+              <textarea id={`${fieldId}-content`}
                 value={item.content || ''}
                 placeholder="Содержимое атома (Markdown)..."
                 rows={6}
@@ -173,8 +180,8 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
 
           <div className="space-y-3">
             <div>
-              <label className="block text-[10px] uppercase text-blue-400 mb-1">English</label>
-              <textarea
+              <label htmlFor={`${fieldId}-en`} className="block text-[10px] uppercase text-blue-400 mb-1">English</label>
+              <textarea id={`${fieldId}-en`}
                 value={item.content_en || ''}
                 placeholder="English content..."
                 rows={3}
@@ -186,8 +193,8 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase text-blue-400 mb-1">Русский</label>
-              <textarea
+              <label htmlFor={`${fieldId}-ru`} className="block text-[10px] uppercase text-blue-400 mb-1">Русский</label>
+              <textarea id={`${fieldId}-ru`}
                 value={item.content_ru || ''}
                 placeholder="Русский контент..."
                 rows={3}

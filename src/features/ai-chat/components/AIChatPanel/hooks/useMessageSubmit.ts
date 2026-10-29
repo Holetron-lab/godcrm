@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * useMessageSubmit — Handles message submission logic for AI agents and user/group chats.
  * Extracted from AIChatPanel.tsx handleSubmit (lines 1873-2042).
@@ -9,7 +10,7 @@ import { apiClient } from '@/shared/utils/apiClient';
 import { filesApi } from '@/features/files/api/filesApi';
 import { validateAndWrapCommands } from '../../../utils/invocationTokens';
 import type { MentionUser } from '../../MentionInput';
-import type { BoundRow } from '../../RowBindingV2';
+import { boundRowToAttachment, type BoundRow } from '../../RowBindingV2';
 import type { ApiResponse } from '../../AIChatPanel.types';
 
 interface UseMessageSubmitParams {
@@ -30,7 +31,7 @@ interface UseMessageSubmitParams {
   setUserConversationId: (id: number | null) => void;
   getOrCreateUserConversation: (participantIds: number[]) => Promise<number>;
   refetchUserMessages: () => void;
-  effectiveSpaceId: number | string | undefined;
+  effectiveSpaceId: number | undefined;
   setLocalError: (error: string | null) => void;
   availableMentionUsers: MentionUser[];
   availableSlashAgents: MentionUser[];
@@ -38,6 +39,7 @@ interface UseMessageSubmitParams {
 }
 
 export function useMessageSubmit(params: UseMessageSubmitParams) {
+  const { t } = useLanguage();
   const {
     inputValue, setInputValue, attachments, setAttachments,
     mentionedUsers, setMentionedUsers, messageBoundRows, setMessageBoundRows,
@@ -89,10 +91,7 @@ export function useMessageSubmit(params: UseMessageSubmitParams) {
       if (chatPartner?.type === 'agent' && currentAgent) {
         const filesToSend = [...attachments];
         const mentionsToSend = mentionedUsers.length > 0 ? mentionedUsers.map(u => ({ id: u.id, name: u.name, type: u.type })) : undefined;
-        const rowAtts = messageBoundRows.length > 0 ? messageBoundRows.map(br => ({
-          id: `row_${br.table_id}_${br.row_id}`, name: br.row_title || `Row #${br.row_id}`, type: 'row_reference', size: 0,
-          rowReference: { table_id: br.table_id, row_id: br.row_id, table_name: br.table_name || '', table_icon: br.table_icon, row_title: br.row_title }
-        })) : undefined;
+        const rowAtts = messageBoundRows.length > 0 ? messageBoundRows.map(boundRowToAttachment) : undefined;
         setInputValue(''); setAttachments(() => []); setMentionedUsers([]); setMessageBoundRows([]);
         const useAgentMode = agentMode === 'agent';
         await sendMessage(trimmedInput, filesToSend.length > 0 ? filesToSend : undefined, undefined, mentionsToSend, useAgentMode, undefined, undefined, rowAtts);
@@ -124,10 +123,7 @@ export function useMessageSubmit(params: UseMessageSubmitParams) {
             }
           }
 
-          const rowRefAttachments = messageBoundRows.length > 0 ? messageBoundRows.map(br => ({
-            id: `row_${br.table_id}_${br.row_id}`, name: br.row_title || `Row #${br.row_id}`, type: 'row_reference', size: 0,
-            rowReference: { table_id: br.table_id, row_id: br.row_id, table_name: br.table_name || '', table_icon: br.table_icon, row_title: br.row_title }
-          })) : [];
+          const rowRefAttachments = messageBoundRows.map(boundRowToAttachment);
           const allAttachments = [...(uploadedAttachments || []), ...rowRefAttachments];
 
           setInputValue(''); setAttachments(() => []); setMentionedUsers([]); setMessageBoundRows([]);
@@ -139,22 +135,22 @@ export function useMessageSubmit(params: UseMessageSubmitParams) {
           });
         } catch (error) {
           logger.error('[Chat v2] Error sending user message:', error);
-          setLocalError('Ошибка отправки сообщения');
+          setLocalError(t('aiChat.ui.sendMessageFailed'));
         }
         return;
       }
 
       if (!currentAgent && !chatPartner) {
-        setLocalError('Выберите агента или пользователя для чата');
+        setLocalError(t('aiChat.ui.chooseChatPartner'));
       }
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.message || 'Ошибка отправки сообщения';
+      const msg = error?.response?.data?.error || error?.message || t('aiChat.ui.sendMessageFailed');
       logger.error('[Chat v2] Error sending message:', error);
-      setLocalError(typeof msg === 'string' ? msg : 'Ошибка отправки сообщения');
+      setLocalError(typeof msg === 'string' ? msg : t('aiChat.ui.sendMessageFailed'));
     } finally {
       isSendingRef.current = false;
     }
-  }, [inputValue, attachments, messageBoundRows, chatPartner, currentAgent, agentMode, thinkingEnabled, mentionedUsers, availableMentionUsers, availableSlashAgents, userConversationId, effectiveSpaceId, sendMessage, getOrCreateUserConversation, setInputValue, setAttachments, setMentionedUsers, setMessageBoundRows, setUserConversationId, setLocalError, sendUserMessageMutation, refetchUserMessages]);
+  }, [inputValue, attachments, messageBoundRows, chatPartner, currentAgent, agentMode, thinkingEnabled, mentionedUsers, availableMentionUsers, availableSlashAgents, userConversationId, effectiveSpaceId, sendMessage, getOrCreateUserConversation, setInputValue, setAttachments, setMentionedUsers, setMessageBoundRows, setUserConversationId, setLocalError, sendUserMessageMutation, refetchUserMessages, t]);
 
   return {
     handleSubmit,

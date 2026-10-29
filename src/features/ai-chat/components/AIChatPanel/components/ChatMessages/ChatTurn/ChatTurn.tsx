@@ -6,8 +6,9 @@ import type { ChatMessage } from '../../../types';
 import { getTranslation } from '@/features/ai-chat/types';
 import { contentLanguageLabel } from '@/shared/i18n/contentLanguages';
 import { useTranslateMessage } from '@/features/ai-chat/hooks/useTranslateMessage';
-import { formatTime } from './helpers';
+import { formatTime, turnTimeSpan } from './helpers';
 import { TurnHeader } from './TurnHeader';
+import { useMentionUsers } from '../../../../MentionUsersContext';
 import { TurnBody } from './TurnBody';
 import { TurnFooter } from './TurnFooter';
 import ChatLinkCard, { type ChatLinkCardMovedBy } from './ChatLinkCard';
@@ -71,6 +72,7 @@ const moverAccentColor = (movedBy: ChatLinkCardMovedBy | undefined): string => {
 
 export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
   messages,
+  planMessage,
   turnType,
   senderName,
   markdownEnabled = true,
@@ -137,6 +139,8 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
   // The translation lives on the message row, so one user's translation is
   // reused by everyone viewing in that language.
   const { language } = useLanguage();
+  const { getByUserId } = useMentionUsers();
+  const humanColor = getByUserId(Number(messages[0]?.sender_id))?.color || '#3b82f6';
   const { translate, translatingId } = useTranslateMessage(conversationId);
   const [showOriginal, setShowOriginal] = React.useState(false);
   // The language the viewer is looking at: whatever they last picked from the
@@ -210,16 +214,12 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
     })
   );
 
-  // Timestamp from first message (start of turn)
-  const messageTime =
-    (messages[0] as unknown as { created_at?: string })?.created_at ||
-    messages[0]?.timestamp;
-
-  // Timestamp from last message (end of turn) -- for time range display
-  const lastMsg = messages[messages.length - 1];
-  const messageTimeEnd = messages.length > 1
-    ? ((lastMsg as unknown as { created_at?: string })?.created_at || lastMsg?.timestamp)
-    : undefined;
+  // Time span of the turn: earliest → latest instant across the turn's messages
+  // AND its hidden step groups. History loads lazily (steps are collapsed into
+  // `_step_groups_before/_after` annotations on the visible message), so a
+  // bubble loaded from history usually holds a single message — the final text —
+  // and its steps' timestamps only survive as `first_at` / `last_at` on the groups.
+  const { start: messageTime, end: messageTimeEnd } = turnTimeSpan(messages);
 
   // Extract token count from metadata if available
   const tokenCount = primaryMessage?.metadata?.usage
@@ -279,6 +279,7 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
 
   return (
     <div
+      data-chat-turn
       className={cn(
         'group relative w-full overflow-hidden',
         isMoved
@@ -298,7 +299,7 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
         borderTopLeftRadius: isFirstInGroup ? undefined : '0px',
         // Square bottom-left when still processing, interrupted, or not last (broken bubble), round when done
         borderBottomLeftRadius: (isLastInGroup && !isProcessing && !hasMoreSegments) ? undefined : '0px',
-      } : undefined}
+      } : { boxShadow: `inset -4px 0 0 0 ${humanColor}` }}
       {...chainDataAttrs}
     >
       <div className={cn('px-4', isFirstInGroup ? 'pt-3' : 'pt-1', isLastInGroup ? 'pb-3' : 'pb-1')}>
@@ -307,8 +308,7 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
           <TurnHeader
             turnType={turnType}
             senderName={senderName}
-            timestamp={formatTime(messageTime)}
-            timestampEnd={messageTimeEnd ? formatTime(messageTimeEnd) : undefined}
+            timestamp={formatTime(messageTime, messageTimeEnd, language)}
             isProcessing={isProcessing}
             agentColor={agentColor}
             agentIcon={agentIcon}
@@ -319,6 +319,8 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
             isAgentActiveInChat={isAgentActiveInChat}
             onAgentNameClick={onAgentNameClick}
             senderAvatar={senderAvatar}
+            senderUserId={messages[0]?.sender_id}
+            conversationId={conversationId}
             isSystemEvent={isSystemEvent}
           />
         )}
@@ -399,6 +401,7 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
         ) : (
           <TurnBody
             messages={messages}
+            planMessage={planMessage}
             turnType={turnType}
             markdownEnabled={markdownEnabled}
             isProcessing={isProcessing}
@@ -471,3 +474,5 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
     </div>
   );
 });
+
+ChatTurn.displayName = "ChatTurn";

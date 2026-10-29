@@ -134,7 +134,6 @@ export const CreateFolderModal = ({
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
             placeholder={t('schemaEditor.folderNamePlaceholder') || 'Folder name...'}
-            autoFocus
           />
         </div>
 

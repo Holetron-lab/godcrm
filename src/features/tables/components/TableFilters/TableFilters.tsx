@@ -1,15 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
-import { logger } from '@/shared/utils/logger';
+import { useState, useEffect, type RefObject } from 'react';
 import { Search, X, Filter, Plus, RefreshCw, Zap, LayoutGrid, Table2, Printer, Settings, Settings2, Replace } from 'lucide-react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/shared/components/ui';
 import { cn } from '@/shared/utils/cn';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
-import { apiClient } from '@/shared/utils/apiClient';
 import type { ColumnModel, ColumnOption } from '../../types/table.types';
 import type { PaginationInfo } from '../UniversalTable/UniversalTable';
 import { AutomationModal } from './AutomationModal';
+import { GoToRowInput } from './GoToRowInput';
+import { RowPositionBar } from './RowPositionBar';
+import { rowCountKey, useRelationOptions } from './utils';
 
 interface DateRange {
   from?: string;
@@ -31,13 +31,14 @@ interface TableFiltersProps {
   groupByColumn?: string | null;
   onGroupByColumnChange?: (columnId: string | null) => void;
   paginationInfo?: PaginationInfo | null;
-  rowsLimit?: number;
-  onRowsLimitChange?: (limit: number) => void;
-  onPageChange?: (page: number) => void;
+  onGoToRow?: (rowNumber: number) => void;
   onAddRow?: () => void;
   addRowText?: string; // Custom text for add row button
   onRefresh?: () => void;
+  /** Kept for callers; the refresh button no longer depends on it. */
   isExternal?: boolean;
+  /** The element that scrolls the table; enables the position bar under the row count. */
+  scrollContainerRef?: RefObject<HTMLElement | null>;
   compact?: boolean; // Hide automations button, reduce padding
   projectId?: number; // For widget creation link
   rawMode?: boolean; // Whether in raw table mode
@@ -69,13 +70,11 @@ export const TableFilters = ({
   groupByColumn,
   onGroupByColumnChange,
   paginationInfo,
-  rowsLimit = 50,
-  onRowsLimitChange,
-  onPageChange,
+  onGoToRow,
   onAddRow,
   addRowText,
   onRefresh,
-  isExternal,
+  scrollContainerRef,
   compact = false,
   projectId,
   rawMode = false,
@@ -88,7 +87,7 @@ export const TableFilters = ({
   onTableSettings,
   showTableSettings = false
 }: TableFiltersProps) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const { tableId } = useParams<{ tableId: string }>();
   const [inputValue, setInputValue] = useState(searchQuery);
@@ -128,7 +127,7 @@ export const TableFilters = ({
 
   // Get searchable columns (text, number, email, url, phone + select/relation for broader search)
   const searchableColumns = (columns || []).filter(col =>
-    ['text', 'number', 'email', 'url', 'phone', 'select', 'relation', 'textarea'].includes(col.type || col.column_type || '')
+    ['text', 'number', 'email', 'url', 'phone', 'select', 'relation', 'textarea'].includes(col.type || ('column_type' in col && typeof col.column_type === 'string' ? col.column_type : ''))
   );
 
   // Get select/multi-select columns for filtering
@@ -151,77 +150,12 @@ export const TableFilters = ({
     ['select', 'multi-select', 'multi_select', 'date', 'datetime'].includes(col.type)
   );
 
-  // Find columns with relation configs that need data loading
-  const relationColumns = useMemo(() => {
-    const cols = Array.isArray(columns) ? columns : [];
-    return cols.filter(col =>
-      ['select', 'multi-select', 'multi_select'].includes(col.type) &&
-      col.config?.relation?.enabled &&
-      col.config?.relation?.tableId &&
-      col.config?.relation?.valueColumn &&
-      col.config?.relation?.labelColumn
-    );
-  }, [columns]);
-
-  // Load relation options for filter dropdowns
-  const { data: relationOptionsMap } = useQuery({
-    queryKey: ['filter-relation-options', relationColumns.map(c => `${c.id}:${c.config?.relation?.tableId}`).join(',')],
-    queryFn: async () => {
-      const map = new Map<string, ColumnOption[]>();
-
-      for (const col of relationColumns) {
-        const relation = col.config?.relation;
-        if (!relation?.tableId || !relation?.valueColumn || !relation?.labelColumn) continue;
-
-        try {
-          const response = await apiClient.request<{
-            data: { rows: Array<Record<string, unknown>> } | Array<Record<string, unknown>>
-          }>(`/tables/${relation.tableId}/rows?limit=5000`);
-
-          // Handle different response formats
-          const responseData = response.data as { rows?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>;
-          const rowsData = Array.isArray(responseData)
-            ? responseData
-            : ((responseData as { rows?: Array<Record<string, unknown>>; data?: { rows: Array<Record<string, unknown>> } })?.rows ||
-               (responseData as { data?: { rows: Array<Record<string, unknown>> } })?.data?.rows || []);
-
-          type RowItem = { id?: string | number; data?: Record<string, unknown>; originalId?: string | number };
-          const options: ColumnOption[] = rowsData.map((row: RowItem) => {
-            const rowData = row.data && typeof row.data === 'object' ? row.data : (row as Record<string, unknown>);
-            const rowId = row.id;
-            const originalId = row.originalId;
-
-            let val: string;
-            if (relation.valueColumn === 'id') {
-              val = String(originalId ?? rowData['id'] ?? rowId ?? '');
-            } else {
-              val = String(rowData[relation.valueColumn] ?? '');
-            }
-
-            return {
-              value: val,
-              label: String(rowData[relation.labelColumn] ?? ''),
-              color: relation.colorColumn ? String(rowData[relation.colorColumn] ?? '') || undefined : undefined
-            };
-          });
-
-          map.set(col.id, options);
-        } catch (e) {
-          logger.error('Failed to load relation options for filter column', col.id, e);
-        }
-      }
-
-      return map;
-    },
-    enabled: relationColumns.length > 0,
-    staleTime: 60000,
-  });
-
-  // Helper to get options for a column (relation or static)
-  const getColumnOptions = (column: ColumnModel): ColumnOption[] => {
-    const relationOpts = relationOptionsMap?.get(column.id);
-    return relationOpts || column.config?.options || [];
-  };
+  // Relation options for filter dropdowns (ADR-205 D4: shared lookup, see ./utils).
+  // A lens column's list downloads when its dropdown is first hovered or focused, not on mount (AC6).
+  const [openedFilterColumns, setOpenedFilterColumns] = useState<string[]>([]);
+  const revealFilterOptions = (columnId: string) =>
+    setOpenedFilterColumns((ids) => (ids.includes(columnId) ? ids : [...ids, columnId]));
+  const { getColumnOptions } = useRelationOptions(columns, openedFilterColumns);
 
   const addFilterColumn = (columnId: string) => {
     onActiveFilterColumnsChange([...activeFilterColumns, columnId]);
@@ -278,6 +212,11 @@ export const TableFilters = ({
 
   const hasActiveFilters = Object.values(selectFilters).some(arr => arr.length > 0) ||
                            Object.values(dateFilters).some(range => range.from || range.to);
+  // Row numbers are positions in the unfiltered table; with a search or filter active they no longer line up.
+  const goToRowBlocked = hasActiveFilters || searchQuery.trim() !== '';
+  const rowCountLabel = paginationInfo
+    ? t(rowCountKey(language, paginationInfo.totalRows), { count: paginationInfo.totalRows.toLocaleString(language) })
+    : '';
 
   const allColumnsActive =
     searchColumns.length === 0 || searchColumns.length === searchableColumns.length;
@@ -411,7 +350,7 @@ export const TableFilters = ({
                     <div className="h-px bg-[var(--border-primary)] my-1" />
                     {(searchableColumns.length > 0 ? searchableColumns : (columns || [])).map(column => (
                       <label key={column.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors">
-                        <input
+                        <input aria-label={column.displayName}
                           type="checkbox"
                           checked={searchColumns.length === 0 || searchColumns.includes(column.id)}
                           onChange={() => toggleSearchColumn(column.id)}
@@ -496,7 +435,7 @@ export const TableFilters = ({
 
             {showEditColumnPicker && (
               <>
-                <div
+                <button type="button" aria-label="Закрыть выбор колонки"
                   className="fixed inset-0 z-40"
                   onClick={() => setShowEditColumnPicker(false)}
                 />
@@ -545,6 +484,17 @@ export const TableFilters = ({
             className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)] transition-colors"
           >
             <Printer className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Refresh — re-fetches rows and columns of any table, not only external ones */}
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            title={t('common.refresh') || 'Refresh'}
+            className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)] transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
           </button>
         )}
 
@@ -600,7 +550,12 @@ export const TableFilters = ({
               const isGrouped = groupByColumn === column.id;
 
               return (
-                <div key={column.id} className="relative group">
+                <div
+                  key={column.id}
+                  className="relative group"
+                  onMouseEnter={() => revealFilterOptions(column.id)}
+                  onFocus={() => revealFilterOptions(column.id)}
+                >
                   <button
                     className={`px-4 py-2 rounded-lg text-sm transition-colors border whitespace-nowrap ${
                       isGrouped
@@ -720,53 +675,29 @@ export const TableFilters = ({
         {/* Spacer to push pagination controls to the right */}
         <div className="flex-1" />
 
-        {/* Pagination Controls - Right side */}
-        {paginationInfo && (
-          <div className="flex items-center gap-3 text-sm whitespace-nowrap">
-            {/* Rows per page selector */}
-            <div className="flex items-center gap-2">
-              <select
-                value={rowsLimit}
-                onChange={(e) => onRowsLimitChange?.(Number(e.target.value))}
-                className="px-2 py-1 rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm cursor-pointer hover:border-[var(--color-primary-400)] transition-colors"
-              >
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-                <option value={200}>200</option>
-              </select>
-              <span className="text-[var(--text-tertiary)]">{t('table.rowsLabel')}</span>
-            </div>
-
-            {/* Page selector - only show if multiple pages */}
-            {paginationInfo.totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <span className="text-[var(--text-tertiary)]">·</span>
-                <span className="text-[var(--text-tertiary)]">{t('table.pageLabel')}</span>
-                <select
-                  value={paginationInfo.currentPage}
-                  onChange={(e) => onPageChange?.(Number(e.target.value))}
-                  className="px-2 py-1 rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm cursor-pointer hover:border-[var(--color-primary-400)] transition-colors"
-                >
-                  {Array.from({ length: paginationInfo.totalPages }, (_, i) => i + 1).map(page => (
-                    <option key={page} value={page}>{page}</option>
-                  ))}
-                </select>
-                <span className="text-[var(--text-tertiary)]">/</span>
-                <span className="text-[var(--text-primary)] font-medium">{paginationInfo.totalPages}</span>
-              </div>
+        {/* Row count - right side; on paged tables it opens an inline "go to row" field.
+            Under it, the position bar shows where the visible rows sit in the whole table. */}
+        {paginationInfo && paginationInfo.totalRows > 0 && (
+          <div className="flex flex-col text-sm whitespace-nowrap">
+            {onGoToRow && paginationInfo.totalPages > 1 ? (
+              <GoToRowInput
+                totalRows={paginationInfo.totalRows}
+                rowCountLabel={rowCountLabel}
+                blocked={goToRowBlocked}
+                onGoToRow={onGoToRow}
+              />
+            ) : (
+              <span className="text-[var(--text-secondary)]">{rowCountLabel}</span>
+            )}
+            {onGoToRow && scrollContainerRef && (
+              <RowPositionBar
+                pagination={paginationInfo}
+                scrollContainerRef={scrollContainerRef}
+                blocked={goToRowBlocked}
+                onGoToRow={onGoToRow}
+              />
             )}
           </div>
-        )}
-
-        {/* Refresh button for external tables - icon only */}
-        {isExternal && onRefresh && (
-          <button
-            onClick={onRefresh}
-            className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)] transition-colors"
-            title={t('common.refresh') || 'Refresh'}
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
         )}
       </div>
 

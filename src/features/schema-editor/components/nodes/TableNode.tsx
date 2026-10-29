@@ -1,8 +1,11 @@
 import { memo, useCallback, useRef, useEffect, useState } from 'react';
 import { logger } from '@/shared/utils/logger';
-import { Handle, Position } from '@xyflow/react';
+import { Handle, Position, useStore as useReactFlowStore, type ReactFlowState } from '@xyflow/react';
+import { DndContext, closestCenter, pointerWithin, PointerSensor, useSensor, useSensors, type CollisionDetection, type DragEndEvent, type Modifier } from '@dnd-kit/core';
+import { SortableContext, arrayMove, verticalListSortingStrategy, type SortingStrategy } from '@dnd-kit/sortable';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { useNavigate } from 'react-router-dom';
-import { MoreVertical, Plus, Eye, Pencil, ArrowRightLeft, Trash2, Settings, PlusCircle } from 'lucide-react';
+import { MoreVertical, Plus, Eye, Pencil, ArrowRightLeft, Trash2, Settings, PlusCircle, Pin, PinOff } from 'lucide-react';
 import type { TableNodeData, ColumnData } from '../../types/schema-editor.types';
 import { useSchemaEditorStore } from '../../store/schemaEditorStore';
 import type { ColumnType } from '@/shared/types';
@@ -13,7 +16,8 @@ import { EditTableModal } from '@/features/tables/components/EditTableModal';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import type { ColumnModel, ColumnConfig } from '@/features/tables/types/table.types';
 import { tablesApi } from '@/features/tables/api/tablesApi';
-import { ColumnRow, hasLinkConfig, hasRelationConfig, hasInverseRelationConfig } from './TableNodeColumnRow';
+import { ColumnRow, hasRelationConfig, hasInverseRelationConfig, COLUMN_ACTION_EVENT, type ColumnActionDetail } from './TableNodeColumnRow';
+import { TableWidgetStrips } from './TableWidgetStrips';
 
 // Convert ColumnData to ColumnModel for settings drawer
 const convertToColumnModel = (column: ColumnData, tableId: number): ColumnModel => {
@@ -38,6 +42,20 @@ interface TableNodeComponentProps {
   selected?: boolean;
 }
 
+const zoomSelector = (state: ReactFlowState) => state.transform[2];
+
+// Pointer and row rects are both in screen pixels, so the drop target stays right at any canvas zoom
+// (the dragged rect is in unzoomed node pixels and would drift); closestCenter only covers the gaps.
+const pointerFirstCollision: CollisionDetection = (args) => {
+  const underPointer = pointerWithin(args);
+  return underPointer.length > 0 ? underPointer : closestCenter(args);
+};
+
+// The virtual `id` row is pinned first and has no table_columns record to reorder.
+const isReorderable = (column: ColumnData) => !column.isPrimaryKey;
+
+type ColumnInsertAt = { column: ColumnData; side: 'above' | 'below' };
+
 export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
   const {
     tableId,
@@ -53,12 +71,24 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
     sourceSpaceName,
     rowsPreview,
     rowsLoading,
+    rowCount,
     projectId,
     spaceId,
+    isPinned,
+    widgets,
   } = data;
 
-  const { selectedColumnKey, selectColumn, pendingConnections, loadTableRows, updateTableColor, refreshSchema, spaceId: schemaSpaceId, toggleTableSelection } = useSchemaEditorStore();
+  const { selectedColumnKey, selectColumn, pendingConnections, loadTableRows, updateTableColor, refreshSchema, setTableColumns, spaceId: schemaSpaceId, toggleTableSelection, toggleTablePinned, showWidgets } = useSchemaEditorStore();
   const { t } = useLanguage();
+  // dnd-kit measures in screen pixels while the node is drawn inside the zoomed canvas:
+  // divide both the dragged row and the shifted neighbours by the zoom so they track the pointer.
+  const zoom = useReactFlowStore(zoomSelector);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const unzoomDrag = useCallback<Modifier>(({ transform }) => ({ ...transform, x: transform.x / zoom, y: transform.y / zoom }), [zoom]);
+  const unzoomedStrategy = useCallback<SortingStrategy>((args) => {
+    const shift = verticalListSortingStrategy(args);
+    return shift && { ...shift, x: shift.x / zoom, y: shift.y / zoom };
+  }, [zoom]);
   const navigate = useNavigate();
   const [showTableMenu, setShowTableMenu] = useState(false);
   const tableMenuRef = useRef<HTMLDivElement | null>(null);
@@ -67,6 +97,8 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
   const [showAddRowModal, setShowAddRowModal] = useState(false);
   const [showEditTableModal, setShowEditTableModal] = useState(false);
   const [showCreateColumnModal, setShowCreateColumnModal] = useState(false);
+  // Where the next created column goes; null appends (footer button).
+  const [columnInsertAt, setColumnInsertAt] = useState<ColumnInsertAt | null>(null);
   const [settingsColumn, setSettingsColumn] = useState<ColumnData | null>(null);
 
   const handleColumnSelect = useCallback((columnName: string) => {
@@ -84,9 +116,6 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
       (pc.targetTableId === tableId && pc.targetColumn === columnName)
     );
   }, [pendingConnections, tableId]);
-
-  // Keep positioning stable (fixed row heights) to avoid layout glitches
-  const handlePositionUpdate = useCallback((_columnName: string, _top: number) => {}, []);
 
   const handleOpenSettings = useCallback((column: ColumnData) => {
     setSettingsColumn(column);
@@ -128,6 +157,92 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
     loadTableRows(tableId);
   }, [tableId, loadTableRows]);
 
+  // Optimistic column edits: update the node first, PATCH after; a failed request resyncs from the server.
+  const resyncAfterFailure = useCallback(async (message: string, error: unknown) => {
+    logger.error(message, error);
+    alert(message);
+    await refreshSchema();
+  }, [refreshSchema]);
+
+  const persistColumnOrder = useCallback(async (ordered: ColumnData[]) => {
+    const renumbered = ordered.map((column, orderIndex) => ({ ...column, orderIndex }));
+    setTableColumns(tableId, [...columns.filter((column) => !isReorderable(column)), ...renumbered]);
+    const results = await Promise.allSettled(
+      ordered.map((column, orderIndex) => column.orderIndex === orderIndex
+        ? Promise.resolve()
+        : tablesApi.updateColumn(String(tableId), column.id, { orderIndex }))
+    );
+    if (results.some((result) => result.status === 'rejected')) {
+      await resyncAfterFailure('Не удалось сохранить порядок колонок.', results);
+    }
+  }, [columns, tableId, setTableColumns, resyncAfterFailure]);
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const reorderable = columns.filter(isReorderable);
+    const from = reorderable.findIndex((column) => column.id === active.id);
+    const to = reorderable.findIndex((column) => column.id === over.id);
+    if (from === -1 || to === -1) return;
+    void persistColumnOrder(arrayMove(reorderable, from, to));
+  }, [columns, persistColumnOrder]);
+
+  const handleMoveColumn = useCallback((column: ColumnData, direction: -1 | 1) => {
+    const reorderable = columns.filter(isReorderable);
+    const from = reorderable.indexOf(column);
+    const to = from + direction;
+    if (from === -1 || to < 0 || to >= reorderable.length) return;
+    void persistColumnOrder(arrayMove(reorderable, from, to));
+  }, [columns, persistColumnOrder]);
+
+  const patchColumn = useCallback(async (column: ColumnData, patch: Pick<ColumnData, 'isVisible'> | Pick<ColumnData, 'isReadonly'>) => {
+    setTableColumns(tableId, columns.map((c) => (c.id === column.id ? { ...c, ...patch } : c)));
+    try {
+      await tablesApi.updateColumn(String(tableId), column.id, patch);
+    } catch (error) {
+      await resyncAfterFailure('Не удалось обновить колонку. Проверьте права или данные.', error);
+    }
+  }, [columns, tableId, setTableColumns, resyncAfterFailure]);
+
+  const handleToggleVisibility = useCallback((column: ColumnData) => {
+    void patchColumn(column, { isVisible: column.isVisible === false });
+  }, [patchColumn]);
+
+  const handleToggleReadonly = useCallback((column: ColumnData) => {
+    void patchColumn(column, { isReadonly: !column.isReadonly });
+  }, [patchColumn]);
+
+  const handleDeleteColumn = useCallback(async (column: ColumnData) => {
+    if (!window.confirm(t('columnHeader.deleteConfirm', { column: column.displayName || column.name }))) return;
+    try {
+      await tablesApi.deleteColumn(String(tableId), column.id);
+      await refreshSchema(); // edges to the deleted column are rebuilt from the server
+    } catch (error) {
+      await resyncAfterFailure('Не удалось удалить колонку. Проверьте права или данные.', error);
+    }
+  }, [tableId, t, refreshSchema, resyncAfterFailure]);
+
+  const handleAddColumn = useCallback((anchor: ColumnInsertAt | null = null) => {
+    setColumnInsertAt(anchor);
+    setShowCreateColumnModal(true);
+  }, []);
+
+  // Create appends; the real columns are then renumbered around the anchor (same flow as the universal table).
+  const placeCreatedColumn = useCallback(async (createdId: string, { column, side }: ColumnInsertAt) => {
+    const reorderable = columns.filter(isReorderable);
+    const anchor = reorderable.findIndex((c) => c.id === column.id);
+    if (anchor === -1) return;
+    const ids = reorderable.map((c) => c.id);
+    ids.splice(anchor + (side === 'below' ? 1 : 0), 0, createdId);
+    const results = await Promise.allSettled(ids.map((id, orderIndex) =>
+      reorderable.find((c) => c.id === id)?.orderIndex === orderIndex
+        ? Promise.resolve()
+        : tablesApi.updateColumn(String(tableId), id, { orderIndex })));
+    if (results.some((result) => result.status === 'rejected')) {
+      await resyncAfterFailure('Колонка создана, но её позиция не сохранена. Переместите её через меню.', results);
+    }
+  }, [columns, tableId, resyncAfterFailure]);
+
   const handleTableMenuClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowTableMenu(!showTableMenu);
@@ -149,6 +264,8 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
       window.open(`/tables/${parentTableId}?openFormSettings=true`, '_blank');
     } else if (action === 'move') {
       window.dispatchEvent(new CustomEvent('schema-editor:move-table', { detail: { tableId } }));
+    } else if (action === 'togglePin') {
+      toggleTablePinned(tableId);
     } else if (action === 'delete') {
       window.dispatchEvent(new CustomEvent('schema-editor:delete-table', { detail: { tableId } }));
     }
@@ -187,8 +304,31 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
     };
   }, [tableId]);
 
-  // Get relation columns for handle positioning
-  const relationColumns = columns.filter(hasLinkConfig);
+  // The nav tree column rows reuse this node's column handlers (settings drawer, patches, create modal)
+  // through one event, so both surfaces behave identically. Requires the node to be mounted (visible).
+  useEffect(() => {
+    const handleColumnAction = (event: Event) => {
+      const detail = (event as CustomEvent<ColumnActionDetail>).detail;
+      if (detail?.tableId !== tableId) return;
+      const column = columns.find((c) => c.id === detail.columnId);
+      if (!column) return;
+      switch (detail.action) {
+        case 'settings': handleOpenSettings(column); break;
+        case 'visibility': handleToggleVisibility(column); break;
+        case 'readonly': handleToggleReadonly(column); break;
+        case 'moveUp': handleMoveColumn(column, -1); break;
+        case 'moveDown': handleMoveColumn(column, 1); break;
+        case 'addAbove': handleAddColumn({ column, side: 'above' }); break;
+        case 'addBelow': handleAddColumn({ column, side: 'below' }); break;
+        case 'delete': void handleDeleteColumn(column); break;
+      }
+    };
+    window.addEventListener(COLUMN_ACTION_EVENT, handleColumnAction as EventListener);
+    return () => window.removeEventListener(COLUMN_ACTION_EVENT, handleColumnAction as EventListener);
+  }, [tableId, columns, handleOpenSettings, handleToggleVisibility, handleToggleReadonly, handleMoveColumn, handleAddColumn, handleDeleteColumn]);
+
+  const reorderableIds = columns.filter(isReorderable).map((column) => column.id);
+  const firstReorderableIndex = columns.findIndex(isReorderable);
 
   const borderClasses = isSystem
     ? 'border-orange-500/50'
@@ -198,7 +338,8 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
   const selectedOutlineClasses = selected
     ? 'outline outline-2 outline-[var(--accent-primary)] outline-offset-1 shadow-[var(--accent-primary)]/20'
     : '';
-  const containerClasses = `min-w-[320px] max-w-[400px] rounded-xl border-2 shadow-lg bg-[var(--bg-primary)] transition-all duration-200 overflow-hidden ${borderClasses} ${selectedOutlineClasses}`;
+  // `relative z-10`: the card paints over the module strips tucked behind its top edge.
+  const containerClasses = `relative z-10 min-w-[320px] max-w-[400px] rounded-xl border-2 shadow-lg bg-[var(--bg-primary)] transition-all duration-200 overflow-hidden ${borderClasses} ${selectedOutlineClasses}`;
 
   // Header background: use table color if available, or special colors for system/external
   const headerBg = color 
@@ -212,7 +353,12 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
   const headerClasses = `flex items-center gap-2 px-3 py-2 rounded-t-md ${headerBg}`;
 
   return (
-    <div className={containerClasses}>
+    <div className="relative">
+      {/* Modules built on this table: strips glued above the card, hidden by the toolbar toggle */}
+      {showWidgets && widgets && widgets.length > 0 && (
+        <TableWidgetStrips widgets={widgets} openLabel={t('schemaEditor.navMenu.openWidget')} />
+      )}
+    <div className={containerClasses} data-testid={`schema-node-${tableId}`}>
       {/* System/Sync badge above header */}
       {(isSystem || syncTarget) && (
         <div className="flex items-center gap-1.5 px-3 py-1 bg-orange-500/20 text-orange-400 text-xs font-medium">
@@ -314,11 +460,23 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
           </div>
         )}
 
+        {isPinned && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); handleMenuAction('togglePin'); }}
+            className="flex h-6 w-4 flex-shrink-0 items-center justify-center rounded text-[var(--accent-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+            title={t('schemaEditor.tableMenu.unpin')}
+            aria-label={t('schemaEditor.tableMenu.unpin')}
+          >
+            <Pin className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         <div className="relative">
           <button
             ref={tableMenuButtonRef}
             onClick={handleTableMenuClick}
-            className="p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+            className="flex h-6 w-4 flex-shrink-0 items-center justify-center rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
             title="Table options"
           >
             <MoreVertical className="w-4 h-4" />
@@ -358,6 +516,13 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
                 <ArrowRightLeft className="w-3.5 h-3.5" />
                 <span>{t('schemaEditor.tableMenu.move')}</span>
               </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleMenuAction('togglePin'); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors"
+              >
+                {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                <span>{t(isPinned ? 'schemaEditor.tableMenu.unpin' : 'schemaEditor.tableMenu.pin')}</span>
+              </button>
               <div className="border-t border-[var(--border-primary)]" />
               <button
                 onClick={(e) => { e.stopPropagation(); handleMenuAction('delete'); }}
@@ -371,82 +536,67 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
         </div>
       </div>
 
-      {/* Columns list - no scroll, show all */}
+      {/* Columns list - no scroll, show all; the emoji of each real column is a sortable drag handle */}
       <div className="relative">
-        {columns.map((column) => {
-          // Determine link type for coloring
-          const linkType: 'none' | 'relation' | 'inverse' = 
-            hasRelationConfig(column) ? 'relation' :
-            hasInverseRelationConfig(column) ? 'inverse' : 'none';
-          
-          return (
-            <ColumnRow 
-              key={column.id} 
-              column={column} 
-              tableId={tableId}
-              isSelected={isColumnSelected(column.name)}
-              linkType={linkType}
-              isPendingConnected={isPendingConnected(column.name)}
-              rowsPreview={rowsPreview}
-              rowsLoading={rowsLoading}
-              onSelect={() => handleColumnSelect(column.name)}
-              onPositionUpdate={handlePositionUpdate}
-              onOpenSettings={handleOpenSettings}
-              onChangeType={handleChangeType}
-              onLoadRows={handleLoadRows}
-            />
-          );
-        })}
+        <DndContext sensors={sensors} collisionDetection={pointerFirstCollision} modifiers={[restrictToVerticalAxis, unzoomDrag]} autoScroll={false} onDragEnd={handleDragEnd}>
+          <SortableContext items={reorderableIds} strategy={unzoomedStrategy}>
+            {columns.map((column, index) => {
+              // Determine link type for coloring
+              const linkType: 'none' | 'relation' | 'inverse' =
+                hasRelationConfig(column) ? 'relation' :
+                hasInverseRelationConfig(column) ? 'inverse' : 'none';
+              const reorderable = isReorderable(column);
+              const canDelete = reorderable && !column.isLocked && !column.isFromSource;
+
+              return (
+                <ColumnRow
+                  key={column.id}
+                  column={column}
+                  tableId={tableId}
+                  isSelected={isColumnSelected(column.name)}
+                  linkType={linkType}
+                  isPendingConnected={isPendingConnected(column.name)}
+                  rowsPreview={rowsPreview}
+                  rowsLoading={rowsLoading}
+                  canReorder={reorderable}
+                  onSelect={() => handleColumnSelect(column.name)}
+                  onOpenSettings={handleOpenSettings}
+                  onChangeType={handleChangeType}
+                  onLoadRows={handleLoadRows}
+                  onToggleVisibility={reorderable ? handleToggleVisibility : undefined}
+                  onMoveUp={reorderable && index > firstReorderableIndex ? () => handleMoveColumn(column, -1) : undefined}
+                  onMoveDown={reorderable && index < columns.length - 1 ? () => handleMoveColumn(column, 1) : undefined}
+                  onAddColumn={reorderable ? (side) => handleAddColumn({ column, side }) : undefined}
+                  onToggleReadonly={reorderable ? handleToggleReadonly : undefined}
+                  onDelete={canDelete ? handleDeleteColumn : undefined}
+                />
+              );
+            })}
+          </SortableContext>
+        </DndContext>
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-2 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]/50 rounded-b-lg">
-        <button 
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]/50 rounded-b-lg">
+        <button
           onClick={(e) => {
             e.stopPropagation();
-            setShowCreateColumnModal(true);
+            handleAddColumn();
           }}
           className="flex items-center gap-1 text-xs text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>{t('schemaEditor.addColumn')}</span>
         </button>
+        {rowCount !== undefined && (
+          <span className="text-xs font-mono tabular-nums text-[var(--text-tertiary)]" title={t('schemaEditor.rowsCount', { count: rowCount })}>
+            {t('schemaEditor.rowsCount', { count: rowCount.toLocaleString() })}
+          </span>
+        )}
       </div>
 
-      {/* Source Handles - one per EVERY column (for pending connections from any column) */}
-      {columns.map((col, idx) => {
-        const ROW_HEIGHT = 37;
-        const HEADER_HEIGHT = 52; // 44 + 8px offset down
-        const topPosition = HEADER_HEIGHT + (idx * ROW_HEIGHT) + (ROW_HEIGHT / 2);
-        return (
-          <Handle
-            key={`source-${col.name}`}
-            type="source"
-            position={Position.Right}
-            id={`source-col-${col.name}`}
-            className="!w-0 !h-0 !bg-transparent !border-0"
-            style={{ top: topPosition }}
-          />
-        );
-      })}
+      {/* Per-column source/target handles live inside each ColumnRow (anchored to the real row). */}
 
-      {/* Target Handles - one per column for receiving connections */}
-      {columns.map((col, idx) => {
-        const ROW_HEIGHT = 37;
-        const HEADER_HEIGHT = 52; // 44 + 8px offset down
-        const topPosition = HEADER_HEIGHT + (idx * ROW_HEIGHT) + (ROW_HEIGHT / 2);
-        return (
-          <Handle
-            key={`target-${col.name}`}
-            type="target"
-            position={Position.Left}
-            id={`target-col-${col.name}`}
-            className="!w-0 !h-0 !bg-transparent !border-0"
-            style={{ top: topPosition }}
-          />
-        );
-      })}
-      
       {/* Fallback center source handle */}
       <Handle
         type="source"
@@ -504,18 +654,20 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
       )}
 
       {/* Add Row Modal */}
-      <AddRowModal
-        isOpen={showAddRowModal}
-        onClose={() => setShowAddRowModal(false)}
-        tableId={String(tableId)}
-        columns={columns.map(c => convertToColumnModel(c, tableId))}
-        onConfirm={(data) => {
-          logger.debug('Add row:', data, 'to table:', tableId);
-          // TODO: Implement row creation API call
-          setShowAddRowModal(false);
-          loadTableRows(tableId);
-        }}
-      />
+      {showAddRowModal && (
+        <AddRowModal
+          isOpen={showAddRowModal}
+          onClose={() => setShowAddRowModal(false)}
+          tableId={String(tableId)}
+          columns={columns.map(c => convertToColumnModel(c, tableId))}
+          onConfirm={(data) => {
+            logger.debug('Add row:', data, 'to table:', tableId);
+            // TODO: Implement row creation API call
+            setShowAddRowModal(false);
+            loadTableRows(tableId);
+          }}
+        />
+      )}
 
       {/* Create Column Modal */}
       <CreateColumnModal
@@ -523,13 +675,16 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
         onOpenChange={setShowCreateColumnModal}
         onSubmit={async (data) => {
           try {
-            await tablesApi.createColumn(String(tableId), {
+            const created = await tablesApi.createColumn(String(tableId), {
               name: data.name,
               displayName: data.displayName,
               type: data.type,
               config: data.config || {}
             });
             setShowCreateColumnModal(false);
+            if (columnInsertAt) {
+              await placeCreatedColumn(String(created.id), columnInsertAt);
+            }
             if (schemaSpaceId) {
               await refreshSchema();
             }
@@ -550,6 +705,7 @@ export const TableNode = memo(({ data, selected }: TableNodeComponentProps) => {
         projectId={projectId}
         spaceId={spaceId}
       />
+    </div>
     </div>
   );
 });

@@ -1,0 +1,75 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { expect } from '@playwright/test';
+import { createFixtureServer, openFixture } from './browser-fixture.mjs';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const artifacts = await mkdtemp(join(tmpdir(), 'cell-actions-'));
+const entry = 'src/tests/cell-actions-fixture/index.html';
+const server = await createFixtureServer({ root, artifacts, entry });
+let browser;
+try {
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  for (const width of [1440, 390]) for (const theme of ['light', 'dark']) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    const generate = page.getByRole('button', { name: 'Generate vector', exact: true });
+    const fixture = await openFixture({ server, page, entry: `${entry}?theme=${theme}`, ready: generate });
+    const images = page.getByRole('region', { name: 'Images' });
+    const link = images.getByRole('link');
+    await link.focus();
+    await expect(link).toBeFocused();
+    await expect(link.locator('span')).toHaveCSS('opacity', '1');
+    await page.keyboard.press('Tab');
+    const remove = images.getByRole('button', { name: 'Remove image' });
+    await expect(remove).toBeFocused();
+    await expect(remove.locator('..')).toHaveCSS('opacity', '1');
+    await page.keyboard.press('Enter');
+    await expect(link).toHaveCount(0);
+    const add = images.getByRole('button', { name: 'Add images' });
+    await add.focus();
+    const choosing = page.waitForEvent('filechooser');
+    await page.keyboard.press('Space');
+    const chooser = await choosing;
+    assert.equal(chooser.isMultiple(), true);
+    await chooser.setFiles([]);
+    await generate.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('region', { name: 'Vector' })).toContainText('Generated 1');
+    const regenerate = page.getByRole('button', { name: 'Regenerate vector' });
+    await regenerate.focus();
+    await expect(regenerate).toHaveCSS('opacity', '1');
+    await page.keyboard.press('Space');
+    await expect(page.getByRole('region', { name: 'Vector' })).toContainText('Generated 2');
+    const trigger = page.getByRole('region', { name: 'Verification' }).getByRole('button');
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Checked');
+    assert.equal(await dialog.evaluate(el => el.contains(document.activeElement)), true);
+    const bounds = await dialog.boundingBox();
+    assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width);
+    await page.addScriptTag({ content: await readFile(join(root, 'node_modules/axe-core/axe.min.js'), 'utf8') });
+    const violations = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations);
+    await writeFile(join(artifacts, `${width}-${theme}-axe.json`), JSON.stringify(violations, null, 2));
+    assert.deepEqual(violations.map(({ id }) => id), []);
+    await page.screenshot({ path: join(artifacts, `${width}-${theme}.png`), fullPage: true });
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(dialog).toBeVisible();
+    await page.getByRole('button', { name: 'Outside' }).click();
+    await expect(dialog).toHaveCount(0);
+    await fixture.assertStable();
+    await page.close();
+    console.log(`${width} ${theme}: image controls, vector generation, verification, axe PASS`);
+  }
+  console.log(`Artifacts: ${artifacts}`);
+} finally {
+  await browser?.close();
+  await server.close();
+}

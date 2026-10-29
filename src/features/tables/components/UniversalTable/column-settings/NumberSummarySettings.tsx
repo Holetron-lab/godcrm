@@ -18,7 +18,7 @@ export const NumberSummarySettings: React.FC<ColumnSettingsProps> = ({
       <div className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
         Суммарная строка
       </div>
-      <div className="p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] space-y-3">
+      <div className="p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <label className="flex items-center gap-2 cursor-pointer">
             <input

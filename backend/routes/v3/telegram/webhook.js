@@ -177,7 +177,7 @@ async function handleCallbackQuery(cb) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ callback_query_id: cb.id })
     });
-  } catch (_) {}
+  } catch (_) { /* Acknowledgement is best effort; still handle the callback action. */ }
 
   if (cbData === 'fortuna_spin') {
     // /fortuna button pressed from group notification — spin the wheel and DM the result

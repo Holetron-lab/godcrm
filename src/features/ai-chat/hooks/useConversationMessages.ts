@@ -25,10 +25,12 @@ import type { ApiResponse, ConversationResponse, UseConversationMessagesOptions 
 // ADR-0057-A WP-A — slug-aware optimistic placeholders + active_agents wiring.
 import { parseInvocations, slugifyAgentName } from '../utils/parseInvocations';
 
+import { statusMessageSlug, placeholderSlug, isSameStatusRow, isTerminalStatusRow, findCachedById, withoutStepAnnotations } from './conversationMessages.cache';
+
 // Backend `active_agents[]` entry (see messageController#GET /messages, ADR-0057 WP-C).
 export interface ActiveAgent {
-  job_db_id: number | string;
-  job_id: string;
+  job_db_id: number | string | null;
+  job_id: string | null;
   agent_row_id: number | null;
   agent_user_id: number | null;
   agent_name: string;
@@ -38,22 +40,6 @@ export interface ActiveAgent {
   last_status_message_id: number | null;
 }
 
-// Extract a slug for placeholder reconciliation from any agent-bearing message.
-function statusMessageSlug(msg: ChatMessage): string | null {
-  const senderName = (msg as Record<string, unknown>).sender_name as string | undefined
-    || (msg.metadata as Record<string, unknown> | undefined)?.agent_name as string | undefined;
-  return slugifyAgentName(senderName);
-}
-
-// Match a single pending placeholder against a status-row slug. We keep
-// legacy placeholders (no `metadata.agent_slug`) — those are auto-respond
-// fallbacks where the slug isn't known at send time and the old "strip on
-// any agent message" rule still applies.
-function placeholderSlug(msg: ChatMessage): string | null {
-  const slug = (msg.metadata as Record<string, unknown> | undefined)?.agent_slug as string | undefined;
-  return slug || null;
-}
-
 // Re-export types and constants for backwards compatibility
 export { POLL_INTERVALS, type ChatActivityState, type SendMessageParams } from './conversationMessages.types';
 export { useCreateConversation, useConversations } from './useConversationList';
@@ -61,27 +47,6 @@ export { useCreateConversation, useConversations } from './useConversationList';
 // Local import for mutation typing
 import type { SendMessageParams } from './conversationMessages.types';
 import { POLL_INTERVALS } from './conversationMessages.types';
-
-// Cheap structural compare for an agent_status / plan message in cache vs.
-// the freshly-polled version. Returns true when nothing the renderer can see
-// has changed — used to skip cache writes that would otherwise produce new
-// page/messages refs every poll tick and trigger a full ChatTurn re-render
-// (visible as bottom-of-chat flicker during agent processing).
-function isSameStatusRow(a: ChatMessage | undefined, b: ChatMessage | undefined): boolean {
-  if (!a || !b) return false;
-  if (String(a.id) !== String(b.id)) return false;
-  if ((a.content || '') !== (b.content || '')) return false;
-  return JSON.stringify(a.metadata ?? null) === JSON.stringify(b.metadata ?? null);
-}
-
-function findCachedById(data: { pages?: Array<{ messages: ChatMessage[] }> } | undefined, id: string): ChatMessage | undefined {
-  if (!data?.pages) return undefined;
-  for (const page of data.pages) {
-    const match = page.messages.find(m => String(m.id) === id);
-    if (match) return match;
-  }
-  return undefined;
-}
 
 /**
  * Hook for managing conversation messages with React Query
@@ -206,8 +171,13 @@ export function useConversationMessages(
         if (numId > maxId) maxId = numId;
       }
     }
+    if (enabled && conversationId && maxId > newestMessageIdRef.current) {
+      // Invocations and handoffs add participants server-side. Refresh metadata
+      // for a new persisted message, not every streaming update to the same row.
+      void queryClient.invalidateQueries({ queryKey: ['conversation', conversationId], exact: true });
+    }
     newestMessageIdRef.current = maxId;
-  }, [messagesInfiniteQuery.data]);
+  }, [messagesInfiniteQuery.data, conversationId, enabled, queryClient]);
 
   const getNewestMessageId = useCallback((): number => newestMessageIdRef.current, []);
 
@@ -268,10 +238,14 @@ export function useConversationMessages(
           : `/chat/conversations/${conversationId}/messages?limit=${pageSize}&content_types=${LAZY_CONTENT_TYPES}`;
 
         const response = await apiClient.get<ApiResponse<{ messages: ChatMessage[]; hasMore: boolean; nextCursor?: number; is_processing?: boolean; processing_agent_name?: string | null; processing_agent_id?: number | null; active_agents?: ActiveAgent[] }>>(url);
-        const freshMessages = response?.data?.messages || [];
+        if (cancelled) return;
+        let freshMessages = response?.data?.messages || [];
 
         // Update processing state from backend response
-        const backendProcessing = !!response?.data?.is_processing;
+        // Long-running jobs can outlive the legacy conversation flag. Keep
+        // fetching their steps (including paused runs) until presence clears.
+        const backendProcessing = !!response?.data?.is_processing
+          || (response?.data?.active_agents?.length ?? 0) > 0;
         const currentProcessingAgentId = backendProcessing ? (response?.data?.processing_agent_id ?? null) : null;
         isProcessingRef.current = backendProcessing;
         localProcessingOverrideRef.current = backendProcessing;
@@ -321,37 +295,111 @@ export function useConversationMessages(
         currentInterval = effectiveIntervalRef.current;
         setPollingError(null);
 
+        const isCurrentAgent = (msg: ChatMessage): boolean => {
+          if (!currentProcessingAgentId) return true;
+          const msgAgentId = 'agent_id' in msg ? msg.agent_id : undefined;
+          if (!msgAgentId) return true;
+          return msgAgentId === currentProcessingAgentId;
+        };
+        const isFresh = (msg: ChatMessage): boolean => {
+          if (msg.metadata?.agent_status === 'finished' || msg.metadata?.agent_status === 'error') return false;
+          const jobs = response?.data?.active_agents;
+          if (jobs) {
+            return jobs.some(job => {
+              if (msg.metadata?.job_id) return msg.metadata.job_id === job.job_id;
+              if (msg.metadata?.job_db_id) return String(msg.metadata.job_db_id) === String(job.job_db_id);
+              if (job.last_status_message_id != null && String(job.last_status_message_id) === String(msg.id)) return true;
+              const rowId = msg.metadata?.agent_row_id || msg.agentId || (msg as ChatMessage & { agent_id?: number }).agent_id;
+              const sameAgent = rowId != null
+                ? Number(rowId) === job.agent_row_id
+                : statusMessageSlug(msg) === slugifyAgentName(job.agent_name);
+              const timestamp = msg.metadata?.started_at || msg.timestamp || (msg as ChatMessage & { created_at?: string }).created_at;
+              return sameAgent && !!job.started_at && !!timestamp
+                && new Date(timestamp as string).getTime() >= new Date(job.started_at).getTime();
+            });
+          }
+          // Legacy servers have no job list: require a known agent and a recent row.
+          const timestamp = msg.metadata?.started_at || msg.timestamp || (msg as ChatMessage & { created_at?: string }).created_at;
+          return isCurrentAgent(msg) && !!timestamp
+            && Date.now() - new Date(timestamp as string).getTime() < 60000;
+        };
+        if (backendProcessing || isInGracePeriod) {
+          const isServiceRow = (msg: ChatMessage) => msg.contentType === 'agent_status' || msg.contentType === 'plan';
+          freshMessages = freshMessages.filter(msg => !isServiceRow(msg) || isFresh(msg))
+            .map(msg => isServiceRow(msg) ? withoutStepAnnotations(msg) : msg);
+          // Evict previous jobs even while another agent continues processing.
+          queryClient.setQueryData(['conversation-messages', conversationId], (old: typeof messagesInfiniteQuery.data) => {
+            if (!old?.pages.some(page => page.messages.some(msg => isServiceRow(msg) && !isFresh(msg)))) return old;
+            return { ...old, pages: old.pages.map(page => ({
+              ...page, messages: page.messages.filter(msg => !isServiceRow(msg) || isFresh(msg)),
+            })) };
+          });
+        }
+
+        // Commit the main batch before auxiliary requests can advance the cache
+        // cursor or a processing-state render can restart this polling effect.
+        if (freshMessages.length > 0) {
+          logger.debug('[Chat Poll] Received', freshMessages.length, 'new messages via incremental poll');
+
+          // Merge new messages into the first page of infinite query cache
+          queryClient.setQueryData(
+            ['conversation-messages', conversationId],
+            (old: typeof messagesInfiniteQuery.data) => {
+              if (!old || !old.pages || old.pages.length === 0) {
+                return { pages: [{ messages: freshMessages, hasMore: false }], pageParams: [null] };
+              }
+              const existingIds = new Set<string>();
+              for (const page of old.pages) {
+                for (const m of (page.messages ?? [])) { existingIds.add(String(m.id)); }
+              }
+              const newOnes = freshMessages.filter(m => !existingIds.has(String(m.id)));
+              const agentStatusUpdates = freshMessages.filter(
+                m => existingIds.has(String(m.id)) && (m.contentType === 'agent_status' || m.contentType === 'plan')
+              );
+              if (newOnes.length === 0 && agentStatusUpdates.length === 0) return old;
+
+              let updatedPages = [...old.pages];
+              if (agentStatusUpdates.length > 0) {
+                const updateMap = new Map(agentStatusUpdates.map(m => [String(m.id), m]));
+                updatedPages = updatedPages.map(page => ({
+                  ...page,
+                  messages: page.messages.map(m => {
+                    const update = updateMap.get(String(m.id));
+                    return update ? { ...m, ...update } : m;
+                  })
+                }));
+              }
+              if (newOnes.length > 0) {
+                const mergedMessages = [...updatedPages[0].messages, ...newOnes];
+                let minId = updatedPages[0].nextCursor;
+                for (const m of mergedMessages) {
+                  const numId = typeof m.id === 'number' ? m.id : parseInt(String(m.id)) || 0;
+                  if (numId > 0 && (minId == null || numId < minId)) { minId = numId; }
+                }
+                updatedPages[0] = {
+                  ...updatedPages[0],
+                  messages: mergedMessages,
+                  ...(minId != null && { nextCursor: minId }),
+                };
+              }
+              return { ...old, pages: updatedPages };
+            }
+          );
+        }
+
         // Fetch agent_status/plan during processing or grace period
         if (backendProcessing || isInGracePeriod) {
-          const isCurrentAgent = (msg: ChatMessage): boolean => {
-            if (!currentProcessingAgentId) return true;
-            const msgAgentId = (msg as Record<string, unknown>).agent_id as number | undefined;
-            if (!msgAgentId) return true;
-            return msgAgentId === currentProcessingAgentId;
-          };
-          const isFresh = (msg: ChatMessage): boolean => {
-            if (backendProcessing && isCurrentAgent(msg)) return true;
-            const startedAt = (msg.metadata as Record<string, unknown>)?.started_at as string | undefined;
-            if (startedAt) {
-              return (Date.now() - new Date(startedAt).getTime()) < 86400000;
-            }
-            const ts = (msg as Record<string, unknown>).timestamp || (msg as Record<string, unknown>).created_at;
-            if (ts) {
-              return (Date.now() - new Date(ts as string).getTime()) < 86400000;
-            }
-            return false;
-          };
-
           // Refresh agent_status messages
           try {
             const statusUrl = `/chat/conversations/${conversationId}/messages?content_types=agent_status&limit=5`;
             const statusResp = await apiClient.get<ApiResponse<{ messages: ChatMessage[] }>>(statusUrl);
+            if (cancelled) return;
             const statusMsgs = statusResp?.data?.messages || [];
             // ADR-0057-A WP-A — keep ALL fresh status rows, group by per-agent
             // slug (latest message-id wins). We no longer filter by
             // `currentProcessingAgentId` because two agents can be invoked in
             // one user message and each ships its own status row.
-            const fresh = statusMsgs.filter(isFresh);
+            const fresh = statusMsgs.filter(isFresh).map(withoutStepAnnotations);
             const latestPerSlug = new Map<string, ChatMessage>();
             for (const msg of fresh) {
               const slug = statusMessageSlug(msg);
@@ -379,7 +427,10 @@ export function useConversationMessages(
               let anyChange = false;
               for (const [slug, msg] of latestPerSlug.entries()) {
                 const cachedMatch = findCachedById(cached, String(msg.id));
-                if (!cachedMatch || !isSameStatusRow(cachedMatch, msg)) { anyChange = true; break; }
+                // A terminal row missing from the cache is never appended, but it
+                // still resolves a pending placeholder for its slug (checked below).
+                const wouldAppend = !cachedMatch && !isTerminalStatusRow(msg);
+                if (wouldAppend || (cachedMatch && !isSameStatusRow(cachedMatch, msg))) { anyChange = true; break; }
                 const hasPendingForSlug = cached?.pages?.some(p =>
                   p.messages.some(m => String(m.id).startsWith('agent-pending-') && placeholderSlug(m) === slug)
                 );
@@ -390,7 +441,8 @@ export function useConversationMessages(
                 const hasGenericPending = cached?.pages?.some(p =>
                   p.messages.some(m => String(m.id).startsWith('agent-pending-') && placeholderSlug(m) === null)
                 );
-                if (!cachedMatch || !isSameStatusRow(cachedMatch, legacyCandidate) || hasGenericPending) anyChange = true;
+                const wouldAppend = !cachedMatch && !isTerminalStatusRow(legacyCandidate);
+                if (wouldAppend || (cachedMatch && !isSameStatusRow(cachedMatch, legacyCandidate)) || hasGenericPending) anyChange = true;
               }
 
               if (anyChange) {
@@ -416,14 +468,14 @@ export function useConversationMessages(
                       });
                       const updatedMessages = filtered.map((m) => {
                         const update = updates.get(String(m.id));
-                        if (update) { seen.add(String(m.id)); return { ...m, ...update }; }
+                        if (update) { seen.add(String(m.id)); return update; }
                         return m;
                       });
                       return { ...page, messages: updatedMessages };
                     });
                     const appended: ChatMessage[] = [];
                     for (const [id, msg] of updates.entries()) {
-                      if (!seen.has(id)) appended.push(msg);
+                      if (!seen.has(id) && !isTerminalStatusRow(msg)) appended.push(msg);
                     }
                     if (appended.length > 0) {
                       updatedPages[0] = { ...updatedPages[0], messages: [...updatedPages[0].messages, ...appended] };
@@ -437,90 +489,45 @@ export function useConversationMessages(
 
           // Refresh plan messages
           try {
-            const planUrl = `/chat/conversations/${conversationId}/messages?content_types=plan&limit=1`;
-            const planResp = await apiClient.get<ApiResponse<{ messages: ChatMessage[] }>>(planUrl);
-            const planMsgs = planResp?.data?.messages || [];
-            if (planMsgs.length > 0) {
-              const latestPlan = planMsgs[planMsgs.length - 1];
-              if (isFresh(latestPlan) && isCurrentAgent(latestPlan)) {
-                const cached = queryClient.getQueryData<typeof messagesInfiniteQuery.data>(
-                  ['conversation-messages', conversationId]
-                );
-                const cachedMatch = findCachedById(cached, String(latestPlan.id));
-                if (!cachedMatch || !isSameStatusRow(cachedMatch, latestPlan)) {
-                  queryClient.setQueryData(
-                    ['conversation-messages', conversationId],
-                    (old: typeof messagesInfiniteQuery.data) => {
-                      if (!old?.pages?.length) return old;
-                      const planId = String(latestPlan.id);
-                      let found = false;
-                      const updatedPages = old.pages.map((page) => ({
-                        ...page,
-                        messages: page.messages.map((m) => {
-                          if (String(m.id) === planId) { found = true; return { ...m, ...latestPlan }; }
-                          return m;
-                        })
-                      }));
-                      if (!found) {
-                        updatedPages[0] = { ...updatedPages[0], messages: [...updatedPages[0].messages, latestPlan] };
-                      }
-                      return { ...old, pages: updatedPages };
-                    }
-                  );
-                }
+            const plans = new Map<string, ChatMessage>();
+            let before: number | undefined;
+            do {
+              const planUrl = `/chat/conversations/${conversationId}/messages?content_types=plan&limit=50${before == null ? '' : `&before=${before}`}`;
+              const planResp = await apiClient.get<ApiResponse<{ messages: ChatMessage[]; hasMore?: boolean; nextCursor?: number }>>(planUrl);
+              if (cancelled) return;
+              for (const msg of planResp?.data?.messages || []) {
+                if (isFresh(msg)) plans.set(String(msg.id), withoutStepAnnotations(msg));
               }
-            }
+              const nextCursor = planResp?.data?.nextCursor;
+              if (!planResp?.data?.hasMore || nextCursor == null || (before != null && nextCursor >= before)) break;
+              before = nextCursor;
+            } while (!cancelled);
+            if (cancelled) return;
+            queryClient.setQueryData(
+              ['conversation-messages', conversationId],
+              (old: typeof messagesInfiniteQuery.data) => {
+                if (!old?.pages?.length) return old;
+                const updates = new Map([...plans].filter(([id, plan]) => !isSameStatusRow(findCachedById(old, id), plan)));
+                if (updates.size === 0) return old;
+                const updatedPages = old.pages.map(page => ({
+                  ...page,
+                  messages: page.messages.map(msg => {
+                    const plan = updates.get(String(msg.id));
+                    if (!plan) return msg;
+                    updates.delete(String(msg.id));
+                    return plan;
+                  }),
+                }));
+                if (updates.size > 0) {
+                  updatedPages[0] = { ...updatedPages[0], messages: [...updatedPages[0].messages, ...updates.values()] };
+                }
+                return { ...old, pages: updatedPages };
+              }
+            );
           } catch { /* Non-critical */ }
         }
-
-        if (freshMessages.length === 0) return;
-        logger.debug('[Chat Poll] Received', freshMessages.length, 'new messages via incremental poll');
-
-        // Merge new messages into the first page of infinite query cache
-        queryClient.setQueryData(
-          ['conversation-messages', conversationId],
-          (old: typeof messagesInfiniteQuery.data) => {
-            if (!old || !old.pages || old.pages.length === 0) {
-              return { pages: [{ messages: freshMessages, hasMore: false }], pageParams: [null] };
-            }
-            const existingIds = new Set<string>();
-            for (const page of old.pages) {
-              for (const m of (page.messages ?? [])) { existingIds.add(String(m.id)); }
-            }
-            const newOnes = freshMessages.filter(m => !existingIds.has(String(m.id)));
-            const agentStatusUpdates = freshMessages.filter(
-              m => existingIds.has(String(m.id)) && (m.contentType === 'agent_status' || m.contentType === 'plan')
-            );
-            if (newOnes.length === 0 && agentStatusUpdates.length === 0) return old;
-
-            let updatedPages = [...old.pages];
-            if (agentStatusUpdates.length > 0) {
-              const updateMap = new Map(agentStatusUpdates.map(m => [String(m.id), m]));
-              updatedPages = updatedPages.map(page => ({
-                ...page,
-                messages: page.messages.map(m => {
-                  const update = updateMap.get(String(m.id));
-                  return update ? { ...m, ...update } : m;
-                })
-              }));
-            }
-            if (newOnes.length > 0) {
-              const mergedMessages = [...updatedPages[0].messages, ...newOnes];
-              let minId = updatedPages[0].nextCursor;
-              for (const m of mergedMessages) {
-                const numId = typeof m.id === 'number' ? m.id : parseInt(String(m.id)) || 0;
-                if (numId > 0 && (minId == null || numId < minId)) { minId = numId; }
-              }
-              updatedPages[0] = {
-                ...updatedPages[0],
-                messages: mergedMessages,
-                ...(minId != null && { nextCursor: minId }),
-              };
-            }
-            return { ...old, pages: updatedPages };
-          }
-        );
       } catch (err) {
+        if (cancelled) return;
         consecutiveFailuresRef.current++;
         const failures = consecutiveFailuresRef.current;
         const errMsg = err instanceof Error ? err.message : String(err);
@@ -735,6 +742,14 @@ export function useConversationMessages(
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
+    }).sort((a, b) => {
+      // Status/plan polling can append an older row before the main poll
+      // inserts its triggering message. Match the API's persisted ID order;
+      // optimistic messages have local IDs and retain their timestamp order.
+      const idOrder = Number(a.id) - Number(b.id);
+      return Number.isFinite(idOrder)
+        ? idOrder
+        : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
     });
   }, [messagesInfiniteQuery.data]);
 

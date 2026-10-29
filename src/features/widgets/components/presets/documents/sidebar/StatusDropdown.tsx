@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { cn } from '@/shared/utils/cn';
 import { logger } from '@/shared/utils/logger';
 import { tablesApi } from '@/features/tables/api/tablesApi';
@@ -24,38 +24,6 @@ export function StatusDropdown({ doc, registryTableId, onUpdate, size = 'sm' }: 
   const ctx = useDocumentsContext();
   const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const buttonRef = useRef<HTMLSpanElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        menuRef.current &&
-        !menuRef.current.contains(e.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
-
-  const handleOpen = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setMenuPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-      });
-    }
-    setIsOpen(true);
-  };
-
   const handleStatusChange = async (option: StatusOption) => {
     if (!registryTableId || option.id === doc.status_id) {
       setIsOpen(false);
@@ -129,12 +97,14 @@ export function StatusDropdown({ doc, registryTableId, onUpdate, size = 'sm' }: 
   }
 
   return (
-    <>
-      <span
-        ref={buttonRef}
-        onClick={handleOpen}
+    <Popover.Root open={isOpen} onOpenChange={open => { if (!isUpdating) setIsOpen(open); }}>
+      <Popover.Trigger asChild>
+      <button
+        type="button"
+        disabled={isUpdating}
+        onClick={e => e.stopPropagation()}
         className={cn(
-          'rounded shrink-0 cursor-pointer hover:ring-1 hover:ring-blue-500/50 transition-all',
+          'rounded shrink-0 cursor-pointer hover:ring-1 hover:ring-blue-500/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 transition-all',
           sizeClass,
           chip.className,
           isUpdating && 'opacity-50'
@@ -147,13 +117,15 @@ export function StatusDropdown({ doc, registryTableId, onUpdate, size = 'sm' }: 
             {chipLabel}
           </>
         )}
-      </span>
+      </button>
+      </Popover.Trigger>
 
-      {isOpen && createPortal(
-        <div
-          ref={menuRef}
-          className="fixed z-[9999] bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-lg py-1 min-w-[120px]"
-          style={{ top: menuPosition.top, left: menuPosition.left }}
+      <Popover.Portal>
+        <Popover.Content
+          aria-label="Статус документа"
+          align="start"
+          sideOffset={4}
+          className="z-[9999] bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-lg py-1 min-w-[120px]"
           // The menu is portaled to <body>, but React synthetic events still
           // bubble through the component tree to the parent row's onClick
           // (which selects/opens the doc). Stop it here so changing status in
@@ -164,6 +136,8 @@ export function StatusDropdown({ doc, registryTableId, onUpdate, size = 'sm' }: 
             const dot = getStatusDotClass(option);
             return (
               <button
+                type="button"
+                disabled={isUpdating}
                 key={option.id}
                 onClick={(e) => { e.stopPropagation(); handleStatusChange(option); }}
                 className={cn(
@@ -177,9 +151,8 @@ export function StatusDropdown({ doc, registryTableId, onUpdate, size = 'sm' }: 
               </button>
             );
           })}
-        </div>,
-        document.body
-      )}
-    </>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }

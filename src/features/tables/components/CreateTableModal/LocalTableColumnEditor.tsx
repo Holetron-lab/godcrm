@@ -159,7 +159,7 @@ export const LocalTableColumnEditor = ({
                       <div className="flex-1">
                         <input
                           type="text"
-                          value={column.defaultValue ?? ''}
+                          value={String(column.defaultValue ?? '')}
                           onChange={(event) =>
                             updateColumn(index, (prevCol) => ({
                               ...prevCol,

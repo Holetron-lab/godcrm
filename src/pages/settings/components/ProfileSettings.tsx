@@ -35,6 +35,7 @@ export const ProfileSettings = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState('');
+  const [colorDraft, setColorDraft] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -74,6 +75,20 @@ export const ProfileSettings = () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       setIsEditing(false);
     }
+  });
+
+  const saveColor = useMutation({
+    mutationFn: async (color: string) => {
+      const result = await authApi.updateProfile({ color });
+      if (!result.success || result.data.color !== color) throw new Error(t('aiChat.ui.couldNotSave'));
+      return result.data;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['profile'] });
+      await queryClient.invalidateQueries({ queryKey: ['inbox-conversations'] });
+      await queryClient.invalidateQueries({ queryKey: ['chat-all-users'] });
+      setColorDraft(null);
+    },
   });
 
   // ADR-099: Upload avatar as file (FormData)
@@ -199,8 +214,11 @@ export const ProfileSettings = () => {
 
         {/* Left column - Avatar */}
         <div className="flex flex-col items-center p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
-          <div
-            className="relative cursor-pointer group mb-4"
+          <button
+            type="button"
+            aria-label={t('settings.profile.changeAvatar')}
+            disabled={isUploading}
+            className="relative cursor-pointer group mb-4 rounded-full focus-visible:ring-2"
             onClick={handleAvatarClick}
           >
             <div className="h-24 w-24 rounded-full overflow-hidden bg-[var(--bg-secondary)] border-3 border-[var(--border-primary)] flex items-center justify-center shadow-lg">
@@ -211,7 +229,7 @@ export const ProfileSettings = () => {
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <User className="h-12 w-12 text-[var(--text-tertiary)]" />
+                <User className="h-12 w-12 text-[var(--text-secondary)]" />
               )}
             </div>
             <div className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -222,7 +240,7 @@ export const ProfileSettings = () => {
                 <Loader2 className="h-6 w-6 text-white animate-spin" />
               </div>
             )}
-          </div>
+          </button>
 
           <p className="font-semibold text-[var(--text-primary)] text-center">{profile?.name}</p>
           <p className="text-sm text-[var(--text-secondary)] text-center">{profile?.email}</p>
@@ -248,6 +266,18 @@ export const ProfileSettings = () => {
             )}
           </div>
 
+          <fieldset disabled={saveColor.isPending} className="flex items-center gap-3 mt-4">
+            <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+              {t('settings.profile.shadowColor')}
+              <input type="color" value={colorDraft ?? profile?.color ?? '#3b82f6'} onChange={e => setColorDraft(e.target.value)} className="h-8 w-10 cursor-pointer rounded border border-[var(--border-primary)] bg-transparent" />
+            </label>
+            <Button size="sm" loading={saveColor.isPending} disabled={colorDraft === null || colorDraft === profile?.color} onClick={() => colorDraft && saveColor.mutate(colorDraft)}>{t('aiChat.ui.save')}</Button>
+          </fieldset>
+          <div className="mt-3 w-full rounded-lg bg-[var(--bg-secondary)] px-4 py-3 text-sm text-[var(--text-secondary)]" style={{ boxShadow: `inset -4px 0 0 0 ${colorDraft ?? profile?.color ?? '#3b82f6'}` }}>
+            {t('settings.profile.shadowPreview')}
+          </div>
+          {saveColor.isError && <p role="alert" className="mt-2 text-xs text-red-500">{saveColor.error.message}</p>}
+
           <input
             ref={fileInputRef}
             type="file"
@@ -271,7 +301,7 @@ export const ProfileSettings = () => {
               </div>
             </div>
           ) : (
-            <p className="mt-3 text-[10px] text-[var(--text-tertiary)] text-center max-w-[200px]">
+            <p className="mt-3 text-[10px] text-[var(--text-secondary)] text-center max-w-[200px]">
               PNG, JPG, GIF, WebP, SVG. Max 5MB.
             </p>
           )}
@@ -281,7 +311,7 @@ export const ProfileSettings = () => {
         <div className="space-y-4">
           {/* Name */}
           <div className="p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
-            <label className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
+            <label className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
               {t('settings.profile.name') || 'Name'}
             </label>
             {isEditing ? (
@@ -290,7 +320,6 @@ export const ProfileSettings = () => {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="flex-1"
-                  autoFocus
                 />
                 <Button
                   size="sm"
@@ -322,7 +351,7 @@ export const ProfileSettings = () => {
 
           {/* Email */}
           <div className="p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
-            <label className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
+            <label className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
               {t('settings.profile.email') || 'Email'}
             </label>
             <p className="text-[var(--text-primary)] font-medium mt-1">{profile?.email}</p>
@@ -330,7 +359,7 @@ export const ProfileSettings = () => {
 
           {/* Member since */}
           <div className="p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
-            <label className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
+            <label className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
               {t('settings.profile.memberSince') || 'Member since'}
             </label>
             <p className="text-[var(--text-primary)] font-medium mt-1">
@@ -348,7 +377,7 @@ export const ProfileSettings = () => {
       <div className="mt-6 p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border-secondary)]">
         <div className="flex items-center gap-2 mb-1">
           <Gift className="h-4 w-4 text-[var(--color-primary)]" />
-          <label className="text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wide">
+          <label className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wide">
             {t('settings.profile.referralTitle')}
           </label>
         </div>
@@ -397,7 +426,7 @@ export const ProfileSettings = () => {
                 </div>
               )}
             </div>
-            <p className="max-w-[10rem] text-center text-xs text-[var(--text-tertiary)]">
+            <p className="max-w-[10rem] text-center text-xs text-[var(--text-secondary)]">
               {t('settings.profile.referralQrHint')}
             </p>
           </div>

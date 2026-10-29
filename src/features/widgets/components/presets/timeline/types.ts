@@ -56,6 +56,8 @@ export interface TimelineWidgetProps extends PresetWidgetProps {
   relationData?: RelationDataMap;
   onEventClick?: (event: TimelineRowData, initialTab?: 'details' | 'files' | 'comments') => void;
   onEventUpdate?: (eventId: string, field: string, value: unknown) => void;
+  /** Persist a complete date change and resolve after refreshed data is available. */
+  onEventSave?: (eventId: string, fields: Record<string, unknown>) => Promise<void>;
   onAddEvent?: (date: Date) => void;
 }
 

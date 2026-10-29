@@ -62,7 +62,7 @@ export function guessColumnType(name: string, values: string[]): string {
   if (nameLower.includes('email')) return 'email';
   if (nameLower.includes('phone') || nameLower.includes('tel')) return 'phone';
   if (nameLower.includes('url') || nameLower.includes('link') || nameLower.includes('website')) return 'url';
-  if (nameLower.includes('date') || nameLower.includes('created') || nameLower.includes('updated')) return 'date';
+  if (nameLower.includes('date') || nameLower.includes('created') || nameLower.includes('updated')) return 'datetime';
   if (nameLower.includes('amount') || nameLower.includes('price') || nameLower.includes('cost') || nameLower.includes('total')) return 'number';
 
   const sampleValues = values.filter(v => v && v.trim()).slice(0, 10);
@@ -78,7 +78,7 @@ export function guessColumnType(name: string, values: string[]): string {
   }
 
   if (sampleValues.every(v => !isNaN(Date.parse(v)))) {
-    return 'date';
+    return 'datetime';
   }
 
   if (sampleValues.every(v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))) {

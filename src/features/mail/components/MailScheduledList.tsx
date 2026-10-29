@@ -13,6 +13,7 @@
  */
 import { Clock, X, Paperclip, Loader2, AlertTriangle, Send as SendIcon } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage, type LanguageContextValue } from '@/shared/i18n/LanguageContext';
 import type { MailScheduled, MailScheduledStatus } from '../types';
 
 interface MailScheduledListProps {
@@ -58,45 +59,45 @@ function bodyToPreview(item: MailScheduled): string {
 }
 
 /** Relative-then-absolute, mirroring the AI-chat scheduled badge. */
-function formatScheduledTime(iso: string): string {
+function formatScheduledTime(iso: string, t: LanguageContextValue['t']): string {
   const d = new Date(iso);
   const diff = d.getTime() - Date.now();
-  if (diff <= 0) return 'сейчас';
-  if (diff < 60_000) return 'меньше минуты';
-  if (diff < 3600_000) return `${Math.round(diff / 60_000)} мин`;
+  if (diff <= 0) return t('mail.scheduled.now');
+  if (diff < 60_000) return t('mail.scheduled.lessThanMinute');
+  if (diff < 3600_000) return t('mail.scheduled.minutes', { n: Math.round(diff / 60_000) });
   if (diff < 86_400_000) {
     const hours = Math.floor(diff / 3600_000);
     const mins = Math.round((diff % 3600_000) / 60_000);
-    return `${hours} ч${mins > 0 ? ` ${mins} мин` : ''}`;
+    return t('mail.scheduled.hours', { n: hours }) + (mins > 0 ? ` ${t('mail.scheduled.minutes', { n: mins })}` : '');
   }
-  const days = Math.round(diff / 86_400_000);
-  return `${days} дн`;
+  return t('mail.scheduled.days', { n: Math.round(diff / 86_400_000) });
 }
 
 /** Short date/time chip shown in the row's top-right, like the inbox date column. */
-function formatWhen(iso: string): string {
+function formatWhen(iso: string, locale: string): string {
   const d = new Date(iso);
   const now = new Date();
   const sameDay =
     d.getDate() === now.getDate() &&
     d.getMonth() === now.getMonth() &&
     d.getFullYear() === now.getFullYear();
-  if (sameDay) return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
-  return d.toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  if (sameDay) return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-function formatAbsolute(iso: string): string {
-  return new Date(iso).toLocaleString('ru', {
+function formatAbsolute(iso: string, locale: string): string {
+  return new Date(iso).toLocaleString(locale, {
     day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
 
-const STATUS_META: Record<MailScheduledStatus, { label: string; className: string }> = {
-  pending: { label: 'В очереди', className: 'bg-amber-500/15 text-amber-500' },
-  sending: { label: 'Отправляется', className: 'bg-blue-500/15 text-blue-500' },
-  sent: { label: 'Отправлено', className: 'bg-green-500/15 text-green-500' },
-  failed: { label: 'Ошибка', className: 'bg-red-500/15 text-red-500' },
-  canceled: { label: 'Отменено', className: 'bg-[var(--bg-tertiary)] text-[var(--text-tertiary)]' },
+// Pill colour per status; the label is `mail.scheduled.status.<status>`.
+const STATUS_CLASS: Record<MailScheduledStatus, string> = {
+  pending: 'bg-amber-500/15 text-amber-500',
+  sending: 'bg-blue-500/15 text-blue-500',
+  sent: 'bg-green-500/15 text-green-500',
+  failed: 'bg-red-500/15 text-red-500',
+  canceled: 'bg-[var(--bg-tertiary)] text-[var(--text-tertiary)]',
 };
 
 export function MailScheduledList({
@@ -111,10 +112,11 @@ export function MailScheduledList({
   openId,
   cancelingId,
 }: MailScheduledListProps) {
+  const { t, language } = useLanguage();
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-sm text-[var(--text-tertiary)]">
-        Загрузка отложенных…
+        {t('mail.scheduled.loading')}
       </div>
     );
   }
@@ -122,13 +124,13 @@ export function MailScheduledList({
   if (isError) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--text-tertiary)]">
-        <span>Не удалось загрузить отложенные</span>
+        <span>{t('mail.scheduled.loadFailed')}</span>
         <button
           type="button"
           onClick={onRetry}
           className="rounded-md border border-[var(--border-primary)] px-3 py-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)]"
         >
-          Повторить
+          {t('mail.common.retry')}
         </button>
       </div>
     );
@@ -138,18 +140,18 @@ export function MailScheduledList({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-[var(--text-tertiary)]">
         <Clock className="h-8 w-8 opacity-40" />
-        <p className="text-sm font-medium text-[var(--text-secondary)]">Нет отложенных писем</p>
+        <p className="text-sm font-medium text-[var(--text-secondary)]">{t('mail.scheduled.empty')}</p>
         <p className="max-w-xs text-xs">
-          Выберите «Отправить позже» под кнопкой отправки, чтобы запланировать письмо.
+          {t('mail.scheduled.emptyHint')}
         </p>
       </div>
     );
   }
 
   return (
-    <ul role="list" className="flex flex-col divide-y divide-[var(--border-primary)]">
+    <ul className="flex flex-col divide-y divide-[var(--border-primary)]">
       {scheduled.map((s) => {
-        const status = STATUS_META[s.status] ?? STATUS_META.pending;
+        const statusKey: MailScheduledStatus = s.status in STATUS_CLASS ? s.status : 'pending';
         const canOpen = s.status === 'pending';
         const canCancel = s.status === 'pending';
         const busy = cancelingId === s.id;
@@ -204,16 +206,16 @@ export function MailScheduledList({
                   )}
                 >
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--text-primary)]">
-                    {s.to.length ? `Кому: ${s.to.join(', ')}` : '(без получателя)'}
+                    {s.to.length ? t('mail.scheduled.toPrefix', { list: s.to.join(', ') }) : t('mail.scheduled.noRecipient')}
                   </span>
                   {s.attachmentCount > 0 && (
-                    <Paperclip size={12} className="flex-shrink-0 text-[var(--text-tertiary)]" aria-label="Есть вложения" />
+                    <Paperclip size={12} className="flex-shrink-0 text-[var(--text-tertiary)]" aria-label={t('mail.scheduled.hasAttachments')} />
                   )}
                   <time
                     className="flex-shrink-0 text-xs text-[var(--text-tertiary)]"
-                    title={formatAbsolute(s.scheduledAt)}
+                    title={formatAbsolute(s.scheduledAt, language)}
                   >
-                    {formatWhen(s.scheduledAt)}
+                    {formatWhen(s.scheduledAt, language)}
                   </time>
                 </button>
 
@@ -227,7 +229,7 @@ export function MailScheduledList({
                     canOpen ? 'cursor-pointer' : 'cursor-default'
                   )}
                 >
-                  {s.subject || '(без темы)'}
+                  {s.subject || t('mail.common.noSubject')}
                 </button>
 
                 {s.status === 'failed' && s.errorMessage && (
@@ -243,11 +245,11 @@ export function MailScheduledList({
                   {s.status === 'pending' ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 font-medium text-amber-500">
                       <Clock className="h-3 w-3" />
-                      уйдёт через {formatScheduledTime(s.scheduledAt)}
+                      {t('mail.scheduled.goesOutIn', { time: formatScheduledTime(s.scheduledAt, t) })}
                     </span>
                   ) : (
-                    <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium', status.className)}>
-                      {status.label}
+                    <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium', STATUS_CLASS[statusKey])}>
+                      {t(`mail.scheduled.status.${statusKey}`)}
                     </span>
                   )}
                   {canCancel && (
@@ -255,8 +257,8 @@ export function MailScheduledList({
                       type="button"
                       onClick={() => onCancel(s.id)}
                       disabled={busy}
-                      aria-label="Отменить отправку"
-                      title="Отменить отправку"
+                      aria-label={t('mail.scheduled.cancel')}
+                      title={t('mail.scheduled.cancel')}
                       className="ml-auto flex-shrink-0 rounded-md p-1 text-[var(--text-tertiary)] opacity-0 transition-all hover:bg-red-500/10 hover:text-red-500 focus:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
@@ -278,8 +280,8 @@ export function MailScheduledList({
                   canOpen ? 'cursor-pointer' : 'cursor-default'
                 )}
               >
-                <span className="line-clamp-3 max-w-prose text-xs leading-snug text-[var(--text-tertiary)]">
-                  {preview || <span className="italic opacity-70">Нет превью</span>}
+                <span className="line-clamp-3 text-xs leading-snug text-[var(--text-tertiary)]">
+                  {preview || <span className="italic opacity-70">{t('mail.scheduled.noPreview')}</span>}
                 </span>
               </button>
             )}

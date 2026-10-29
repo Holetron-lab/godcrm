@@ -32,8 +32,8 @@ vi.mock('../../utils/logger.js', () => ({
   apiLogger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 vi.mock('../AgentLoopService.js', () => ({ saveStepMessage: mockSaveStepMessage }));
-vi.mock('./query.js', () => ({ getStalledJobs: mockGetStalledJobs }));
-vi.mock('./shared.js', () => ({ failJob: mockFailJob }));
+vi.mock('../agent-job/query.js', () => ({ getStalledJobs: mockGetStalledJobs }));
+vi.mock('../agent-job/shared.js', () => ({ failJob: mockFailJob }));
 
 // Only setConversationProcessing is mocked; isSyncActive uses the REAL registry.
 vi.mock('../chat/agent-execution-shared.js', async () => {
@@ -72,6 +72,18 @@ describe('watchdog orphan-reaper × live sync agent', () => {
     expect(reapMsg).toBeUndefined();
   });
 
+  it('attributes timeout notifications to the system', async () => {
+    mockDbAll.mockResolvedValue([]);
+    mockGetStalledJobs.mockResolvedValue([{ id: 99, conversation_id: 9001, agent_name: 'Frontend Developer' }]);
+
+    await _watchdogTick();
+
+    expect(mockFailJob).toHaveBeenCalledWith(99, 'Job timed out (watchdog cleanup)');
+    expect(mockSaveStepMessage).toHaveBeenCalledWith(9001, expect.objectContaining({
+      role: 'system', senderType: 'system', content: expect.stringContaining('превысил лимит времени'),
+    }));
+  });
+
   it('DOES reap a genuinely orphaned conversation (no live sync agent)', async () => {
     // not registered → dead lock
 
@@ -82,5 +94,6 @@ describe('watchdog orphan-reaper × live sync agent', () => {
       ([, msg]) => REAP_MSG.test(msg?.content || '')
     );
     expect(reapMsg).toBeDefined();
+    expect(reapMsg[1]).toMatchObject({ role: 'system', senderType: 'system' });
   });
 });

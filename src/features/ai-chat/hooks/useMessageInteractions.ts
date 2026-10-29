@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ADR-097: Message interaction handlers
  * Extracted from AIChatPanel.tsx (lines 1015-1213)
@@ -62,6 +63,7 @@ export function useMessageInteractions({
   sendUserMessageMutateAsync,
   refetchUserMessages,
 }: UseMessageInteractionsParams): UseMessageInteractionsReturn {
+  const { t } = useLanguage();
   // Handle reaction toggle on message
   const handleReaction = async (messageId: number, emoji: string) => {
     try {
@@ -153,7 +155,7 @@ export function useMessageInteractions({
     const prefix = context.heading ? `[${context.heading}] ` : '';
     const status = isNowChecked ? '✅' : '⬜';
     const currentUser = useAuthStore.getState().user;
-    const userName = currentUser?.name || 'User';
+    const userName = currentUser?.name || t('aiChat.ui.user');
     const systemText = `${status} ${prefix}${isNowChecked ? 'Checked' : 'Unchecked'}: "${context.lineText}" — ${userName}`;
 
     // Use the active conversation to send the system message
@@ -168,7 +170,7 @@ export function useMessageInteractions({
         logger.error('Failed to send checkbox system message:', e);
       }
     }
-  }, [userConversationId, currentConversationId, sendUserMessageMutateAsync, refetchUserMessages]);
+  }, [userConversationId, currentConversationId, sendUserMessageMutateAsync, refetchUserMessages, t]);
 
   // Legacy: handle checkbox click info (append to input)
   const handleCheckboxClick = useCallback((info: CheckboxClickInfo) => {
@@ -182,7 +184,7 @@ export function useMessageInteractions({
   // Handle forward message -- copy content to clipboard with attribution and notify user
   const handleForwardMessage = useCallback((message: ChatMessage) => {
     if (!message.content) {
-      showToast('Сообщение пустое — нечего пересылать', 'error');
+      showToast(t('aiChat.ui.emptyForward'), 'error');
       return;
     }
 
@@ -195,14 +197,14 @@ export function useMessageInteractions({
     ].join('\n');
 
     navigator.clipboard.writeText(forwardedText).then(() => {
-      showToast('Сообщение скопировано в буфер. Вставьте в нужный чат.', 'success');
+      showToast(t('aiChat.ui.forwardCopied'), 'success');
     }).catch(() => {
       // Clipboard API may fail in non-secure contexts
-      showToast('Пересылка сообщений скоро будет доступна', 'info');
+      showToast(t('aiChat.ui.forwardUnavailable'), 'info');
     });
 
     logger.debug('Forward message copied to clipboard:', message.id);
-  }, []);
+  }, [t]);
 
   // Handle soft delete message
   const handleDeleteMessage = useCallback(async (messageId: number) => {

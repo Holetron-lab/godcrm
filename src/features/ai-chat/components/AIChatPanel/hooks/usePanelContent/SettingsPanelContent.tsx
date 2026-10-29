@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /** SettingsPanelContent — ADR-119 extracted from usePanelContent.tsx */
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -25,52 +26,18 @@ function useProjectForTable(tableId?: number): { name: string; icon?: string } |
 const DEFAULT_QUICK_EMOJIS = ['👍', '❤️', '😂', '🔥', '💯', '🙏', '😍', '😮'];
 
 export function SettingsPanelContent(d: PanelContentDeps) {
+  const { t } = useLanguage();
   // ADR-0031 P2: per-conversation toggle to hide row_mutation system pills.
   const [hideSystemEvents, setHideSystemEvents] = useHideSystemEvents(d.currentConversationId);
 
   return (
     <div className="flex flex-col h-full">
       <div className="p-3 space-y-3 overflow-y-auto flex-1">
-        {d.currentAgent && (
-          <>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label htmlFor="chat-operator-select" className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">Оператор</label>
-                <select id="chat-operator-select" value={d.chatOperatorId || ''} onChange={(e) => { d.setChatOperatorId(e.target.value ? Number(e.target.value) : null); d.setChatModelId(''); }} disabled={!d.isAdminOrOwner}
-                  className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-60">
-                  <option value="">— Выбрать —</option>
-                  {d.operators.map(op => <option key={op.id} value={op.id}>{op.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="chat-model-select" className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">Модель</label>
-                <select id="chat-model-select" value={d.chatModelId} onChange={(e) => d.setChatModelId(e.target.value)} disabled={!d.isAdminOrOwner || !d.chatOperatorId}
-                  className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-60">
-                  <option value="">— Выбрать —</option>
-                  {d.models.map((m) => <option key={m.model_id || m.id} value={m.model_id}>{m.name || m.model_id}</option>)}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label htmlFor="chat-system-prompt" className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">Системный промпт</label>
-              <textarea id="chat-system-prompt" value={d.chatSystemPrompt} onChange={(e) => d.setChatSystemPrompt(e.target.value)} readOnly={!d.isAdminOrOwner} rows={4}
-                className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 resize-none" placeholder="Системный промпт..." />
-            </div>
-            {d.isAdminOrOwner && (d.chatOperatorId !== (d.currentAgent.provider_id || d.currentAgent.operator_id) || d.chatModelId !== d.currentAgent.model || d.chatSystemPrompt !== d.currentAgent.system_prompt) && (
-              <button onClick={d.saveAgentSettings} disabled={d.isSavingAgentSettings}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-600)] disabled:opacity-50 transition-colors">
-                {d.isSavingAgentSettings ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}Сохранить в агента
-              </button>
-            )}
-          </>
-        )}
-
         <div className="pt-2 border-t border-[var(--border-secondary)]">
           <button onClick={d.clearMessages} disabled={d.messages.length === 0}
-            title="Локальный сброс: очистить view сообщений и начать новый чат. История в БД не удаляется."
+            title={t('aiChat.ui.resetCacheHint')}
             className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed">
-            <Trash2 className="w-3.5 h-3.5" />Сбросить кеш чата
-          </button>
+            <Trash2 className="w-3.5 h-3.5" />{t('aiChat.ui.resetCache')}</button>
         </div>
 
         {/* ADR-0031 P2 — Hide row_mutation system events in this chat */}
@@ -79,10 +46,10 @@ export function SettingsPanelContent(d: PanelContentDeps) {
             onClick={() => setHideSystemEvents(!hideSystemEvents)}
             disabled={d.currentConversationId == null}
             className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] disabled:opacity-40 disabled:cursor-not-allowed"
-            title={hideSystemEvents ? 'Системные события скрыты — нажми чтобы показать' : 'Скрыть системные события (изменения статусов, переназначения и т.п.)'}
+            title={hideSystemEvents ? t('aiChat.ui.showSystemEventsHint') : t('aiChat.ui.hideSystemEventsHint')}
           >
             <EyeOff className="w-3.5 h-3.5 flex-shrink-0" />
-            <span className="flex-1 text-left">Скрыть системные события</span>
+            <span className="flex-1 text-left">{t('aiChat.ui.hideSystemEvents')}</span>
             <span
               className={cn(
                 'inline-block w-7 h-4 rounded-full transition-colors relative flex-shrink-0',
@@ -106,12 +73,12 @@ export function SettingsPanelContent(d: PanelContentDeps) {
         {d.updateFavoritesConfig && <CustomTablesSection d={d} />}
 
         <div className="pt-2 border-t border-[var(--border-secondary)]">
-          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Агент по умолчанию</h4>
-          <p className="text-[10px] text-[var(--text-tertiary)] mb-2">Отвечает на сообщения по умолчанию</p>
+          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.defaultAgent')}</h4>
+          <p className="text-[10px] text-[var(--text-tertiary)] mb-2">{t('aiChat.ui.defaultAgentHint')}</p>
           <div className="flex items-center gap-2">
             <select value={d.defaultAgentId || ''} onChange={(e) => d.saveDefaultAgent(e.target.value ? Number(e.target.value) : null)} disabled={d.isSavingDefaultAgent || !d.isAdminOrOwner}
               className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50">
-              <option value="">— Не выбран —</option>
+              <option value="">{t('aiChat.ui.notSelected')}</option>
               {d.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.icon || '🤖'} {agent.name}</option>)}
             </select>
             {d.isSavingDefaultAgent && <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)] flex-shrink-0" />}
@@ -120,12 +87,12 @@ export function SettingsPanelContent(d: PanelContentDeps) {
 
         {d.onTranslationAgentChange && (
         <div className="pt-2 border-t border-[var(--border-secondary)]">
-          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Агент перевода</h4>
-          <p className="text-[10px] text-[var(--text-tertiary)] mb-2">Переводит сообщения чата между языками</p>
+          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.translationAgent')}</h4>
+          <p className="text-[10px] text-[var(--text-tertiary)] mb-2">{t('aiChat.ui.translationAgentHint')}</p>
           <div className="flex items-center gap-2">
             <select value={d.translationAgentId || ''} onChange={(e) => d.onTranslationAgentChange!(e.target.value ? Number(e.target.value) : null)} disabled={d.isSavingTranslationAgent || !d.isAdminOrOwner}
               className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50">
-              <option value="">— Не выбран —</option>
+              <option value="">{t('aiChat.ui.notSelected')}</option>
               {d.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.icon || '🤖'} {agent.name}</option>)}
             </select>
             {d.isSavingTranslationAgent && <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)] flex-shrink-0" />}
@@ -135,12 +102,12 @@ export function SettingsPanelContent(d: PanelContentDeps) {
 
         {d.onSummaryAgentChange && (
         <div className="pt-2 border-t border-[var(--border-secondary)]">
-          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Summary Agent</h4>
-          <p className="text-[10px] text-[var(--text-tertiary)] mb-2">Агент для генерации сводок чата</p>
+          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.summaryAgent')}</h4>
+          <p className="text-[10px] text-[var(--text-tertiary)] mb-2">{t('aiChat.ui.summaryAgentHint')}</p>
           <div className="flex items-center gap-2">
             <select value={d.summaryAgentId || ''} onChange={(e) => d.onSummaryAgentChange!(e.target.value ? Number(e.target.value) : null)} disabled={d.isSavingSummaryAgent || !d.isAdminOrOwner}
               className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50">
-              <option value="">По умолчанию (gpt-4o-mini)</option>
+              <option value="">{t('aiChat.ui.defaultSummaryModel')}</option>
               {d.agents.map(agent => <option key={agent.id} value={agent.id}>{agent.icon || '🤖'} {agent.name}</option>)}
             </select>
             {d.isSavingSummaryAgent && <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" />}
@@ -149,7 +116,7 @@ export function SettingsPanelContent(d: PanelContentDeps) {
         )}
 
         <div className="pt-2 border-t border-[var(--border-secondary)]">
-          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Быстрые реакции</h4>
+          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.quickReactions')}</h4>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(32px,1fr))] gap-1.5 mb-3">
             {d.quickEmojis.map((emoji, index) => (
               <div key={index} className="relative group">
@@ -170,32 +137,16 @@ export function SettingsPanelContent(d: PanelContentDeps) {
             <div className="flex items-center gap-2">
               <button onClick={() => d.saveQuickEmojis(d.quickEmojis)} disabled={d.isSavingEmojis}
                 className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-600)] disabled:opacity-50 transition-colors">
-                {d.isSavingEmojis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}Сохранить
-              </button>
+                {d.isSavingEmojis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}{t('aiChat.ui.save')}</button>
               <button onClick={() => d.setQuickEmojis(DEFAULT_QUICK_EMOJIS)}
-                className="px-3 py-2 rounded-lg text-xs bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] transition-colors">Сбросить</button>
+                className="px-3 py-2 rounded-lg text-xs bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] transition-colors">{t('aiChat.ui.reset')}</button>
             </div>
           )}
         </div>
 
         <div className="pt-2 border-t border-[var(--border-secondary)]">
-          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Голосовой ввод</h4>
-          <div className="space-y-2">
-            {(['webSpeech', 'whisper'] as const).map(mode => (
-              <label key={mode} className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
-                <input type="radio" name="voiceMode" value={mode} checked={d.voiceMode === mode} onChange={() => d.setVoiceMode(mode)} className="w-4 h-4 text-[var(--color-primary-500)]" />
-                <div className="flex-1">
-                  <div className="text-sm text-[var(--text-primary)] flex items-center gap-2">
-                    {mode === 'webSpeech' ? 'Web Speech API' : 'OpenAI Whisper'}
-                    {mode === 'webSpeech' && (d.webSpeechAvailable
-                      ? <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">Доступен</span>
-                      : <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Недоступен</span>)}
-                  </div>
-                  <p className="text-[10px] text-[var(--text-tertiary)]">{mode === 'webSpeech' ? 'Бесплатно, быстро, работает в браузере' : 'Высокое качество, поддержка 50+ языков, платный'}</p>
-                </div>
-              </label>
-            ))}
-          </div>
+          <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.voiceInput')}</h4>
+          <p className="text-xs text-[var(--text-secondary)]">{t('aiChat.ui.voiceInputHint')}</p>
           {d.voiceError && (
             <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" /><span className="text-xs text-red-400">{d.voiceError}</span>
@@ -219,6 +170,7 @@ function CollapsibleCard({
   children?: React.ReactNode;
   defaultOpen?: boolean;
 }) {
+  const { t } = useLanguage();
   const [open, setOpen] = React.useState(defaultOpen);
   const Chevron = open ? ChevronDown : ChevronRight;
   const hasBody = !!children;
@@ -253,7 +205,7 @@ function CollapsibleCard({
             type="button"
             onClick={onRemove}
             className="text-xs text-red-400 hover:underline flex-shrink-0 px-2 py-1"
-          >Удалить</button>
+          >{t('aiChat.ui.delete')}</button>
         )}
       </div>
       {open && hasBody && (
@@ -280,12 +232,13 @@ function PresetSlot({ label, icon, children }: { label: string; icon: string; ch
 
 /** Tickets-source mapping (uses already-loaded d.tasksTableColumns instead of refetching). */
 function TicketsMapping({ d }: { d: PanelContentDeps }) {
+  const { t } = useLanguage();
   if (d.tasksTableColumns.length === 0) return null;
   const FIELDS = [
-    { key: 'displayColumn',     label: 'Название',  emptyLabel: 'авто' },
-    { key: 'descriptionColumn', label: 'Описание',  emptyLabel: 'нет'  },
-    { key: 'statusColumn',      label: 'Статус',    emptyLabel: 'нет'  },
-    { key: 'priorityColumn',    label: 'Приоритет', emptyLabel: 'нет'  },
+    { key: 'displayColumn',     label: t('aiChat.ui.name'),  emptyLabel: t('aiChat.ui.auto') },
+    { key: 'descriptionColumn', label: t('aiChat.ui.description'),  emptyLabel: t('aiChat.ui.none')  },
+    { key: 'statusColumn',      label: t('aiChat.ui.status'),    emptyLabel: t('aiChat.ui.none')  },
+    { key: 'priorityColumn',    label: t('aiChat.ui.priority'), emptyLabel: t('aiChat.ui.none')  },
   ] as const;
 
   const tasksSource = d.tasksSource!;
@@ -327,7 +280,7 @@ function TicketsMapping({ d }: { d: PanelContentDeps }) {
 
   return (
     <div className="pt-2 space-y-2">
-      <p className="text-[10px] text-[var(--text-tertiary)] uppercase font-medium">Маппинг полей</p>
+      <p className="text-[10px] text-[var(--text-tertiary)] uppercase font-medium">{t('aiChat.ui.fieldMapping')}</p>
       <MappingPresetSelector
         kind="tickets"
         tableId={tasksSource.tableId}
@@ -343,12 +296,12 @@ function TicketsMapping({ d }: { d: PanelContentDeps }) {
       />
       {usingPreset ? (
         <div className="flex items-center justify-between text-[10px] text-[var(--text-tertiary)]">
-          <span>Используется пресет</span>
+          <span>{t('aiChat.ui.presetInUse')}</span>
           <button
             type="button"
             onClick={() => d.updateTasksSource({ ...tasksSource, preset: undefined })}
             className="text-[var(--color-primary-500)] hover:underline"
-          >Кастомизировать</button>
+          >{t('aiChat.ui.customize')}</button>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">
@@ -386,24 +339,25 @@ function TicketsMapping({ d }: { d: PanelContentDeps }) {
 
 /** Three fixed presets shown as collapsible cards: Tickets / Files / Documents. */
 function DataSourcesSection({ d }: { d: PanelContentDeps }) {
+  const { t } = useLanguage();
   const fav = d.favoritesConfig;
   const update = d.updateFavoritesConfig;
   return (
     <div>
-      <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Источники данных</h4>
+      <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.dataSources')}</h4>
       <div className="space-y-2">
         {d.tasksSource ? (
           <CollapsibleCard
             icon={d.tasksSource.tableIcon || '📋'}
             title={d.tasksSource.tableName}
             tableId={d.tasksSource.tableId}
-            label="Tickets"
+            label={t('aiChat.ui.tickets')}
             onRemove={() => d.updateTasksSource(undefined)}
           >
             <TicketsMapping d={d} />
           </CollapsibleCard>
         ) : (
-          <PresetSlot label="Tickets" icon="📋">
+          <PresetSlot label={t('aiChat.ui.tickets')} icon="📋">
             <TasksSourceInlineSelector defaultSpaceId={d.effectiveSpaceId} onSelect={(c) => d.updateTasksSource(c)} onCancel={() => {}} showHeader={false} />
           </PresetSlot>
         )}
@@ -412,11 +366,11 @@ function DataSourcesSection({ d }: { d: PanelContentDeps }) {
             icon={d.filesSource.tableIcon || '📁'}
             title={d.filesSource.tableName}
             tableId={d.filesSource.tableId}
-            label="Files"
+            label={t('aiChat.ui.files')}
             onRemove={() => d.updateFilesSource(undefined)}
           />
         ) : (
-          <PresetSlot label="Files" icon="📁">
+          <PresetSlot label={t('aiChat.ui.files')} icon="📁">
             <FilesSourceInlineSelector defaultSpaceId={d.effectiveSpaceId} onSelect={(c) => d.updateFilesSource(c)} onCancel={() => {}} showHeader={false} />
           </PresetSlot>
         )}
@@ -425,13 +379,13 @@ function DataSourcesSection({ d }: { d: PanelContentDeps }) {
             icon={fav.documents.tableIcon || '📄'}
             title={fav.documents.tableName}
             tableId={fav.documents.tableId}
-            label="Documents"
+            label={t('aiChat.ui.documents')}
             onRemove={() => update({ ...fav, documents: null })}
           >
             <FavoriteTableMapping table={fav.documents} kind="documents" onChange={(updated) => update({ ...fav, documents: updated })} />
           </CollapsibleCard>
         ) : (
-          <PresetSlot label="Documents" icon="📄">
+          <PresetSlot label={t('aiChat.ui.documents')} icon="📄">
             <FilesSourceInlineSelector
               defaultSpaceId={d.effectiveSpaceId}
               onSelect={(config) => update({ ...(fav || {}), documents: { tableId: config.tableId, tableName: config.tableName, tableIcon: config.tableIcon } })}
@@ -447,14 +401,15 @@ function DataSourcesSection({ d }: { d: PanelContentDeps }) {
 
 /** Additional custom tables — collapsible cards each with field mapping. */
 function CustomTablesSection({ d }: { d: PanelContentDeps }) {
+  const { t } = useLanguage();
   const [showAddPicker, setShowAddPicker] = React.useState(false);
   const fav = d.favoritesConfig;
   const update = d.updateFavoritesConfig!;
   const customs = fav?.custom || [];
   return (
     <div className="pt-2 border-t border-[var(--border-secondary)]">
-      <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Дополнительные таблицы</h4>
-      <p className="text-[10px] text-[var(--text-tertiary)] mb-2">Табы в popup-е прикрепления чата</p>
+      <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.additionalTables')}</h4>
+      <p className="text-[10px] text-[var(--text-tertiary)] mb-2">{t('aiChat.ui.additionalTablesHint')}</p>
       {customs.length > 0 && (
         <div className="space-y-2 mb-2">
           {customs.map(c => (
@@ -492,7 +447,7 @@ function CustomTablesSection({ d }: { d: PanelContentDeps }) {
         <button
           onClick={() => setShowAddPicker(true)}
           className="w-full px-3 py-2 text-xs rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] transition-colors border border-dashed border-[var(--border-primary)]"
-        >+ Добавить таблицу</button>
+        >{t('aiChat.ui.addTable')}</button>
       )}
     </div>
   );
@@ -505,18 +460,18 @@ type FavoriteMappingField = {
 };
 
 const DOCUMENTS_FIELDS: readonly FavoriteMappingField[] = [
-  { key: 'iconColumn',        label: 'Иконка',    emptyLabel: 'нет'  },
-  { key: 'displayColumn',     label: 'Название',  emptyLabel: 'авто' },
-  { key: 'descriptionColumn', label: 'Описание',  emptyLabel: 'нет'  },
-  { key: 'statusColumn',      label: 'Статус',    emptyLabel: 'нет'  },
-  { key: 'categoryColumn',    label: 'Категория', emptyLabel: 'нет'  },
+  { key: 'iconColumn',        label: 'aiChat.ui.icon',    emptyLabel: 'aiChat.ui.none'  },
+  { key: 'displayColumn',     label: 'aiChat.ui.name',  emptyLabel: 'aiChat.ui.auto' },
+  { key: 'descriptionColumn', label: 'aiChat.ui.description',  emptyLabel: 'aiChat.ui.none'  },
+  { key: 'statusColumn',      label: 'aiChat.ui.status',    emptyLabel: 'aiChat.ui.none'  },
+  { key: 'categoryColumn',    label: 'aiChat.ui.category', emptyLabel: 'aiChat.ui.none'  },
 ];
 
 const CUSTOM_FIELDS: readonly FavoriteMappingField[] = [
-  { key: 'displayColumn',     label: 'Название',  emptyLabel: 'авто' },
-  { key: 'descriptionColumn', label: 'Описание',  emptyLabel: 'нет'  },
-  { key: 'statusColumn',      label: 'Статус',    emptyLabel: 'нет'  },
-  { key: 'priorityColumn',    label: 'Приоритет', emptyLabel: 'нет'  },
+  { key: 'displayColumn',     label: 'aiChat.ui.name',  emptyLabel: 'aiChat.ui.auto' },
+  { key: 'descriptionColumn', label: 'aiChat.ui.description',  emptyLabel: 'aiChat.ui.none'  },
+  { key: 'statusColumn',      label: 'aiChat.ui.status',    emptyLabel: 'aiChat.ui.none'  },
+  { key: 'priorityColumn',    label: 'aiChat.ui.priority', emptyLabel: 'aiChat.ui.none'  },
 ];
 
 const RELATION_DICT_KEY: Partial<Record<FavoriteMappingField['key'], keyof FavoriteTable>> = {
@@ -533,6 +488,7 @@ function FavoriteTableMapping({
   onChange: (t: FavoriteTable) => void;
   kind?: 'documents' | 'custom';
 }) {
+  const { t } = useLanguage();
   const { data: columns = [] } = useQuery<Array<{ column_name: string; display_name: string; type: string; config?: string }>>({
     queryKey: ['favorite-table-columns', table.tableId],
     queryFn: async () => {
@@ -586,7 +542,7 @@ function FavoriteTableMapping({
 
   return (
     <div className="pt-2 space-y-2">
-      <p className="text-[10px] text-[var(--text-tertiary)] uppercase font-medium">Маппинг полей</p>
+      <p className="text-[10px] text-[var(--text-tertiary)] uppercase font-medium">{t('aiChat.ui.fieldMapping')}</p>
       <MappingPresetSelector
         kind={kind}
         tableId={table.tableId}
@@ -602,18 +558,18 @@ function FavoriteTableMapping({
       />
       {usingPreset ? (
         <div className="flex items-center justify-between text-[10px] text-[var(--text-tertiary)]">
-          <span>Используется пресет</span>
+          <span>{t('aiChat.ui.presetInUse')}</span>
           <button
             type="button"
             onClick={() => onChange({ ...table, preset: undefined })}
             className="text-[var(--color-primary-500)] hover:underline"
-          >Кастомизировать</button>
+          >{t('aiChat.ui.customize')}</button>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">
           {fields.map(({ key, label, emptyLabel }) => (
             <div key={key}>
-              <label className="block text-[10px] text-[var(--text-tertiary)] mb-1">{label}</label>
+              <label className="block text-[10px] text-[var(--text-tertiary)] mb-1">{t(label)}</label>
               <select
                 value={(table[key] as string | undefined) || ''}
                 onChange={(e) => {
@@ -633,7 +589,7 @@ function FavoriteTableMapping({
                 }}
                 className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
               >
-                <option value="">— {emptyLabel} —</option>
+                <option value="">— {t(emptyLabel)} —</option>
                 {columns.map(col => <option key={col.column_name} value={col.column_name}>{col.display_name || col.column_name}</option>)}
               </select>
             </div>

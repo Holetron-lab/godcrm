@@ -28,9 +28,10 @@ function formatDate(iso: string): string {
     : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-/** Strip an existing Re:/Fwd: prefix so replies/forwards don't stack them. */
-function baseSubject(subject: string): string {
-  return subject.replace(/^\s*(re|fwd?)\s*:\s*/i, '').trim();
+/** Strip existing Re:/Fwd: prefixes so replies/forwards don't stack them
+ *  (also the thread key in the list — "Re: Re: X" and "X" are one thread). */
+export function baseSubject(subject: string): string {
+  return subject.replace(/^(\s*(re|fwd?|fw)\s*:\s*)+/i, '').trim();
 }
 
 export function buildReply(message: MailMessage): ComposeSeed {

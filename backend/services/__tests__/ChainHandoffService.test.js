@@ -137,6 +137,7 @@ function makeKnowledgeStackEntry({ cycle = 1, chain_id = 'chain-prev-1', summary
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockDbAll.mockReset().mockResolvedValue([]);
 });
 
 // ─── buildKnowledgeSummary ──────────────────────────────────────────────────
@@ -1884,6 +1885,14 @@ describe('ADR-109 AC10: Cascade updates on supervisor transitions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // vi.clearAllMocks() wipes recorded calls but keeps implementations, so a
+    // mockResolvedValue set by one test leaks into the next. The chain-progress
+    // tests below leave dbAll returning task rows; the ADR-0002 G4 completion
+    // gate then reads those as unverified must-criteria and blocks every
+    // CONTROL → DONE transition in the tests that follow them. Reset it here —
+    // no criteria means the gate passes, which is what these cascade tests
+    // (about logActivity, not about the gate) assume.
+    mockDbAll.mockResolvedValue([]);
   });
 
   test('logActivity is called when supervisor completes a ticket (CONTROL → DONE)', async () => {

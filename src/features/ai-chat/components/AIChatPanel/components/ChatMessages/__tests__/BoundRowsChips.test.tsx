@@ -4,9 +4,9 @@ import { BoundRowsChips } from '../BoundRowsChips';
 import type { BoundRow } from '../BoundRowsChips';
 
 // Mock icons
-vi.mock('lucide-react', () => ({
-  Link2: ({ className, ...props }: { className?: string; [key: string]: unknown }) => <div className={className} data-testid="link2-icon" {...props} />
-}));
+// lucide-react is auto-mocked: any icon a component adds resolves to a stub,
+// so a new <Icon/> can no longer fail every test in this file (see src/tests/lucideMock.tsx).
+vi.mock('lucide-react', async () => (await import('@/tests/lucideMock')).lucideMock());
 
 // Mock cn utility
 vi.mock('@/shared/utils/cn', () => ({

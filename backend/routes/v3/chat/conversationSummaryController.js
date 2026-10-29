@@ -24,10 +24,7 @@
  * (forward-compatible). When set, response is { id, title, deleted: true }
  * with no other fields. A truly missing row → 404.
  *
- * Auth: caller must be a participant of the conversation. Mirrors the
- * access check used by GET /conversations/:id (conversation_participants
- * membership only — there is no separate space-membership table in this
- * schema; space membership is materialised as participant rows on creation).
+ * Auth: participant or at least editor of the linked row, as on chat reads.
  *
  * Avatar safety (memory: project_users_avatar_base64_mine): users.avatar may
  * contain multi-MB base64 data-URLs. Strip any avatar > 2048 chars to null,
@@ -39,6 +36,7 @@ import {
   success, error, notFound, forbidden,
   requireAuth,
 } from './chatShared.js';
+import { canReadConversation } from '../../../services/chat/conversation-read-access.js';
 
 const AVATAR_MAX_BYTES = 2048;
 const PARTICIPANTS_PREVIEW_CAP = 3;
@@ -69,6 +67,9 @@ export default function registerConversationSummaryRoutes(router) {
         [conversationId]
       );
       if (!conv) return notFound(res, 'Conversation not found');
+      if (!await canReadConversation(req.user, conversationId, conv)) {
+        return forbidden(res, 'No access to this conversation');
+      }
 
       // 2. Soft-delete short-circuit. Read settings (text or jsonb) and look
       //    for { deleted: true }. When present, return the trimmed payload so
@@ -80,19 +81,6 @@ export default function registerConversationSummaryRoutes(router) {
           title: conv.title || null,
           deleted: true,
         });
-      }
-
-      // 3. Access check — participant of the conversation. This mirrors
-      //    GET /conversations/:id (the canonical read-side check). Admins
-      //    aren't auto-granted here; if a use case needs admin override the
-      //    parent route can wrap with that policy.
-      const participant = await dbGet(
-        `SELECT user_id FROM conversation_participants
-          WHERE conversation_id = $1 AND user_id = $2`,
-        [conversationId, userId]
-      );
-      if (!participant) {
-        return forbidden(res, 'No access to this conversation');
       }
 
       // 4. Participants — cap to first N for the preview, plus full count.

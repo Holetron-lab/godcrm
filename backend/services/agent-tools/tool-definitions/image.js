@@ -6,6 +6,30 @@ export const IMAGE_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'replicate_video_generate',
+      description: 'Start one paid Seedance 2.0 video using ONLY replicate_api_key from the current conversation space. '
+        + 'Accepts up to three images and one MP4 from that conversation attachments (relative /uploads/ URLs). '
+        + 'Returns prediction_id immediately; poll replicate_check_prediction with kind="video" in the same conversation. '
+        + 'Never retry automatically after submission_unknown: inspect Replicate history first. References: [Image1], [Video1].',
+      parameters: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          prompt: { type: 'string', minLength: 1, maxLength: 4000 },
+          reference_images: { type: 'array', maxItems: 3, items: { type: 'string' }, description: 'Relative URLs of attached PNG/JPEG/WebP images in prompt order.' },
+          reference_video: { type: 'string', description: 'Relative URL of one attached MP4, max 50 MiB and 15 seconds.' },
+          duration: { type: 'integer', minimum: 4, maximum: 15, default: 6 },
+          resolution: { type: 'string', enum: ['480p', '720p'], default: '720p' },
+          aspect_ratio: { type: 'string', enum: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'adaptive'], default: '9:16' },
+          generate_audio: { type: 'boolean', default: false },
+          seed: { type: 'integer' },
+        },
+        required: ['prompt'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'replicate_image_generate',
       description: 'Generate or edit images using Replicate AI models (FLUX Kontext, Seedream, Ideogram, Recraft, etc). '
         + 'Can take an input image for editing or generate from scratch. '
@@ -112,8 +136,8 @@ export const IMAGE_TOOLS = [
           },
           kind: {
             type: 'string',
-            enum: ['3d', 'image'],
-            description: 'Output kind to materialise on success. "3d" expects a single mesh URL, "image" expects an array of image URLs. Default: 3d',
+            enum: ['3d', 'image', 'video'],
+            description: 'Output kind to materialise on success. "3d" expects a single mesh URL, "image" expects an array of image URLs. "video" uses only the conversation space key and saves a private MP4 there. Default: 3d',
           },
           space_id: {
             type: 'number',

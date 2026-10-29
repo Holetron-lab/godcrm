@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ContactsList Component v3
  * ADR-024: Chat Contacts with improved UX
@@ -128,6 +129,7 @@ function ContactMenu({
   onRemoveFromChat?: () => void;
   onStartChat?: () => void;
 }) {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -180,24 +182,21 @@ function ContactMenu({
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
           >
             <MessageSquare className="w-4 h-4" />
-            Начать чат
-          </button>
+            {t('aiChat.ui.startChat')}</button>
           {isInChat ? (
             <button
               onClick={handleRemoveFromChat}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-[var(--bg-tertiary)]"
             >
               <UserMinus className="w-4 h-4" />
-              Удалить из чата
-            </button>
+              {t('aiChat.ui.removeFromChat')}</button>
           ) : (
             <button
               onClick={handleAddToChat}
               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
             >
               <UserPlus className="w-4 h-4" />
-              Добавить в чат
-            </button>
+              {t('aiChat.ui.addToChat')}</button>
           )}
         </div>
       )}
@@ -222,17 +221,16 @@ function StatusDot({ status }: { status?: 'online' | 'offline' | 'away' }) {
 
 // User Type Label
 function UserTypeLabel({ type }: { type: ContactType }) {
+  const { t } = useLanguage();
   if (type === 'agent-user') {
     return (
       <span className="text-[10px] text-purple-400">
-        AI Агент
-      </span>
+        {t('aiChat.ui.aIAgent')}</span>
     );
   }
   return (
     <span className="text-[10px] text-[var(--text-tertiary)]">
-      Человек
-    </span>
+      {t('aiChat.ui.person')}</span>
   );
 }
 
@@ -257,6 +255,7 @@ export function ContactsList({
   chatParticipantIds = [],
   className
 }: ContactsListProps) {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<TabKey>('contacts');
   const [searchQuery, setSearchQuery] = useState('');
   const [contactFilter, setContactFilter] = useState<ContactFilter>('all');
@@ -367,9 +366,9 @@ export function ContactsList({
   };
 
   const tabs = [
-    { key: 'contacts' as TabKey, label: 'Контакты', icon: <Users className="w-4 h-4" />, count: allContacts.length },
-    { key: 'ai-chat' as TabKey, label: 'AI Чат', icon: <Zap className="w-4 h-4" />, count: agents.length },
-    { key: 'tasks' as TabKey, label: 'Задачи', icon: <ListTodo className="w-4 h-4" /> },
+    { key: 'contacts' as TabKey, label: t('aiChat.ui.contacts'), icon: <Users className="w-4 h-4" />, count: allContacts.length },
+    { key: 'ai-chat' as TabKey, label: t('aiChat.ui.aIChat'), icon: <Zap className="w-4 h-4" />, count: agents.length },
+    { key: 'tasks' as TabKey, label: t('aiChat.ui.tasks'), icon: <ListTodo className="w-4 h-4" /> },
   ];
 
   return (
@@ -383,7 +382,7 @@ export function ContactsList({
           >
             <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
               <History className="w-3.5 h-3.5" />
-              <span>История чатов</span>
+              <span>{t('aiChat.ui.chatHistory')}</span>
               <span className="px-1.5 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[10px]">
                 {conversations.length}
               </span>
@@ -402,7 +401,7 @@ export function ContactsList({
                 </div>
               ) : filteredConversations.length === 0 ? (
                 <div className="px-3 py-3 text-xs text-[var(--text-tertiary)] text-center">
-                  {searchQuery ? 'Не найдено' : 'Нет истории'}
+                  {searchQuery ? t('aiChat.contacts.notFound') : t('aiChat.ui.noHistory')}
                 </div>
               ) : (
                 filteredConversations.map(conv => (
@@ -425,7 +424,7 @@ export function ContactsList({
                           {conv.title}
                         </div>
                         <div className="text-[10px] text-[var(--text-tertiary)]">
-                          {conv.agentName} • {conv.messageCount || 0} сообщ.
+                          {conv.agentName} • {t('aiChat.ui.messageCount', { count: conv.messageCount || 0 })}
                         </div>
                       </div>
                     </button>
@@ -478,9 +477,9 @@ export function ContactsList({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={
-                activeTab === 'contacts' ? 'Поиск контактов...' :
-                activeTab === 'ai-chat' ? 'Поиск агентов...' :
-                'Поиск задач...'
+                activeTab === 'contacts' ? t('aiChat.contacts.searchPlaceholder') :
+                activeTab === 'ai-chat' ? t('aiChat.ui.searchAgents') :
+                t('aiChat.ui.searchTasks')
               }
               className="w-full pl-8 pr-8 py-1.5 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] border-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
             />
@@ -501,8 +500,8 @@ export function ContactsList({
               onChange={(e) => setContactFilter(e.target.value as ContactFilter)}
               className="px-2 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
             >
-              <option value="all">Все ({allContacts.length})</option>
-              <option value="humans">Люди ({humanContacts.length})</option>
+              <option value="all">{t('aiChat.ui.allCount', { count: allContacts.length })}</option>
+              <option value="humans">{t('aiChat.ui.peopleCount', { count: humanContacts.length })}</option>
               <option value="agents">AI ({agentUserContacts.length})</option>
             </select>
           )}
@@ -512,7 +511,7 @@ export function ContactsList({
             <button
               onClick={onConfigureTasks}
               className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-              title="Настроить источник"
+              title={t('aiChat.ui.configureSource')}
             >
               <Settings className="w-4 h-4" />
             </button>
@@ -532,7 +531,7 @@ export function ContactsList({
             <div className="flex flex-col items-center justify-center h-full px-4 text-center">
               <Users className="w-10 h-10 text-[var(--text-tertiary)] mb-2" />
               <p className="text-sm text-[var(--text-tertiary)]">
-                {searchQuery ? 'Ничего не найдено' : 'Нет контактов'}
+                {searchQuery ? t('columnSettings.nothingFound') : t('aiChat.contacts.empty')}
               </p>
             </div>
           ) : (
@@ -584,8 +583,7 @@ export function ContactsList({
                           </span>
                           {isInChat && (
                             <span className="flex-shrink-0 px-1 py-0.5 text-[8px] font-semibold rounded bg-green-500/20 text-green-400">
-                              в чате
-                            </span>
+                              {t('aiChat.ui.inChat')}</span>
                           )}
                         </div>
                         <div className="flex items-center gap-2">
@@ -629,7 +627,7 @@ export function ContactsList({
             <div className="flex flex-col items-center justify-center h-full px-4 text-center">
               <Bot className="w-10 h-10 text-[var(--text-tertiary)] mb-2" />
               <p className="text-sm text-[var(--text-tertiary)]">
-                {searchQuery ? 'Агенты не найдены' : 'Нет доступных агентов'}
+                {searchQuery ? t('aiChat.ui.noAgentsFound') : t('aiChat.ui.noAgentsAvailable')}
               </p>
             </div>
           ) : (
@@ -660,8 +658,7 @@ export function ContactsList({
                       </span>
                       {currentAgentId === agent.id && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-primary-500)]/30 text-[var(--color-primary-400)]">
-                          активен
-                        </span>
+                          {t('aiChat.ui.activeLower')}</span>
                       )}
                     </div>
                     {agent.description && (
@@ -695,8 +692,7 @@ export function ContactsList({
                 </div>
               ) : taskRows.length === 0 ? (
                 <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-                  Нет записей в таблице
-                </div>
+                  {t('aiChat.ui.noRecordsInThisTable')}</div>
               ) : (
                 taskRows.map(row => {
                   const displayCol = tasksSource.displayColumn || 'name';
@@ -744,18 +740,16 @@ export function ContactsList({
             <div className="flex flex-col items-center justify-center h-full px-4 text-center">
               <Database className="w-10 h-10 text-[var(--text-tertiary)] mb-3" />
               <p className="text-sm text-[var(--text-secondary)] mb-1">
-                Источник не настроен
-              </p>
+                {t('aiChat.ui.sourceIsNotConfigured')}</p>
               <p className="text-xs text-[var(--text-tertiary)] mb-4">
-                Выберите таблицу для отображения записей
-              </p>
+                {t('aiChat.ui.chooseATableToDisplayRecords')}</p>
               {onConfigureTasks && (
                 <button
                   onClick={onConfigureTasks}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-primary-500)]/10 text-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/20 transition-colors"
                 >
                   <Settings className="w-4 h-4" />
-                  <span className="text-sm font-medium">Настроить</span>
+                  <span className="text-sm font-medium">{t('home.quickAccess.customize')}</span>
                 </button>
               )}
             </div>

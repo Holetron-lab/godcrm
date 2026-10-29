@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { CaptionedMedia } from '@/shared/components/CaptionedMedia';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import '@google/model-viewer';
-import { createPortal } from 'react-dom';
+import * as Dialog from '@radix-ui/react-dialog';
 import { 
   X, 
   Sun, 
@@ -17,8 +18,9 @@ import {
   FileText,
   Eye
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { SafeChatImage } from '@/shared/components/SafeChatImage';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -85,6 +87,7 @@ export const FilePreviewModal = ({
   extraHeaderActions,
   headerSubtitle,
 }: FilePreviewModalProps) => {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const [isDarkBg, setIsDarkBg] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState('');
@@ -174,24 +177,190 @@ export const FilePreviewModal = ({
     URL.revokeObjectURL(url);
   }, [fileUrl, fileName, fileType, content]);
   
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      if (isEditing) {
-        setIsEditing(false);
-        setEditContent(content);
-      } else {
-        onClose();
+  // Stable component types preserve selection, images and table scroll when the chat rerenders.
+  const markdownComponents = useMemo<Components>(() => ({
+    // Custom heading styles
+    h1: ({ children }) => (
+      <h1 className={`text-3xl font-bold ${isDarkBg ? 'text-gray-100' : 'text-gray-900'} border-b ${isDarkBg ? 'border-gray-700' : 'border-gray-300'} pb-3 mb-6 mt-2`}>
+        {children}
+      </h1>
+    ),
+    h2: ({ children }) => (
+      <h2 className={`text-2xl font-semibold ${isDarkBg ? 'text-gray-100' : 'text-gray-900'} border-b ${isDarkBg ? 'border-gray-700' : 'border-gray-200'} pb-2 mb-4 mt-8`}>
+        {children}
+      </h2>
+    ),
+    h3: ({ children }) => (
+      <h3 className={`text-xl font-semibold ${isDarkBg ? 'text-gray-200' : 'text-gray-800'} mb-3 mt-6`}>
+        {children}
+      </h3>
+    ),
+    h4: ({ children }) => (
+      <h4 className={`text-lg font-semibold ${isDarkBg ? 'text-gray-200' : 'text-gray-800'} mb-2 mt-4`}>
+        {children}
+      </h4>
+    ),
+    h5: ({ children }) => (
+      <h5 className={`text-base font-semibold ${isDarkBg ? 'text-gray-300' : 'text-gray-700'} mb-2 mt-3`}>
+        {children}
+      </h5>
+    ),
+    h6: ({ children }) => (
+      <h6 className={`text-sm font-semibold ${isDarkBg ? 'text-gray-400' : 'text-gray-600'} mb-1 mt-2`}>
+        {children}
+      </h6>
+    ),
+    // Paragraphs
+    p: ({ children }) => (
+      <p className={`${isDarkBg ? 'text-gray-300' : 'text-gray-700'} mb-4 leading-relaxed`}>
+        {children}
+      </p>
+    ),
+    // Lists
+    ul: ({ children }) => (
+      <ul className={`list-disc list-inside ${isDarkBg ? 'text-gray-300' : 'text-gray-700'} mb-4 space-y-1 pl-2`}>
+        {children}
+      </ul>
+    ),
+    ol: ({ children }) => (
+      <ol className={`list-decimal list-inside ${isDarkBg ? 'text-gray-300' : 'text-gray-700'} mb-4 space-y-1 pl-2`}>
+        {children}
+      </ol>
+    ),
+    li: ({ children }) => (
+      <li className={`${isDarkBg ? 'text-gray-300' : 'text-gray-700'}`}>
+        {children}
+      </li>
+    ),
+    // Links
+    a: ({ href, children }) => (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-primary-500 hover:text-primary-400 hover:underline"
+      >
+        {children}
+      </a>
+    ),
+    // Blockquote
+    blockquote: ({ children }) => (
+      <blockquote className={`border-l-4 ${isDarkBg ? 'border-primary-500 bg-gray-800/50' : 'border-primary-500 bg-primary-50'} pl-4 py-2 my-4 rounded-r-lg`}>
+        {children}
+      </blockquote>
+    ),
+    // Horizontal rule
+    hr: () => (
+      <hr className={`my-6 ${isDarkBg ? 'border-gray-700' : 'border-gray-300'}`} />
+    ),
+    // Strong
+    strong: ({ children }) => (
+      <strong className={`font-semibold ${isDarkBg ? 'text-gray-100' : 'text-gray-900'}`}>
+        {children}
+      </strong>
+    ),
+    // Emphasis
+    em: ({ children }) => (
+      <em className={`italic ${isDarkBg ? 'text-gray-300' : 'text-gray-700'}`}>
+        {children}
+      </em>
+    ),
+    // Code
+    code({ node, className, children, ...props }) {
+      const match = /language-(\w+)/.exec(className || '');
+      const codeString = String(children).replace(/\n$/, '');
+      const isInline = !className && !codeString.includes('\n');
+
+      // Inline code
+      if (isInline) {
+        return (
+          <code className={`${isDarkBg ? 'bg-gray-800 text-pink-400' : 'bg-gray-100 text-pink-600'} px-1.5 py-0.5 rounded text-sm font-mono`} {...props}>
+            {children}
+          </code>
+        );
       }
-    }
-  }, [isEditing, content, onClose]);
-  
-  useEffect(() => {
-    if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isOpen, handleKeyDown]);
-  
+
+      // Code block with language - use syntax highlighter
+      if (match) {
+        return (
+          <SyntaxHighlighter
+            style={isDarkBg ? oneDark : oneLight}
+            language={match[1]}
+            PreTag="div"
+            className="rounded-lg my-4"
+          >
+            {codeString}
+          </SyntaxHighlighter>
+        );
+      }
+
+      // Plain code block (ASCII diagrams, etc.) - render as monospace pre
+      // Use specific monospace font stack for proper box-drawing character alignment
+      return (
+        <code
+          className={`block whitespace-pre ${isDarkBg ? 'text-gray-300' : 'text-gray-700'}`}
+          style={{
+            fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Liberation Mono', 'Menlo', monospace",
+            fontSize: '14px',
+            lineHeight: '1.15',
+            letterSpacing: '0',
+          }}
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    },
+    // Pre - wrapper for code blocks
+    pre: ({ children }) => (
+      <pre
+        className={`${isDarkBg ? 'bg-gray-800/80' : 'bg-gray-100'} rounded-lg overflow-x-auto my-4 p-4`}
+        style={{
+          fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Liberation Mono', 'Menlo', monospace",
+          lineHeight: '1.15',
+        }}
+      >
+        {children}
+      </pre>
+    ),
+    // Tables
+    table: ({ children }) => (
+      <div className="overflow-x-auto my-4">
+        <table className={`min-w-full border ${isDarkBg ? 'border-gray-700' : 'border-gray-300'} rounded-lg overflow-hidden`}>
+          {children}
+        </table>
+      </div>
+    ),
+    thead: ({ children }) => (
+      <thead className={isDarkBg ? 'bg-gray-800' : 'bg-gray-100'}>
+        {children}
+      </thead>
+    ),
+    th: ({ children }) => (
+      <th className={`px-4 py-2 text-left text-sm font-semibold ${isDarkBg ? 'text-gray-100 border-gray-700' : 'text-gray-900 border-gray-300'} border-b`}>
+        {children}
+      </th>
+    ),
+    td: ({ children }) => (
+      <td className={`px-4 py-2 text-sm ${isDarkBg ? 'text-gray-300 border-gray-700' : 'text-gray-700 border-gray-200'} border-b`}>
+        {children}
+      </td>
+    ),
+    tr: ({ children }) => (
+      <tr className={isDarkBg ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}>
+        {children}
+      </tr>
+    ),
+    // Images
+    img: ({ src, alt }) => (
+      <img
+        src={src}
+        alt={alt || ''}
+        className="max-w-full h-auto rounded-lg shadow-md my-4"
+      />
+    ),
+  }), [isDarkBg]);
+
   if (!isOpen) return null;
   
   const bgClass = isDarkBg 
@@ -202,25 +371,36 @@ export const FilePreviewModal = ({
     ? 'bg-[#2a2a2a] border-[#3a3a3a]'
     : 'bg-gray-100 border-gray-200';
     
-  const modalContent = (
-    <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      
-      {/* Modal — responsive: full screen on mobile, 95vw/90vh on desktop */}
-      <div
-        className={`relative w-[100vw] h-[100vh] sm:w-[95vw] sm:h-[90vh] sm:max-w-7xl sm:rounded-lg shadow-2xl flex flex-col overflow-hidden ${bgClass}`}
-        onClick={(e) => e.stopPropagation()}
-      >
+  return (
+    <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm" />
+        <Dialog.Content
+          onClick={(event) => event.stopPropagation()}
+          aria-modal="true"
+          aria-describedby={undefined}
+          onOpenAutoFocus={() => {
+            returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          onEscapeKeyDown={(event) => {
+            if (isEditing) {
+              event.preventDefault();
+              setIsEditing(false);
+              setEditContent(content);
+            }
+          }}
+          className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-[100vw] h-[100dvh] sm:w-[95vw] sm:h-[90vh] sm:max-w-7xl sm:rounded-lg shadow-2xl flex flex-col overflow-hidden ${bgClass}`}
+        >
         {/* Header */}
         <div className={`flex items-center justify-between px-3 py-2 sm:px-4 sm:py-3 border-b ${toolbarBgClass}`}>
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             <FileText className="w-4 h-4 sm:w-5 sm:h-5 opacity-60 flex-shrink-0" />
             <div className="flex flex-col min-w-0">
-              <span className="font-medium truncate max-w-[50vw] sm:max-w-md text-sm sm:text-base">{fileName}</span>
+              <Dialog.Title className="font-medium truncate max-w-[50vw] sm:max-w-md text-sm sm:text-base">{fileName}</Dialog.Title>
               {headerSubtitle && (
                 <div className="text-xs opacity-70 truncate max-w-[50vw] sm:max-w-md">{headerSubtitle}</div>
               )}
@@ -340,6 +520,7 @@ export const FilePreviewModal = ({
               onClick={(e) => { e.stopPropagation(); onClose(); }}
               className={`p-2 rounded-lg transition-colors ${isDarkBg ? 'hover:bg-white/10' : 'hover:bg-black/10'}`}
               title="Close (Esc)"
+              aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
@@ -363,12 +544,14 @@ export const FilePreviewModal = ({
           {!loading && !error && (
             <>
               {/* Image Preview */}
+              {/* 100% = fit: the image's long side spans the viewport edge to edge
+                  (object-contain inside a full-size box); zoom scales from there. */}
               {fileType === 'image' && (
-                <div className="flex items-center justify-center h-full p-4 overflow-auto">
-                  <img
+                <div className="flex items-center justify-center h-full w-full overflow-auto">
+                  <SafeChatImage
                     src={fileUrl}
                     alt={fileName}
-                    className="max-w-none transition-transform duration-200"
+                    className="h-auto w-auto max-h-full max-w-full object-contain transition-transform duration-200"
                     style={{ 
                       transform: `scale(${zoom}) rotate(${rotation}deg)`,
                       transformOrigin: 'center'
@@ -393,188 +576,7 @@ export const FilePreviewModal = ({
                   <div className={`p-6 prose prose-lg max-w-none ${isDarkBg ? 'prose-invert' : ''}`}>
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
-                      components={{
-                        // Custom heading styles
-                        h1: ({ children }) => (
-                          <h1 className={`text-3xl font-bold ${isDarkBg ? 'text-gray-100' : 'text-gray-900'} border-b ${isDarkBg ? 'border-gray-700' : 'border-gray-300'} pb-3 mb-6 mt-2`}>
-                            {children}
-                          </h1>
-                        ),
-                        h2: ({ children }) => (
-                          <h2 className={`text-2xl font-semibold ${isDarkBg ? 'text-gray-100' : 'text-gray-900'} border-b ${isDarkBg ? 'border-gray-700' : 'border-gray-200'} pb-2 mb-4 mt-8`}>
-                            {children}
-                          </h2>
-                        ),
-                        h3: ({ children }) => (
-                          <h3 className={`text-xl font-semibold ${isDarkBg ? 'text-gray-200' : 'text-gray-800'} mb-3 mt-6`}>
-                            {children}
-                          </h3>
-                        ),
-                        h4: ({ children }) => (
-                          <h4 className={`text-lg font-semibold ${isDarkBg ? 'text-gray-200' : 'text-gray-800'} mb-2 mt-4`}>
-                            {children}
-                          </h4>
-                        ),
-                        h5: ({ children }) => (
-                          <h5 className={`text-base font-semibold ${isDarkBg ? 'text-gray-300' : 'text-gray-700'} mb-2 mt-3`}>
-                            {children}
-                          </h5>
-                        ),
-                        h6: ({ children }) => (
-                          <h6 className={`text-sm font-semibold ${isDarkBg ? 'text-gray-400' : 'text-gray-600'} mb-1 mt-2`}>
-                            {children}
-                          </h6>
-                        ),
-                        // Paragraphs
-                        p: ({ children }) => (
-                          <p className={`${isDarkBg ? 'text-gray-300' : 'text-gray-700'} mb-4 leading-relaxed`}>
-                            {children}
-                          </p>
-                        ),
-                        // Lists
-                        ul: ({ children }) => (
-                          <ul className={`list-disc list-inside ${isDarkBg ? 'text-gray-300' : 'text-gray-700'} mb-4 space-y-1 pl-2`}>
-                            {children}
-                          </ul>
-                        ),
-                        ol: ({ children }) => (
-                          <ol className={`list-decimal list-inside ${isDarkBg ? 'text-gray-300' : 'text-gray-700'} mb-4 space-y-1 pl-2`}>
-                            {children}
-                          </ol>
-                        ),
-                        li: ({ children }) => (
-                          <li className={`${isDarkBg ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {children}
-                          </li>
-                        ),
-                        // Links
-                        a: ({ href, children }) => (
-                          <a 
-                            href={href} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-primary-500 hover:text-primary-400 hover:underline"
-                          >
-                            {children}
-                          </a>
-                        ),
-                        // Blockquote
-                        blockquote: ({ children }) => (
-                          <blockquote className={`border-l-4 ${isDarkBg ? 'border-primary-500 bg-gray-800/50' : 'border-primary-500 bg-primary-50'} pl-4 py-2 my-4 rounded-r-lg`}>
-                            {children}
-                          </blockquote>
-                        ),
-                        // Horizontal rule
-                        hr: () => (
-                          <hr className={`my-6 ${isDarkBg ? 'border-gray-700' : 'border-gray-300'}`} />
-                        ),
-                        // Strong
-                        strong: ({ children }) => (
-                          <strong className={`font-semibold ${isDarkBg ? 'text-gray-100' : 'text-gray-900'}`}>
-                            {children}
-                          </strong>
-                        ),
-                        // Emphasis
-                        em: ({ children }) => (
-                          <em className={`italic ${isDarkBg ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {children}
-                          </em>
-                        ),
-                        // Code
-                        code({ node, className, children, ...props }) {
-                          const match = /language-(\w+)/.exec(className || '');
-                          const codeString = String(children).replace(/\n$/, '');
-                          const isInline = !className && !codeString.includes('\n');
-                          
-                          // Inline code
-                          if (isInline) {
-                            return (
-                              <code className={`${isDarkBg ? 'bg-gray-800 text-pink-400' : 'bg-gray-100 text-pink-600'} px-1.5 py-0.5 rounded text-sm font-mono`} {...props}>
-                                {children}
-                              </code>
-                            );
-                          }
-                          
-                          // Code block with language - use syntax highlighter
-                          if (match) {
-                            return (
-                              <SyntaxHighlighter
-                                style={isDarkBg ? oneDark : oneLight}
-                                language={match[1]}
-                                PreTag="div"
-                                className="rounded-lg my-4"
-                              >
-                                {codeString}
-                              </SyntaxHighlighter>
-                            );
-                          }
-                          
-                          // Plain code block (ASCII diagrams, etc.) - render as monospace pre
-                          // Use specific monospace font stack for proper box-drawing character alignment
-                          return (
-                            <code 
-                              className={`block whitespace-pre ${isDarkBg ? 'text-gray-300' : 'text-gray-700'}`}
-                              style={{
-                                fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Liberation Mono', 'Menlo', monospace",
-                                fontSize: '14px',
-                                lineHeight: '1.15',
-                                letterSpacing: '0',
-                              }}
-                              {...props}
-                            >
-                              {children}
-                            </code>
-                          );
-                        },
-                        // Pre - wrapper for code blocks
-                        pre: ({ children }) => (
-                          <pre 
-                            className={`${isDarkBg ? 'bg-gray-800/80' : 'bg-gray-100'} rounded-lg overflow-x-auto my-4 p-4`}
-                            style={{
-                              fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', 'Consolas', 'Liberation Mono', 'Menlo', monospace",
-                              lineHeight: '1.15',
-                            }}
-                          >
-                            {children}
-                          </pre>
-                        ),
-                        // Tables
-                        table: ({ children }) => (
-                          <div className="overflow-x-auto my-4">
-                            <table className={`min-w-full border ${isDarkBg ? 'border-gray-700' : 'border-gray-300'} rounded-lg overflow-hidden`}>
-                              {children}
-                            </table>
-                          </div>
-                        ),
-                        thead: ({ children }) => (
-                          <thead className={isDarkBg ? 'bg-gray-800' : 'bg-gray-100'}>
-                            {children}
-                          </thead>
-                        ),
-                        th: ({ children }) => (
-                          <th className={`px-4 py-2 text-left text-sm font-semibold ${isDarkBg ? 'text-gray-100 border-gray-700' : 'text-gray-900 border-gray-300'} border-b`}>
-                            {children}
-                          </th>
-                        ),
-                        td: ({ children }) => (
-                          <td className={`px-4 py-2 text-sm ${isDarkBg ? 'text-gray-300 border-gray-700' : 'text-gray-700 border-gray-200'} border-b`}>
-                            {children}
-                          </td>
-                        ),
-                        tr: ({ children }) => (
-                          <tr className={isDarkBg ? 'hover:bg-gray-800/50' : 'hover:bg-gray-50'}>
-                            {children}
-                          </tr>
-                        ),
-                        // Images
-                        img: ({ src, alt }) => (
-                          <img 
-                            src={src} 
-                            alt={alt || ''} 
-                            className="max-w-full h-auto rounded-lg shadow-md my-4"
-                          />
-                        ),
-                      }}
+                      components={markdownComponents}
                     >
                       {content}
                     </ReactMarkdown>
@@ -610,14 +612,10 @@ export const FilePreviewModal = ({
               {/* Video Preview */}
               {fileType === 'video' && (
                 <div className="flex items-center justify-center h-full p-4">
-                  <video
-                    src={fileUrl}
+                  <CaptionedMedia key={fileUrl} kind="video" src={fileUrl}
                     controls
                     className="max-w-full max-h-full rounded-lg shadow-lg"
-                    style={{ maxHeight: 'calc(90vh - 60px)' }}
-                  >
-                    Your browser does not support video playback.
-                  </video>
+                    style={{ maxHeight: 'calc(90vh - 60px)' }}  />
                 </div>
               )}
               
@@ -628,20 +626,15 @@ export const FilePreviewModal = ({
                     <span className="text-6xl">🎵</span>
                   </div>
                   <p className="text-lg font-medium">{fileName}</p>
-                  <audio
-                    src={fileUrl}
+                  <CaptionedMedia key={fileUrl} kind="audio" src={fileUrl}
                     controls
-                    className="w-full max-w-md"
-                  >
-                    Your browser does not support audio playback.
-                  </audio>
+                    className="w-full max-w-md"  />
                 </div>
               )}
               
               {/* 3D Model Preview */}
               {fileType === '3d' && (
                 <div className="flex items-center justify-center h-full w-full p-4">
-                  {/* @ts-ignore - model-viewer web component */}
                   <model-viewer
                     src={fileUrl}
                     alt={fileName}
@@ -678,12 +671,10 @@ export const FilePreviewModal = ({
             </>
           )}
         </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
-  
-  // Use portal to render modal outside of button hierarchy
-  return createPortal(modalContent, document.body);
 };
 
 export default FilePreviewModal;

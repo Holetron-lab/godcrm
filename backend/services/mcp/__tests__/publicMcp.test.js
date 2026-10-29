@@ -71,7 +71,7 @@ describe('capability isolation (allow-set)', () => {
     'list_spaces', 'global_search', 'analyze_table_data',
     'list_conversations', 'get_conversation_messages', 'get_workspace_info',
     'delete_table_row', 'send_telegram_message', 'add_table_row',
-    'memory_retain', 'printer_start',
+    'memory_retain', 'printer_start', 'manage_plan',
   ])('dropped/dangerous tool %s is not public', (name) => {
     expect(PUBLIC_ALLOWLIST.has(name)).toBe(false);
   });

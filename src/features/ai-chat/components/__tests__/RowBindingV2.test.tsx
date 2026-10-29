@@ -6,8 +6,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { LanguageProvider } from '@/shared/i18n/LanguageContext';
 import { RowBindingV2 } from '../RowBindingV2';
 
 // Mock useAllTables hook
@@ -82,9 +84,12 @@ function createTestQueryClient() {
 
 function renderWithProviders(ui: React.ReactElement) {
   const queryClient = createTestQueryClient();
+  // LanguageProvider: the component tree calls useLanguage, which throws without it.
+  // 'ru' is seeded because this suite asserts the Russian copy (jsdom would pick 'en').
+  window.localStorage.setItem('god-crm-language', 'ru');
   return render(
     <QueryClientProvider client={queryClient}>
-      {ui}
+      <LanguageProvider>{ui}</LanguageProvider>
     </QueryClientProvider>
   );
 }
@@ -121,12 +126,13 @@ describe('RowBindingV2', () => {
     fireEvent.click(screen.getByText('Привязать к записи'));
 
     await waitFor(() => {
-      // Default tab bar shows "Другая таблица" when no tasksSource
-      expect(screen.getByText('Другая таблица')).toBeInTheDocument();
+      // The "Другая таблица" tab is icon-only (RowBindingV2.TabBar.tsx) — its label
+      // lives in title=, not in text, so it is queried by title.
+      expect(screen.getByTitle('Другая таблица')).toBeInTheDocument();
     });
 
     // Click "Другая таблица" tab to see project/table selectors
-    fireEvent.click(screen.getByText('Другая таблица'));
+    fireEvent.click(screen.getByTitle('Другая таблица'));
 
     await waitFor(() => {
       expect(screen.getByText('Проект')).toBeInTheDocument();
@@ -184,9 +190,9 @@ describe('RowBindingV2', () => {
 
     // Click "Другая таблица" tab to see project selector
     await waitFor(() => {
-      expect(screen.getByText('Другая таблица')).toBeInTheDocument();
+      expect(screen.getByTitle('Другая таблица')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('Другая таблица'));
+    fireEvent.click(screen.getByTitle('Другая таблица'));
 
     await waitFor(() => {
       // Check for optgroup labels and options
@@ -207,9 +213,9 @@ describe('RowBindingV2', () => {
 
     // Click "Другая таблица" tab first
     await waitFor(() => {
-      expect(screen.getByText('Другая таблица')).toBeInTheDocument();
+      expect(screen.getByTitle('Другая таблица')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('Другая таблица'));
+    fireEvent.click(screen.getByTitle('Другая таблица'));
 
     await waitFor(() => {
       expect(screen.getByText('Проект')).toBeInTheDocument();
@@ -240,9 +246,9 @@ describe('RowBindingV2', () => {
 
     // Switch to "Другая таблица" tab to see the row search
     await waitFor(() => {
-      expect(screen.getByText('Другая таблица')).toBeInTheDocument();
+      expect(screen.getByTitle('Другая таблица')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('Другая таблица'));
+    fireEvent.click(screen.getByTitle('Другая таблица'));
 
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Поиск записей...')).toBeInTheDocument();
@@ -263,9 +269,9 @@ describe('RowBindingV2', () => {
 
     // Switch to "Другая таблица" tab to see rows
     await waitFor(() => {
-      expect(screen.getByText('Другая таблица')).toBeInTheDocument();
+      expect(screen.getByTitle('Другая таблица')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('Другая таблица'));
+    fireEvent.click(screen.getByTitle('Другая таблица'));
 
     await waitFor(() => {
       expect(screen.getByText('Task One')).toBeInTheDocument();
@@ -288,9 +294,9 @@ describe('RowBindingV2', () => {
 
     // Switch to "Другая таблица" tab to see rows
     await waitFor(() => {
-      expect(screen.getByText('Другая таблица')).toBeInTheDocument();
+      expect(screen.getByTitle('Другая таблица')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('Другая таблица'));
+    fireEvent.click(screen.getByTitle('Другая таблица'));
 
     await waitFor(() => {
       expect(screen.getByText('Task One')).toBeInTheDocument();
@@ -342,17 +348,19 @@ describe('RowBindingV2', () => {
     fireEvent.click(screen.getByText('Привязать к записи'));
     
     await waitFor(() => {
-      expect(screen.getByText(/Достигнут лимит привязок/)).toBeInTheDocument();
+      expect(screen.queryByTitle('Другая таблица')).not.toBeInTheDocument();
+      expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+      expect(mockOnBind).not.toHaveBeenCalled();
     });
   });
 
-  it('shows bound rows list when expanded', async () => {
+  it('shows bound rows as chips in compact mode', () => {
     const boundRows = [
       { table_id: 1, row_id: 1, row_title: 'Task One', table_name: 'Tasks', table_icon: '📋' }
     ];
-    
     renderWithProviders(
       <RowBindingV2
+        compact
         defaultSpaceId={1}
         boundRows={boundRows}
         onBind={mockOnBind}
@@ -360,21 +368,17 @@ describe('RowBindingV2', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('Привязать к записи'));
-    
-    await waitFor(() => {
-      expect(screen.getByText('Привязанные записи (1/10)')).toBeInTheDocument();
-      expect(screen.getByText('Task One')).toBeInTheDocument();
-    });
+    expect(screen.getByText('Task One')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ добавить' })).toBeInTheDocument();
   });
 
-  it('calls onUnbind when clicking delete on bound row', async () => {
+  it('calls onUnbind when removing a compact bound-row chip', () => {
     const boundRows = [
       { table_id: 1, row_id: 1, row_title: 'Task One', table_name: 'Tasks' }
     ];
-    
     renderWithProviders(
       <RowBindingV2
+        compact
         defaultSpaceId={1}
         boundRows={boundRows}
         onBind={mockOnBind}
@@ -382,22 +386,40 @@ describe('RowBindingV2', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('Привязать к записи'));
-    
-    await waitFor(() => {
-      expect(screen.getByText('Task One')).toBeInTheDocument();
-    });
+    const chip = screen.getByText('Task One').parentElement!;
+    fireEvent.click(within(chip).getByRole('button'));
+    expect(mockOnUnbind).toHaveBeenCalledExactlyOnceWith(1, 1);
+  });
 
-    // Find trash button
-    const trashButtons = document.querySelectorAll('button');
-    const trashButton = Array.from(trashButtons).find(btn => 
-      btn.querySelector('svg.lucide-trash-2')
+  // ADR-203 G9: the expanded picker no longer lists bound rows itself (that
+  // display and the unbind control are parent-owned — see BoundRowsStrip.test).
+  // What the expanded mode still owns is row identity: an already-bound row is
+  // marked as linked and cannot be bound twice.
+  it('marks an already-bound row as linked and disabled in expanded mode', async () => {
+    renderWithProviders(
+      <RowBindingV2
+        defaultSpaceId={1}
+        defaultTableId={1}
+        boundRows={[{ table_id: 1, row_id: 2, row_title: 'Task Two' }]}
+        onBind={mockOnBind}
+        onUnbind={mockOnUnbind}
+      />
     );
-    
-    if (trashButton) {
-      fireEvent.click(trashButton);
-      expect(mockOnUnbind).toHaveBeenCalledWith(1, 1);
-    }
+
+    fireEvent.click(screen.getByText('Привязать к записи'));
+    await waitFor(() => {
+      expect(screen.getByTitle('Другая таблица')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTitle('Другая таблица'));
+
+    const boundRow = (await screen.findByText('Task Two')).closest('button')!;
+    expect(boundRow).toBeDisabled();
+    expect(within(boundRow).getByText('привязано')).toBeInTheDocument();
+    expect(screen.getByText('Task One').closest('button')).toBeEnabled();
+
+    fireEvent.click(boundRow);
+    expect(mockOnBind).not.toHaveBeenCalled();
+    expect(mockOnUnbind).not.toHaveBeenCalled();
   });
 
   it('shows green indicator when table is selected', async () => {
@@ -414,9 +436,9 @@ describe('RowBindingV2', () => {
 
     // Switch to "Другая таблица" tab to see the green indicator
     await waitFor(() => {
-      expect(screen.getByText('Другая таблица')).toBeInTheDocument();
+      expect(screen.getByTitle('Другая таблица')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByText('Другая таблица'));
+    fireEvent.click(screen.getByTitle('Другая таблица'));
 
     await waitFor(() => {
       // Should show green indicator with table info (class contains bg-green-500/10)
@@ -449,7 +471,7 @@ describe('RowBindingV2', () => {
       await waitFor(() => {
         // Should show "Quick Tasks" section (emoji and text are separate spans)
         expect(screen.getByText('Задачи')).toBeInTheDocument();
-        expect(screen.getByText('📋')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Задачи' })).toBeInTheDocument();
       });
 
       await waitFor(() => {
@@ -501,18 +523,18 @@ describe('RowBindingV2', () => {
       fireEvent.click(screen.getByText('Привязать к записи'));
       
       await waitFor(() => {
-        expect(screen.getByText('Другая таблица')).toBeInTheDocument();
+        expect(screen.getByTitle('Другая таблица')).toBeInTheDocument();
       });
     });
   });
 
   // ADR-024: Space Files Binding
   describe('Space Files Binding', () => {
-    it('shows files section when spaceFilesTableId is provided', async () => {
+    it('shows files section when a custom file source is provided', async () => {
       renderWithProviders(
         <RowBindingV2
           defaultSpaceId={1}
-          spaceFilesTableId={5}
+          customSources={[{ tableId: 5, tableName: 'Файлы', tableIcon: '📁', displayColumn: 'name' }]}
           onBind={mockOnBind}
           onUnbind={mockOnUnbind}
         />
@@ -555,7 +577,7 @@ describe('RowBindingV2', () => {
       renderWithProviders(
         <RowBindingV2
           defaultSpaceId={1}
-          spaceFilesTableId={5}
+          customSources={[{ tableId: 5, tableName: 'Файлы', tableIcon: '📁', displayColumn: 'name' }]}
           onBind={mockOnBind}
           onUnbind={mockOnUnbind}
         />

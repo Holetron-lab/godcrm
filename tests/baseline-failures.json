@@ -1,0 +1,10 @@
+{
+  "note": "Known-failing tests on main. Regenerate with: npm run test:baseline -- --update",
+  "recordedAt": "2026-10-21T18:12:42.666Z",
+  "commit": "548b45d0",
+  "host": "mail.godcrm.ai",
+  "database": "godcrm_test",
+  "workers": 1,
+  "count": 0,
+  "failures": []
+}

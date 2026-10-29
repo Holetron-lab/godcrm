@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useMemo, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
@@ -67,6 +68,7 @@ function formatModel(model: string | null): string {
 }
 
 export const ContextIndicator: React.FC<ContextIndicatorProps> = ({ stats, className }) => {
+  const { t } = useLanguage();
   const [showTooltip, setShowTooltip] = useState(false);
 
   const { percent, colors, tokenText, totalTokens } = useMemo(() => {
@@ -80,11 +82,11 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({ stats, class
     if (stats.last_prompt_tokens > 0 && stats.context_window) {
       text = `${formatTokens(stats.last_prompt_tokens)} / ${formatTokens(stats.context_window)}`;
     } else if (total > 0) {
-      text = `${formatTokens(total)} tokens`;
+      text = t('aiChat.ui.tokensCount', { count: formatTokens(total) });
     }
 
     return { percent: p, colors: c, tokenText: text, totalTokens: total };
-  }, [stats]);
+  }, [stats, t]);
 
   if (!stats || stats.total_messages === 0) return null;
 
@@ -113,7 +115,7 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({ stats, class
         ) : tokenText ? (
           <span>{tokenText}</span>
         ) : (
-          <span>{stats.total_messages} msg</span>
+          <span>{t('aiChat.ui.messageCount', { count: stats.total_messages })}</span>
         )}
       </div>
 
@@ -127,14 +129,13 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({ stats, class
             {/* Title */}
             <div className="flex items-center gap-1.5 text-[var(--text-primary)] font-medium">
               <Activity className="w-3.5 h-3.5" />
-              Context Usage
-            </div>
+              {t('aiChat.ui.contextUsage')}</div>
 
             {/* Progress bar (full) */}
             {percent !== null && (
               <div>
                 <div className="flex justify-between text-[10px] text-[var(--text-secondary)] mb-1">
-                  <span>{formatTokens(stats.last_prompt_tokens)} prompt</span>
+                  <span>{formatTokens(stats.last_prompt_tokens)} {t('aiChat.ui.promptTokens')}</span>
                   <span className={colors.text}>{percent}%</span>
                 </div>
                 <div className="w-full h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
@@ -144,37 +145,36 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({ stats, class
                   />
                 </div>
                 <div className="text-[10px] text-[var(--text-tertiary)] mt-0.5 text-right">
-                  {formatTokens(stats.context_window || 0)} window
-                </div>
+                  {formatTokens(stats.context_window || 0)} {t('aiChat.ui.contextWindow')}</div>
               </div>
             )}
 
             {/* Stats grid */}
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
-              <div className="text-[var(--text-tertiary)]">Tokens in</div>
+              <div className="text-[var(--text-tertiary)]">{t('aiChat.ui.tokensIn')}</div>
               <div className="text-[var(--text-primary)] text-right font-mono">{formatTokens(stats.total_tokens_in)}</div>
 
-              <div className="text-[var(--text-tertiary)]">Tokens out</div>
+              <div className="text-[var(--text-tertiary)]">{t('aiChat.ui.tokensOut')}</div>
               <div className="text-[var(--text-primary)] text-right font-mono">{formatTokens(stats.total_tokens_out)}</div>
 
-              <div className="text-[var(--text-tertiary)]">Total tokens</div>
+              <div className="text-[var(--text-tertiary)]">{t('aiChat.ui.totalTokens')}</div>
               <div className="text-[var(--text-primary)] text-right font-mono">{formatTokens(totalTokens)}</div>
 
               <div className="col-span-2 h-px bg-[var(--border-secondary)] my-0.5" />
 
-              <div className="text-[var(--text-tertiary)]">Messages</div>
+              <div className="text-[var(--text-tertiary)]">{t('aiChat.ui.messages')}</div>
               <div className="text-[var(--text-primary)] text-right font-mono">{stats.text_messages}</div>
 
-              <div className="text-[var(--text-tertiary)]">Tool calls</div>
+              <div className="text-[var(--text-tertiary)]">{t('aiChat.ui.toolCalls')}</div>
               <div className="text-[var(--text-primary)] text-right font-mono">{stats.tool_calls}</div>
 
-              <div className="text-[var(--text-tertiary)]">Thinking</div>
+              <div className="text-[var(--text-tertiary)]">{t('aiChat.ui.thinkingLabel')}</div>
               <div className="text-[var(--text-primary)] text-right font-mono">{stats.thinking_steps}</div>
 
               {stats.model_used && (
                 <>
                   <div className="col-span-2 h-px bg-[var(--border-secondary)] my-0.5" />
-                  <div className="text-[var(--text-tertiary)]">Model</div>
+                  <div className="text-[var(--text-tertiary)]">{t('aiChat.ui.model')}</div>
                   <div className="text-[var(--text-primary)] text-right truncate">{formatModel(stats.model_used)}</div>
                 </>
               )}
@@ -183,8 +183,7 @@ export const ContextIndicator: React.FC<ContextIndicatorProps> = ({ stats, class
             {/* Cost estimate */}
             {totalTokens > 0 && (
               <div className="pt-1 border-t border-[var(--border-secondary)] text-[10px] text-[var(--text-tertiary)]">
-                ~${((stats.total_tokens_in * 0.003 + stats.total_tokens_out * 0.015) / 1000).toFixed(3)} estimated cost
-              </div>
+                ~${((stats.total_tokens_in * 0.003 + stats.total_tokens_out * 0.015) / 1000).toFixed(3)} {t('aiChat.ui.estimatedCost')}</div>
             )}
           </div>
         </div>

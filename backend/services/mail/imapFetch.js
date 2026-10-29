@@ -17,6 +17,7 @@
 // the actual mailbox path from the server's LIST so dovecot's `Sent` vs
 // `INBOX.Sent` naming doesn't matter. INBOX has no special-use flag — it's named.
 const SPECIAL_USE = {
+  spam: '\\Junk',
   sent: '\\Sent',
   drafts: '\\Drafts',
   archive: '\\Archive',
@@ -26,6 +27,7 @@ const SPECIAL_USE = {
 // Fallback for servers that don't advertise SPECIAL-USE (RFC 6154) — matched on
 // the mailbox *leaf* name, case-insensitively, so `Sent` and `INBOX.Sent` both hit.
 const FOLDER_NAMES = {
+  spam: ['spam', 'junk', 'junk email', 'спам'],
   sent: ['sent', 'sent items', 'sent messages', 'отправленные'],
   drafts: ['drafts', 'draft', 'черновики'],
   archive: ['archive', 'archives', 'архив'],
@@ -88,7 +90,7 @@ export async function resolveMailbox(client, folder) {
  * @param {number} [args.limit=50]
  * @returns {Promise<Array<object>>} normalized mail_messages rows (no DB ids)
  */
-export async function imapFetch({ creds, folder = 'inbox', limit = 50 }) {
+export async function imapFetch({ creds, folder = 'inbox', limit = 50, uid = null, includeAttachmentContent = false }) {
   if (!creds?.imap_host || !creds?.username || !creds?.password) {
     throw new Error('imap creds incomplete: imap_host, username, password required');
   }
@@ -120,29 +122,29 @@ export async function imapFetch({ creds, folder = 'inbox', limit = 50 }) {
     // Newest N by sequence number; ask for the parsed envelope, flags and the
     // raw source so mailparser can extract body/preview in one pass.
     const start = Math.max(1, exists - Math.max(1, limit) + 1);
-    for await (const msg of client.fetch(`${start}:*`, {
+    for await (const msg of client.fetch(uid == null ? `${start}:*` : String(uid), {
       uid: true,
       envelope: true,
       flags: true,
       source: true,
-    })) {
-      const parsed = await simpleParser(msg.source).catch(() => ({}));
+    }, { uid: uid != null })) {
+      const parsed = await simpleParser(msg.source);
       const env = msg.envelope || {};
       const from = firstAddress(env.from);
       const text = parsed.text || null;
       const html = parsed.html || null;
-      // ADR-158 §P5 — metadata only (name/type/size); bytes stay in IMAP until a
-      // download-attachment endpoint lands. Inline images (cid, no filename) are
-      // part of the body, not attachments — skip them.
+      // Keep byte transport opt-in; existing consumers receive metadata only.
       const attachments = (parsed.attachments || [])
         .filter((a) => a.filename)
         .map((a) => ({
           filename: a.filename,
           contentType: a.contentType || 'application/octet-stream',
           size: a.size ?? (a.content ? a.content.length : 0),
+          ...(includeAttachmentContent ? { content: a.content } : {}),
         }));
       rows.push({
         imap_uid: msg.uid,
+        imap_uid_validity: status.uidValidity?.toString() ?? null,
         message_id: env.messageId || parsed.messageId || null,
         from_name: from.name,
         from_address: from.address,

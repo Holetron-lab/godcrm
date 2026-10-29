@@ -228,7 +228,6 @@ export function TicketSealSection({
               inputMode="numeric"
               pattern="[0-9]*"
               autoComplete="one-time-code"
-              autoFocus
               maxLength={6}
               value={unsealCode}
               onChange={(e) => setUnsealCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -341,7 +340,6 @@ export function TicketSealSection({
               inputMode="numeric"
               pattern="[0-9]*"
               autoComplete="one-time-code"
-              autoFocus
               maxLength={6}
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}

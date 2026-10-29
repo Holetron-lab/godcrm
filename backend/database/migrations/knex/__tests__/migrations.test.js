@@ -3,6 +3,7 @@
 // SKIP: These tests require isolated database for migration testing
 // They conflict with the shared test database
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../../tests/helpers/sentinel-ids.js';
 import knex from 'knex';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -145,7 +146,7 @@ describe.skip('Knex Migrations', () => {
         db('spaces').insert({
           name: 'Test Space',
           type: 'business',
-          owner_id: 99999
+          owner_id: NON_EXISTENT_ID
         })
       ).rejects.toThrow();
     });

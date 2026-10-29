@@ -56,7 +56,7 @@ export async function loadConversationHistory(conversationId, agentConfig = {}, 
   const messages = await dbAll(
     isPostgres()
       ? `SELECT m.id, m.content, m.role, m.sender_id, m.sender_type, m.content_type,
-                m.attachments, m.tool_results, m.metadata, u.name as sender_name
+                m.attachments, m.tool_results, m.metadata, m.created_at, u.name as sender_name
          FROM messages m
          LEFT JOIN users u ON m.sender_id = u.id
          WHERE m.conversation_id = $1
@@ -65,7 +65,7 @@ export async function loadConversationHistory(conversationId, agentConfig = {}, 
          ORDER BY m.created_at DESC
          LIMIT $2`
       : `SELECT m.id, m.content, m.role, m.sender_id, m.sender_type, m.content_type,
-                m.attachments, m.tool_results, m.metadata, u.name as sender_name
+                m.attachments, m.tool_results, m.metadata, m.created_at, u.name as sender_name
          FROM messages m
          LEFT JOIN users u ON m.sender_id = u.id
          WHERE m.conversation_id = ?
@@ -127,6 +127,12 @@ export async function loadConversationHistory(conversationId, agentConfig = {}, 
       }
     }
 
+    // Preserve the stored message time in provider-visible content (ISO 8601 UTC).
+    // Using execution time here would misdate replayed or queued messages.
+    const sentAt = m.created_at ? new Date(m.created_at) : null;
+    if (sentAt && !Number.isNaN(sentAt.getTime())) {
+      content = `[${sentAt.toISOString()}] ${content}`;
+    }
     return { role, content };
   });
 }

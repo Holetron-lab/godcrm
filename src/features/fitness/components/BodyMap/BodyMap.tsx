@@ -107,11 +107,11 @@ export function BodyMap({
   }, [muscleVolumes, calculatedMaxVolume, selectedMuscleIds, compact]);
 
   // Handle mouse events
-  const handleMouseOver = useCallback((e: React.MouseEvent) => {
+  const handleMouseOver = useCallback((e: React.SyntheticEvent) => {
     const target = e.target as SVGElement;
     const muscleId = target.closest('[id]')?.id;
     
-    if (muscleId && INTERACTIVE_MUSCLE_IDS.includes(muscleId as any)) {
+    if (muscleId && INTERACTIVE_MUSCLE_IDS.some(id => id === muscleId)) {
       hoveredMuscleRef.current = muscleId;
       applyColors(muscleId);
       onPartHover?.(SVG_MUSCLE_GROUPS[muscleId] || muscleId);
@@ -124,15 +124,27 @@ export function BodyMap({
     onPartHover?.(null);
   }, [applyColors, onPartHover]);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  const handleClick = useCallback((e: React.SyntheticEvent) => {
     const target = e.target as SVGElement;
     const muscleId = target.closest('[id]')?.id;
     
-    if (muscleId && INTERACTIVE_MUSCLE_IDS.includes(muscleId as any)) {
+    if (muscleId && INTERACTIVE_MUSCLE_IDS.some(id => id === muscleId)) {
       const groupName = SVG_MUSCLE_GROUPS[muscleId] || muscleId;
       onPartClick?.(groupName);
     }
   }, [onPartClick]);
+
+  useEffect(() => {
+    const muscles = containerRef.current?.querySelectorAll<SVGGElement>('g[id]');
+    muscles?.forEach(muscle => {
+      if (!INTERACTIVE_MUSCLE_IDS.some(id => id === muscle.id)) return;
+      muscle.setAttribute('role', onPartClick ? 'button' : 'img');
+      muscle.setAttribute('tabindex', onPartClick ? '0' : '-1');
+      muscle.setAttribute('aria-label', SVG_MUSCLE_NAMES[muscle.id] || muscle.id);
+      if (onPartClick) muscle.setAttribute('aria-pressed', String(selectedMuscleIds.includes(muscle.id)));
+      else muscle.removeAttribute('aria-pressed');
+    });
+  }, [onPartClick, selectedMuscleIds]);
 
   // Apply colors on mount and when data changes
   useEffect(() => {
@@ -140,13 +152,21 @@ export function BodyMap({
   }, [applyColors]);
 
   return (
-    <div 
+    <div role="presentation"
       ref={containerRef}
       className={cn(
         'flex items-center justify-center gap-2',
         compact ? 'h-48' : 'h-80',
         className
       )}
+      onFocus={handleMouseOver}
+      onBlur={handleMouseOut}
+      onKeyDown={(e) => {
+        if (onPartClick && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          handleClick(e);
+        }
+      }}
       onMouseOver={handleMouseOver}
       onMouseOut={handleMouseOut}
       onClick={handleClick}

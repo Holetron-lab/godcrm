@@ -173,7 +173,7 @@ async function pinStarterTableWidgets(trx, projectId, tableIds, userId) {
   const dashboard = await trx.get(
     `SELECT id FROM dashboards
       WHERE project_id = ? AND is_default = ?
-      ORDER BY id ASC LIMIT 1`,
+      ORDER BY id ASC LIMIT 1 FOR KEY SHARE`,
     [projectId, toBool(true)]
   );
   if (!dashboard?.id) {
@@ -241,7 +241,7 @@ async function pinWelcomeWidget(trx, spaceId, userId, starterTablesMap) {
   let dashboard = await trx.get(
     `SELECT id FROM dashboards
       WHERE space_id = ? AND project_id IS NULL
-      ORDER BY id ASC LIMIT 1`,
+      ORDER BY id ASC LIMIT 1 FOR KEY SHARE`,
     [spaceId]
   );
   let dashboardId = dashboard?.id;

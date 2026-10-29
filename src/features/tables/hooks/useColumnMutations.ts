@@ -8,17 +8,17 @@ import {
   useIsPublicReadOnly,
 } from '@/features/public/PublicViewContext';
 
-interface VisibilityPayload {
+export interface VisibilityPayload {
   columnId: string;
   isVisible: boolean;
 }
 
-interface WidthPayload {
+export interface WidthPayload {
   columnId: string;
   width: number;
 }
 
-interface SettingsPayload {
+export interface SettingsPayload {
   columnId: string;
   payload: Partial<ColumnModel>;
 }

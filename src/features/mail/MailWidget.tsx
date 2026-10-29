@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import type { PresetWidgetProps, Widget } from '@/features/widgets/types/widget.types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 /**
  * Mail dashboard/module preset (ADR-195) — the three-pane inbox embedded in a
@@ -23,13 +24,14 @@ type WidgetWithSpace = Widget & { space_id?: number | null };
 
 export function MailWidget({ widget }: PresetWidgetProps) {
   const spaceId = (widget as WidgetWithSpace).space_id ?? undefined;
+  const { t } = useLanguage();
 
   return (
     <div className="h-full w-full overflow-hidden">
       <Suspense
         fallback={
           <div className="flex h-full items-center justify-center text-sm text-[var(--text-tertiary)]">
-            Загрузка почты…
+            {t('mail.widget.loading')}
           </div>
         }
       >

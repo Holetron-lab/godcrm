@@ -14,7 +14,8 @@ export const _PRIORITY_ALIASES = ['priority', 'urgency', 'Приоритет'];
 /** Get task row title using configured column or fallback aliases */
 export function getTaskRowTitle(
   row: { id: number; data: Record<string, unknown> },
-  config?: TasksSourceConfig
+  config: TasksSourceConfig | undefined,
+  t: (key: string, params?: Record<string, unknown>) => string
 ): string {
   const d = row.data;
   // Try configured display column first
@@ -25,7 +26,7 @@ export function getTaskRowTitle(
   for (const alias of TITLE_ALIASES) {
     if (d[alias]) return String(d[alias]);
   }
-  return `Запись #${row.id}`;
+  return t('aiChat.ui.rowFallback', { id: row.id });
 }
 
 /** Get task row field value */

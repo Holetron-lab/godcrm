@@ -4,7 +4,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import userEvent from '@testing-library/user-event';
 import { MentionInput, MentionUser } from '../MentionInput';
 
@@ -30,7 +31,7 @@ describe('MentionInput', () => {
   it('should render textarea with placeholder', () => {
     render(<MentionInput {...defaultProps} />);
     
-    expect(screen.getByPlaceholderText(/Type @ to mention/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Введите @ для упоминания/i)).toBeInTheDocument();
   });
   
   it('should call onChange when typing', async () => {
@@ -102,26 +103,33 @@ describe('MentionInput', () => {
     );
   });
   
-  it('should call onSubmit when pressing Enter', async () => {
-    const user = userEvent.setup();
-    render(<MentionInput {...defaultProps} value="Hello world" />);
-    
-    const input = screen.getByRole('textbox');
-    await user.type(input, '{enter}');
-    
-    expect(defaultProps.onSubmit).toHaveBeenCalled();
-  });
-  
-  it('should not call onSubmit when pressing Shift+Enter', async () => {
+  it('should call onSubmit when pressing Shift+Enter', async () => {
     const user = userEvent.setup();
     render(<MentionInput {...defaultProps} value="Hello world" />);
     
     const input = screen.getByRole('textbox');
     await user.type(input, '{shift>}{enter}{/shift}');
     
+    expect(defaultProps.onSubmit).toHaveBeenCalled();
+  });
+  
+  it('should insert a newline without submitting when pressing Enter', async () => {
+    const user = userEvent.setup();
+    render(<MentionInput {...defaultProps} value="Hello world" />);
+    
+    const input = screen.getByRole('textbox');
+    await user.type(input, '{enter}');
+    expect(defaultProps.onChange).toHaveBeenCalledWith('Hello world\n');
+    
     expect(defaultProps.onSubmit).not.toHaveBeenCalled();
   });
   
+  it('does not submit Shift+Enter during IME composition', () => {
+    render(<MentionInput {...defaultProps} value="Draft" />);
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter', shiftKey: true, isComposing: true });
+    expect(defaultProps.onSubmit).not.toHaveBeenCalled();
+  });
+
   it('should be disabled when disabled prop is true', () => {
     render(<MentionInput {...defaultProps} disabled />);
     
@@ -186,4 +194,50 @@ describe('MentionInput', () => {
       expect(screen.queryByText('General Assistant')).not.toBeInTheDocument();
     });
   });
+});
+
+
+describe('mention dropdown identity', () => {
+  it('shows agent emoji, description and a left accent shadow without changing selection', () => {
+    const onMention = vi.fn();
+    render(<MentionInput value="@" onChange={vi.fn()} onMention={onMention} availableUsers={[
+      { id: 24, name: 'Architect', type: 'bot', icon: '🏗️', color: '#ec4899', description: 'Software Architect / Planner' },
+      { id: 22, name: 'Frontend QA', type: 'bot', icon: '🔍', color: '#14b8a6', description: 'UI Quality Specialist' },
+      { id: 1, name: 'Alice', type: 'human', color: '#a16207' },
+      { id: 2, name: 'Sam', type: 'human' },
+    ]} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '@a', selectionStart: 2 } });
+    const architect = screen.getByRole('button', { name: /Architect/ });
+    expect(architect).toHaveTextContent('🏗️');
+    expect(architect).toHaveTextContent('Software Architect / Planner');
+    expect(architect.style.boxShadow).toContain('#ec4899');
+    expect(screen.getByRole('button', { name: /Frontend QA/ }).style.boxShadow).toContain('#14b8a6');
+    expect(screen.getByRole('button', { name: /Alice/ }).style.boxShadow).toContain('#a16207');
+    expect(screen.getByRole('button', { name: /Sam/ }).style.boxShadow).toContain('#3b82f6');
+    fireEvent.click(architect);
+    expect(onMention).toHaveBeenCalledWith(expect.objectContaining({ id: 24, type: 'bot' }), '@');
+  });
+});
+
+it('finds a passport by handle and inserts the handle instead of the display name', () => {
+  const onChange = vi.fn();
+  render(<MentionInput value="@audit" onChange={onChange} availableUsers={[
+    { id: 99, name: 'Quality Reviewer', type: 'bot', handle: 'audit-reviewer' },
+  ]} />);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: '@audit-', selectionStart: 7 } });
+  fireEvent.click(screen.getByRole('button', { name: /Quality Reviewer/ }));
+  expect(onChange).toHaveBeenLastCalledWith('<<@audit-reviewer>> ');
+});
+
+it('closes an empty picker with Escape after a passport disappears', () => {
+  const { rerender } = render(<MentionInput value="@audit" onChange={vi.fn()} availableUsers={[
+    { id: 99, name: 'Reviewer', handle: 'audit-reviewer', type: 'bot' },
+  ]} />);
+  const input = screen.getByRole('textbox');
+  fireEvent.change(input, { target: { value: '@audit-', selectionStart: 7 } });
+  expect(screen.getByRole('button', { name: /Reviewer/ })).toBeInTheDocument();
+  rerender(<MentionInput value="@audit-" onChange={vi.fn()} availableUsers={[]} />);
+  expect(screen.getByText(/Нет совпадений/)).toBeInTheDocument();
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(screen.queryByText(/Нет совпадений/)).not.toBeInTheDocument();
 });

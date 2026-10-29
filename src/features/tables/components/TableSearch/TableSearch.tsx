@@ -23,7 +23,7 @@ export const TableSearch = ({ value, onChange, placeholder, onSearch }: TableSea
     if (onSearch) {
       onSearch(inputValue);
     } else {
-      onChange(inputValue);
+      onChange?.(inputValue);
     }
   };
 

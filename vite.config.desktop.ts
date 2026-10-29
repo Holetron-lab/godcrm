@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || '1.2.0'),
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version || '0.3.0'),
   },
   plugins: [
     react({

@@ -26,9 +26,11 @@ const createWrapper = () => {
       mutations: { retry: false },
     },
   });
-  return ({ children }: { children: React.ReactNode }) => (
+  return function QueryWrapper({ children }: { children: React.ReactNode }) {
+    return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
+  };
 };
 
 describe('useAutomations', () => {

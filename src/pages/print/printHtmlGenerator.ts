@@ -1,4 +1,7 @@
-import type { ColumnModel, RowModel } from '@/features/tables/types/table.types';
+import type { ColumnModel, ColumnConfig, RowModel } from '@/features/tables/types/table.types';
+
+// Printing also reads persisted schemas with legacy type names and option settings.
+type PrintColumn = Omit<ColumnModel, 'type'> & { type: string; settings?: Pick<ColumnConfig, 'options'> };
 
 type Orientation = 'portrait' | 'landscape';
 
@@ -20,7 +23,7 @@ export interface GeneratePageHTMLParams {
 // Get label and color from column options (config.options, settings.options, or loaded relation data)
 export const getOptionInfo = (
   value: string,
-  column: ColumnModel,
+  column: PrintColumn,
   relationOptionsMap: RelationOptionsMap | undefined
 ): { label: string; color?: string } => {
   // First check loaded relation data
@@ -47,7 +50,7 @@ export const getOptionInfo = (
 
 export const getBadgeColor = (
   value: string,
-  column: ColumnModel,
+  column: PrintColumn,
   relationOptionsMap: RelationOptionsMap | undefined
 ): { bg: string; text: string } => {
   const optionInfo = getOptionInfo(value, column, relationOptionsMap);
@@ -72,7 +75,7 @@ export const escapeHtml = (str: string): string => {
 };
 
 export const formatCellValue = (
-  column: ColumnModel,
+  column: PrintColumn,
   value: unknown,
   useColor: boolean,
   relationOptionsMap: RelationOptionsMap | undefined

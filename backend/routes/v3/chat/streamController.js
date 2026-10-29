@@ -7,6 +7,7 @@ import {
   success, error, badRequest,
   requireAuth, getJobsForConversation, cancelJob,
 } from './chatShared.js';
+import { parseAttachments } from './parseAttachments.js';
 import { getContextUsage } from '../../../services/agent-job/liveContextUsage.js';
 // T-148528 (WP-B): /stop must also reach dispatcher-managed runs (ADR-0030
 // path) — the legacy `cancelJob` only covers `agent_jobs` rows.
@@ -31,7 +32,7 @@ export default function registerStreamRoutes(router) {
     res.write(`event: connected\ndata: {"conversationId": ${id}}\n\n`);
 
     const heartbeat = setInterval(() => {
-      try { res.write(': heartbeat\n\n'); } catch (_) {}
+      try { res.write(': heartbeat\n\n'); } catch (_) { /* The client may disconnect before this heartbeat. */ }
     }, 15000);
 
     // ADR-0057-A WP-B — subscribe to chat_inflight pg_notify bus and fan
@@ -73,7 +74,7 @@ export default function registerStreamRoutes(router) {
           const parsed = {
             ...msg, contentType: msg.content_type || 'text', senderType: msg.sender_type || 'human',
             toolResults: msg.tool_results ? safeJsonParse(msg.tool_results) : null,
-            mentions: safeJsonParse(msg.mentions) || [], attachments: safeJsonParse(msg.attachments) || [],
+            mentions: safeJsonParse(msg.mentions) || [], attachments: parseAttachments(msg.attachments),
             timestamp: msg.created_at, metadata: safeJsonParse(msg.metadata) || {},
           };
           res.write(`event: message_updated\ndata: ${JSON.stringify(parsed)}\n\n`);
@@ -83,7 +84,7 @@ export default function registerStreamRoutes(router) {
           const parsed = {
             ...msg, contentType: msg.content_type || 'text', senderType: msg.sender_type || 'human',
             toolResults: msg.tool_results ? safeJsonParse(msg.tool_results) : null,
-            mentions: safeJsonParse(msg.mentions) || [], attachments: safeJsonParse(msg.attachments) || [],
+            mentions: safeJsonParse(msg.mentions) || [], attachments: parseAttachments(msg.attachments),
             metadata: safeJsonParse(msg.metadata) || {}, timestamp: msg.created_at,
           };
           res.write(`event: message\ndata: ${JSON.stringify(parsed)}\n\n`);
@@ -131,7 +132,7 @@ export default function registerStreamRoutes(router) {
     req.on('close', () => {
       clearInterval(poller);
       clearInterval(heartbeat);
-      try { unsubscribeInflight(); } catch (_) {}
+      try { unsubscribeInflight(); } catch (_) { /* Continue closing the stream if the subscription already ended. */ }
       apiLogger.debug({ conversationId: id }, 'SSE stream closed');
     });
   });

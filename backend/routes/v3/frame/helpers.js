@@ -163,6 +163,7 @@ export function cleanupTempFile(filePath) {
  */
 export function sanitizeText(input, maxLength = 2000) {
   if (typeof input !== 'string') return '';
-  const cleaned = input.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  const cleaned = input.replace(/\p{Cc}/gu, char =>
+    char.charCodeAt(0) > 127 || '\t\n\r'.includes(char) ? char : '');
   return cleaned.substring(0, maxLength);
 }

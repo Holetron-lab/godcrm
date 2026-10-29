@@ -205,7 +205,7 @@ export function ChatNotificationOrchestrator() {
     setCurrentConversationId?: (id: number | null) => void;
   };
 
-  const { byConversation } = useChatUnreadSummary({
+  const { byConversation, isSuccess } = useChatUnreadSummary({
     refetchInterval: ORCHESTRATOR_POLL_MS,
   });
 
@@ -238,7 +238,9 @@ export function ChatNotificationOrchestrator() {
   }, []);
 
   useEffect(() => {
-    if (!byConversation) return;
+    // Loading/error fallbacks are not an unread snapshot. Seed the baseline
+    // only from a successful response, including a genuinely empty inbox.
+    if (!isSuccess) return;
 
     const curr = new Map<number, number>();
     for (const r of byConversation) curr.set(r.conversation_id, r.unread_count);
@@ -273,7 +275,7 @@ export function ChatNotificationOrchestrator() {
       const newest = visible.slice(-count);
       newest.forEach((m) => fanout(m, prefs, conversationId, ctxRef.current));
     });
-  }, [byConversation]);
+  }, [byConversation, isSuccess]);
 
   return null;
 }

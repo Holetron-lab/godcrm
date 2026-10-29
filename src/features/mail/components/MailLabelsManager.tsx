@@ -19,6 +19,7 @@ import type {
 } from '../types';
 import type { MailLabelInput } from '../api/mailApi';
 import { MailTableConditionEditor } from './MailTableConditionEditor';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 export interface MailLabelsManagerProps {
   spaceId: number | undefined;
@@ -50,26 +51,10 @@ interface Draft {
   conditions: DraftCondition[];
 }
 
-const FIELD_OPTIONS: { label: string; value: MailRuleField }[] = [
-  { label: 'От кого', value: 'from' },
-  { label: 'Кому', value: 'to' },
-  { label: 'Тема', value: 'subject' },
-  { label: 'Тело', value: 'body' },
-  { label: 'Любое поле', value: 'any' },
-];
-
-const OP_OPTIONS: { label: string; value: MailRuleOp }[] = [
-  { label: 'содержит', value: 'contains' },
-  { label: 'один из списка', value: 'in_list' },
-  { label: 'равно', value: 'equals' },
-  { label: 'регулярное выражение', value: 'regex' },
-  { label: 'информация из таблицы', value: 'in_table' },
-];
-
-const MATCH_OPTIONS = [
-  { label: 'любое из условий (ИЛИ)', value: 'any' },
-  { label: 'все условия (И)', value: 'all' },
-];
+// Select values; labels come from `mail.labels.{fields,ops,match}.<value>`.
+const FIELD_VALUES: MailRuleField[] = ['from', 'to', 'subject', 'body', 'any'];
+const OP_VALUES: MailRuleOp[] = ['contains', 'in_list', 'equals', 'regex', 'in_table'];
+const MATCH_VALUES = ['any', 'all'] as const;
 
 const emptyDraft = (): Draft => ({
   id: null,
@@ -147,6 +132,7 @@ function toInput(draft: Draft): MailLabelInput {
  * over existing mail; the server caps the scan and reports `capped`.
  */
 export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManagerProps) {
+  const { t } = useLanguage();
   const labelsQuery = useMailLabels(spaceId);
   const create = useCreateLabel(spaceId);
   const update = useUpdateLabel(spaceId);
@@ -155,6 +141,9 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
   const { colorizeIds, setColorize } = useMailLabelColorize();
 
   const labels = useMemo(() => labelsQuery.data ?? [], [labelsQuery.data]);
+  const fieldOptions = FIELD_VALUES.map((value) => ({ label: t(`mail.labels.fields.${value}`), value }));
+  const opOptions = OP_VALUES.map((value) => ({ label: t(`mail.labels.ops.${value}`), value }));
+  const matchOptions = MATCH_VALUES.map((value) => ({ label: t(`mail.labels.match.${value}`), value }));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [applyNote, setApplyNote] = useState<string | null>(null);
@@ -196,7 +185,7 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
   const handleSave = async () => {
     if (!draft) return;
     if (!draft.name.trim()) {
-      setError('Название обязательно');
+      setError(t('mail.labels.nameRequired'));
       return;
     }
     setError(null);
@@ -212,18 +201,18 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
       }
     } catch (e) {
       // Backend returns 400 with a rule-validation message — surface it verbatim.
-      setError(e instanceof Error ? e.message : 'Не удалось сохранить ярлык');
+      setError(e instanceof Error ? e.message : t('mail.labels.saveFailed'));
     }
   };
 
   const handleDelete = async () => {
     if (!draft?.id) return;
-    if (!window.confirm(`Удалить ярлык «${draft.name}»? Метки на письмах будут сняты.`)) return;
+    if (!window.confirm(t('mail.labels.deleteConfirm', { name: draft.name }))) return;
     try {
       await remove.mutateAsync(draft.id);
       setDraft(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось удалить ярлык');
+      setError(e instanceof Error ? e.message : t('mail.labels.deleteFailed'));
     }
   };
 
@@ -234,11 +223,11 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
       const res = await apply.mutateAsync(draft.id);
       setApplyNote(
         res.capped
-          ? `Применено к ${res.applied} из ${res.scanned}+ писем (показаны не все — лимит скана).`
-          : `Применено к ${res.applied} из ${res.scanned} писем.`
+          ? t('mail.labels.appliedCapped', { applied: res.applied, scanned: res.scanned })
+          : t('mail.labels.applied', { applied: res.applied, scanned: res.scanned })
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось применить правила');
+      setError(e instanceof Error ? e.message : t('mail.labels.applyFailed'));
     }
   };
 
@@ -247,32 +236,32 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Ярлыки</h3>
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">{t('mail.labels.title')}</h3>
         <p className="text-xs text-[var(--text-tertiary)]">
-          Метки для писем: правила авто-присвоения, цвет и вывод в панель.
+          {t('mail.labels.description')}
         </p>
       </div>
       <div className="flex max-h-[70vh] min-h-[24rem] gap-4">
         {/* Left: label list. */}
         <div className="flex w-52 flex-shrink-0 flex-col border-r border-[var(--border-primary)] pr-3">
           <Button variant="secondary" size="sm" onClick={startNew} className="mb-2 justify-start">
-            <Plus size={15} className="mr-1.5" /> Новый ярлык
+            <Plus size={15} className="mr-1.5" /> {t('mail.labels.newLabel')}
           </Button>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {labelsQuery.isLoading ? (
               <div className="flex items-center gap-2 p-2 text-sm text-[var(--text-tertiary)]">
-                <Loader2 size={14} className="animate-spin" /> Загрузка…
+                <Loader2 size={14} className="animate-spin" /> {t('mail.common.loading')}
               </div>
             ) : labelsQuery.isError ? (
               <div className="flex flex-col items-start gap-2 p-2 text-sm text-[var(--text-tertiary)]">
-                <span>Не удалось загрузить ярлыки</span>
+                <span>{t('mail.labels.loadFailed')}</span>
                 <Button variant="ghost" size="sm" onClick={() => labelsQuery.refetch()}>
-                  Повторить
+                  {t('mail.common.retry')}
                 </Button>
               </div>
             ) : labels.length === 0 ? (
               <p className="p-2 text-sm text-[var(--text-tertiary)]">
-                Пока нет ярлыков. Создайте первый.
+                {t('mail.labels.empty')}
               </p>
             ) : (
               <ul className="flex flex-col gap-0.5">
@@ -313,24 +302,24 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           {!draft ? (
             <div className="flex h-full items-center justify-center text-center text-sm text-[var(--text-tertiary)]">
-              Выберите ярлык слева или создайте новый.
+              {t('mail.labels.pick')}
             </div>
           ) : (
             <div className="flex flex-col gap-4">
               <div className="flex items-end gap-3">
                 <div className="min-w-0 flex-1">
                   <Input
-                    label="Название"
+                    label={t('mail.labels.name')}
                     value={draft.name}
                     onChange={(e) => patch({ name: e.target.value })}
-                    placeholder="Например: Клиенты"
+                    placeholder={t('mail.labels.namePlaceholder')}
                   />
                 </div>
                 <label className="flex flex-col gap-1 text-sm">
-                  <span className="font-medium text-[var(--text-secondary)]">Цвет</span>
+                  <span className="font-medium text-[var(--text-secondary)]">{t('mail.labels.color')}</span>
                   <input
                     type="color"
-                    aria-label="Цвет ярлыка"
+                    aria-label={t('mail.labels.labelColor')}
                     value={draft.color || '#3b82f6'}
                     onChange={(e) => patch({ color: e.target.value })}
                     className="h-9 w-12 cursor-pointer rounded-md border border-[var(--border-primary)] bg-transparent"
@@ -340,18 +329,18 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
 
               <div className="flex flex-col gap-2 rounded-lg border border-[var(--border-primary)] p-3">
                 <Switch
-                  label="Показывать кнопку в панели письма"
+                  label={t('mail.labels.showInToolbar')}
                   checked={draft.showInToolbar}
                   onCheckedChange={(v) => patch({ showInToolbar: v })}
                 />
                 <Switch
-                  label="Подсвечивать фон писем этим цветом"
-                  description="Письма с этим ярлыком получают цветную заливку строки в списке."
+                  label={t('mail.labels.colorizeRow')}
+                  description={t('mail.labels.colorizeRowHint')}
                   checked={draft.colorizeRow}
                   onCheckedChange={(v) => patch({ colorizeRow: v })}
                 />
                 <Switch
-                  label="Правила активны (авто-присвоение при синхронизации)"
+                  label={t('mail.labels.rulesEnabled')}
                   checked={draft.enabled}
                   onCheckedChange={(v) => patch({ enabled: v })}
                 />
@@ -361,20 +350,20 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-[var(--text-secondary)]">
-                    Правила авто-присвоения
+                    {t('mail.labels.rulesTitle')}
                   </span>
                   <div className="w-56">
                     <Select
                       value={draft.match}
                       onChange={(v) => patch({ match: v === 'all' ? 'all' : 'any' })}
-                      options={MATCH_OPTIONS}
+                      options={matchOptions}
                     />
                   </div>
                 </div>
 
                 {draft.conditions.length === 0 ? (
                   <p className="text-sm text-[var(--text-tertiary)]">
-                    Без правил ярлык присваивается только вручную.
+                    {t('mail.labels.noRules')}
                   </p>
                 ) : (
                   <div className="flex flex-col gap-2">
@@ -385,14 +374,14 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
                             <Select
                               value={c.field}
                               onChange={(v) => setCondition(i, { field: v as MailRuleField })}
-                              options={FIELD_OPTIONS}
+                              options={fieldOptions}
                             />
                           </div>
                           <div className="w-44 flex-shrink-0">
                             <Select
                               value={c.op}
                               onChange={(v) => setCondition(i, { op: v as MailRuleOp })}
-                              options={OP_OPTIONS}
+                              options={opOptions}
                             />
                           </div>
                           {c.op === 'in_table' ? (
@@ -402,14 +391,14 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
                               <Input
                                 value={c.value}
                                 onChange={(e) => setCondition(i, { value: e.target.value })}
-                                placeholder={c.op === 'in_list' ? 'a@x.com, @domain.com' : 'значение'}
+                                placeholder={c.op === 'in_list' ? 'a@x.com, @domain.com' : t('mail.labels.valuePlaceholder')}
                               />
                             </div>
                           )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            aria-label="Удалить условие"
+                            aria-label={t('mail.labels.removeCondition')}
                             onClick={() => removeCondition(i)}
                           >
                             <Trash2 size={14} />
@@ -428,7 +417,7 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
                 )}
 
                 <Button variant="ghost" size="sm" onClick={addCondition} className="self-start">
-                  <Plus size={14} className="mr-1" /> Добавить условие
+                  <Plus size={14} className="mr-1" /> {t('mail.labels.addCondition')}
                 </Button>
               </div>
 
@@ -445,7 +434,7 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
               <div className="flex items-center gap-2 border-t border-[var(--border-primary)] pt-3">
                 <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
                   {saving ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-                  {draft.id == null ? 'Создать' : 'Сохранить'}
+                  {draft.id == null ? t('mail.labels.create') : t('mail.common.save')}
                 </Button>
                 {draft.id != null && (
                   <>
@@ -454,10 +443,10 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
                       size="sm"
                       onClick={handleApply}
                       disabled={apply.isPending || !hasRules}
-                      title={hasRules ? undefined : 'У ярлыка нет правил для применения'}
+                      title={hasRules ? undefined : t('mail.labels.noRulesToApply')}
                     >
                       {apply.isPending ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : null}
-                      Применить к письмам
+                      {t('mail.labels.apply')}
                     </Button>
                     <Button
                       variant="ghost"
@@ -466,7 +455,7 @@ export function MailLabelsManager({ spaceId, autoNew = false }: MailLabelsManage
                       disabled={remove.isPending}
                       className="ml-auto text-[var(--color-error)]"
                     >
-                      <Trash2 size={14} className="mr-1" /> Удалить
+                      <Trash2 size={14} className="mr-1" /> {t('mail.common.delete')}
                     </Button>
                   </>
                 )}

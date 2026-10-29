@@ -3,7 +3,9 @@
  * Extracted from UserAccessPanel.tsx.
  */
 
-import React from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useInfiniteScroll } from '@/shared/hooks/useInfiniteScroll';
+import { Avatar } from '@/shared/components/ui/Avatar';
 import { UserPlus, Users, Search, Check, X, Loader2 } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
@@ -21,6 +23,9 @@ interface AddUsersPanelProps {
   setAddUserSearchQuery: (v: string) => void;
   availableLevels: { value: UserAccessLevel; label: string }[];
   isAddingUser: boolean;
+  isLoading?: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
   onToggleUser: (userId: number) => void;
   onUpdateSelectedLevel: (userId: number, level: UserAccessLevel) => void;
   onRemoveSelected: (userId: number) => void;
@@ -38,6 +43,9 @@ export const AddUsersPanel = ({
   setAddUserSearchQuery,
   availableLevels,
   isAddingUser,
+  isLoading = false,
+  isError = false,
+  onRetry,
   onToggleUser,
   onUpdateSelectedLevel,
   onRemoveSelected,
@@ -46,8 +54,30 @@ export const AddUsersPanel = ({
 }: AddUsersPanelProps) => {
   const { language } = useLanguage();
   const t = (ru: string, en: string) => (language === 'ru' ? ru : en);
+  const [visibleCount, setVisibleCount] = useState(50);
+  const [userType, setUserType] = useState('all');
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setVisibleCount(50);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [addUserSearchQuery, userType]);
+  const existingIds = new Set(usersTableRows.map(user => user.system_user_id));
+  const query = addUserSearchQuery.trim().toLowerCase();
+  const availableUsers = systemUsers.filter(user => !existingIds.has(user.id));
+  const filteredUsers = availableUsers.filter(user => {
+    const isAgent = user.managed_by_agent_table_id != null || ['agent', 'bot', 'service'].includes(user.user_type ?? '');
+    if (userType === 'agents' && !isAgent || userType === 'humans' && isAgent) return false;
+    return !query || user.name?.toLowerCase().includes(query)
+      || user.email?.toLowerCase().includes(query) || String(user.id).includes(query);
+  });
+  const hasMore = visibleCount < filteredUsers.length;
+  const { sentinelRef } = useInfiniteScroll({
+    hasNextPage: hasMore, isFetchingNextPage: isLoading, enabled: !isLoading && !isError && hasMore,
+    fetchNextPage: () => setVisibleCount(count => Math.min(count + 50, filteredUsers.length)),
+    rootMargin: '200px',
+  });
   return (
-    <div className="col-span-full p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--accent-primary)] space-y-4">
+    <div style={{ boxShadow: 'inset 3px 0 0 var(--accent-primary)' }} className="col-span-full p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--accent-primary)] space-y-4">
       <div className="flex items-center justify-between">
         <h5 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2">
           <UserPlus className="w-4 h-4 text-[var(--accent-primary)]" />
@@ -61,16 +91,19 @@ export const AddUsersPanel = ({
         <button
           type="button"
           onClick={onCancel}
-          className="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+          disabled={isAddingUser}
+          aria-label={t('Закрыть добавление пользователей', 'Close add users')}
+          className="p-1 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
       {/* Default role for new selections */}
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-[var(--text-tertiary)]">{t('Роль по умолчанию:', 'Default role:')}</span>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-[var(--text-secondary)]">{t('Роль по умолчанию:', 'Default role:')}</span>
         <select
+          aria-label={t('Роль по умолчанию', 'Default role')}
           value={selectedLevel}
           onChange={(e) => setSelectedLevel(e.target.value as UserAccessLevel)}
           className="px-2 py-1 text-sm rounded border bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/50"
@@ -81,12 +114,19 @@ export const AddUsersPanel = ({
             </option>
           ))}
         </select>
+        <select aria-label={t('Тип пользователя', 'User type')} value={userType}
+          onChange={event => setUserType(event.target.value)}
+          className="px-2 py-1 text-sm rounded border bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/50">
+          <option value="all">{t('Все', 'All')}</option>
+          <option value="humans">{t('Люди', 'People')}</option>
+          <option value="agents">{t('Агенты', 'Agents')}</option>
+        </select>
       </div>
 
       {/* Selected users list */}
       {selectedUsersToAdd.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs text-[var(--text-tertiary)] font-medium">{t('Выбранные пользователи:', 'Selected users:')}</div>
+          <div className="text-xs text-[var(--text-secondary)] font-medium">{t('Выбранные пользователи:', 'Selected users:')}</div>
           <div className="flex flex-wrap gap-2">
             {selectedUsersToAdd.map(({ userId, level }) => {
               const user = systemUsers.find((u) => u.id === userId);
@@ -106,10 +146,10 @@ export const AddUsersPanel = ({
                   </div>
                   <span className="text-sm text-[var(--text-primary)]">{user.name}</span>
                   <select
+                    aria-label={`${t('Роль', 'Role')}: ${user.name}`}
                     value={level}
                     onChange={(e) => onUpdateSelectedLevel(userId, e.target.value as UserAccessLevel)}
-                    className="px-1 py-0.5 text-xs rounded border-0 bg-transparent focus:outline-none cursor-pointer"
-                    style={{ color: roleColor }}
+                    className="px-1 py-0.5 text-xs rounded border-0 bg-[var(--bg-primary)] text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] cursor-pointer"
                   >
                     {availableLevels.map((l) => (
                       <option key={l.value} value={l.value}>
@@ -119,8 +159,9 @@ export const AddUsersPanel = ({
                   </select>
                   <button
                     type="button"
+                    aria-label={`${t('Убрать', 'Remove')}: ${user.name}`}
                     onClick={() => onRemoveSelected(userId)}
-                    className="p-0.5 text-[var(--text-tertiary)] hover:text-red-500 transition-colors"
+                    className="p-0.5 text-[var(--text-secondary)] hover:text-red-500 transition-colors"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -133,9 +174,10 @@ export const AddUsersPanel = ({
 
       {/* Search input */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)]" />
         <input
           type="text"
+          aria-label={t('Поиск пользователей для добавления', 'Search users to add')}
           value={addUserSearchQuery}
           onChange={(e) => setAddUserSearchQuery(e.target.value)}
           placeholder={t('Поиск по имени, email или ID...', 'Search by name, email or ID...')}
@@ -144,28 +186,24 @@ export const AddUsersPanel = ({
       </div>
 
       {/* Available users list - click to add/remove from selection */}
-      <div className="max-h-48 overflow-y-auto rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] divide-y divide-[var(--border-secondary)]">
-        {systemUsers
-          .filter((u) => {
-            // Exclude users already in the table
-            const alreadyAdded = usersTableRows.some((row) => row.system_user_id === u.id);
-            if (alreadyAdded) return false;
-
-            if (!addUserSearchQuery) return true;
-            const q = addUserSearchQuery.toLowerCase();
-            return (
-              u.email?.toLowerCase().includes(q) ||
-              u.name?.toLowerCase().includes(q) ||
-              u.id.toString().includes(q)
-            );
-          })
-          .slice(0, 15)
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- A named scroll region must support keyboard scrolling. */}
+      <div ref={listRef} role="region" aria-label={t('Доступные пользователи', 'Available users')} tabIndex={0} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] max-h-48 overflow-y-auto rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] divide-y divide-[var(--border-secondary)]">
+        {isLoading ? (
+          <p role="status" className="p-3 text-sm text-[var(--text-secondary)]">{t('Загрузка пользователей...', 'Loading users...')}</p>
+        ) : isError ? (
+          <div role="alert" className="p-3 text-sm text-[var(--text-secondary)]">
+            {t('Не удалось загрузить пользователей', 'Unable to load users')}
+            <Button type="button" variant="ghost" size="sm" onClick={onRetry}>{t('Повторить', 'Retry')}</Button>
+          </div>
+        ) : filteredUsers.slice(0, visibleCount)
           .map((u) => {
             const isSelected = selectedUsersToAdd.some((s) => s.userId === u.id);
             return (
               <button
                 key={u.id}
                 type="button"
+                aria-pressed={isSelected}
+                style={{ boxShadow: (u.color || u.agent_color) ? `inset 3px 0 0 ${u.color || u.agent_color}` : undefined }}
                 onClick={() => onToggleUser(u.id)}
                 className={`w-full px-3 py-2.5 text-left hover:bg-[var(--bg-tertiary)] transition-colors flex items-center gap-3 ${isSelected ? 'bg-[var(--accent-primary)]/10' : ''}`}
               >
@@ -175,10 +213,7 @@ export const AddUsersPanel = ({
                 >
                   {isSelected && <Check className="w-3 h-3 text-white" />}
                 </div>
-                {/* Mini avatar */}
-                <div className="w-8 h-8 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-xs font-medium text-[var(--text-secondary)] shrink-0">
-                  {String(u.name || '?').charAt(0).toUpperCase()}
-                </div>
+                <Avatar url={u.avatar} emoji={u.agent_icon} name={u.name} color={u.color || u.agent_color} size={32} />
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div
@@ -186,19 +221,22 @@ export const AddUsersPanel = ({
                   >
                     {u.name}
                   </div>
-                  <div className="text-xs text-[var(--text-tertiary)] truncate">
+                  <div className="text-xs text-[var(--text-secondary)] truncate">
                     (ID: {u.id}) {u.email}
                   </div>
                 </div>
               </button>
             );
           })}
-        {systemUsers.filter((u) => !usersTableRows.some((row) => row.system_user_id === u.id)).length === 0 && (
-          <div className="px-3 py-6 text-center text-sm text-[var(--text-tertiary)]">
+        {!isLoading && !isError && filteredUsers.length === 0 && (
+          <div className="px-3 py-6 text-center text-sm text-[var(--text-secondary)]">
             <Users className="w-6 h-6 mx-auto mb-2 opacity-50" />
-            {t('Все системные пользователи уже добавлены', 'All system users are already added')}
+            {availableUsers.length === 0
+              ? t('Все системные пользователи уже добавлены', 'All system users are already added')
+              : t('Пользователи не найдены', 'No matching users')}
           </div>
         )}
+        {!isLoading && !isError && hasMore && <div ref={sentinelRef} aria-hidden="true" className="h-1" />}
       </div>
 
       {/* Action buttons */}
@@ -208,6 +246,7 @@ export const AddUsersPanel = ({
         </Button>
         <Button
           variant="primary"
+          className="bg-[var(--color-primary-800)] hover:bg-[var(--color-primary-800)]"
           size="sm"
           onClick={onConfirm}
           disabled={selectedUsersToAdd.length === 0 || isAddingUser}

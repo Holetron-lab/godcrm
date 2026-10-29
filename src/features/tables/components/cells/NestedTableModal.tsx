@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
+import * as Dialog from '@radix-ui/react-dialog';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { X, Plus, RefreshCw, Table2 } from 'lucide-react';
 import { apiClient } from '@/shared/utils/apiClient';
@@ -31,6 +31,7 @@ export const NestedTableModal = ({
   config,
   parentLabel,
 }: NestedTableModalProps) => {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const [page, setPage] = useState(1);
   const limit = 50;
 
@@ -77,7 +78,7 @@ export const NestedTableModal = ({
 
   // Filter columns to display
   // First try tableInfo columns, fallback to extracting from row data
-  let displayColumns: Array<{ id?: string; name: string; displayName?: string }> = [];
+  let displayColumns: Array<Partial<ColumnModel> & Pick<ColumnModel, 'name'>> = [];
   
   if (config?.displayColumns?.length && tableInfo?.columns?.length) {
     displayColumns = tableInfo.columns.filter(c => config.displayColumns!.includes(c.id || c.name));
@@ -97,25 +98,31 @@ export const NestedTableModal = ({
 
   if (!isOpen) return null;
 
-  const modalContent = (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      
-      {/* Modal */}
-      <div className="relative bg-[var(--bg-primary)] rounded-xl shadow-2xl border border-[var(--border-primary)] w-[90vw] max-w-5xl max-h-[85vh] flex flex-col overflow-hidden">
+  return (
+    <Dialog.Root open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm" />
+        <Dialog.Content
+          aria-modal="true"
+          aria-describedby={undefined}
+          onOpenAutoFocus={() => {
+            returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[9999] bg-[var(--bg-primary)] rounded-xl shadow-2xl border border-[var(--border-primary)] w-[90vw] max-w-5xl max-h-[85vh] flex flex-col overflow-hidden"
+        >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
           <div className="flex items-center gap-3">
             <Table2 className="w-5 h-5 text-[var(--color-primary-500)]" />
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+            <Dialog.Title className="text-lg font-semibold text-[var(--text-primary)]">
               {title}
-            </h2>
+            </Dialog.Title>
             {tableData && (
-              <span className="text-sm text-[var(--text-tertiary)]">
+              <span className="text-sm text-[var(--text-secondary)]">
                 ({tableData.total} записей)
               </span>
             )}
@@ -140,6 +147,8 @@ export const NestedTableModal = ({
             </button>
             
             <button
+              aria-label="Закрыть"
+              type="button"
               onClick={onClose}
               className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
             >
@@ -152,13 +161,13 @@ export const NestedTableModal = ({
         <div className="flex-1 overflow-auto min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="flex items-center gap-3 text-[var(--text-tertiary)]">
+              <div className="flex items-center gap-3 text-[var(--text-secondary)]">
                 <RefreshCw className="w-5 h-5 animate-spin" />
                 <span>Загрузка...</span>
               </div>
             </div>
           ) : !tableData?.rows?.length ? (
-            <div className="flex flex-col items-center justify-center py-12 text-[var(--text-tertiary)]">
+            <div className="flex flex-col items-center justify-center py-12 text-[var(--text-secondary)]">
               <Table2 className="w-12 h-12 mb-3 opacity-50" />
               <span>Записи не найдены</span>
             </div>
@@ -171,15 +180,21 @@ export const NestedTableModal = ({
                 projectId: 0,
               }}
               columns={displayColumns.map((col, idx) => ({
+                ...col,
                 id: col.id || String(idx),
+                tableId,
+                config: col.config || {},
+                isRequired: col.isRequired ?? false,
+                isReadonly: col.isReadonly ?? false,
                 name: col.name,
                 displayName: col.displayName || col.name,
-                type: (col as ColumnModel).type || 'text',
+                type: col.type || 'text',
                 width: 150,
-                order: idx,
-                visible: true,
+                orderIndex: idx,
+                isVisible: true,
               }))}
               rows={tableData.rows.map((row, idx) => ({
+                ...row,
                 id: row.id || `row_${idx}`,
                 data: row.data || row,
               }))}
@@ -193,7 +208,7 @@ export const NestedTableModal = ({
         {/* Pagination */}
         {tableData && tableData.total > limit && (
           <div className="flex items-center justify-between px-6 py-3 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
-            <span className="text-sm text-[var(--text-tertiary)]">
+            <span className="text-sm text-[var(--text-secondary)]">
               Страница {page} из {Math.ceil(tableData.total / limit)}
             </span>
             
@@ -215,9 +230,8 @@ export const NestedTableModal = ({
             </div>
           </div>
         )}
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
-
-  return createPortal(modalContent, document.body);
 };

@@ -251,3 +251,26 @@ describe('CORS Configuration (ADR-064)', () => {
     });
   });
 });
+
+
+describe('dedicated OIDC origin activation', () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it('requires explicit id origin and rejects lookalikes after activation', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('CORS_ORIGINS', 'https://app.godcrm.ai');
+    const { createCorsOriginHandler } = await import('../corsConfig.js');
+    const callback = vi.fn();
+    createCorsOriginHandler()('https://id.godcrm.ai', callback);
+    expect(callback).toHaveBeenLastCalledWith(expect.any(Error));
+    vi.stubEnv('CORS_ORIGINS', 'https://app.godcrm.ai,https://id.godcrm.ai');
+    const activated = createCorsOriginHandler();
+    for (const origin of ['https://app.godcrm.ai', 'https://id.godcrm.ai']) {
+      activated(origin, callback);
+      expect(callback).toHaveBeenLastCalledWith(null, true);
+    }
+    for (const origin of ['https://id.godcrm.ai.evil.test', 'http://id.godcrm.ai', 'https://other.godcrm.ai']) {
+      activated(origin, callback);
+      expect(callback).toHaveBeenLastCalledWith(expect.any(Error));
+    }
+  });
+});

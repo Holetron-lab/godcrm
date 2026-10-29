@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { DashboardGrid } from '@/features/widgets';
@@ -194,12 +194,12 @@ export function SpaceDashboardPage() {
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <a
-              href="/spaces"
+            <Link
+              to="/spaces"
               className="px-8 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-100"
             >
               🏠 {t('spaceDashboard.backToSpaces')}
-            </a>
+            </Link>
             {isNotFound && (
               <button
                 onClick={() => window.location.reload()}

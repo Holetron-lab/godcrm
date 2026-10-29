@@ -104,3 +104,47 @@ docker compose down            # stop (keeps data)
 docker compose down -v         # stop and delete all data volumes
 docker compose up -d --build   # rebuild after pulling new code
 ```
+
+## Schema upgrades
+
+Back up the database and uploads before upgrading. The entrypoint loads
+`schema.sql` atomically on an empty database, then runs
+`node run-migrations.mjs --selfhost` before seeding or starting the server.
+Existing snapshot installations run the same upgrade without reloading the dump.
+Migration failures stop startup; fix the reported conflict and retry.
+
+Snapshot upgrades use `selfhost_migrations` (and Knex's lock table). The original
+`knex_migrations` stays empty: historical core migrations did not produce this
+snapshot and must not be marked as applied. Once the self-host ledger exists,
+`node run-migrations.mjs` also selects this chain. For the first manual upgrade:
+
+```bash
+docker compose run --rm --entrypoint node app run-migrations.mjs --selfhost
+```
+
+The first bridge supports the shipped snapshot and the previously published
+GitHub snapshot at `d800f339f3680797188c81cacef62d4e8a3554af`. It adds connected
+account identity, mail messages/labels/attachments/outbox/folders, and mailbox
+schema with `users.handle`. It preserves existing data and leaves mailbox
+provisioning disabled unless the owner previously enabled it. Installing an
+SMTP/IMAP server and enabling provisioning remain separate operator actions.
+
+A non-empty core migration ledger is refused in snapshot mode; it needs an
+explicit reconciliation, not automatic baselining. This bridge does not claim
+full parity with every core or optional-module migration. Add future snapshot
+upgrades to `deploy/selfhost/migrations`; do not edit the dump or replay core
+CREATE migrations on an installed database. Upgrades are forward-only; rollback
+means restoring the pre-upgrade backup with the previous application image.
+
+Backend regression (Docker required, no production data or external mail):
+
+```bash
+python3 scripts/qa/selfhost-upgrade.py <qa-image> <previous-public-schema.sql> /tmp/selfhost-evidence
+```
+
+Run from the repository root. The QA image supplies dependencies; current
+backend/bootstrap sources are copied into disposable containers on an internal
+network. Each scenario uses its own tmpfs `godcrm_test`, without published ports
+or host mounts. This checks fresh/legacy upgrades, ledger idempotence, conflict
+rollback, mixed-ledger refusal, and real mailbox creation/repair. It does not
+replace a clean release-image build or staging Gate 1.

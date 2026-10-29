@@ -3,6 +3,7 @@
  * TDD - Test First Approach
  */
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from './helpers/sentinel-ids.js';
 import request from 'supertest';
 import express from 'express';
 import { setupTestDatabase, cleanupTestDatabase } from './helpers/test-db.js';
@@ -185,7 +186,7 @@ describe('Fitness API - Workouts CRUD', () => {
 
     test('should return 404 for non-existent workout', async () => {
       const response = await request(app)
-        .get('/api/v3/fitness/workouts/99999')
+        .get(`/api/v3/fitness/workouts/${NON_EXISTENT_ID}`)
         .set('Authorization', `Bearer ${authToken}`);
       
       expect(response.status).toBe(404);

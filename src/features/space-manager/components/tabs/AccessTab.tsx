@@ -89,8 +89,8 @@ export const AccessTab = ({ spaceId }: AccessTabProps) => {
       if (!space) throw new Error('Space not found');
       return spacesApi.update(spaceId, {
         name: space.name,
-        description: space.description,
-        icon: space.icon,
+        description: space.description ?? undefined,
+        icon: space.icon ?? undefined,
         access_control: accessControl
       });
     },

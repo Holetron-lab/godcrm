@@ -10,6 +10,9 @@
 
 import { dbRun, dbGet, dbAll, toBool, withTransactionAsync } from '../database/connection.js';
 import { apiLogger } from '../utils/logger.js';
+import { persistColumnType, validateColumnValue } from './ColumnService.js';
+import { verifyContentValue } from './column-adapters/media-kind.js';
+import { normalizeTypedCells, NORMALIZED_CELL_TYPES } from './cellNormalizers.js';
 
 /**
  * Generate URL-friendly slug from text
@@ -88,7 +91,7 @@ export class ImportService {
           tableId,
           col.name,
           col.displayName || col.name,
-          col.columnType || 'text',
+          persistColumnType(col.columnType === undefined ? 'text' : col.columnType),
           col.config ? JSON.stringify(col.config) : null,
           toBool(col.isRequired || false),
           toBool(col.isVisible !== false),
@@ -107,12 +110,36 @@ export class ImportService {
       throw new Error('Invalid import mode or missing targetTableId for replace mode');
     }
     
+    // ADR-204 AC8: `content` cells are verified against real files on import.
+    // Shape or media mismatch throws, so the whole import rolls back.
+    const contentColumns = (await trx.all(
+      "SELECT column_name FROM table_columns WHERE table_id = ? AND type = 'content'", [tableId]
+    )).map((c) => c.column_name);
+    // ADR-0035 / ADR-0035-A: geo_point + address cells go through the same
+    // normalizer as every other write path; a bad value fails the whole import.
+    const typedColumns = await trx.all(
+      `SELECT id, column_name, type FROM table_columns WHERE table_id = ? AND type IN (${NORMALIZED_CELL_TYPES.map(() => '?').join(', ')})`,
+      [tableId, ...NORMALIZED_CELL_TYPES]
+    );
+
     // Import rows
     let rowsImported = 0;
     for (const row of data.rows || []) {
       // Remove internal metadata from row data
-      const { _id, _created_at, _updated_at, ...rowData } = row;
-      
+      const { _id, _created_at, _updated_at, ...rawRowData } = row;
+      const typed = normalizeTypedCells(typedColumns, rawRowData);
+      if (!typed.ok) throw new Error(typed.message);
+      const rowData = typed.data;
+      for (const name of contentColumns) {
+        const value = rowData[name];
+        if (value === null || value === undefined || value === '') continue;
+        if (!validateColumnValue({ type: 'content', config: {} }, value)) {
+          throw new Error(`Column "${name}": invalid content value`);
+        }
+        const problems = await verifyContentValue(value);
+        if (problems.length) throw new Error(`Column "${name}": ${problems.join('; ')}`);
+      }
+
       // Generate unique base_id
       const baseId = 'imp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
       

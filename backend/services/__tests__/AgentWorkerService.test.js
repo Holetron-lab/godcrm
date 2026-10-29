@@ -167,7 +167,7 @@ describe('AgentWorkerService', () => {
     mockDbAll.mockResolvedValue([]);
     mockAgentLoop.mockResolvedValue('Agent completed the task.');
     mockResolveProvider.mockResolvedValue({ apiKey: 'test-key', model: 'claude-sonnet-4', provider: 'anthropic', isLocal: false });
-    mockDetectProvider.mockReturnValue({ isClaudeCode: false, isCopilot: false, isAnthropic: true });
+    mockDetectProvider.mockReturnValue({ isClaudeCode: false, isCopilot: false, isCodex: false, isCliAgent: false, isAnthropic: true });
     mockBuildSystemPrompt.mockReturnValue('You are a helpful agent.');
     mockSaveStepMessage.mockResolvedValue(1);
     mockCreateAndDispatchJob.mockResolvedValue({ jobId: 'job-123', id: 1 });
@@ -370,7 +370,7 @@ describe('AgentWorkerService', () => {
       mockDbRun.mockResolvedValue({ lastInsertRowid: 50 });
       // Override provider to claude-code
       mockResolveProvider.mockResolvedValue({ apiKey: null, model: 'claude-sonnet-4', provider: 'claude-code', isLocal: true });
-      mockDetectProvider.mockReturnValue({ isClaudeCode: true, isCopilot: false, isAnthropic: false });
+      mockDetectProvider.mockReturnValue({ isClaudeCode: true, isCopilot: false, isCodex: false, isCliAgent: true, isAnthropic: false });
 
       await executeTicket(ticket, AgentWorkerService._activeJobs);
 
@@ -392,7 +392,7 @@ describe('AgentWorkerService', () => {
       mockDbRun.mockResolvedValue({ lastInsertRowid: 50 });
       // Ensure provider is anthropic (non-claude-code)
       mockResolveProvider.mockResolvedValue({ apiKey: 'test-key', model: 'claude-sonnet-4', provider: 'anthropic', isLocal: false });
-      mockDetectProvider.mockReturnValue({ isClaudeCode: false, isCopilot: false, isAnthropic: true });
+      mockDetectProvider.mockReturnValue({ isClaudeCode: false, isCopilot: false, isCodex: false, isCliAgent: false, isAnthropic: true });
 
       await executeTicket(ticket, AgentWorkerService._activeJobs);
 
@@ -408,7 +408,7 @@ describe('AgentWorkerService', () => {
         .mockResolvedValueOnce({ data: JSON.stringify({ name: 'Table Architect' }) });
       mockDbRun.mockResolvedValue({ lastInsertRowid: 50 });
       mockResolveProvider.mockResolvedValue({ apiKey: null, model: 'claude-sonnet-4', provider: 'claude-code', isLocal: true });
-      mockDetectProvider.mockReturnValue({ isClaudeCode: true, isCopilot: false, isAnthropic: false });
+      mockDetectProvider.mockReturnValue({ isClaudeCode: true, isCopilot: false, isCodex: false, isCliAgent: true, isAnthropic: false });
 
       await executeTicket(ticket, AgentWorkerService._activeJobs);
 

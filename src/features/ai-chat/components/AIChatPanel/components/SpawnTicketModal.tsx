@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 // ADR-0031 P6 — Frontend modal for spawning a ticket from a chat conversation.
 // Backend: POST /api/v3/chat/conversations/:id/spawn-ticket
 // Body: { ticket_data: { what, assigned_to, priority? }, message_ids? }
@@ -29,11 +30,11 @@ interface SpawnTicketModalProps {
 }
 
 const PRIORITY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Без приоритета' },
-  { value: 'low', label: 'Низкий' },
-  { value: 'medium', label: 'Средний' },
-  { value: 'high', label: 'Высокий' },
-  { value: 'critical', label: 'Критический' },
+  { value: '', label: "aiChat.ui.noPriority" },
+  { value: 'low', label: "aiChat.ui.low" },
+  { value: 'medium', label: "aiChat.ui.medium" },
+  { value: 'high', label: "aiChat.ui.high" },
+  { value: 'critical', label: "aiChat.ui.critical" },
 ];
 
 export const SpawnTicketModal: React.FC<SpawnTicketModalProps> = ({
@@ -42,6 +43,7 @@ export const SpawnTicketModal: React.FC<SpawnTicketModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { t } = useLanguage();
   const [what, setWhat] = useState('');
   const [assignee, setAssignee] = useState<Participant | null>(null);
   const [priority, setPriority] = useState('');
@@ -62,16 +64,16 @@ export const SpawnTicketModal: React.FC<SpawnTicketModalProps> = ({
   const handleSubmit = async () => {
     if (submitting) return;
     if (!conversationId) {
-      showToast('Не удалось определить чат-источник', 'error');
+      showToast(t('aiChat.ui.couldNotIdentifyTheSourceChat'), 'error');
       return;
     }
     const trimmed = what.trim();
     if (!trimmed) {
-      showToast('Заполните поле «Что»', 'error');
+      showToast(t('aiChat.ui.fillInTheTaskDescription'), 'error');
       return;
     }
     if (!assignee) {
-      showToast('Выберите ответственного', 'error');
+      showToast(t('aiChat.ui.chooseAnAssignee'), 'error');
       return;
     }
 
@@ -90,18 +92,18 @@ export const SpawnTicketModal: React.FC<SpawnTicketModalProps> = ({
 
       if (resp?.success && resp.data) {
         showToast(
-          `Тикет #${resp.data.ticket_id} создан, ${resp.data.moved_count} сообщ. перенесено`,
+          t('aiChat.ui.ticketCreatedMessagesMoved', { id: resp.data.ticket_id, count: resp.data.moved_count }),
           'success',
         );
         onSuccess?.(resp.data);
         reset();
         onClose();
       } else {
-        showToast('Не удалось создать тикет', 'error');
+        showToast(t('aiChat.ui.couldNotCreateTicket'), 'error');
       }
     } catch (err: any) {
       logger.error('SpawnTicketModal: spawn failed', err);
-      const msg = typeof err?.message === 'string' ? err.message : 'Ошибка при создании тикета';
+      const msg = typeof err?.message === 'string' ? err.message : t('aiChat.ui.errorCreatingTicket');
       showToast(msg, 'error');
     } finally {
       setSubmitting(false);
@@ -114,16 +116,16 @@ export const SpawnTicketModal: React.FC<SpawnTicketModalProps> = ({
     <Modal
       open={open}
       onOpenChange={(next) => { if (!next) handleClose(); }}
-      title="Создать тикет из чата"
-      description="Все сообщения этого чата будут перенесены в новый тикет; в исходном чате останутся ссылки-заглушки."
+      title={t('aiChat.ui.createTicketFromChat')}
+      description={t('aiChat.ui.allMessagesInThisChatWillBeMovedToTheNewTicketLinksWillRemainInTheOriginalChat')}
       size="md"
       primaryAction={{
-        label: submitting ? 'Создаём…' : 'Создать тикет',
+        label: submitting ? t('auth.register.submitting') : t('aiChat.ui.createTicket'),
         onClick: handleSubmit,
         disabled: !canSubmit,
       }}
       secondaryAction={{
-        label: 'Отмена',
+        label: t('aiChat.ui.cancel'),
         onClick: handleClose,
         disabled: submitting,
       }}
@@ -131,37 +133,35 @@ export const SpawnTicketModal: React.FC<SpawnTicketModalProps> = ({
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-            Что нужно сделать <span className="text-red-400">*</span>
+            {t('aiChat.ui.whatNeedsToBeDone')}<span className="text-red-400">*</span>
           </label>
           <textarea
             value={what}
             onChange={(e) => setWhat(e.target.value)}
-            placeholder="Кратко опишите задачу"
+            placeholder={t('aiChat.ui.brieflyDescribeTheTask')}
             rows={3}
             disabled={submitting}
-            autoFocus
             className="w-full px-3 py-2 text-sm rounded border border-[var(--border-secondary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)] resize-none disabled:opacity-60"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-            Ответственный <span className="text-red-400">*</span>
+            {t('aiChat.ui.assignee')}<span className="text-red-400">*</span>
           </label>
           <ParticipantSelector
             value={assignee}
             onSelect={setAssignee}
             showUsers
             showAgents
-            placeholder="Выберите пользователя или агента..."
+            placeholder={t('aiChat.ui.selectAUserOrAgent')}
             showStatus={false}
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
-            Приоритет
-          </label>
+            {t('aiChat.ui.priority')}</label>
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value)}
@@ -169,7 +169,7 @@ export const SpawnTicketModal: React.FC<SpawnTicketModalProps> = ({
             className="w-full px-3 py-2 text-sm rounded border border-[var(--border-secondary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
           >
             {PRIORITY_OPTIONS.map((p) => (
-              <option key={p.value || 'none'} value={p.value}>{p.label}</option>
+              <option key={p.value || 'none'} value={p.value}>{t(p.label)}</option>
             ))}
           </select>
         </div>

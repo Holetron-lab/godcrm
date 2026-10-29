@@ -7,6 +7,7 @@
 
 // API v3: Tables Routes — thin router that imports all controllers
 import express from 'express';
+import { historicalDataGuard } from '../../../services/chat/historical-access.js';
 import tableCreateController from './tableCreateController.js';
 import tableManageController from './tableManageController.js';
 import tableColumnController from './tableColumnController.js';
@@ -15,10 +16,17 @@ import tableRowGetController from './tableRowGetController.js';
 import tableRowCreateController from './tableRowCreateController.js';
 import tableRowMutateController from './tableRowMutateController.js';
 import tableRowBatchController from './tableRowBatchController.js';
+import tableRowEventsController from './tableRowEventsController.js';
 import tableSummaryVariableController from './tableSummaryVariableController.js';
+import tableSummaryController from './tableSummaryController.js';
 import verificationController from './verificationController.js'; // ADR-0011 Phase A
+import tableExcelPreviewController from './tableExcelPreviewController.js';
 
 const router = express.Router();
+router.use('/tables/:tableId(\\d+)', historicalDataGuard);
+router.use('/projects/:projectId(\\d+)/tables', historicalDataGuard);
+
+router.use(tableExcelPreviewController);
 
 // Mount order matters for Express route matching:
 // 1. Table creation (includes /tables/create-calendar before :tableId,
@@ -31,6 +39,9 @@ router.use(tableManageController);
 
 // 3. Column operations: GET /tables/:tableId/columns
 router.use(tableColumnController);
+
+// 3b. Live row changes: GET /tables/:tableId/events (SSE)
+router.use(tableRowEventsController);
 
 // 4. Row batch operations must come before single-row routes
 //    to avoid :rowId matching "batch-update" or "batch-delete"
@@ -51,6 +62,7 @@ router.use(tableRowMutateController);
 
 // 9. Summary variable: POST /tables/:tableId/columns/:columnId/summary-variable
 router.use(tableSummaryVariableController);
+router.use(tableSummaryController);
 
 // 10. ADR-0011 verification: POST /tables/:tableId/rows/:rowId/columns/:columnId/verify|unverify
 router.use(verificationController);

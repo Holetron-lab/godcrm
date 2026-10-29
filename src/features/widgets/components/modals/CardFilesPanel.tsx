@@ -40,14 +40,15 @@ export function CardFilesPanel({
         {!isPublicReadOnly && (
           <>
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="text-xs text-[var(--color-primary-500)] hover:text-[var(--color-primary-600)] flex items-center gap-1 disabled:opacity-50"
+              className="rounded focus-visible:[outline:auto] text-xs text-[var(--color-primary-500)] hover:text-[var(--color-primary-600)] flex items-center gap-1 disabled:opacity-50"
             >
               {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
               {uploading ? 'Загрузка...' : 'Добавить'}
             </button>
-            <input ref={fileInputRef} type="file" multiple onChange={handleUpload} className="hidden" />
+            <input ref={fileInputRef} type="file" multiple onChange={handleUpload} hidden />
           </>
         )}
       </div>
@@ -57,15 +58,22 @@ export function CardFilesPanel({
           {files.map((file) => (
             <div
               key={file.id}
-              className="flex items-center gap-2 p-2 bg-[var(--bg-tertiary)] rounded-lg group hover:bg-[var(--bg-primary)] transition cursor-pointer"
-              onClick={() => onPreview(file)}
+              className="flex items-center gap-2 p-2 bg-[var(--bg-tertiary)] rounded-lg group hover:bg-[var(--bg-primary)] transition"
             >
-              <span className="text-base flex-shrink-0">{getFileIcon(file)}</span>
-              <span className="flex-1 text-sm text-[var(--text-primary)] truncate">{file.name}</span>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+              <button
+                type="button"
+                onClick={() => onPreview(file)}
+                className="flex flex-1 min-w-0 items-center gap-2 text-left rounded focus-visible:[outline:auto]"
+              >
+                <span aria-hidden="true" className="text-base flex-shrink-0">{getFileIcon(file)}</span>
+                <span className="text-sm text-[var(--text-primary)] truncate">{file.name}</span>
+              </button>
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition">
                 <button
+                  type="button"
+                  aria-label="Просмотр"
                   onClick={(e) => { e.stopPropagation(); onPreview(file); }}
-                  className="p-1 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-tertiary)] hover:text-primary-500"
+                  className="p-1 rounded focus-visible:[outline:auto] hover:bg-[var(--bg-secondary)] text-[var(--text-tertiary)] hover:text-primary-500"
                   title="Просмотр"
                 >
                   <Eye className="w-3.5 h-3.5" />
@@ -76,16 +84,19 @@ export function CardFilesPanel({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="p-1 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)]"
+                    className="p-1 rounded focus-visible:[outline:auto] hover:bg-[var(--bg-secondary)] text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)]"
                     title="Открыть"
+                    aria-label="Открыть"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 )}
                 {!isPublicReadOnly && (
                   <button
+                    type="button"
+                    aria-label="Удалить"
                     onClick={(e) => { e.stopPropagation(); onRemove(file.id); }}
-                    className="p-1 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-tertiary)] hover:text-red-500"
+                    className="p-1 rounded focus-visible:[outline:auto] hover:bg-[var(--bg-secondary)] text-[var(--text-tertiary)] hover:text-red-500"
                     title="Удалить"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -96,13 +107,15 @@ export function CardFilesPanel({
           ))}
         </div>
       ) : !isPublicReadOnly ? (
-        <div
+        <button
+          type="button"
+          disabled={uploading}
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-[var(--border-secondary)] rounded-lg p-4 text-center cursor-pointer hover:border-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/5 transition"
+          className="w-full disabled:opacity-50 focus-visible:[outline:auto] border-2 border-dashed border-[var(--border-secondary)] rounded-lg p-4 text-center cursor-pointer hover:border-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/5 transition"
         >
           <Upload className="w-6 h-6 mx-auto mb-1.5 text-[var(--text-tertiary)]" />
-          <p className="text-xs text-[var(--text-tertiary)]">Нажмите для загрузки</p>
-        </div>
+          <span className="text-xs text-[var(--text-tertiary)]">Нажмите для загрузки</span>
+        </button>
       ) : (
         <p className="text-xs text-[var(--text-tertiary)] italic">Нет вложений</p>
       )}

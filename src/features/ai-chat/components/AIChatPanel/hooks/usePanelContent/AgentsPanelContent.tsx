@@ -1,32 +1,47 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /** AgentsPanelContent — ADR-119 extracted from usePanelContent.tsx
  *
  * Layout (unified with ContactsPanelContent):
  *   header row 1: [🔍 search...]   [⭐] [🧠 AI] [filter]
  *   header row 2: [status select] [provider select]   ← only when filter open
- *   row body: [color-bar | avatar | (name+id+badges) / (status pill + description + footer toolbar)]
+ *   row body: [color-bar | avatar tinted with agent colour | (name + 🤖 + id + badges) / (description + footer toolbar)]
+ *
+ * Locked Tier-B bindings (ADR-0079 §2) reach this list only for admins/owners;
+ * they carry a 🔒 after the name and an unlock button instead of selection.
  *
  * Footer toolbar inside each row: ⭐ favorite, 👁 view, ▾ expand context
  * settings (Context Depth / Auto-Summary / Vector Memory; saved per-agent
  * via PUT /ai/agents/:id). Tapping the avatar/name selects the agent and
  * opens its chat — that replaces the previous explicit "new chat" button.
  */
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { X, Search, Star, Loader2, Brain, Bot, Plus, ChevronDown, Filter, Eye } from 'lucide-react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { X, Search, Star, Loader2, Brain, Bot, Plus, ChevronDown, Filter, Eye, Lock, LockOpen } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { apiClient } from '@/shared/utils/apiClient';
+import { Avatar } from '@/shared/components/ui/Avatar';
+import { AgentConfigurationFields } from './AgentConfigurationFields';
 import { ContextSettingsSection } from '../../components/ChatPanels/ContextSettingsSection';
 import type { ContextSettings } from '../../types';
 import type { PanelContentDeps } from './PanelContentTypes';
 import type { AIAgent } from '../../../../types';
 
 const RowViewerModal = lazy(() => import('../../components/ChatMessages/RowViewerModal'));
+const AGENTS_PAGE = 30;
 
 export function AgentsPanelContent(d: PanelContentDeps) {
+  const { t } = useLanguage();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [providerFilter, setProviderFilter] = useState<string>('all');
   const [viewAgent, setViewAgent] = useState<AIAgent | null>(null);
   const [expandedAgentId, setExpandedAgentId] = useState<number | null>(null);
+
+  const [hasUnsavedConfiguration, setHasUnsavedConfiguration] = useState(false);
+  const toggleExpandedAgent = (id: number) => {
+    if (hasUnsavedConfiguration && !window.confirm(t('aiChat.ui.discardConfigurationDraft'))) return;
+    setHasUnsavedConfiguration(false);
+    setExpandedAgentId(previous => previous === id ? null : id);
+  };
 
   const activeFilterCount =
     (statusFilter !== 'all' ? 1 : 0) + (providerFilter !== 'all' ? 1 : 0);
@@ -39,8 +54,36 @@ export function AgentsPanelContent(d: PanelContentDeps) {
     if (providerFilter !== 'all') {
       list = list.filter(a => String(a.operator_id ?? a.provider_id ?? '') === providerFilter);
     }
-    return list;
-  }, [d.filteredAgents, statusFilter, providerFilter]);
+    const assigned = [d.defaultAgentId, d.summaryAgentId, d.translationAgentId];
+    return [...list].sort((a, b) => Number(assigned.includes(b.id)) - Number(assigned.includes(a.id)));
+  }, [d.filteredAgents, statusFilter, providerFilter, d.defaultAgentId, d.summaryAgentId, d.translationAgentId]);
+
+  // Client-side paging, same as ContactsPanelContent: reveal a window of rows and
+  // grow it from an IntersectionObserver sentinel near the bottom of the list.
+  const [visibleCount, setVisibleCount] = useState(AGENTS_PAGE);
+  useEffect(() => {
+    setVisibleCount(AGENTS_PAGE);
+  }, [d.agentsSearch, d.showFavoriteAgents, statusFilter, providerFilter, filteredAgents.length]);
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const visibleAgents = useMemo(() => filteredAgents.slice(0, visibleCount), [filteredAgents, visibleCount]);
+  const hasMore = visibleCount < filteredAgents.length;
+
+  useEffect(() => {
+    if (!hasMore) return;
+    const node = sentinelRef.current;
+    if (!node) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some(e => e.isIntersecting)) {
+          setVisibleCount(c => Math.min(c + AGENTS_PAGE, filteredAgents.length));
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    io.observe(node);
+    return () => io.disconnect();
+  }, [hasMore, filteredAgents.length]);
 
   return (
     <div className="flex flex-col h-full">
@@ -53,7 +96,7 @@ export function AgentsPanelContent(d: PanelContentDeps) {
               type="text"
               value={d.agentsSearch}
               onChange={(e) => { d.setAgentsSearch(e.target.value); if (!e.target.value) d.setVectorSearchResults(null); }}
-              placeholder="Поиск агентов..."
+              placeholder={t('aiChat.ui.searchAgents')}
               className="w-full pl-7 pr-7 py-1 text-xs rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
             />
             {d.agentsSearch && (
@@ -66,7 +109,7 @@ export function AgentsPanelContent(d: PanelContentDeps) {
           <button
             type="button"
             onClick={() => d.setShowFavoriteAgents(!d.showFavoriteAgents)}
-            title={d.showFavoriteAgents ? 'Показать всех' : 'Только избранные'}
+            title={d.showFavoriteAgents ? t('aiChat.ui.showAll') : t('aiChat.ui.favoritesOnly')}
             className={cn(
               'p-1 rounded transition-colors',
               d.showFavoriteAgents ? 'bg-yellow-500/20 text-yellow-500' : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
@@ -78,7 +121,7 @@ export function AgentsPanelContent(d: PanelContentDeps) {
             type="button"
             onClick={d.handleVectorSearch}
             disabled={d.isVectorSearching || !d.agentsSearch}
-            title={d.vectorSearchResults ? 'AI поиск активен' : 'Семантический поиск'}
+            title={d.vectorSearchResults ? t('aiChat.ui.aISearchIsActive') : t('aiChat.ui.semanticSearch')}
             className={cn(
               'p-1 rounded transition-colors',
               d.vectorSearchResults
@@ -92,7 +135,7 @@ export function AgentsPanelContent(d: PanelContentDeps) {
           <button
             type="button"
             onClick={() => setFiltersOpen(o => !o)}
-            title={filtersOpen ? 'Скрыть фильтры' : 'Показать фильтры'}
+            title={filtersOpen ? t('aiChat.ui.hideFilters') : t('aiChat.ui.showFilters')}
             className={cn(
               'relative p-1 rounded transition-colors',
               activeFilterCount > 0 || filtersOpen
@@ -118,16 +161,16 @@ export function AgentsPanelContent(d: PanelContentDeps) {
             onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
             className="px-2 py-1 text-xs rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
           >
-            <option value="all">Все статусы</option>
-            <option value="active">Активные</option>
-            <option value="inactive">Неактивные</option>
+            <option value="all">{t('aiChat.ui.allStatuses')}</option>
+            <option value="active">{t('aiChat.ui.active')}</option>
+            <option value="inactive">{t('aiChat.ui.inactive')}</option>
           </select>
           <select
             value={providerFilter}
             onChange={(e) => setProviderFilter(e.target.value)}
             className="px-2 py-1 text-xs rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
           >
-            <option value="all">Все провайдеры</option>
+            <option value="all">{t('aiChat.ui.allProviders')}</option>
             {d.operators.map(op => (
               <option key={op.id} value={String(op.id)}>{op.name}</option>
             ))}
@@ -138,28 +181,29 @@ export function AgentsPanelContent(d: PanelContentDeps) {
       <div className="flex-1 overflow-y-auto">
         {filteredAgents.length === 0 ? (
           d.agentsSearch || activeFilterCount > 0 ? (
-            <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">Не найдено</div>
+            <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{t('aiChat.ui.notFound')}</div>
           ) : d.isLoadingAgents ? (
             <div className="py-8 flex flex-col items-center gap-3">
               <Loader2 className="w-6 h-6 animate-spin text-[var(--color-primary-500)]" />
-              <span className="text-sm text-[var(--text-tertiary)]">Загрузка агентов...</span>
+              <span className="text-sm text-[var(--text-tertiary)]">{t('aiChat.ui.loadingAgents')}</span>
             </div>
           ) : (
             <div className="p-6 text-center">
               <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500/20 to-primary-500/20 flex items-center justify-center mb-4 mx-auto">
                 <Bot className="w-7 h-7 text-[var(--color-primary-500)]" />
               </div>
-              <h3 className="font-medium text-[var(--text-primary)] mb-2">AI агенты не настроены</h3>
-              <p className="text-sm text-[var(--text-tertiary)] mb-4">Создайте AI таблицы в System Data для работы с агентами</p>
+              <h3 className="font-medium text-[var(--text-primary)] mb-2">{t('aiChat.ui.aIAgentsAreNotConfigured')}</h3>
+              <p className="text-sm text-[var(--text-tertiary)] mb-4">{t('aiChat.ui.createAITablesInSystemDataToWorkWithAgents')}</p>
               <button onClick={() => d.createTablesMutation.mutate()} disabled={d.createTablesMutation.isPending || !d.currentSpace?.id}
                 className="px-4 py-2 bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-medium mx-auto">
-                {d.createTablesMutation.isPending ? (<><Loader2 className="w-4 h-4 animate-spin" />Создание...</>) : (<><Plus className="w-4 h-4" />Создать AI таблицы</>)}
+                {d.createTablesMutation.isPending ? (<><Loader2 className="w-4 h-4 animate-spin" />{t('aiChat.ui.creating')}</>) : (<><Plus className="w-4 h-4" />{t('aiChat.ui.createAITables')}</>)}
               </button>
-              {d.createTablesMutation.isError && <p className="text-sm text-red-500 mt-2">Ошибка создания таблиц</p>}
+              {d.createTablesMutation.isError && <p className="text-sm text-red-500 mt-2">{t('aiChat.ui.couldNotCreateTables')}</p>}
             </div>
           )
         ) : (
-          filteredAgents.map(agent => {
+          <>
+          {visibleAgents.map(agent => {
             const isFavorite = d.favoriteAgents.includes(agent.id);
             const isActive = d.currentAgent?.id === agent.id;
             const isExpanded = expandedAgentId === agent.id;
@@ -171,16 +215,42 @@ export function AgentsPanelContent(d: PanelContentDeps) {
                 isFavorite={isFavorite}
                 isExpanded={isExpanded}
                 isAdminOrOwner={d.isAdminOrOwner}
+                roles={[
+                  agent.id === d.defaultAgentId ? t('aiChat.ui.defaultAgent') : '',
+                  agent.id === d.summaryAgentId ? t('aiChat.ui.summaryAgent') : '',
+                  agent.id === d.translationAgentId ? t('aiChat.ui.translationAgent') : '',
+                ].filter(Boolean)}
+                configuration={<>
+                  <fieldset disabled={!d.isAdminOrOwner || d.isSavingDefaultAgent || d.isSavingSummaryAgent || d.isSavingTranslationAgent} className="flex flex-wrap gap-3 py-2 text-xs">
+                    <label className="flex items-center gap-1"><input type="checkbox" checked={d.defaultAgentId === agent.id} onChange={e => d.saveDefaultAgent(e.target.checked ? agent.id : null)} />{t('aiChat.ui.defaultAgent')}</label>
+                    {d.onSummaryAgentChange && <label className="flex items-center gap-1"><input type="checkbox" checked={d.summaryAgentId === agent.id} onChange={e => d.onSummaryAgentChange?.(e.target.checked ? agent.id : null)} />{t('aiChat.ui.summaryAgent')}</label>}
+                    {d.onTranslationAgentChange && <label className="flex items-center gap-1"><input type="checkbox" checked={d.translationAgentId === agent.id} onChange={e => d.onTranslationAgentChange?.(e.target.checked ? agent.id : null)} />{t('aiChat.ui.translationAgent')}</label>}
+                  </fieldset>
+                  <AgentConfigurationFields key={agent.id} agent={agent} operators={d.operators} disabled={!d.isAdminOrOwner} onDirtyChange={setHasUnsavedConfiguration} />
+                </>}
                 onSelect={() => d.handleAgentSelect(agent)}
                 onToggleFavorite={() =>
                   d.setFavoriteAgents(prev => isFavorite ? prev.filter(id => id !== agent.id) : [...prev, agent.id])
                 }
                 onView={() => setViewAgent(agent)}
-                onToggleExpand={() => setExpandedAgentId(prev => prev === agent.id ? null : agent.id)}
+                onUnlock={() => d.unlockAgent(agent)}
+                onToggleExpand={() => toggleExpandedAgent(agent.id)}
               />
             );
-          })
+          })}
+          {hasMore && (
+            <div ref={sentinelRef} className="flex items-center justify-center py-3">
+              <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" />
+            </div>
+          )}
+          </>
         )}
+      </div>
+      <div className="px-3 py-1.5 border-t border-[var(--border-secondary)] bg-[var(--bg-tertiary)] flex items-center gap-1.5 text-[10px] text-[var(--text-tertiary)] flex-shrink-0">
+        <Bot className="w-3 h-3 flex-shrink-0" />
+        <span className="truncate">{t('aiChat.ui.agents')}</span>
+        <span>·</span>
+        <span>{hasMore ? `${visibleAgents.length} / ${filteredAgents.length}` : filteredAgents.length}</span>
       </div>
 
       {viewAgent && viewAgent.table_id && (
@@ -199,6 +269,8 @@ export function AgentsPanelContent(d: PanelContentDeps) {
 }
 
 interface AgentRowProps {
+  roles: string[];
+  configuration: React.ReactNode;
   agent: AIAgent;
   isActive: boolean;
   isFavorite: boolean;
@@ -207,10 +279,25 @@ interface AgentRowProps {
   onSelect: () => void;
   onToggleFavorite: () => void;
   onView: () => void;
+  onUnlock: () => Promise<void>;
   onToggleExpand: () => void;
 }
 
-function AgentRow({ agent, isActive, isFavorite, isExpanded, isAdminOrOwner, onSelect, onToggleFavorite, onView, onToggleExpand }: AgentRowProps) {
+function AgentRow({ roles, configuration, agent, isActive, isFavorite, isExpanded, isAdminOrOwner, onSelect, onToggleFavorite, onView, onUnlock, onToggleExpand }: AgentRowProps) {
+  const { t } = useLanguage();
+  const isLocked = agent.visibility === 'locked';
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const handleUnlock = useCallback(async () => {
+    setIsUnlocking(true);
+    try {
+      await onUnlock();
+    } finally {
+      setIsUnlocking(false);
+    }
+  }, [onUnlock]);
+  // A locked row cannot start a chat: tapping it unlocks instead of selecting.
+  const activate = isLocked ? () => { void handleUnlock(); } : onSelect;
+  const activateTitle = isLocked ? t('aiChat.ui.lockedAgent') : t('aiChat.ui.selectAgent');
   // Per-agent context_settings — initialized from the agent record and updated
   // on save so the row reflects the new value without waiting for a parent reload.
   const initialSettings = (agent as unknown as Record<string, unknown>).context_settings as ContextSettings | string | undefined;
@@ -246,18 +333,11 @@ function AgentRow({ agent, isActive, isFavorite, isExpanded, isAdminOrOwner, onS
           {/* Avatar */}
           <button
             type="button"
-            onClick={onSelect}
+            onClick={activate}
             className="relative flex-shrink-0"
-            title="Выбрать агента"
+            title={activateTitle}
           >
-            <div
-              className={cn(
-                'w-10 h-10 rounded-full flex items-center justify-center text-base',
-                isActive ? 'bg-[var(--color-primary-500)]/20' : 'bg-purple-500/20 text-purple-400'
-              )}
-            >
-              {agent.icon ? <span className="text-base">{agent.icon}</span> : <Bot className="w-5 h-5" />}
-            </div>
+            <Avatar emoji={agent.icon} name={agent.name} size={40} color={agent.color || '#a855f7'} />
             <span
               className={cn(
                 'absolute bottom-0 right-0 w-2 h-2 rounded-full border border-[var(--bg-secondary)]',
@@ -268,24 +348,31 @@ function AgentRow({ agent, isActive, isFavorite, isExpanded, isAdminOrOwner, onS
 
           {/* Content: 2 rows */}
           <div className="flex-1 min-w-0">
-            {/* Row 1: name + (id) + active badge */}
+            {/* Row 1: name + 🤖 (+ 🔒) + (id) + active badge */}
             <button
               type="button"
-              onClick={onSelect}
+              onClick={activate}
               className="w-full flex items-center gap-1.5 text-left"
+              title={activateTitle}
             >
               <span className="text-sm font-medium text-[var(--text-primary)] truncate">{agent.name}</span>
+              <span role="img" aria-label={t('aiChat.ui.agent')} className="flex-shrink-0 text-[var(--text-tertiary)]">
+                <Bot className="w-3 h-3" aria-hidden="true" />
+              </span>
+              {isLocked && (
+                <span role="img" aria-label={t('aiChat.ui.lockedAgent')} className="flex-shrink-0 text-[var(--text-tertiary)]">
+                  <Lock className="w-3 h-3" aria-hidden="true" />
+                </span>
+              )}
               <span className="text-[10px] font-normal text-[var(--text-tertiary)] flex-shrink-0">(#{agent.id})</span>
+              {roles.length > 0 && <span title={roles.join(', ')} className="ml-auto min-w-0 max-w-[40%] truncate text-[8px] px-1 py-0.5 rounded bg-[var(--color-primary-500)]/15 text-[var(--color-primary-400)]">{roles.join(', ')}</span>}
               {isActive && (
-                <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--color-primary-500)]/30 text-[var(--color-primary-400)] flex-shrink-0">активен</span>
+                <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--color-primary-500)]/30 text-[var(--color-primary-400)] flex-shrink-0">{t('aiChat.ui.activeLabel')}</span>
               )}
             </button>
 
-            {/* Row 2: type pill + description + toolbar */}
+            {/* Row 2: description + toolbar */}
             <div className="mt-0.5 flex items-center gap-1 min-w-0">
-              <span className="text-[9px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 bg-purple-500/20 text-purple-400">
-                Агент
-              </span>
               {agent.description ? (
                 <span className="text-[10px] text-[var(--text-tertiary)] truncate flex-1 min-w-0">
                   {agent.description}
@@ -295,16 +382,23 @@ function AgentRow({ agent, isActive, isFavorite, isExpanded, isAdminOrOwner, onS
               )}
 
               <div className="flex items-center gap-px flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
+                {isLocked && (
+                  <RowToolbarBtn
+                    icon={isUnlocking ? <Loader2 className="w-3 h-3 animate-spin" /> : <LockOpen className="w-3 h-3" />}
+                    title={t('aiChat.ui.unlockAgent')}
+                    onClick={() => { void handleUnlock(); }}
+                  />
+                )}
                 <RowToolbarBtn
                   icon={<Star className={cn('w-3 h-3', isFavorite && 'fill-current')} />}
-                  title={isFavorite ? 'Убрать из избранного' : 'В избранное'}
+                  title={isFavorite ? t('aiChat.ui.removeFromFavorites') : t('aiChat.ui.addToFavorites')}
                   onClick={onToggleFavorite}
                   active={isFavorite}
                   activeClass="text-yellow-400"
                 />
                 <RowToolbarBtn
                   icon={<Eye className="w-3 h-3" />}
-                  title="Просмотр"
+                  title={t('aiChat.ui.view')}
                   onClick={onView}
                 />
                 <RowToolbarBtn
@@ -313,7 +407,7 @@ function AgentRow({ agent, isActive, isFavorite, isExpanded, isAdminOrOwner, onS
                       className={cn('w-3 h-3 transition-transform', isExpanded && 'rotate-180')}
                     />
                   }
-                  title={isExpanded ? 'Скрыть настройки контекста' : 'Настройки контекста'}
+                  title={isExpanded ? t('aiChat.ui.hideContextSettings') : t('aiChat.ui.contextSettings')}
                   onClick={onToggleExpand}
                   active={isExpanded}
                   activeClass="text-[var(--color-primary-400)]"
@@ -326,6 +420,7 @@ function AgentRow({ agent, isActive, isFavorite, isExpanded, isAdminOrOwner, onS
 
       {isExpanded && (
         <div className="px-3 pb-3 pt-1 bg-[var(--bg-tertiary)]/40 border-t border-[var(--border-secondary)]">
+          {configuration}
           <ContextSettingsSection
             contextSettings={savedSettings}
             onChange={() => { /* no-op: row commits on Save */ }}

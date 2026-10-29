@@ -91,6 +91,10 @@ async function deliverOne(row) {
       attachments,
       linkedTableId: row.linked_table_id ?? null,
       linkedRowId: row.linked_row_id ?? null,
+      inReplyToId: row.in_reply_to_id ?? null,
+      projectId: row.project_id ?? null,
+      userId: row.created_by ?? null,
+      messageId: row.message_id || undefined,
     });
 
     await dbRun(

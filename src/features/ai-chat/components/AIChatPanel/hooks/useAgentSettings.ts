@@ -7,11 +7,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { logger } from '@/shared/utils/logger';
 import { apiClient } from '@/shared/utils/apiClient';
 import { useSpacesStore } from '@/features/spaces/store/spacesStore';
+import type { SpaceWithProjects } from '@/features/spaces/types/space.types';
 import type { ContextSettings } from '../types';
 
 interface UseAgentSettingsParams {
   currentAgent: { id: number; provider_id?: number; operator_id?: number; model?: string; system_prompt?: string } | null;
-  currentSpace: { id?: number | string; settings?: unknown } | null;
+  currentSpace: SpaceWithProjects | null;
   loadAgents: () => void;
   chatOperatorId: number | null;
   chatModelId: string;
@@ -90,15 +91,15 @@ export function useAgentSettings({
     if (!currentSpace?.id) return;
     setIsSavingDefaultAgent(true);
     try {
-      const currentSettings = (currentSpace?.settings as Record<string, unknown>) || {};
+      const currentSettings = currentSpace.settings || {};
       const newSettings = { ...currentSettings, default_agent_id: agentId };
 
       await apiClient.put(`/spaces/${currentSpace.id}`, { settings: newSettings });
       setDefaultAgentId(agentId);
 
       if (currentSpace) {
-        setCurrentSpaceInStore({ ...currentSpace, settings: newSettings } as typeof currentSpace & { id: number | string });
-        updateSpaceInStore(currentSpace.id as number, { settings: newSettings } as Partial<typeof currentSpace>);
+        setCurrentSpaceInStore({ ...currentSpace, settings: newSettings });
+        updateSpaceInStore(currentSpace.id, { settings: newSettings });
       }
 
       queryClient.invalidateQueries({ queryKey: ['spaces', 'detail', currentSpace.id] });
@@ -115,15 +116,15 @@ export function useAgentSettings({
     if (!currentSpace?.id) return;
     setIsSavingEmojis(true);
     try {
-      const currentSettings = (currentSpace?.settings as Record<string, unknown>) || {};
+      const currentSettings = currentSpace.settings || {};
       const newSettings = { ...currentSettings, quick_emojis: emojis.slice(0, 10) };
 
       await apiClient.put(`/spaces/${currentSpace.id}`, { settings: newSettings });
       setQuickEmojis(emojis.slice(0, 10));
 
       if (currentSpace) {
-        setCurrentSpaceInStore({ ...currentSpace, settings: newSettings } as typeof currentSpace & { id: number | string });
-        updateSpaceInStore(currentSpace.id as number, { settings: newSettings } as Partial<typeof currentSpace>);
+        setCurrentSpaceInStore({ ...currentSpace, settings: newSettings });
+        updateSpaceInStore(currentSpace.id, { settings: newSettings });
       }
 
       queryClient.invalidateQueries({ queryKey: ['spaces', 'detail', currentSpace.id] });

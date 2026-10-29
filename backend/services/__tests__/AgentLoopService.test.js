@@ -258,7 +258,8 @@ describe('ADR-095: AgentLoopService', () => {
       expect(insertParams[9]).toBeNull();    // tokensOut default null
       expect(insertParams[10]).toBeNull();   // latencyMs default null
       expect(insertParams[11]).toBeNull();   // toolResults default null (no JSON.stringify of null)
-      expect(insertParams[12]).toBeNull();   // metadata default null
+      expect(insertParams[12]).toBe('[]');   // attachments default empty array
+      expect(insertParams[13]).toBeNull();   // metadata default null
     });
 
     it('should use Postgres syntax when isPostgres() returns true', async () => {
@@ -719,7 +720,7 @@ describe('ADR-095: AgentLoopService', () => {
         expect(insertParams[5]).toBe('text');       // content_type is 'text' for Q&A
         expect(insertParams[3]).toBe('assistant');    // role
         expect(insertParams[6]).toBe(10);             // agent_id
-        expect(insertParams[12]).toContain('Helper Bot'); // metadata includes agent name
+        expect(insertParams[13]).toContain('Helper Bot'); // metadata includes agent name
       });
 
       it('Q&A path should NOT produce tool_call or tool_result messages', async () => {

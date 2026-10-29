@@ -8,7 +8,11 @@
 //   - 'denied' at ANY level blocks access regardless of other roles
 //   - For 'open' visibility spaces: default to 'viewer' if no explicit role
 //
-// Uses PostgreSQL resource_type/resource_id/permission schema.
+// Schema (backend/database/migrations/009-user-access-permissions.sql):
+//   user_access_permissions(user_id, space_id, project_id, table_id, column_id, access_level)
+//   — one nullable FK column per level, `access_level` holds the role.
+//   There is no view_id column on the live masters, so the view level is
+//   accepted in the API but never resolves to an explicit grant.
 
 import { dbGet, dbAll, safeJsonParse } from '../database/connection.js';
 import { isOpenSpace } from './SpaceVisibilityService.js';
@@ -40,6 +44,12 @@ const VALID_ACCESS_LEVELS = Object.keys(ACCESS_LEVEL_VALUES);
  */
 const RESOURCE_TYPES = ['space', 'project', 'table', 'view'];
 
+/**
+ * Which user_access_permissions column identifies each level.
+ * 'view' is absent on purpose: the live table has no view_id column.
+ */
+const LEVEL_COLUMNS = { space: 'space_id', project: 'project_id', table: 'table_id' };
+
 // ============================================================
 // Internal helpers
 // ============================================================
@@ -66,15 +76,16 @@ function normaliseAccessLevel(raw) {
  * @returns {Promise<string|null>} access level string or null
  */
 async function queryPermissionAtLevel(userId, resourceType, resourceId) {
-  if (!userId || !resourceType || !resourceId) return null;
+  const column = LEVEL_COLUMNS[resourceType];
+  if (!userId || !column || !resourceId) return null;
 
   const row = await dbGet(
-    `SELECT permission FROM user_access_permissions
-     WHERE user_id = ? AND resource_type = ? AND resource_id = ?
+    `SELECT access_level FROM user_access_permissions
+     WHERE user_id = ? AND ${column} = ?
      LIMIT 1`,
-    [userId, resourceType, String(resourceId)]
+    [userId, Number(resourceId)]
   );
-  return row ? normaliseAccessLevel(row.permission) : null;
+  return row ? normaliseAccessLevel(row.access_level) : null;
 }
 
 /**
@@ -376,54 +387,19 @@ export async function getUsersWithRoles(spaceId) {
     tableIds = tables.map(t => t.id);
   }
 
-  // --- Query permissions (PostgreSQL: resource_type / resource_id schema) ---
-  // Space-level
-  const spacePerms = await dbAll(
-    `SELECT user_id, permission FROM user_access_permissions
-     WHERE resource_type = 'space' AND resource_id = ?`,
-    [String(spaceId)]
-  );
-  for (const p of spacePerms) {
-    recordRole(p.user_id, 'space', normaliseAccessLevel(p.permission), spaceId);
-  }
-
-  // Project-level
-  if (projectIds.length > 0) {
-    const phProject = projectIds.map(() => '?').join(',');
-    const projectPerms = await dbAll(
-      `SELECT user_id, permission, resource_id FROM user_access_permissions
-       WHERE resource_type = 'project' AND resource_id IN (${phProject})`,
-      projectIds.map(String)
+  // --- Query permissions, one nullable FK column per level (see header) ---
+  const levelIds = { space: [spaceId], project: projectIds, table: tableIds };
+  for (const [level, ids] of Object.entries(levelIds)) {
+    if (ids.length === 0) continue;
+    const column = LEVEL_COLUMNS[level];
+    const placeholders = ids.map(() => '?').join(',');
+    const perms = await dbAll(
+      `SELECT user_id, access_level, ${column} AS resource_id FROM user_access_permissions
+       WHERE ${column} IN (${placeholders})`,
+      ids.map(Number)
     );
-    for (const p of projectPerms) {
-      recordRole(p.user_id, 'project', normaliseAccessLevel(p.permission), p.resource_id);
-    }
-  }
-
-  // Table-level
-  if (tableIds.length > 0) {
-    const phTable = tableIds.map(() => '?').join(',');
-    const tablePerms = await dbAll(
-      `SELECT user_id, permission, resource_id FROM user_access_permissions
-       WHERE resource_type = 'table' AND resource_id IN (${phTable})`,
-      tableIds.map(String)
-    );
-    for (const p of tablePerms) {
-      recordRole(p.user_id, 'table', normaliseAccessLevel(p.permission), p.resource_id);
-    }
-  }
-
-  // View-level (views do not have a dedicated views table yet, query by type)
-  const viewPerms = await dbAll(
-    `SELECT user_id, permission, resource_id FROM user_access_permissions
-     WHERE resource_type = 'view' AND resource_id IS NOT NULL`,
-    []
-  );
-  // We cannot easily filter views by space right now; include all view perms
-  // for users who already appear in the space
-  for (const p of viewPerms) {
-    if (userIdSet.has(String(p.user_id))) {
-      recordRole(p.user_id, 'view', normaliseAccessLevel(p.permission), p.resource_id);
+    for (const p of perms) {
+      recordRole(p.user_id, level, normaliseAccessLevel(p.access_level), p.resource_id);
     }
   }
 

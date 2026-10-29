@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 /**
  * Atom Picker Modal - Select an existing atom to link to a document element
  * 
@@ -21,6 +22,7 @@ interface AtomPickerProps {
 export function AtomPicker({ isOpen, onClose, onSelect, excludeAtomIds = [] }: AtomPickerProps) {
   const ctx = useDocumentsContext();
   const [search, setSearch] = useState('');
+  const requestedFocusRef = useRequestedFocus<HTMLInputElement>(isOpen);
   
   // Filter atoms by search and exclude already linked ones
   const filteredAtoms = useMemo(() => {
@@ -71,7 +73,7 @@ export function AtomPicker({ isOpen, onClose, onSelect, excludeAtomIds = [] }: A
               placeholder="Поиск атомов по названию, ключу или содержимому..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              autoFocus
+              ref={requestedFocusRef}
               className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm focus:outline-none focus:border-purple-500"
             />
           </div>

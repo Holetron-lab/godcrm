@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React from 'react';
 import { ListTodo, Loader2, MessageSquare, Plus, ChevronDown } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
@@ -101,14 +102,15 @@ export const TicketsPanel: React.FC<TicketsPanelProps> = ({
   isLoadingMore,
   onLoadMore,
 }) => {
+  const { t } = useLanguage();
   if (!ticketsSource) {
     return (
       <div className="flex flex-col h-full">
         <div className="flex flex-col h-full px-4 py-4">
           <div className="flex flex-col items-center text-center mb-4">
             <ListTodo className="w-10 h-10 text-[var(--text-tertiary)] mb-3" />
-            <p className="text-sm text-[var(--text-secondary)] mb-1">Источник не настроен</p>
-            <p className="text-xs text-[var(--text-tertiary)]">Выберите таблицу для тикетов</p>
+            <p className="text-sm text-[var(--text-secondary)] mb-1">{t('aiChat.ui.sourceIsNotConfigured')}</p>
+            <p className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.selectATicketTable')}</p>
           </div>
           <TicketsSourceInlineSelector
             defaultSpaceId={currentSpace?.id}
@@ -135,8 +137,7 @@ export const TicketsPanel: React.FC<TicketsPanelProps> = ({
             onClick={() => setTicketsSource(undefined)}
             className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
           >
-            Изменить
-          </button>
+            {t('common.edit')}</button>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto">
@@ -146,8 +147,7 @@ export const TicketsPanel: React.FC<TicketsPanelProps> = ({
           </div>
         ) : ticketRows.length === 0 ? (
           <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-            Нет записей
-          </div>
+            {t('kanban.noRecords')}</div>
         ) : (
           <>
           {ticketRows.map(row => {
@@ -161,10 +161,10 @@ export const TicketsPanel: React.FC<TicketsPanelProps> = ({
             const chatCount = rowChats.length;
             const isExpanded = expandedTicketChats === row.id;
 
-            const rowTitle = String(row.data['name'] || row.data['title'] || row.data['Название'] || `Запись #${row.id}`);
-            const status = getField(row.data, 'status', 'state', 'task_status', 'Статус');
-            const priority = getField(row.data, 'priority', 'urgency', 'Приоритет');
-            const type = getField(row.data, 'type', 'task_type', 'ticket_type', 'kind', 'Тип');
+            const rowTitle = String(row.data['name'] || row.data['title'] || row.data[t('aiChat.ui.name')] || t('aiChat.ui.recordNumber', { id: row.id }));
+            const status = getField(row.data, 'status', 'state', 'task_status', t('aiChat.ui.status'));
+            const priority = getField(row.data, 'priority', 'urgency', t('aiChat.ui.priority'));
+            const type = getField(row.data, 'type', 'task_type', 'ticket_type', 'kind', t('columnSettings.tabs.type'));
             const statusStyle = status ? getStatusStyle(status) : null;
             const priorityStyle = priority ? getPriorityStyle(priority) : null;
             const typeEmoji = type ? getTypeEmoji(type) : '';
@@ -224,7 +224,7 @@ export const TicketsPanel: React.FC<TicketsPanelProps> = ({
                         ? "bg-[var(--color-primary-500)]/10 text-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/20"
                         : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
                     )}
-                    title={chatCount === 0 ? 'Новый чат' : chatCount === 1 ? 'Открыть чат' : `${chatCount} чатов`}
+                    title={chatCount === 0 ? t('aiChat.ui.newChat') : chatCount === 1 ? t('rowActions.openChat') : t('aiChat.ui.chatCount', { count: chatCount })}
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
                     {chatCount > 1 && (
@@ -250,7 +250,7 @@ export const TicketsPanel: React.FC<TicketsPanelProps> = ({
                       >
                         <MessageSquare className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
                         <span className="flex-1 text-xs text-[var(--text-secondary)] truncate">
-                          {chat.title || 'Чат'}
+                          {chat.title || t('columnTypes.chat.label')}
                         </span>
                         <span className="text-[10px] text-[var(--text-tertiary)]">
                           {new Date(chat.updatedAt).toLocaleDateString()}
@@ -273,7 +273,7 @@ export const TicketsPanel: React.FC<TicketsPanelProps> = ({
                       className="w-full flex items-center gap-2 px-3 py-2 pl-12 hover:bg-[var(--bg-secondary)] transition-colors text-left text-[var(--color-primary-500)]"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span className="text-xs">Новый чат</span>
+                      <span className="text-xs">{t('aiChat.ui.newChat')}</span>
                     </button>
                   </div>
                 )}
@@ -290,7 +290,7 @@ export const TicketsPanel: React.FC<TicketsPanelProps> = ({
                 {isLoadingMore ? (
                   <Loader2 className="w-4 h-4 animate-spin mx-auto" />
                 ) : (
-                  'Загрузить ещё'
+                  t('aiChat.ui.loadMore')
                 )}
               </button>
             </div>

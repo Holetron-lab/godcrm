@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
-import { createPortal } from 'react-dom';
+import * as Dialog from '@radix-ui/react-dialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
 import { apiKeysApi } from '../api/apiKeysApi';
@@ -60,6 +60,8 @@ export function CreateApiKeyModal({
   projectId,
   onSuccess
 }: CreateApiKeyModalProps) {
+  const nameId = useId();
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const { language } = useLanguage();
   const queryClient = useQueryClient();
   const t = (ru: string, en: string) => language === 'ru' ? ru : en;
@@ -208,32 +210,41 @@ export function CreateApiKeyModal({
 
   if (!open) return null;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div 
-        className="w-full max-w-md bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)]"
-        onClick={e => e.stopPropagation()}
-      >
+  return (
+    <Dialog.Root open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[9999] bg-black/50" />
+        <Dialog.Content
+          aria-describedby={undefined}
+          onOpenAutoFocus={() => {
+            returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          className="fixed left-1/2 top-1/2 z-[10000] -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-md max-h-[90dvh] overflow-y-auto bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)]"
+        >
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-primary)]">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+          <Dialog.Title className="text-lg font-semibold text-[var(--text-primary)]">
             {t('Новый API ключ', 'New API Key')}
-          </h2>
+          </Dialog.Title>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={nameId} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               {t('Название', 'Name')}
             </label>
             <input
+              id={nameId}
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('Например: Интеграция с n8n', 'e.g., n8n Integration')}
               className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
               required
-              autoFocus
             />
           </div>
 
@@ -380,9 +391,9 @@ export function CreateApiKeyModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>,
-    document.body
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

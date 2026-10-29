@@ -79,43 +79,33 @@ async function executeAgentResponse(conversationId, agent, triggeredByUserId, op
     }
 
     const resolved = await sharedResolveAgentProvider(agentConfig);
-    const { isClaudeCode } = detectProvider(resolved.provider, resolved.model);
+    // isCliAgent — claude-code AND codex both take the async-job path.
+    const { isCliAgent } = detectProvider(resolved.provider, resolved.model);
 
-    if (isClaudeCode) {
+    if (isCliAgent) {
       const agentRowId = agent.managed_by_agent_row_id || agent._agentConfig?.row_id || null;
       const agentName = agent.name || agent._agentConfig?.name || null;
 
       apiLogger.info({ conversationId, agentName, provider: resolved.provider },
-        'Strategy B: Dispatching async job for claude-code agent');
+        'Strategy B: Dispatching async job for CLI agent');
 
       logAgentMentioned(agentName || 'unknown', conversationId, triggeredByUserId);
 
-      // Set is_processing on conversation so frontend starts polling agent_status
-      await dbRun(
-        isPostgres()
-          ? `UPDATE conversations SET is_processing = true, processing_started_at = NOW(), processing_agent_id = $2, processing_agent_name = $3, updated_at = NOW() WHERE id = $1`
-          : `UPDATE conversations SET is_processing = 1, processing_started_at = datetime('now'), processing_agent_id = ?, processing_agent_name = ?, updated_at = datetime('now') WHERE id = ?`,
-        isPostgres() ? [conversationId, agentRowId, agentName] : [agentRowId, agentName, conversationId]
-      );
-
       let asyncStatusMsgId = null;
-      try { asyncStatusMsgId = await _resolveStatusPlaceholder(conversationId, agent, agentRowId); }
-      catch (placeholderErr) { apiLogger.error({ err: placeholderErr, conversationId }, 'Strategy B: Failed to create/reuse status placeholder'); }
-
       const job = await createAndDispatchJob({
         conversationId, agent, triggeredByUserId, messageContent: message_content,
         options: { agent_mode, thinking_enabled, attachments, attachmentBaseUrl },
-        statusMessageId: asyncStatusMsgId,
+        createStatusPlaceholder: async () => {
+          try { asyncStatusMsgId = await _resolveStatusPlaceholder(conversationId, agent, agentRowId); }
+          catch (placeholderErr) { apiLogger.error({ err: placeholderErr, conversationId }, 'Strategy B: Failed to create status placeholder'); }
+          return asyncStatusMsgId;
+        },
         invocationType: invocation_type,
       });
 
       if (job.skipped) {
         apiLogger.info({ conversationId, agentName, existingJobId: job.jobId },
           'Strategy B: Skipped — active worker already running for this agent');
-        // Clean up unused status placeholder
-        if (asyncStatusMsgId) {
-          finalizeAgentStatus(asyncStatusMsgId, null).catch(() => {});
-        }
         return;
       }
 

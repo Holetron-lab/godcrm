@@ -2,6 +2,7 @@
 // Comprehensive tests for checkUserSpaceAccess, checkUserAccessViaTableV2,
 // getSpacesByUser filtering, and user_access_permissions
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from './helpers/sentinel-ids.js';
 import { dbAll, dbGet, dbRun, destroyAdapter, resetAdapter } from '../database/connection.js';
 import {
   checkUserSpaceAccess,
@@ -179,7 +180,7 @@ describe('Space Access Control', () => {
     });
 
     test('owner role can see admin spaces', async () => {
-      const space = { id: 90001, owner_id: 99999, type: 'admin', visibility: 'internal' };
+      const space = { id: 90001, owner_id: NON_EXISTENT_ID, type: 'admin', visibility: 'internal' };
       expect(await checkUserSpaceAccess(U_OWNER, 'owner', space, null)).toBe(true);
     });
 
@@ -457,6 +458,24 @@ describe('Space Access Control', () => {
 
       const spacesUser = await getSpacesByUser(U_VIKA, 'user');
       expect(spacesUser.find(s => s.id === 90001)).toBeUndefined();
+    });
+
+    test.each(['admin', 'owner'])('%s listing preserves independent counts and empty spaces', async (role) => {
+      await createSpaceRow(90001, 'Populated', U_OWNER, 'admin');
+      await createSpaceRow(90050, 'Empty', U_OWNER, 'admin');
+      await dbRun('DELETE FROM dashboards WHERE space_id = ?', [90050]);
+      await dbRun("INSERT INTO dashboards (space_id, name) VALUES (?, 'Second')", [90001]);
+      for (const id of [90100, 90200]) {
+        await dbRun(
+          "INSERT INTO projects (id, space_id, name, type, owner_id) VALUES (?, ?, 'Counted', 'default', ?)",
+          [id, 90001, U_OWNER]
+        );
+      }
+
+      const spaces = await getSpacesByUser(U_ADMIN, role);
+      expect(spaces.filter(s => s.id === 90001)).toHaveLength(1);
+      expect(spaces.find(s => s.id === 90001)).toMatchObject({ projects_count: '2', dashboards_count: '2' });
+      expect(spaces.find(s => s.id === 90050)).toMatchObject({ projects_count: '0', dashboards_count: '0', projects: [] });
     });
 
     test('denied in table → space NOT shown', async () => {

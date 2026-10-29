@@ -6,42 +6,14 @@
 import { memo, useState, useCallback } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
-import { 
-  Calendar, 
-  LayoutGrid, 
-  Image, 
-  BarChart3, 
-  List, 
-  Table2,
-  ExternalLink,
-  Eye
-} from 'lucide-react';
+import { Table2, ExternalLink } from 'lucide-react';
 import type { WidgetNodeData } from '../../types/schema-editor.types';
 import { Modal } from '@/shared/components/ui/Modal';
+import { getWidgetIcon } from '../widgetIcon';
 
 interface WidgetNodeComponentProps extends NodeProps {
   data: WidgetNodeData;
 }
-
-// Get icon component based on widget type
-const getWidgetIcon = (widgetType: string) => {
-  switch (widgetType?.toLowerCase()) {
-    case 'calendar':
-      return Calendar;
-    case 'kanban':
-      return LayoutGrid;
-    case 'gallery':
-      return Image;
-    case 'chart':
-      return BarChart3;
-    case 'list':
-      return List;
-    case 'table':
-      return Table2;
-    default:
-      return Eye;
-  }
-};
 
 export const WidgetNode = memo(({ data, selected }: WidgetNodeComponentProps) => {
   const {
@@ -50,6 +22,7 @@ export const WidgetNode = memo(({ data, selected }: WidgetNodeComponentProps) =>
     name,
     icon,
     widgetType,
+    presetName,
     mainTableId,
     projectId,
   } = data;
@@ -68,7 +41,7 @@ export const WidgetNode = memo(({ data, selected }: WidgetNodeComponentProps) =>
     window.location.href = `/widgets/${widgetId}`;
   }, [widgetId]);
 
-  const IconComponent = getWidgetIcon(widgetType);
+  const IconComponent = getWidgetIcon(presetName || widgetType, data.widgetConfig);
 
   return (
     <>
@@ -121,7 +94,7 @@ export const WidgetNode = memo(({ data, selected }: WidgetNodeComponentProps) =>
               {displayName || name}
             </div>
             <div className="text-[10px] text-purple-400 uppercase tracking-wide">
-              {widgetType || 'widget'}
+              {presetName || widgetType || 'widget'}
             </div>
           </div>
 
@@ -156,18 +129,13 @@ export const WidgetNode = memo(({ data, selected }: WidgetNodeComponentProps) =>
       <Modal
         open={showPreview}
         onOpenChange={setShowPreview}
-        title={
-          <div className="flex items-center gap-2">
-            <span>{icon}</span>
-            <span>{displayName || name}</span>
-          </div>
-        }
+        title={`${icon} ${displayName || name}`}
         className="max-w-4xl"
       >
         <div className="w-full h-[70vh] flex flex-col items-center justify-center gap-4">
           <div className="text-[var(--text-secondary)] text-center">
             <p className="text-lg font-medium">{displayName || name}</p>
-            <p className="text-sm mt-1">Тип: {widgetType || 'widget'}</p>
+            <p className="text-sm mt-1">Тип: {presetName || widgetType || 'widget'}</p>
             {mainTableId && <p className="text-sm">Связана с таблицей #{mainTableId}</p>}
           </div>
           <button

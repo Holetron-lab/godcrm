@@ -302,6 +302,21 @@ export function useResizeHandlers(params: UseResizeHandlersParams) {
     };
   }, [panelWidth, isGlued, isOpen, setPanelWidth, setIsGlued, computeWidthBounds]);
 
+  const handleWidthResizeKeyDown = (e: React.KeyboardEvent) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    const width = e.key === 'Home' ? MIN_PANEL : e.key === 'End' ? computeWidthBounds().gluedMax
+      : panelWidth + (e.key === 'ArrowLeft' ? 20 : -20);
+    applyDrag(width);
+    commitFavorite(width);
+  };
+  const handleSidebarResizeKeyDown = (e: React.KeyboardEvent) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    setSidebarWidth(e.key === 'Home' ? 300 : e.key === 'End' ? 500
+      : Math.max(300, Math.min(500, sidebarWidth + (e.key === 'ArrowLeft' ? 20 : -20))));
+  };
+
   // Sidebar resize handler (between chat and sidebar) — mouse + touch.
   const handleSidebarResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -378,6 +393,9 @@ export function useResizeHandlers(params: UseResizeHandlersParams) {
     handleResizeStart,
     handleTouchResizeStart,
     handleWidthResizeStart,
+    handleWidthResizeKeyDown,
+    panelMaxWidth: computeWidthBounds().gluedMax,
+    handleSidebarResizeKeyDown,
     handleWidthTouchResizeStart,
     handleSidebarResizeStart,
     handleSidebarTouchResizeStart,

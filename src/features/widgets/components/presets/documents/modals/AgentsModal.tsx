@@ -3,7 +3,7 @@
  * Uses cascade selection: Space -> Project -> Table -> Agent
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useId, useState, useMemo, useEffect } from 'react';
 import {
   Save,
   RefreshCw,
@@ -20,6 +20,7 @@ import { Select } from '@/shared/components/ui/Select';
 import { useAllTables } from '@/features/tables/hooks/useAllTables';
 
 export function AgentsModal() {
+  const fieldId = useId();
   const ctx = useDocumentsContext();
 
   // Table selection state
@@ -370,13 +371,13 @@ export function AgentsModal() {
           <>
             {/* Embedding Agent */}
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+              <label htmlFor={`${fieldId}-label-0`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 🔍 Агент для эмбеддингов
               </label>
               <p className="text-xs text-[var(--text-tertiary)] mb-3">
                 Используется для векторного поиска по содержимому документов
               </p>
-              <select
+              <select id={`${fieldId}-label-0`}
                 value={selectedEmbeddingAgent || ''}
                 onChange={(e) => setSelectedEmbeddingAgent(e.target.value ? Number(e.target.value) : null)}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-sm"
@@ -392,13 +393,13 @@ export function AgentsModal() {
 
             {/* Translation Agent */}
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+              <label htmlFor={`${fieldId}-label-1`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 🌐 Агент для переводов
               </label>
               <p className="text-xs text-[var(--text-tertiary)] mb-3">
                 Используется для автоматического перевода контента между языками
               </p>
-              <select
+              <select id={`${fieldId}-label-1`}
                 value={selectedTranslationAgent || ''}
                 onChange={(e) => setSelectedTranslationAgent(e.target.value ? Number(e.target.value) : null)}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-sm"

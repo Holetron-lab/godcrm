@@ -1,3 +1,4 @@
+import type { CardData } from './modals/card-detail-types';
 import { useState, useMemo } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { showToast } from '@/shared/hooks/useToast';
@@ -58,7 +59,7 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
   
   // Card detail modal state
   const [showCardDetailModal, setShowCardDetailModal] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<KanbanRowData | null>(null);
+  const [selectedCard, setSelectedCard] = useState<CardData | null>(null);
   const [cardDetailInitialTab, setCardDetailInitialTab] = useState<'details' | 'files' | 'comments'>('details');
   
   // Add row modal state
@@ -186,7 +187,7 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
     attachRowToChat({
       table_id: widget.config.table_id,
       row_id: Number(rowId),
-      table_name: widget?.name || '',
+      table_name: widget?.title || '',
       row_title: card ? resolveRowName(card) : `#${rowId}`,
     });
   };
@@ -197,7 +198,7 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
     attachRowToMessage({
       table_id: widget.config.table_id,
       row_id: Number(rowId),
-      table_name: widget?.name || '',
+      table_name: widget?.title || '',
       row_title: card ? resolveRowName(card) : `#${rowId}`,
     });
   };
@@ -258,7 +259,8 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
       handleOpenCardChat(card);
       return;
     }
-    setSelectedCard(card);
+    if (card.id == null) return;
+    setSelectedCard({ ...card, id: String(card.id), data: card.data || card });
     setCardDetailInitialTab(initialTab);
     setShowCardDetailModal(true);
   };
@@ -296,7 +298,7 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
   const handleCardSave = async (cardId: string, data: Record<string, unknown>) => {
     if (!widget?.config?.table_id) return;
     await tablesApi.updateRow(String(widget.config.table_id), cardId, data);
-    queryClient.invalidateQueries({ queryKey: ['widget-data', widgetId] });
+    await queryClient.invalidateQueries({ queryKey: ['widget-data', widgetId] });
   };
 
   // Handle add row
@@ -311,10 +313,13 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
 
   // Render widget content
   const renderWidgetContent = () => {
+    if (!widget) return null;
     const props = { widget, data: filteredData };
 
-    switch (widget.preset_name) {
-      case 'kanban_board':
+    // Keep rendering persisted legacy preset names such as table_widget.
+    const presetName: string | null = widget.preset_name;
+    switch (presetName) {
+      case 'kanban_board': {
         // Get active status filters for the kanban group column
         const kanbanGroupColumnId = kanbanGroupColumn?.id;
         const activeKanbanStatusFilters = kanbanGroupColumnId ? selectFilters[kanbanGroupColumnId] : undefined;
@@ -362,6 +367,7 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
             }}
           />
         );
+      }
       case 'table_view':
       case 'table_widget':
         return (
@@ -390,6 +396,7 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
             relationData={allRelationData}
             onEventClick={handleCardDoubleClick}
             onEventUpdate={handleCardFieldUpdate}
+            onEventSave={handleCardSave}
           />
         );
       case 'chart_widget':
@@ -415,14 +422,14 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
             visibleColumns={widget.config?.visible_columns || []}
             compact
             onTaskToggle={(taskId, completed) => handleCardFieldUpdate(taskId, widget.config?.completed_column || 'completed', completed)}
-            onTaskDoubleClick={handleCardDoubleClick}
+            onTaskDoubleClick={(task, tab) => handleCardDoubleClick({ ...task }, tab)}
             onTaskUpdate={handleCardFieldUpdate}
           />
         );
       case 'ai_agents':
         return <AIAgentsWidget widget={widget} data={widgetData} />;
       case 'labs':
-        return <LabsWidget widget={widget} data={widgetData} isEditMode={true} />;
+        return <LabsWidget widget={widget} data={widgetData} />;
       case 'virtual_office':
         return <VirtualOfficeWidget widget={widget} data={widgetData} />;
       case 'terminal':

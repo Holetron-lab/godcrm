@@ -7,7 +7,7 @@
  * - displayMode: swatch-code | full-cell | swatch-only
  */
 
-import React from 'react';
+import React, { useId } from 'react';
 import { Select, Switch } from '@/shared/components/ui';
 import type { ColumnSettingsProps } from './types';
 import type { RowColorMode } from '../../../utils/color-utils';
@@ -57,6 +57,7 @@ const ROW_COLOR_MODE_OPTIONS: Array<{ value: RowColorMode; label: string }> = [
 // ═══════════════════════════════════════════════════════════
 
 export const ColorColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setDraft }) => {
+  const fieldId = useId();
   const colorConfig = draft.config?.color;
   
   // Map legacy mode to colorType
@@ -102,7 +103,7 @@ export const ColorColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setD
   };
   
   return (
-    <div className="space-y-5 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-5 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
         🎨 Настройки цвета
       </h4>
@@ -138,7 +139,7 @@ export const ColorColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setD
         
         {/* Cell Preview */}
         <div className="space-y-1">
-          <label className="text-xs font-medium text-[var(--text-tertiary)]">Превью:</label>
+          <p className="text-xs font-medium text-[var(--text-tertiary)]">Превью:</p>
           <div className="flex gap-2 p-2 bg-[var(--bg-primary)] rounded border border-[var(--border-primary)]">
             {displayMode === 'swatch-code' && (
               <span className="inline-flex items-center gap-1.5">
@@ -165,7 +166,7 @@ export const ColorColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setD
               <div className="text-sm">Показывать код</div>
               <div className="text-xs text-[var(--text-tertiary)]">Отображать значение цвета рядом</div>
             </div>
-            <Switch
+            <Switch aria-label="Показывать код"
               checked={showCode}
               onCheckedChange={(checked) => updateColorConfig({ showCode: checked })}
             />
@@ -199,7 +200,7 @@ export const ColorColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setD
                 <div className="text-sm">Разрешить ввод HEX</div>
                 <div className="text-xs text-[var(--text-tertiary)]">Ручной ввод кода цвета</div>
               </div>
-              <Switch
+              <Switch aria-label="Разрешить ввод HEX"
                 checked={allowCustomHex}
                 onCheckedChange={(checked) => updateColorConfig({ allowCustomColor: checked })}
               />
@@ -248,7 +249,7 @@ export const ColorColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setD
             <div className="text-sm font-medium">Раскрасить строку</div>
             <div className="text-xs text-[var(--text-tertiary)]">Применить цвет ко всей строке таблицы</div>
           </div>
-          <Switch
+          <Switch aria-label="Раскрасить строку"
             checked={applyToRow}
             onCheckedChange={(checked) => updateColorConfig({ applyToRow: checked })}
           />
@@ -257,13 +258,13 @@ export const ColorColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setD
         {applyToRow && (
           <>
             {/* Row color mode */}
-            <div className="space-y-2">
-              <label className="block text-xs font-medium text-[var(--text-secondary)]">
+            <fieldset className="min-w-0 space-y-2">
+              <legend className="block text-xs font-medium text-[var(--text-secondary)]">
                 Режим раскраски
-              </label>
+              </legend>
               <div className="flex gap-2 flex-wrap">
                 {ROW_COLOR_MODE_OPTIONS.map((option) => (
-                  <button
+                  <button aria-pressed={rowColorMode === option.value}
                     key={option.value}
                     type="button"
                     onClick={() => updateColorConfig({ rowColorMode: option.value })}
@@ -277,20 +278,20 @@ export const ColorColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setD
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
             
             {/* Opacity slider (for background mode) */}
             {rowColorMode === 'background' && (
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <label className="text-xs font-medium text-[var(--text-secondary)]">
+                  <label htmlFor={`${fieldId}-opacity`} className="text-xs font-medium text-[var(--text-secondary)]">
                     Прозрачность фона
                   </label>
                   <span className="text-xs text-[var(--text-tertiary)]">
                     {Math.round(rowColorOpacity * 100)}%
                   </span>
                 </div>
-                <input
+                <input id={`${fieldId}-opacity`}
                   type="range"
                   min="0.05"
                   max="0.5"
@@ -304,7 +305,7 @@ export const ColorColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setD
             
             {/* Preview */}
             <div className="space-y-1">
-              <label className="text-xs font-medium text-[var(--text-tertiary)]">Превью строки:</label>
+              <p className="text-xs font-medium text-[var(--text-tertiary)]">Превью строки:</p>
               <div 
                 className="flex items-center gap-3 px-3 py-2 rounded border border-[var(--border-primary)] bg-[var(--bg-primary)]"
                 style={getRowPreviewStyle(rowColorMode, rowColorOpacity)}

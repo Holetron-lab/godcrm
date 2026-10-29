@@ -25,7 +25,6 @@ export const VectorCell = ({
   config,
   onUpdate
 }: VectorCellProps) => {
-  const [isHovered, setIsHovered] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [localValue, setLocalValue] = useState(value);
 
@@ -120,25 +119,26 @@ export const VectorCell = ({
   // Empty state - show preview text or subtle placeholder, click to generate
   if (!displayText && !hasEmbedding) {
     return (
-      <div
-        className="group relative h-full px-2 py-1 cursor-pointer hover:bg-muted/30 transition-colors"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        onClick={canGenerate && !isGenerating ? handleGenerate : undefined}
+      <button
+        type="button"
+        aria-label="Generate vector"
+        disabled={!canGenerate || isGenerating}
+        className="group relative block w-full h-full px-2 py-1 text-left hover:bg-muted/30 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 disabled:cursor-default"
+        onClick={handleGenerate}
         title={previewText ? 'Click to generate' : 'Click to generate vector'}
       >
         <Sparkles className="absolute top-0.5 left-0.5 h-3 w-3 text-orange-400/50" />
         {isGenerating ? (
-          <div className="flex items-center gap-2 pl-4 text-sm text-muted-foreground">
+          <span className="flex items-center gap-2 pl-4 text-sm text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 text-orange-500 animate-spin" />
             <span>Generating...</span>
-          </div>
+          </span>
         ) : (
-          <div className="pl-4 text-sm whitespace-pre-wrap break-words overflow-hidden text-muted-foreground">
+          <span className="block pl-4 text-sm whitespace-pre-wrap break-words overflow-hidden text-muted-foreground">
             {previewText || <span className="italic text-muted-foreground/50">Click to generate</span>}
-          </div>
+          </span>
         )}
-      </div>
+      </button>
     );
   }
 
@@ -146,8 +146,6 @@ export const VectorCell = ({
   return (
     <div
       className="group relative h-full px-2 py-1 hover:bg-muted/30 transition-colors"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
     >
       <Sparkles className={`absolute top-0.5 left-0.5 h-3 w-3 ${hasEmbedding ? 'text-orange-500/60' : 'text-orange-400/50'}`} />
       {isGenerating ? (
@@ -162,14 +160,16 @@ export const VectorCell = ({
       )}
 
       {/* Regenerate button on hover */}
-      {isHovered && canGenerate && !isGenerating && (
-        <div
-          className="absolute top-0.5 right-0.5 p-0.5 rounded hover:bg-muted transition-colors cursor-pointer"
+      {canGenerate && (
+        <button
+          type="button"
+          disabled={isGenerating}
+          className="absolute top-0.5 right-0.5 p-0.5 rounded hover:bg-muted transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
           onClick={handleGenerate}
           title="Regenerate vector"
         >
           <RefreshCw className="h-3 w-3 text-muted-foreground hover:text-orange-500" />
-        </div>
+        </button>
       )}
     </div>
   );

@@ -3,13 +3,10 @@ import { logger } from '@/shared/utils/logger';
 import { Eye, Upload, X } from 'lucide-react';
 import { Input } from '@/shared/components/ui';
 import { filesApi } from '@/features/files/api/filesApi';
+import { parseAttachmentUrls } from '../cells/attachmentValue';
 
-const parseFileUrls = (value: unknown): string[] => {
-  if (!value) return [];
-  const str = String(value).trim();
-  if (!str) return [];
-  return str.split(',').map((url) => url.trim()).filter(Boolean);
-};
+// Shared parser: comma lists, JSON strings and external {path,...} arrays all normalise to URLs
+const parseFileUrls = parseAttachmentUrls;
 
 const getFileNameFromUrl = (url: string): string => {
   const parts = url.split('/');
@@ -148,7 +145,7 @@ export function FileUploaderField({ value, onChange, disabled, tableId, columnId
     <div
       ref={dropZoneRef}
       className="flex flex-col gap-2"
-      tabIndex={0}
+
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       onPaste={(e) => handlePaste(e.nativeEvent)}

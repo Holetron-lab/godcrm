@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { expect } from '@playwright/test';
+import { createFixtureServer, openFixture } from './browser-fixture.mjs';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const artifacts = await mkdtemp(join(tmpdir(), 'chat-preferences-'));
+const entry = 'src/tests/chat-preferences-fixture/index.html';
+const server = await createFixtureServer({ root, artifacts, entry });
+let browser;
+try {
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  for (const width of [1440, 390]) for (const theme of ['light', 'dark']) {
+    const page = await browser.newPage({ viewport: { width, height: 1100 } });
+    await page.clock.install();
+    const fixture = await openFixture({ server, page, entry: `${entry}?theme=${theme}`, ready: page.getByLabel('Цвет тени') });
+    const device = width < 768 ? 'Мобильная версия' : 'Десктопная версия';
+    await page.getByLabel(device).selectOption('enter');
+    const input = page.locator('textarea');
+    await input.fill('Первая');
+    await input.press('Shift+Enter');
+    await input.press('End');
+    await input.pressSequentially('Вторая');
+    await expect(input).toHaveValue('Первая\nВторая');
+    await input.press('Enter');
+    await expect(page.getByLabel('Отправлено', { exact: true })).toHaveText('1');
+    await expect(page.getByLabel('Текст сообщения')).toHaveText('Первая\nВторая');
+    await page.getByLabel(device).selectOption('shift-enter');
+    await input.fill('Третья');
+    await input.press('Enter');
+    await expect(input).toHaveValue('Третья\n');
+    await input.press('Shift+Enter');
+    await expect(page.getByLabel('Отправлено', { exact: true })).toHaveText('2');
+    await page.getByLabel('Цвет тени', { exact: true }).fill('#008899');
+    await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+    const bubble = page.locator('[data-chat-turn]').first();
+    await expect(bubble).toHaveCSS('box-shadow', 'rgb(0, 136, 153) -4px 0px 0px 0px inset');
+    await expect(page.locator('[data-chat-turn]').nth(1)).toHaveCSS('box-shadow', 'rgb(59, 130, 246) -4px 0px 0px 0px inset');
+    await expect(page.getByRole('img', { name: 'Активен в этом чате', exact: true })).toHaveCount(1);
+    await page.addScriptTag({ content: await readFile(join(root, 'node_modules/axe-core/axe.min.js'), 'utf8') });
+    const audit = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations);
+    await writeFile(join(artifacts, `${width}-${theme}-axe.json`), JSON.stringify(audit, null, 2));
+    assert.deepEqual(audit.map(({ id, nodes }) => ({ id, targets: nodes.map(node => node.target) })), []);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: join(artifacts, `${width}-${theme}.png`), fullPage: true });
+    await page.clock.fastForward(60_000);
+    await expect(page.getByRole('img', { name: 'Активен в этом чате', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Собеседник вернулся' }).click();
+    await expect(page.getByRole('img', { name: 'Активен в этом чате', exact: true })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Другая беседа' }).click();
+    await expect(page.getByRole('img', { name: 'Активен в этом чате', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Сбой статуса' }).click();
+    await expect(page.getByRole('img', { name: 'Активность в чате неизвестна', exact: true })).toHaveCount(2);
+    await fixture.assertStable();
+    process.stdout.write(`${width} ${theme}: send modes, color save, shadows, idle/return/switch/failure, overflow, axe PASS\n`);
+    await page.close();
+  }
+} finally { await browser?.close(); await server.close(); process.stdout.write(`Artifacts: ${artifacts}\n`); }

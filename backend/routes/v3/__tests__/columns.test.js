@@ -5,6 +5,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import request from 'supertest';
 import express from 'express';
 import columnsRoutes from '../columns.js';
@@ -113,7 +114,7 @@ describe('Columns API Routes (v3)', () => {
 
     test('should return 404 for non-existent table', async () => {
       const response = await request(app)
-        .get('/api/v3/tables/99999/columns')
+        .get(`/api/v3/tables/${NON_EXISTENT_ID}/columns`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
@@ -189,7 +190,7 @@ describe('Columns API Routes (v3)', () => {
 
     test('should return 404 for non-existent table', async () => {
       const response = await request(app)
-        .post('/api/v3/tables/99999/columns')
+        .post(`/api/v3/tables/${NON_EXISTENT_ID}/columns`)
         .send({
           name: 'email',
           display_name: 'Email',
@@ -220,7 +221,7 @@ describe('Columns API Routes (v3)', () => {
 
     test('should return 404 for non-existent column', async () => {
       const response = await request(app)
-        .get(`/api/v3/tables/${tableId}/columns/99999`)
+        .get(`/api/v3/tables/${tableId}/columns/${NON_EXISTENT_ID}`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
@@ -277,7 +278,7 @@ describe('Columns API Routes (v3)', () => {
 
     test('should return 404 for non-existent column', async () => {
       const response = await request(app)
-        .patch(`/api/v3/tables/${tableId}/columns/99999`)
+        .patch(`/api/v3/tables/${tableId}/columns/${NON_EXISTENT_ID}`)
         .send({ display_name: 'New Name' })
         .expect(404);
 
@@ -307,7 +308,7 @@ describe('Columns API Routes (v3)', () => {
 
     test('should return 404 for non-existent column', async () => {
       const response = await request(app)
-        .delete(`/api/v3/tables/${tableId}/columns/99999`)
+        .delete(`/api/v3/tables/${tableId}/columns/${NON_EXISTENT_ID}`)
         .expect(404);
 
       expect(response.body.success).toBe(false);

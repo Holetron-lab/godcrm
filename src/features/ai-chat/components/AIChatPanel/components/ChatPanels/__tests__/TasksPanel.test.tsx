@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { TicketsPanel } from '../TicketsPanel';
 import type { TicketsSource, TaskRow, Conversation, BoundRow } from '../../../types';
 
@@ -19,13 +20,9 @@ vi.mock('@/features/ai-chat/components/TicketsSourceInlineSelector', () => ({
 }));
 
 // Mock icons
-vi.mock('lucide-react', () => ({
-  ListTodo: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="list-todo-icon" {...props} />,
-  Loader2: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="loader-icon" {...props} />,
-  MessageSquare: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="message-square-icon" {...props} />,
-  Plus: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="plus-icon" {...props} />,
-  ChevronDown: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="chevron-down-icon" {...props} />
-}));
+// lucide-react is auto-mocked: any icon a component adds resolves to a stub,
+// so a new <Icon/> can no longer fail every test in this file (see src/tests/lucideMock.tsx).
+vi.mock('lucide-react', async () => (await import('@/tests/lucideMock')).lucideMock());
 
 // Mock cn utility
 vi.mock('@/shared/utils/cn', () => ({

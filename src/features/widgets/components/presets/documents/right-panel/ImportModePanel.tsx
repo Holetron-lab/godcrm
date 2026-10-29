@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import { X, Atom, FileText, Settings, Trash2 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useDocumentsContext } from '../DocumentsContext';
@@ -9,6 +9,7 @@ import { TYPE_OPTIONS } from './constants';
 
 export function ImportModePanel() {
   const ctx = useDocumentsContext();
+  const fieldId = useId();
 
   const flatSections = useMemo(
     () => (ctx.isCreatingMode ? flattenSectionTree(ctx.importTree) : []),
@@ -33,7 +34,7 @@ export function ImportModePanel() {
             <FileText className="w-4 h-4 text-purple-400" />
             <span className="font-medium text-sm">Название документа</span>
           </div>
-          <button onClick={() => ctx.setRightPanelOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)]">
+          <button type="button" aria-label="Закрыть панель" onClick={() => ctx.setRightPanelOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)]">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -42,8 +43,9 @@ export function ImportModePanel() {
             <span className="px-2 py-1 rounded text-xs font-mono uppercase bg-purple-500/20 text-purple-400">H1</span>
           </div>
           <div>
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Название</label>
+            <label htmlFor={`${fieldId}-name`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Название</label>
             <input
+              id={`${fieldId}-name`}
               type="text"
               value={ctx.newDocName}
               onChange={(e) => ctx.setNewDocName(e.target.value)}
@@ -64,7 +66,7 @@ export function ImportModePanel() {
             <FileText className="w-4 h-4 text-gray-400" />
             <span className="font-medium text-sm">Описание документа</span>
           </div>
-          <button onClick={() => ctx.setRightPanelOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)]">
+          <button type="button" aria-label="Закрыть панель" onClick={() => ctx.setRightPanelOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)]">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -73,8 +75,9 @@ export function ImportModePanel() {
             <span className="px-2 py-1 rounded text-xs font-mono uppercase bg-gray-500/20 text-gray-400">DESC</span>
           </div>
           <div>
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Описание</label>
+            <label htmlFor={`${fieldId}-description`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Описание</label>
             <textarea
+              id={`${fieldId}-description`}
               value={ctx.newDocDescription}
               onChange={(e) => ctx.setNewDocDescription(e.target.value)}
               rows={4}
@@ -111,7 +114,7 @@ export function ImportModePanel() {
               <Atom className="w-3 h-3" />
             </span>
           )}
-          <button onClick={() => ctx.setRightPanelOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)]">
+          <button type="button" aria-label="Закрыть панель" onClick={() => ctx.setRightPanelOpen(false)} className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)]">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -131,8 +134,10 @@ export function ImportModePanel() {
             {LEVEL_ICONS[importSection.level] || '📝'} {LEVEL_LABELS[importSection.level] || importSection.level}
           </span>
           <div className="flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
-            <span>order:</span>
+            <label htmlFor={`${fieldId}-order`}>order:</label>
             <input
+              id={`${fieldId}-order`}
+              aria-label="Порядок секции"
               type="number"
               value={importSection.order}
               onChange={(e) => {
@@ -160,8 +165,9 @@ export function ImportModePanel() {
 
         {/* Type selector */}
         <div>
-          <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Тип секции</label>
+          <label htmlFor={`${fieldId}-type`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Тип секции</label>
           <select
+            id={`${fieldId}-type`}
             className="w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm cursor-pointer"
             defaultValue={importSection.level === 'text' ? 'reference' : 'heading'}
           >
@@ -174,8 +180,9 @@ export function ImportModePanel() {
         {/* Content — headings only */}
         {importSection.level !== 'divider' && importSection.level !== 'text' && (
           <div>
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Заголовок</label>
+            <label htmlFor={`${fieldId}-heading`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">Заголовок</label>
             <input
+              id={`${fieldId}-heading`}
               type="text"
               value={importSection.content || ''}
               onChange={(e) => {
@@ -195,6 +202,9 @@ export function ImportModePanel() {
                 <span className="text-sm font-medium">Атом</span>
               </div>
               <button
+                type="button"
+                aria-label={`Атом: ${atomState.enabled ? 'Вкл' : 'Выкл'}`}
+                aria-pressed={atomState.enabled}
                 onClick={() => {
                   const newEnabled = !atomState.enabled;
                   let parentTitle = '';
@@ -226,8 +236,9 @@ export function ImportModePanel() {
             {atomState.enabled && (
               <div className="space-y-2 mt-3">
                 <div>
-                  <label className="block text-[10px] uppercase text-purple-400 mb-1">base_id</label>
+                  <label htmlFor={`${fieldId}-key`} className="block text-[10px] uppercase text-purple-400 mb-1">base_id</label>
                   <input
+                    id={`${fieldId}-key`}
                     type="text"
                     value={atomState.key}
                     onChange={(e) => ctx.setAtomSections(prev => ({
@@ -238,8 +249,9 @@ export function ImportModePanel() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase text-purple-400 mb-1">Заголовок</label>
+                  <label htmlFor={`${fieldId}-atom-title`} className="block text-[10px] uppercase text-purple-400 mb-1">Заголовок</label>
                   <input
+                    id={`${fieldId}-atom-title`}
                     type="text"
                     value={atomState.title}
                     onChange={(e) => ctx.setAtomSections(prev => ({

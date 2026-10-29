@@ -23,4 +23,8 @@ export { ColorCell } from './ColorCell';
 export { ColorEditor } from './ColorEditor';
 export { VerificationCell } from './VerificationCell';
 export { JsonCell } from './JsonCell';
+export { JsonTableCell } from './JsonTableCell';
 export { JsonEditor } from './JsonEditor';
+export { GeoPointCell } from './GeoPointCell';
+export { AddressCell } from './AddressCell';
+export { AddressEditor } from './AddressEditor';

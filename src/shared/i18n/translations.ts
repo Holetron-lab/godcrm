@@ -40,9 +40,11 @@ import { colors } from './modules/colors';
 import { columnSettings } from './modules/columnSettings';
 import { columnTypes } from './modules/columnTypes';
 import { dateSettings } from './modules/dateSettings';
+import { publicForm } from './modules/publicForm';
 import { userAccess } from './modules/userAccess';
 import { documents } from './modules/documents';
 import { aiChat } from './modules/aiChat';
+import { mail } from './modules/mail';
 
 export const translations = {
   en: {
@@ -75,6 +77,7 @@ export const translations = {
     emojiPicker: emojiPicker.en,
     bulkReplace: bulkReplace.en,
     notFound: notFound.en,
+    publicForm: publicForm.en,
     error: error.en,
     common: common.en,
     kanban: kanban.en,
@@ -89,6 +92,7 @@ export const translations = {
     userAccess: userAccess.en,
     documents: documents.en,
     aiChat: aiChat.en,
+    mail: mail.en,
   },
   ru: {
     headerActions: headerActions.ru,
@@ -120,6 +124,7 @@ export const translations = {
     emojiPicker: emojiPicker.ru,
     bulkReplace: bulkReplace.ru,
     notFound: notFound.ru,
+    publicForm: publicForm.ru,
     error: error.ru,
     common: common.ru,
     kanban: kanban.ru,
@@ -134,6 +139,7 @@ export const translations = {
     userAccess: userAccess.ru,
     documents: documents.ru,
     aiChat: aiChat.ru,
+    mail: mail.ru,
   },
 } as const;
 

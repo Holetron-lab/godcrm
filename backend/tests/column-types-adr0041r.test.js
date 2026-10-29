@@ -13,6 +13,9 @@ import {
   persistColumnType,
 } from '../services/ColumnService.js';
 import { RATCHET_TYPES } from '../database/migrations/knex/088_adr_0041r_p1_type_ratchet.js';
+import { STAGE2_TYPES, ADR204_TYPES } from '../database/migrations/knex/104_adr_0204_s2_content_contact_types.js';
+import { STAGE3_TYPES, ADR0035_TYPES } from '../database/migrations/knex/105_adr_0035_s1_geo_point_type.js';
+import { STAGE4_TYPES, ADR0035A_TYPES } from '../database/migrations/knex/106_adr_0035_a_address_type.js';
 import { ALL_PERSISTABLE_COLUMN_TYPES } from '../../shared/column-types.js';
 
 describe('ADR-0041R: canonicalizeColumnType', () => {
@@ -118,7 +121,13 @@ describe('ADR-0041R: manifest, owner module and DB ratchet agree', () => {
     // the constraint admits a spelling the application will never emit.
     // Migration 088 keeps its own literal copy on purpose — an applied
     // migration must not change meaning when the manifest is later edited.
-    // This test is what keeps the two honest.
-    expect([...VALID_COLUMN_TYPES].sort()).toEqual([...RATCHET_TYPES].sort());
+    // This test is what keeps the two honest. ADR-204 Stage 2 (migration 104)
+    // widened the alphabet by exactly `content` and `contact`; ADR-0035 Slice 1
+    // (migration 105) by exactly `geo_point`; ADR-0035-A (migration 106) by
+    // exactly `address`.
+    expect([...VALID_COLUMN_TYPES].sort()).toEqual([...STAGE4_TYPES].sort());
+    expect(STAGE2_TYPES.filter((t) => !RATCHET_TYPES.includes(t)).sort()).toEqual([...ADR204_TYPES].sort());
+    expect(STAGE3_TYPES.filter((t) => !STAGE2_TYPES.includes(t))).toEqual(ADR0035_TYPES);
+    expect(STAGE4_TYPES.filter((t) => !STAGE3_TYPES.includes(t))).toEqual(ADR0035A_TYPES);
   });
 });

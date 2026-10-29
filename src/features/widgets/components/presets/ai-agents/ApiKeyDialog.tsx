@@ -1,3 +1,5 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
+import { useId } from 'react';
 import {
   Bot,
   Check,
@@ -30,6 +32,8 @@ export function ApiKeyDialog({
   onSave,
   onClose,
 }: ApiKeyDialogProps) {
+  const fieldId = useId();
+  const requestedFocusRef = useRequestedFocus<HTMLInputElement>(setupOperatorId);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-[var(--bg-secondary)] rounded-xl shadow-2xl border border-[var(--border-primary)] w-[420px] max-w-[90vw] overflow-hidden">
@@ -55,10 +59,10 @@ export function ApiKeyDialog({
         {/* Content */}
         <div className="p-5 space-y-4">
           {/* Operator Selection */}
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+          <div role="group" aria-labelledby={`${fieldId}-label-0`}>
+            <span id={`${fieldId}-label-0`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
               Провайдер AI
-            </label>
+            </span>
             <div className="grid grid-cols-2 gap-2">
               {operators.map((operator) => (
                 <button
@@ -98,7 +102,7 @@ export function ApiKeyDialog({
                 onChange={(e) => onApiKeyInputChange(e.target.value)}
                 placeholder="sk-..."
                 className="w-full px-4 py-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] font-mono text-sm"
-                autoFocus
+                ref={requestedFocusRef}
               />
               <p className="text-xs text-[var(--text-tertiary)] mt-1.5">
                 Ключ будет сохранён и использован для запросов к API

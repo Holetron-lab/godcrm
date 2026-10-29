@@ -13,7 +13,7 @@
 import {
   Table2, LayoutGrid, Calendar, GitBranch, BarChart3,
   ListTodo, Activity, Database, Bot, FileText, Link2,
-  TrendingUp, Image, Hash, HeartPulse, Beaker, Building2, Coins, Gamepad2, Home, LucideIcon
+  TrendingUp, Image, Hash, HeartPulse, Beaker, Building2, Coins, Home, IdCard, LucideIcon
 } from 'lucide-react';
 
 // Import JSON data (Vite handles JSON imports)
@@ -36,13 +36,13 @@ const ICON_MAP: Record<string, LucideIcon> = {
   recent_activity: Activity,
   quick_links: Link2,
   ai_agents: Bot,
+  agent_row: IdCard,
   data_sources: Database,
   documents: FileText,
   wellness: HeartPulse,
   labs: Beaker,
   virtual_office: Building2,
   token_usage: Coins,
-  '16neo': Gamepad2,
   welcome_dashboard: Home,
   // Module presets contribute their own icon via the preset registry (seam #2)
   // — core's ICON_MAP never names a module. See MERGED_ICONS below.
@@ -69,6 +69,7 @@ export interface WidgetDefaultColumn {
   type: string;
   required: boolean;
   options?: string[];
+  config?: Record<string, unknown>;
 }
 
 /**

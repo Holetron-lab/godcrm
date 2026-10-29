@@ -51,7 +51,7 @@ export const DropdownMenu = ({ trigger, items, align = 'end', side = 'bottom', c
                       {item.icon && <span className="text-[var(--text-tertiary)]">{item.icon}</span>}
                       {item.label}
                     </span>
-                    <span className="text-[var(--text-tertiary)]">›</span>
+                    <span className="text-[var(--text-tertiary)]" aria-hidden="true">›</span>
                   </Dropdown.SubTrigger>
                   <Dropdown.Portal>
                     <Dropdown.SubContent

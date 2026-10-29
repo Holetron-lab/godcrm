@@ -4,11 +4,11 @@
  */
 
 import { logger } from '@/shared/utils/logger';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useId } from 'react';
 import { Modal } from '@/shared/components/ui/Modal';
 import { Input } from '@/shared/components/ui/Input';
 import { Button } from '@/shared/components/ui/Button';
-import { AlertTriangle, Trash2, Table2 } from 'lucide-react';
+import { Trash2, Table2 } from 'lucide-react';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 // 50 random funny/sarcastic words for confirmation
@@ -37,6 +37,7 @@ export const DeleteTablesModal = ({
   onConfirm
 }: DeleteTablesModalProps) => {
   const { t } = useLanguage();
+  const confirmationId = useId();
   const [confirmText, setConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -77,12 +78,7 @@ export const DeleteTablesModal = ({
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={
-        <div className="flex items-center gap-2 text-red-500">
-          <AlertTriangle className="w-5 h-5" />
-          <span>Удаление {tables.length} таблиц</span>
-        </div>
-      }
+      title={`Удаление ${tables.length} таблиц`}
     >
       <div className="space-y-4">
         {/* Warning */}
@@ -123,18 +119,18 @@ export const DeleteTablesModal = ({
 
         {/* Confirmation input */}
         <div className="space-y-2">
-          <label className="block text-sm font-medium text-[var(--text-primary)]">
+          <label htmlFor={confirmationId} className="block text-sm font-medium text-[var(--text-primary)]">
             Для подтверждения введите:
           </label>
           <div className="bg-[var(--bg-tertiary)] rounded-lg px-3 py-2 font-mono text-sm text-[var(--accent-primary)] select-all">
             {expectedPhrase}
           </div>
           <Input
+            id={confirmationId}
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
             placeholder="Введите фразу выше..."
             className={`font-mono ${isValid ? 'border-green-500 focus:border-green-500' : ''}`}
-            autoFocus
           />
           {confirmText && !isValid && (
             <p className="text-xs text-red-500">

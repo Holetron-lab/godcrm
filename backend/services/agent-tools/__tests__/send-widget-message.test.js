@@ -24,9 +24,10 @@ vi.mock('../../../database/connection.js', () => ({
   sqlNow: (...args) => sqlNow(...args),
 }));
 
-vi.mock('../../../utils/logger.js', () => ({
-  apiLogger: { error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-}));
+// logger is auto-mocked: a self-similar recorder whose .child() is itself, so a
+// module that grows `apiLogger.child(...)` can no longer break this file's import
+// (see backend/test/loggerMock.js).
+vi.mock('../../../utils/logger.js', async () => (await import('../../../test/loggerMock.js')).loggerMock());
 
 vi.mock('../../chat/invocation-dispatcher.js', () => ({
   dispatchInvocationsFromContent: vi.fn(),
@@ -113,11 +114,11 @@ describe('send_widget_message — happy path', () => {
     const insertCall = dbRun.mock.calls.find(([sql]) => /INSERT INTO messages/.test(sql));
     expect(insertCall).toBeTruthy();
     const params = insertCall[1];
-    // params order: [conversation_id, role, content, content_type, sender_id, attachmentsJson]
+    // params order: [conversation_id, role, content, content_type, sender_id, sender_type, agent_id, attachmentsJson, metadata]
     expect(params[0]).toBe(42);
     expect(params[2]).toBe('doc ready');     // content = note
     expect(params[3]).toBe('text');          // content_type = 'text' (chips ride on text msgs)
-    const atts = JSON.parse(params[5]);
+    const atts = JSON.parse(params[7]);
     expect(atts).toHaveLength(1);
     expect(atts[0]).toMatchObject({
       type: 'row_reference',
@@ -146,7 +147,7 @@ describe('send_widget_message — happy path', () => {
     );
 
     const insertCall = dbRun.mock.calls.find(([sql]) => /INSERT INTO messages/.test(sql));
-    const atts = JSON.parse(insertCall[1][5]);
+    const atts = JSON.parse(insertCall[1][7]);
     expect(atts[0].rowReference.row_title).toBe('Row #7');
     expect(atts[0].rowReference.table_name).toBe('misc');
     // No table_icon when icon is null.

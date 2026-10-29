@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { Select, Input } from '@/shared/components/ui';
 import { ColumnSettingsProps } from './types';
 
@@ -21,6 +21,7 @@ export const PersonColumnSettings: React.FC<ColumnSettingsProps> = ({
   allColumns = [],
   firstRow,
 }) => {
+  const fieldId = useId();
   const personConfig = draft.config?.person || {};
 
   const updateConfig = (updates: Partial<typeof personConfig>) => {
@@ -39,9 +40,9 @@ export const PersonColumnSettings: React.FC<ColumnSettingsProps> = ({
         👤 Настройки пользователя
       </h4>
 
-      <div className="p-3 bg-primary-50 dark:bg-primary-100 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
+      <div className="p-3 bg-primary-50 dark:bg-primary-900 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
         <p className="text-primary-600 dark:text-primary-300">
-          💡 Колонка "Пользователь" связывает запись с пользователем системы или таблицей пользователей.
+          💡 Колонка &quot;Пользователь&quot; связывает запись с пользователем системы или таблицей пользователей.
         </p>
       </div>
 
@@ -59,20 +60,20 @@ export const PersonColumnSettings: React.FC<ColumnSettingsProps> = ({
 
       {personConfig.source === 'table' && (
         <>
-          <Input
+          <Input id={`${fieldId}-input-1`}
             label="ID таблицы пользователей"
             placeholder="users_table_id"
             value={personConfig.usersTableId || ''}
             onChange={(e) => updateConfig({ usersTableId: e.target.value })}
           />
           <div className="grid grid-cols-2 gap-3">
-            <Input
+            <Input id={`${fieldId}-input-2`}
               label="Колонка ID"
               placeholder="id"
               value={personConfig.idColumn || 'id'}
               onChange={(e) => updateConfig({ idColumn: e.target.value })}
             />
-            <Input
+            <Input id={`${fieldId}-input-3`}
               label="Колонка имени"
               placeholder="name"
               value={personConfig.nameColumn || 'name'}
@@ -83,13 +84,13 @@ export const PersonColumnSettings: React.FC<ColumnSettingsProps> = ({
       )}
 
       {/* Формат отображения */}
-      <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+      <fieldset className="min-w-0">
+        <legend className="block text-sm font-medium text-[var(--text-primary)] mb-2">
           Формат отображения
-        </label>
+        </legend>
         <div className="grid grid-cols-2 gap-2">
           {displayFormats.map(format => (
-            <button
+            <button aria-pressed={(personConfig.displayFormat || 'avatarName') === format.value}
               key={format.value}
               type="button"
               onClick={() => updateConfig({ displayFormat: format.value })}
@@ -107,13 +108,13 @@ export const PersonColumnSettings: React.FC<ColumnSettingsProps> = ({
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       {/* Дополнительные опции */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-[var(--text-primary)]">
+      <fieldset className="min-w-0 space-y-2">
+        <legend className="block text-sm font-medium text-[var(--text-primary)]">
           Опции
-        </label>
+        </legend>
 
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -144,7 +145,7 @@ export const PersonColumnSettings: React.FC<ColumnSettingsProps> = ({
           />
           <span className="text-sm text-[var(--text-secondary)]">Разрешить несколько пользователей</span>
         </label>
-      </div>
+      </fieldset>
 
       {/* Превью */}
       <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-secondary)]">

@@ -81,6 +81,7 @@ export type Section = ThinkingSection | ToolGroupSection | ToolApprovalSection |
 // ---------------------------------------------------------------------------
 
 export interface ChatTurnProps {
+  planMessage?: ChatMessage | null;
   messages: ChatMessage[];                // 1 message for human, N for agent steps
   turnType: 'human' | 'agent';           // Determines badge and avatar
   senderName: string;                     // Display name
@@ -188,6 +189,8 @@ export interface TurnHeaderProps {
   onAgentNameClick?: () => void;
   /** Sender avatar URL for human turns */
   senderAvatar?: string;
+  senderUserId?: number;
+  conversationId?: number;
   /** ADR-0031 (broadened): message emitted by the service on behalf of an
    *  actor (row_mutation, call summary, future notifications). Replaces the
    *  human/bot role badge with a "system" badge AND adds a microchip overlay
@@ -233,9 +236,21 @@ export interface StepGroup {
   last_id: number;
   /** Preview text for thinking groups (first ~150 chars) */
   preview?: string;
+  /** created_at of the group's first / last hidden step — lets a bubble loaded
+   *  from history (steps not in the message list) still show its time span. */
+  first_at?: string | null;
+  last_at?: string | null;
+  /** Agent that produced the group (WP-2, Bugs 1552/228710) — the backend closes
+   *  a group on agent change; groupMessagesIntoTurns lifts foreign-agent groups
+   *  into their own bubble, so within one turn every group is the turn's agent. */
+  agent_id?: number | null;
+  agent_name?: string | null;
+  agent_icon?: string | null;
+  agent_color?: string | null;
 }
 
 export interface TurnBodyProps {
+  planMessage?: ChatMessage | null;
   messages: ChatMessage[];
   turnType: 'human' | 'agent';
   markdownEnabled: boolean;

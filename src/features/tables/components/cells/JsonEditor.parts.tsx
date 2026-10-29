@@ -7,7 +7,7 @@
  *   - FormFieldRow:    one key→value row inside FormNode
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   detectType,
   nextUniqueKey,
@@ -110,6 +110,11 @@ export const AdderRow = ({
 }: AdderRowProps) => {
   const [name, setName] = useState('');
   const [typ, setTyp] = useState<ValueType>('string');
+  const nameRef = useRef<HTMLInputElement>(null);
+  const typeRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    (isArray ? typeRef.current : nameRef.current)?.focus();
+  }, [isArray]);
   const nameError =
     !isArray && name && existingKeys.includes(name) ? 'ключ уже есть' : null;
   return (
@@ -119,7 +124,8 @@ export const AdderRow = ({
     >
       {!isArray && (
         <input
-          autoFocus
+          ref={nameRef}
+          aria-label="Имя ключа"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="ключ (auto)"
@@ -128,6 +134,8 @@ export const AdderRow = ({
         />
       )}
       <select
+        ref={typeRef}
+        aria-label="Тип значения"
         value={typ}
         onChange={(e) => setTyp(e.target.value as ValueType)}
         className="px-1 py-0.5 text-xs rounded border border-[var(--border-primary)] bg-[var(--bg-primary)]"
@@ -184,6 +192,10 @@ export const TreeNode = ({
   const [open, setOpen] = useState<boolean>(Boolean(isRoot) || depth < 2);
   const [adderOpen, setAdderOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const keyRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (renaming) keyRef.current?.focus();
+  }, [renaming]);
   const indent = { paddingLeft: `${depth * 14}px` };
   const t = detectType(value);
   const isContainer = t === 'object' || t === 'array';
@@ -200,7 +212,8 @@ export const TreeNode = ({
     if (renaming) {
       return (
         <input
-          autoFocus
+          ref={keyRef}
+          aria-label="Имя ключа"
           defaultValue={keyName}
           onBlur={(e) => {
             setRenaming(false);
@@ -429,6 +442,10 @@ const FormFieldRow = ({
 }: FormFieldRowProps) => {
   const [renaming, setRenaming] = useState(false);
   const [expanded, setExpanded] = useState(depth < 2);
+  const keyRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (renaming) keyRef.current?.focus();
+  }, [renaming]);
   const t = detectType(value);
   const isContainer = t === 'object' || t === 'array';
 
@@ -443,7 +460,8 @@ const FormFieldRow = ({
     if (renaming) {
       return (
         <input
-          autoFocus
+          ref={keyRef}
+          aria-label="Имя ключа"
           defaultValue={keyName}
           onBlur={(e) => {
             setRenaming(false);

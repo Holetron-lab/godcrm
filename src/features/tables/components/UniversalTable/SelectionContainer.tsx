@@ -41,14 +41,14 @@ export const SelectionContainer = ({
   const [selectedColumnId, setSelectedColumnId] = useState<string>('');
   const [copied, setCopied] = useState(false);
   
-  // Don't render if nothing selected
-  if (selectedCount === 0) return null;
-
   // Get selected rows data
   const selectedRows = useMemo(() => {
     if (!selectedRowIds || !rows.length) return [];
     return rows.filter(row => selectedRowIds.has(row.id));
   }, [selectedRowIds, rows]);
+
+  // Don't render if nothing selected
+  if (selectedCount === 0) return null;
 
   // Copy array of values for selected column
   const handleCopyArray = () => {
@@ -103,7 +103,7 @@ export const SelectionContainer = ({
       {isOpen && (
         <>
           {/* Backdrop */}
-          <div 
+          <button type="button" aria-label="Закрыть меню выделения"
             className="fixed inset-0 z-[9998]" 
             onClick={() => setIsOpen(false)}
           />

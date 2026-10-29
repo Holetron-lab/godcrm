@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatMessageList Component
  * Extracted from ChatConversationView (ADR-024)
@@ -62,17 +63,17 @@ export interface ChatMessageListProps {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatTime(date: Date) {
-  return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+function formatTime(date: Date, language: string) {
+  return date.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDate(date: Date) {
+function formatDate(date: Date, language: string, t: (key: string) => string) {
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return 'Сегодня';
-  if (date.toDateString() === yesterday.toDateString()) return 'Вчера';
-  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+  if (date.toDateString() === today.toDateString()) return t('aiChat.ui.today');
+  if (date.toDateString() === yesterday.toDateString()) return t('aiChat.ui.yesterday');
+  return date.toLocaleDateString(language, { day: 'numeric', month: 'long' });
 }
 
 function renderSenderAvatar(sender: ChatMessageItem['sender'] | undefined, fallbackIcon?: string) {
@@ -115,6 +116,7 @@ export function ChatMessageList({
   authUser,
   currentConversationId,
 }: ChatMessageListProps) {
+  const { t, language } = useLanguage();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
@@ -125,7 +127,7 @@ export function ChatMessageList({
   const isFirstLoadRef = useRef(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
-  const [agentWorking, setAgentWorking] = useState(false);
+  const [, setAgentWorking] = useState(false);
   const [selectedMessageId, setSelectedMessageId] = useState<number | string | null>(null);
   const [returnAnchor, setReturnAnchor] = useState<number | null>(null);
   // Window during which scroll events are treated as programmatic; one-shot bool misses smooth-scroll's tail events.
@@ -407,7 +409,7 @@ export function ChatMessageList({
                   onMentionClick={(token) => setInputValue(prev => prev ? `${prev} ${token} ` : `${token} `)}
                 />
               ) : (
-                <MarkdownPreview content={userText} />
+                <MarkdownPreview mediaLinks content={userText} />
               )}
             </div>
           )}
@@ -428,6 +430,7 @@ export function ChatMessageList({
           />
         ) : (
           <MarkdownPreview
+            mediaLinks
             content={message.content}
             onCheckboxClick={(info) => {
               handleCheckboxToggleInMessage(message.id, message.content, info.index);
@@ -452,7 +455,7 @@ export function ChatMessageList({
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <p className="text-sm text-[var(--text-tertiary)]">Начните диалог</p>
+            <p className="text-sm text-[var(--text-tertiary)]">{t('aiChat.ui.startAConversation')}</p>
           </div>
         ) : (
           <>
@@ -465,10 +468,10 @@ export function ChatMessageList({
               {hasMoreMessages && isLoadingMore ? (
                 <div className="inline-flex items-center gap-2 px-4 py-2 text-xs text-[var(--text-tertiary)]">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Loading older messages...</span>
+                  <span>{t('aiChat.ui.loadingOlder')}</span>
                 </div>
               ) : hasMoreMessages ? (
-                <div className="py-2 text-xs text-[var(--text-quaternary)]">↑ Scroll up for older messages</div>
+                <div className="py-2 text-xs text-[var(--text-quaternary)]">{t('aiChat.ui.scrollForOlder')}</div>
               ) : null}
             </div>
 
@@ -477,7 +480,7 @@ export function ChatMessageList({
                 {/* Date separator */}
                 <div className="flex justify-center my-4">
                   <span className="px-3 py-1 text-xs text-[var(--text-tertiary)] bg-[var(--bg-tertiary)] rounded-full">
-                    {formatDate(new Date(dateKey))}
+                    {formatDate(new Date(dateKey), language, t)}
                   </span>
                 </div>
 
@@ -518,7 +521,7 @@ export function ChatMessageList({
                               currentUser={authUser ? { name: authUser.name, id: authUser.id } : undefined}
                             />
                             <span className="text-[10px] text-[var(--text-tertiary)] ml-1">
-                              {formatTime(lastMsg.timestamp)}
+                              {formatTime(lastMsg.timestamp, language)}
                             </span>
                           </div>
                         </div>
@@ -592,8 +595,7 @@ export function ChatMessageList({
                                         isOwn ? 'text-white/80' : 'text-[var(--color-primary-500)]',
                                       )}
                                     >
-                                      <Pin className="w-3 h-3" /> Закреплено
-                                    </div>
+                                      <Pin className="w-3 h-3" /> {t('aiChat.ui.pinned')}</div>
                                   )}
                                   {message.replyTo && (
                                     <button
@@ -642,7 +644,7 @@ export function ChatMessageList({
                                     <div className="group relative flex justify-end my-0.5">
                                       <div className="w-1/3 h-px bg-white/10 group-hover:bg-white/20 transition-colors" />
                                       <span className="absolute -bottom-3 right-0 text-[9px] text-white/0 group-hover:text-white/40 transition-colors pointer-events-none">
-                                        {formatTime(message.timestamp)}
+                                        {formatTime(message.timestamp, language)}
                                       </span>
                                     </div>
                                   )}
@@ -671,8 +673,8 @@ export function ChatMessageList({
                               'flex items-center justify-end gap-1 mt-1',
                               isOwn ? 'text-white/60' : 'text-[var(--text-tertiary)]'
                             )}>
-                              {hasEdited && <span className="text-[10px]">изменено</span>}
-                              <span className="text-[10px]">{formatTime(lastMessage.timestamp)}</span>
+                              {hasEdited && <span className="text-[10px]">{t('aiChat.ui.edited')}</span>}
+                              <span className="text-[10px]">{formatTime(lastMessage.timestamp, language)}</span>
                               {isOwn && (
                                 lastRead ? <CheckCheck className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />
                               )}
@@ -706,7 +708,7 @@ export function ChatMessageList({
                     <span className="w-2 h-2 bg-[var(--text-tertiary)] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                   <span className="text-xs text-[var(--text-tertiary)]">
-                    {typingAgentName ? `${typingAgentName} думает...` : 'AI думает...'}
+                    {typingAgentName ? t('aiChat.ui.agentThinking', { name: typingAgentName }) : t('aiChat.ui.aIIsThinking')}
                   </span>
                 </div>
               </div>
@@ -718,26 +720,20 @@ export function ChatMessageList({
       </div>
 
       {returnAnchor !== null && (
-        <button type="button" onClick={handleReturnToAnchor} title="Вернуться обратно" className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-lg text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-all">
-          <CornerDownLeft className="w-3.5 h-3.5" /><span>Вернуться</span>
+        <button type="button" onClick={handleReturnToAnchor} title={t('aiChat.ui.goBack')} className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-lg text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-all">
+          <CornerDownLeft className="w-3.5 h-3.5" /><span>{t('aiChat.ui.back')}</span>
         </button>
       )}
 
       {(showScrollToBottom || returnAnchor !== null) && (
         <div className="absolute bottom-4 right-4 z-20 flex flex-col items-end gap-1.5">
-          {agentWorking && newMessageCount === 0 && (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-lg text-[var(--text-secondary)] text-[11px]">
-              <Loader2 className="w-3 h-3 animate-spin text-[var(--color-primary-500)]" />
-              <span>Agent working…</span>
-            </div>
-          )}
           {returnAnchor !== null && (
             <button
               type="button"
               onClick={handleReturnToAnchor}
               className="w-9 h-9 rounded-full bg-[var(--bg-primary)] border border-[var(--border-primary)] shadow-lg flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-all"
-              title="Return ↩"
-              aria-label="Return to previous position"
+              title={t('aiChat.ui.returnPosition')}
+              aria-label={t('aiChat.ui.returnPositionHint')}
             >
               <CornerDownLeft className="w-4 h-4" />
             </button>

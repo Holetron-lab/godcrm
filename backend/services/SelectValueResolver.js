@@ -12,6 +12,7 @@
 import { dbAll, dbGet, safeJsonParse } from '../database/connection.js';
 import { apiLogger } from '../utils/logger.js';
 import { validateColumnValue } from './ColumnService.js';
+import { verifyContentValue } from './column-adapters/media-kind.js';
 
 /**
  * Resolve select column values: convert text labels to numeric IDs.
@@ -159,7 +160,8 @@ export async function resolveSelectValues(tableId, data) {
 
 // Column types that we validate (non-select)
 const VALIDATED_TYPES = new Set([
-  'number', 'email', 'url', 'phone', 'date', 'datetime', 'checkbox'
+  'number', 'email', 'url', 'phone', 'date', 'datetime', 'checkbox',
+  'content', 'contact', // ADR-204 Stage 2
 ]);
 
 // Human-readable format hints per type
@@ -171,7 +173,34 @@ const TYPE_HINTS = {
   date:     'Must be a date in YYYY-MM-DD format',
   datetime: 'Must be a datetime in YYYY-MM-DD HH:mm format',
   checkbox: 'Must be a boolean (true/false) or 0/1',
+  content:  'Must be null or a non-empty array of { url, kind: image|video|audio } items',
+  contact:  'Must be null or an array of { kind: external, fields } | { kind: linked, source, id } items',
 };
+
+/**
+ * ADR-204 AC8 — the narrow check the bulk-import paths run: only `content`
+ * columns, shape + real media kind. Import historically accepts sloppy
+ * numbers/emails and this does not change that; it only closes the media hole.
+ * @returns {Promise<string[]>} problems; empty = admissible
+ */
+export async function validateContentColumns(tableId, data) {
+  if (!data || typeof data !== 'object') return [];
+  const columns = await dbAll(
+    "SELECT id, column_name FROM table_columns WHERE table_id = ? AND type = 'content'",
+    [tableId]
+  );
+  const problems = [];
+  for (const col of columns) {
+    const value = data[col.column_name] ?? data[String(col.id)];
+    if (value === null || value === undefined || value === '') continue;
+    if (!validateColumnValue({ type: 'content', config: {} }, value)) {
+      problems.push(`Column "${col.column_name}": ${TYPE_HINTS.content}`);
+      continue;
+    }
+    for (const p of await verifyContentValue(value)) problems.push(`Column "${col.column_name}": ${p}`);
+  }
+  return problems;
+}
 
 /**
  * Validate non-select column values against their declared types.
@@ -230,6 +259,17 @@ export async function validateAllColumns(tableId, data) {
         expected_type: colType,
         hint,
       });
+      continue;
+    }
+
+    // ADR-204 AC8: the server, not the picker, decides whether each `content`
+    // item is an admissible media file. The payload `kind` is a claim; the
+    // files table (uploads) or a conservative extension allow-list verifies it.
+    if (colType === 'content') {
+      for (const problem of await verifyContentValue(value)) {
+        errors.push(`Column "${colDef.column_name}": ${problem}`);
+        rejections.push({ column: colDef.column_name, value, expected_type: colType, hint: problem });
+      }
     }
   }
 

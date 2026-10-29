@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
-import { useViewport, type Node } from '@xyflow/react';
+import { WIDGET_STRIP_RISE } from '../nodes/TableWidgetStrips';
+import { useViewport } from '@xyflow/react';
+import type { SchemaNode, TableNode } from '../../types/schema-editor.types';
 import { useSchemaEditorStore } from '../../store/schemaEditorStore';
 
 interface ProjectBoundariesProps {
-  nodes: Node[];
+  nodes: SchemaNode[];
   projectColors: Record<number, string>;
   showConnectionLines?: boolean;
 }
@@ -59,6 +61,8 @@ export const ProjectBoundaries = ({ nodes, projectColors, showConnectionLines = 
   const edgeShape = useSchemaEditorStore(state => state.edgeShape);
   const toggleProjectExpanded = useSchemaEditorStore(state => state.toggleProjectExpanded);
   
+  const showWidgets = useSchemaEditorStore(state => state.showWidgets);
+
   const pathStyle = (edgeShape || 'rounded') as PathStyle;
   
   // Handle click on project badge
@@ -70,7 +74,7 @@ export const ProjectBoundaries = ({ nodes, projectColors, showConnectionLines = 
   const tableBoundaries = useMemo(() => {
     const boundaries: TableBoundary[] = [];
     
-    const tableNodes = nodes.filter(n => n.type === 'tableNode');
+    const tableNodes = nodes.filter((n): n is TableNode => n.type === 'tableNode');
     
     tableNodes.forEach(node => {
       const projectId = node.data?.projectId;
@@ -87,11 +91,12 @@ export const ProjectBoundaries = ({ nodes, projectColors, showConnectionLines = 
       const columns = node.data?.columns || [];
       const cardHeight = node.measured?.height || node.height || (56 + (columns.length * 37) + 44);
       
-      // Simple calculation: boundary = card position - padding
+      // Absolute-positioned widget strips are outside React Flow's measured card.
+      const widgetHeight = showWidgets ? (node.data.widgets?.length ?? 0) * WIDGET_STRIP_RISE : 0;
       const boundaryX = nodeX - PADDING;
-      const boundaryY = nodeY - PADDING;
+      const boundaryY = nodeY - widgetHeight - PADDING;
       const boundaryWidth = cardWidth + PADDING * 2;
-      const boundaryHeight = cardHeight + PADDING * 2;
+      const boundaryHeight = cardHeight + widgetHeight + PADDING * 2;
       
       const centerX = nodeX + cardWidth / 2;
       const centerY = nodeY + cardHeight / 2;
@@ -115,7 +120,7 @@ export const ProjectBoundaries = ({ nodes, projectColors, showConnectionLines = 
     });
     
     return boundaries;
-  }, [nodes, projectColors]);
+  }, [nodes, projectColors, showWidgets]);
 
   // Group boundaries by project
   const projectGroups = useMemo(() => {

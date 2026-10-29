@@ -40,6 +40,7 @@ const { dbRun, dbGet, dbAll } = await import('../../../database/connection.js');
 const { default: secretsVault } = await import('../../../services/secrets/SecretsVault.js');
 const { default: secretsRouter, revealLimiter } = await import('../secrets.js');
 const { authenticate } = await import('../../../middleware/auth.js');
+const { lockSecretsSuite } = await import('../../../tests/helpers/secrets-suite.js');
 
 const TABLE = '_secrets';
 const OWNER_SPACE_ID = 11;
@@ -59,6 +60,8 @@ async function ensureMigrations(adapter) {
     };
     await mig.up(knexShim);
   }
+  const scopedMigration = await import('../../../database/migrations/knex/093_space_secrets.js');
+  await scopedMigration.up({ raw: (sql, bindings = []) => adapter.query(sql, bindings) });
   // Minimal users + audit_log + spaces — godcrm_test on DEV is a slim
   // sandbox, not a full PROD copy. Recreate just the columns this suite
   // touches; full schema lives in `make sync-db`.
@@ -99,21 +102,24 @@ async function ensureMigrations(adapter) {
 }
 
 async function clearSecretsTable() {
-  await dbRun(`DELETE FROM ${TABLE}`);
+  await dbRun(`DELETE FROM ${TABLE} WHERE space_id IN (11, 987773, 987774)`); // space-scoped: table is shared by every suite
 }
 
 async function ensureOwnerUser() {
   // Seed the canonical owner (id=1) and one non-owner (id=2). Idempotent —
   // ON CONFLICT lets the suite re-run without manual cleanup.
+  // users.password_hash and users.encryption_key_encrypted are NOT NULL with no
+  // default; omitting them aborted the suite in a hook instead of failing an
+  // assertion. The values are throwaway — nothing in this suite authenticates.
   await dbRun(
-    `INSERT INTO users (id, email, name, role)
-     VALUES (1, ?, ?, 'owner')
+    `INSERT INTO users (id, email, name, role, password_hash, encryption_key_encrypted)
+     VALUES (1, ?, ?, 'owner', 'test-hash', 'test-encrypted-key')
      ON CONFLICT (id) DO NOTHING`,
     ['owner-test@local', 'Owner Test']
   );
   await dbRun(
-    `INSERT INTO users (id, email, name, role)
-     VALUES (2, ?, ?, 'admin')
+    `INSERT INTO users (id, email, name, role, password_hash, encryption_key_encrypted)
+     VALUES (2, ?, ?, 'admin', 'test-hash', 'test-encrypted-key')
      ON CONFLICT (id) DO NOTHING`,
     ['nonowner-test@local', 'NonOwner Test']
   );
@@ -146,8 +152,10 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
   let otherToken;
   let ownerId;
   let otherId;
+  let releaseSuite;
 
   beforeAll(async () => {
+    releaseSuite = await lockSecretsSuite();
     adapter = new PostgresAdapter({});
     await adapter.initialize();
     await ensureMigrations(adapter);
@@ -158,11 +166,12 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
     ownerToken = signFor(ownerId);
     otherToken = signFor(otherId);
     app = makeApp();
-  });
+  }, 120_000);
 
   afterAll(async () => {
     try { await secretsVault.shutdown(); } catch { /* ignore */ }
     try { await adapter.close?.(); } catch { /* ignore */ }
+    await releaseSuite?.();
   });
 
   beforeEach(async () => {
@@ -180,7 +189,7 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
   // ── T1 ─────────────────────────────────────────────────────────────
   it('T1 — POST creates row; encrypted_payload is v:1 blob, plaintext never stored', async () => {
     const res = await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'test_key', plaintext: 'hunter2', description: 'CI smoke key' });
     expect(res.status).toBe(201);
@@ -206,12 +215,12 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
 
   it('POST returns 409 when key already exists', async () => {
     await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'dup_key', plaintext: 'first' })
       .expect(201);
     const res = await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'dup_key', plaintext: 'second' });
     expect(res.status).toBe(409);
@@ -221,24 +230,30 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
   // ── T2 ─────────────────────────────────────────────────────────────
   it('T2 — GET lists rows without plaintext and without encrypted_payload', async () => {
     await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'alpha', plaintext: 'A-plain' })
       .expect(201);
     await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'beta', plaintext: 'B-plain', description: 'B note' })
       .expect(201);
 
     const res = await request(app)
-      .get('/api/v3/secrets')
+      .get('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`);
     expect(res.status).toBe(200);
     const list = res.body.data.secrets;
     expect(list.length).toBe(2);
     const keys = list.map((s) => s.key).sort();
     expect(keys).toEqual(['alpha', 'beta']);
+    // ADR-0040 §space-secrets — the list points at the space's Secrets system table.
+    const sysTable = await dbGet(
+      `SELECT ut.sync_target, p.space_id FROM universal_tables ut JOIN projects p ON p.id = ut.project_id WHERE ut.id = ?`,
+      [res.body.data.table_id]
+    );
+    expect(sysTable).toEqual({ sync_target: '_secrets', space_id: OWNER_SPACE_ID });
     for (const s of list) {
       expect(s.encrypted_payload).toBeUndefined();
       expect(s.plaintext).toBeUndefined();
@@ -249,16 +264,91 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
     expect(body).not.toContain('B-plain');
   });
 
+  it('isolates lists and same-name secrets between spaces, including the cache', async () => {
+    await dbRun(`INSERT INTO spaces (id, owner_id, name, type)
+      VALUES (987773, 1, 'Secrets scope test', 'admin')
+      ON CONFLICT (id) DO UPDATE SET owner_id = 1`);
+    try {
+      await request(app).post('/api/v3/secrets?space_id=11')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ key: 'shared_name', plaintext: 'development-value' }).expect(201);
+      const empty = await request(app).get('/api/v3/secrets?space_id=987773')
+        .set('Authorization', `Bearer ${ownerToken}`).expect(200);
+      expect(empty.body.data.secrets).toEqual([]);
+      await request(app).post('/api/v3/secrets?space_id=987773')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ key: 'shared_name', plaintext: 'other-space-value' }).expect(201);
+      expect(await secretsVault.getSecret('shared_name')).toBe('development-value');
+      expect(await secretsVault.getSecret('shared_name', { spaceId: 987773 })).toBe('other-space-value');
+      await request(app).put('/api/v3/secrets/shared_name?space_id=987773')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ plaintext: 'updated-other', description: 'scoped' }).expect(200);
+      const revealed = await request(app).post('/api/v3/secrets/shared_name/reveal?space_id=987773')
+        .set('Authorization', `Bearer ${ownerToken}`).expect(200);
+      expect(revealed.body.data.plaintext).toBe('updated-other');
+      const audit = await dbGet(`SELECT details FROM audit_log WHERE entity_type = 'secret'
+        AND entity_id = 'shared_name' AND action = 'secret.reveal' ORDER BY id DESC LIMIT 1`);
+      expect(JSON.parse(audit.details).space_id).toBe(987773);
+      await request(app).delete('/api/v3/secrets/shared_name?space_id=987773')
+        .set('Authorization', `Bearer ${ownerToken}`).expect(200);
+      expect(await secretsVault.getSecret('shared_name', { spaceId: 987773 })).toBeNull();
+      expect(await secretsVault.getSecret('shared_name')).toBe('development-value');
+      for (const [method, suffix, body] of [
+        ['post', '/reveal'], ['put', '', { description: 'must not touch dev' }], ['delete', ''],
+      ]) {
+        const call = request(app)[method](`/api/v3/secrets/shared_name${suffix}?space_id=987773`)
+          .set('Authorization', `Bearer ${ownerToken}`);
+        const result = await (body ? call.send(body) : call);
+        expect(result.status).toBe(404);
+      }
+    } finally {
+      await dbRun('DELETE FROM spaces WHERE id = 987773');
+    }
+  });
+
+  it('authorizes the requested space owner, not the Development owner', async () => {
+    await dbRun(`INSERT INTO spaces (id, owner_id, name, type)
+      VALUES (987774, 2, 'Other owner secrets', 'admin')
+      ON CONFLICT (id) DO UPDATE SET owner_id = 2`);
+    try {
+      await request(app).post('/api/v3/secrets?space_id=987774')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .send({ key: 'private_key', plaintext: 'private-value' }).expect(201);
+      for (const [method, path, body] of [
+        ['get', ''], ['post', '', { key: 'new_key', plaintext: 'x' }],
+        ['put', '/private_key', { plaintext: 'x' }],
+        ['post', '/private_key/reveal'], ['delete', '/private_key'],
+      ]) {
+        const call = request(app)[method](`/api/v3/secrets${path}?space_id=987774`)
+          .set('Authorization', `Bearer ${ownerToken}`);
+        expect((await (body ? call.send(body) : call)).status).toBe(403);
+      }
+    } finally {
+      await dbRun('DELETE FROM _secrets WHERE key = ?', ['private_key']);
+      await dbRun('DELETE FROM spaces WHERE id = 987774');
+    }
+  });
+
+  it('rejects requests without a space instead of exposing the legacy global list', async () => {
+    await request(app).get('/api/v3/secrets')
+      .set('Authorization', `Bearer ${ownerToken}`).expect(400);
+  });
+
+  it.each(['0', '-1', 'abc', '11.5', '', '11&space_id=773'])('rejects invalid space_id %s', async (spaceId) => {
+    await request(app).get(`/api/v3/secrets?space_id=${spaceId}`)
+      .set('Authorization', `Bearer ${ownerToken}`).expect(400);
+  });
+
   // ── T3 ─────────────────────────────────────────────────────────────
   it('T3 — reveal returns plaintext + writes audit_log row (no plaintext in details)', async () => {
     await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'reveal_me', plaintext: 'top-sekrit' })
       .expect(201);
 
     const res = await request(app)
-      .post('/api/v3/secrets/reveal_me/reveal')
+      .post('/api/v3/secrets/reveal_me/reveal?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`);
     expect(res.status).toBe(200);
     expect(res.body.data.plaintext).toBe('top-sekrit');
@@ -284,7 +374,7 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
 
   it('reveal on missing key → 404', async () => {
     const res = await request(app)
-      .post('/api/v3/secrets/never_existed/reveal')
+      .post('/api/v3/secrets/never_existed/reveal?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`);
     expect(res.status).toBe(404);
   });
@@ -292,7 +382,7 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
   // ── PUT ────────────────────────────────────────────────────────────
   it('PUT updates plaintext (encrypted_payload changes) and keeps description', async () => {
     await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'rotateable', plaintext: 'v1', description: 'keep me' })
       .expect(201);
@@ -301,7 +391,7 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
       ['rotateable']
     );
     const res = await request(app)
-      .put('/api/v3/secrets/rotateable')
+      .put('/api/v3/secrets/rotateable?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ plaintext: 'v2' });
     expect(res.status).toBe(200);
@@ -321,7 +411,7 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
 
   it('PUT description-only does not change encrypted_payload', async () => {
     await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'desc_only', plaintext: 'unchanged' })
       .expect(201);
@@ -330,7 +420,7 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
       ['desc_only']
     );
     const res = await request(app)
-      .put('/api/v3/secrets/desc_only')
+      .put('/api/v3/secrets/desc_only?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ description: 'now annotated' });
     expect(res.status).toBe(200);
@@ -346,7 +436,7 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
 
   it('PUT 404 on missing key', async () => {
     const res = await request(app)
-      .put('/api/v3/secrets/ghost')
+      .put('/api/v3/secrets/ghost?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ plaintext: 'x' });
     expect(res.status).toBe(404);
@@ -355,12 +445,12 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
   // ── DELETE ─────────────────────────────────────────────────────────
   it('DELETE hard-removes row + writes audit', async () => {
     await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'doomed', plaintext: 'goodbye' })
       .expect(201);
     const res = await request(app)
-      .delete('/api/v3/secrets/doomed')
+      .delete('/api/v3/secrets/doomed?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`);
     expect(res.status).toBe(200);
     const row = await dbGet(`SELECT id FROM ${TABLE} WHERE key = ?`, ['doomed']);
@@ -377,17 +467,17 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
   it('T4 — non-owner JWT → 403 on every route', async () => {
     // Seed a row as owner so DELETE/PUT/reveal have a target.
     await request(app)
-      .post('/api/v3/secrets')
+      .post('/api/v3/secrets?space_id=11')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ key: 'guarded', plaintext: 'x' })
       .expect(201);
 
     const calls = [
-      ['get', '/api/v3/secrets'],
-      ['post', '/api/v3/secrets', { key: 'forbidden_new', plaintext: 'x' }],
-      ['put', '/api/v3/secrets/guarded', { plaintext: 'mutate' }],
-      ['post', '/api/v3/secrets/guarded/reveal'],
-      ['delete', '/api/v3/secrets/guarded'],
+      ['get', '/api/v3/secrets?space_id=11'],
+      ['post', '/api/v3/secrets?space_id=11', { key: 'forbidden_new', plaintext: 'x' }],
+      ['put', '/api/v3/secrets/guarded?space_id=11', { plaintext: 'mutate' }],
+      ['post', '/api/v3/secrets/guarded/reveal?space_id=11'],
+      ['delete', '/api/v3/secrets/guarded?space_id=11'],
     ];
     for (const [method, url, body] of calls) {
       const req = request(app)[method](url).set('Authorization', `Bearer ${otherToken}`);
@@ -403,8 +493,8 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
     // T5 its own ownerId — fresh keyGenerator output → virgin bucket.
     const t5OwnerId = 999_001;
     await dbRun(
-      `INSERT INTO users (id, email, name, role)
-       VALUES (?, 't5-owner@local', 'T5 Owner', 'owner')
+      `INSERT INTO users (id, email, name, role, password_hash, encryption_key_encrypted)
+       VALUES (?, 't5-owner@local', 'T5 Owner', 'owner', 'test-hash', 'test-encrypted-key')
        ON CONFLICT (id) DO NOTHING`,
       [t5OwnerId]
     );
@@ -412,19 +502,19 @@ describe('ADR-0040 P1 — /api/v3/secrets', () => {
     const t5Token = signFor(t5OwnerId);
     try {
       await request(app)
-        .post('/api/v3/secrets')
+        .post('/api/v3/secrets?space_id=11')
         .set('Authorization', `Bearer ${t5Token}`)
         .send({ key: 'rl_key', plaintext: 'p' })
         .expect(201);
 
       for (let i = 1; i <= 30; i++) {
         const r = await request(app)
-          .post('/api/v3/secrets/rl_key/reveal')
+          .post('/api/v3/secrets/rl_key/reveal?space_id=11')
           .set('Authorization', `Bearer ${t5Token}`);
         expect(r.status, `reveal #${i}`).toBe(200);
       }
       const over = await request(app)
-        .post('/api/v3/secrets/rl_key/reveal')
+        .post('/api/v3/secrets/rl_key/reveal?space_id=11')
         .set('Authorization', `Bearer ${t5Token}`);
       expect(over.status).toBe(429);
       expect(over.body.error.code).toBe('REVEAL_RATE_LIMITED');

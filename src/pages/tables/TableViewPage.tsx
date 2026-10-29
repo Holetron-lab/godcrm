@@ -127,8 +127,10 @@ const TableViewPage = () => {
   const setRowsLimit = useTablesStore((state) => state.setRowsLimit);
   const currentPage = useTablesStore((state) => state.currentPage);
   const setCurrentPage = useTablesStore((state) => state.setCurrentPage);
+  const minLoadedPage = useTablesStore((state) => state.minLoadedPage);
   const setMinLoadedPage = useTablesStore((state) => state.setMinLoadedPage);
-  
+  const setRows = useTablesStore((state) => state.setRows);
+
   // Parse initial state from URL
   const initialFilters = useMemo(() => parseUrlFilters(searchParams), []);
   
@@ -156,6 +158,7 @@ const TableViewPage = () => {
   const [tableSettingsOpen, setTableSettingsOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const [paginationInfo, setPaginationInfo] = useState<PaginationInfo | null>(null);
+  const [goToRowTarget, setGoToRowTarget] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   // Update URL when filters change
@@ -208,9 +211,29 @@ const TableViewPage = () => {
     setPaginationInfo(info);
   }, []);
 
-  const handlePageChange = useCallback((page: number) => {
-    setCurrentPage(page);
-  }, [setCurrentPage]);
+  // Jump to a 1-based row number: reuse the loaded window when the row is already in it,
+  // otherwise start a fresh window at the row's page (same shape as opening ?page=N).
+  const handleGoToRow = useCallback((rowNumber: number) => {
+    const page = Math.ceil(rowNumber / rowsLimit);
+    const inLoadedWindow = page >= minLoadedPage && page <= currentPage;
+    if (!inLoadedWindow && activeTableId) {
+      setRows(activeTableId, []);
+      setMinLoadedPage(page);
+      setCurrentPage(page);
+    }
+    setGoToRowTarget(rowNumber);
+  }, [rowsLimit, minLoadedPage, currentPage, activeTableId, setRows, setMinLoadedPage, setCurrentPage]);
+
+  // Scroll to the requested row once it is rendered (its page may still be loading)
+  useEffect(() => {
+    if (goToRowTarget === null) return;
+    const index = goToRowTarget - 1 - (minLoadedPage - 1) * rowsLimit;
+    if (index < 0) return;
+    const targetRow = scrollContainerRef.current?.querySelectorAll('tbody tr[data-row-id]')[index];
+    if (!targetRow) return;
+    targetRow.scrollIntoView({ block: 'start', behavior: 'instant' });
+    setGoToRowTarget(null);
+  }, [goToRowTarget, minLoadedPage, rowsLimit, paginationInfo]);
 
   const handleLoadMore = useCallback(() => {
     // Store the row index we want to scroll to after loading
@@ -322,7 +345,7 @@ const TableViewPage = () => {
   // Update page title when table changes
   useEffect(() => {
     if (currentTable) {
-      setTableTitle(currentTable.display_name || currentTable.name, currentProject?.name);
+      setTableTitle(currentTable.displayName || currentTable.name, currentProject?.name);
     }
   }, [currentTable, currentProject]);
   
@@ -387,17 +410,16 @@ const TableViewPage = () => {
           groupByColumn={groupByColumn}
           onGroupByColumnChange={setGroupByColumn}
           paginationInfo={paginationInfo}
-          rowsLimit={rowsLimit}
-          onRowsLimitChange={setRowsLimit}
-          onPageChange={handlePageChange}
+          onGoToRow={handleGoToRow}
           onAddRow={() => {
             setAddRowModalOpen(true);
           }}
           onRefresh={handleRefresh}
+          scrollContainerRef={scrollContainerRef}
           isExternal={!!currentTable.source_table_name}
-          projectId={currentTable.projectId}
+          projectId={currentTable.projectId ?? undefined}
           rawMode={rawMode}
-          tableIdProp={currentTable.id}
+          tableIdProp={Number(currentTable.id)}
           showBulkReplace={true}
           onBulkReplace={() => setBulkReplaceOpen(true)}
           showTableSettings={true}
@@ -423,7 +445,9 @@ const TableViewPage = () => {
           selectFilters={selectFilters}
           dateFilters={dateFilters}
           groupByColumn={groupByColumn}
-          addRowModalOpen={addRowModalOpen} 
+          onSearchColumnsChange={setSearchColumns}
+          onGroupByColumnChange={setGroupByColumn}
+          addRowModalOpen={addRowModalOpen}
           onCloseAddRowModal={() => setAddRowModalOpen(false)}
           onPaginationChange={handlePaginationChange}
           onLoadMore={handleLoadMore}
@@ -441,7 +465,7 @@ const TableViewPage = () => {
         open={tableSettingsOpen}
         onOpenChange={setTableSettingsOpen}
         tableId={currentTable.id}
-        projectId={currentTable.projectId}
+        projectId={currentTable.projectId ?? undefined}
         spaceId={currentProject?.space_id ?? undefined}
         defaultTab="personalization"
       />

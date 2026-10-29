@@ -16,16 +16,16 @@ import type { TriggerType, ActionType } from '../types/automation.types';
 
 // Локализация триггеров
 export const TRIGGER_LABELS: Record<TriggerType, { ru: string; en: string }> = {
-  column_change: { ru: 'Изменение поля', en: 'Field change' },
   row_create: { ru: 'Создание записи', en: 'Row created' },
+  row_update: { ru: 'Изменение записи', en: 'Row updated' },
   row_delete: { ru: 'Удаление записи', en: 'Row deleted' },
   button_click: { ru: 'Нажатие кнопки', en: 'Button click' },
   schedule: { ru: 'По расписанию', en: 'Scheduled' },
 };
 
 export const TRIGGER_ICONS: Record<TriggerType, React.ElementType> = {
-  column_change: RefreshCcw,
   row_create: Plus,
+  row_update: RefreshCcw,
   row_delete: Trash2,
   button_click: MousePointerClick,
   schedule: Clock,

@@ -38,7 +38,7 @@ export const useUserAccessQueries = ({
   selectedTableId,
 }: UseUserAccessQueriesArgs) => {
   // Fetch all system users for the add user dropdown
-  const { data: systemUsersData, isLoading: isLoadingSystemUsers } = useQuery({
+  const { data: systemUsersData, isLoading: isLoadingSystemUsers, isError: isSystemUsersError, refetch: refetchSystemUsers } = useQuery({
     queryKey: ['system-users-all'],
     queryFn: async () => {
       logger.debug('[UserAccessPanel] Fetching system users...');
@@ -133,6 +133,7 @@ export const useUserAccessQueries = ({
     data: usersTableData,
     refetch: refetchUsersTable,
     isLoading: isLoadingUsersTable,
+    isError: isUsersTableError,
   } = useQuery({
     queryKey: ['users-table-rows', selectedTableId],
     queryFn: async () => {
@@ -140,26 +141,22 @@ export const useUserAccessQueries = ({
 
       logger.debug('[UserAccessPanel] Fetching users from table:', selectedTableId);
 
-      // Get table rows - API returns { data: { rows: [...], pagination: {...} } }
-      const rowsResponse = await apiClient.request<{
-        data: {
-          rows: Array<{ id: string; base_id: string; data: Record<string, unknown> }>;
-          pagination: unknown;
-        };
-      }>(`/tables/${selectedTableId}/rows`);
+      // Load every page so search and duplicate exclusion include all members.
+      const rows: Array<{ id: string; base_id: string; data: Record<string, unknown> }> = [];
+      let page = 1;
+      let pages = 1;
+      do {
+        const response = await apiClient.request<{
+          data: { rows: typeof rows; pagination?: { pages: number } };
+        }>(`/tables/${selectedTableId}/rows?page=${page}&limit=50`);
+        rows.push(...response.data.rows);
+        pages = response.data.pagination?.pages ?? 1;
+        page += 1;
+      } while (page <= pages);
 
-      // Get all columns (including granular access columns)
       const columnsResponse = await apiClient.request<{ data: TableColumn[] }>(
         `/tables/${selectedTableId}/columns`
       );
-
-      // Extract rows from nested structure
-      const rowsData = rowsResponse.data;
-      const rows = Array.isArray(rowsData?.rows)
-        ? rowsData.rows
-        : Array.isArray(rowsData)
-          ? rowsData
-          : [];
       const columns = Array.isArray(columnsResponse.data) ? columnsResponse.data : [];
 
       logger.debug('[UserAccessPanel] Got', rows.length, 'rows and', columns.length, 'columns');
@@ -235,7 +232,13 @@ export const useUserAccessQueries = ({
     enabled: !!selectedTableId && enabled,
   });
 
-  const usersTableRows = Array.isArray(usersTableData?.rows) ? usersTableData.rows : [];
+  const identities = new Map(allUsers.map(user => [user.id, user]));
+  const usersTableRows = (usersTableData?.rows ?? []).map(user => {
+    const identity = user.system_user_id == null ? undefined : identities.get(user.system_user_id);
+    return { ...user, avatar: identity?.avatar || user.avatar,
+      color: identity?.color || identity?.agent_color, agent_icon: identity?.agent_icon,
+      user_type: identity?.user_type, managed_by_agent_table_id: identity?.managed_by_agent_table_id };
+  });
   const usersTableColumns = Array.isArray(usersTableData?.columns) ? usersTableData.columns : [];
   const usersColumnMap = usersTableData?.columnMap || {};
 
@@ -305,6 +308,8 @@ export const useUserAccessQueries = ({
     // system users
     systemUsers,
     isLoadingSystemUsers,
+    isSystemUsersError,
+    refetchSystemUsers,
     // settings
     accessSettings,
     isLoadingSettings,
@@ -320,6 +325,7 @@ export const useUserAccessQueries = ({
     usersTableColumns,
     usersColumnMap,
     isLoadingUsersTable,
+    isUsersTableError,
     refetchUsersTable,
     // all space tables w/ columns (for granular access UI)
     allSpaceTables,

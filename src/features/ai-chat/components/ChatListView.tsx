@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatListView Component
  * ADR-024: Telegram-like Chat List
@@ -8,11 +9,10 @@
  * - New chat FAB button
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type KeyboardEvent } from 'react';
 import { Avatar } from '@/shared/components/ui/Avatar';
 import {
   Search,
-  Plus,
   MessageSquare,
   Check,
   CheckCheck,
@@ -76,8 +76,17 @@ export function ChatListView({
   isLoading = false,
   className
 }: ChatListViewProps) {
+  const { t, language } = useLanguage();
   const [searchQuery, setSearchQuery] = useState('');
-  const [contextMenuChatId, setContextMenuChatId] = useState<number | null>(null);
+
+  const handleMenuKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Escape') return;
+    const menu = event.currentTarget.closest('details');
+    if (!menu) return;
+    event.preventDefault();
+    menu.open = false;
+    menu.querySelector('summary')?.focus();
+  };
 
   // Filter chats by search
   const filteredChats = useMemo(() => {
@@ -110,13 +119,13 @@ export function ChatListView({
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     
     if (days === 0) {
-      return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
     } else if (days === 1) {
-      return 'Вчера';
+      return t('aiChat.ui.yesterday');
     } else if (days < 7) {
-      return date.toLocaleDateString('ru-RU', { weekday: 'short' });
+      return date.toLocaleDateString(language, { weekday: 'short' });
     } else {
-      return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+      return date.toLocaleDateString(language, { day: '2-digit', month: '2-digit' });
     }
   };
 
@@ -161,7 +170,7 @@ export function ChatListView({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Поиск..."
+            placeholder={t('aiChat.ui.search')}
             className="w-full pl-10 pr-4 py-2 text-sm rounded-full bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] border-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
           />
         </div>
@@ -177,158 +186,163 @@ export function ChatListView({
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
             <MessageSquare className="w-12 h-12 text-[var(--text-tertiary)] mb-3" />
             <p className="text-sm text-[var(--text-tertiary)]">
-              {searchQuery ? 'Чаты не найдены' : 'Нет чатов'}
+              {searchQuery ? t('aiChat.ui.noChatsFound') : t('aiChat.ui.noChats')}
             </p>
             <button
               onClick={onCreateChat}
               className="mt-3 text-sm text-[var(--color-primary-500)] hover:underline"
             >
-              Создать новый чат
-            </button>
+              {t('aiChat.ui.createANewChat')}</button>
           </div>
         ) : (
           <div className="divide-y divide-[var(--border-secondary)]">
             {sortedChats.map(chat => (
-              <div
-                key={chat.id}
-                className={cn(
-                  'relative flex items-center gap-3 px-3 py-3 cursor-pointer transition-colors',
-                  'hover:bg-[var(--bg-tertiary)]',
-                  selectedChatId === chat.id && 'bg-[var(--color-primary-50)] dark:bg-[var(--color-primary-900)]/20'
-                )}
-                onClick={() => onSelectChat(chat.id)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenuChatId(contextMenuChatId === chat.id ? null : chat.id);
-                }}
-              >
-                {/* Avatar */}
-                <div className="relative flex-shrink-0 w-12 h-12">
-                  {renderAvatar(chat)}
-                  {/* Online indicator for direct chats */}
-                  {chat.type === 'direct' && (
-                    <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[var(--bg-primary)] rounded-full" />
+              <div key={chat.id} className="relative flex items-center">
+                <button
+                  type="button"
+                  aria-label={chat.title}
+                  aria-current={selectedChatId === chat.id ? 'true' : undefined}
+                  className={cn(
+                    'flex w-full min-w-0 items-center gap-3 px-3 py-3 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--color-primary-500)]',
+                    (onPinChat || onMuteChat || onDeleteChat) && 'pr-12',
+                    'hover:bg-[var(--bg-tertiary)]',
+                    selectedChatId === chat.id && 'bg-[var(--color-primary-50)] dark:bg-[var(--color-primary-900)]/20'
                   )}
-                </div>
+                  onClick={() => onSelectChat(chat.id)}
+                  onContextMenu={(event) => {
+                    const menu = event.currentTarget.parentElement?.querySelector('details');
+                    if (!menu) return;
+                    event.preventDefault();
+                    menu.open = true;
+                    menu.querySelector('summary')?.focus();
+                  }}
+                >
+                  {/* Avatar */}
+                  <span className="relative block flex-shrink-0 w-12 h-12">
+                    {renderAvatar(chat)}
+                    {/* Online indicator for direct chats */}
+                    {chat.type === 'direct' && (
+                      <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[var(--bg-primary)] rounded-full" />
+                    )}
+                  </span>
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  {/* Top row: Name + Time */}
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {chat.isPinned && (
-                        <Pin className="w-3 h-3 text-[var(--text-tertiary)] flex-shrink-0" />
-                      )}
-                      <span className="font-medium text-[var(--text-primary)] truncate">
-                        {chat.title}
-                      </span>
-                      {chat.type === 'agent' && (
-                        <span className="flex-shrink-0 px-1 py-0.5 text-[9px] font-medium rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
-                          AI
+                  {/* Content */}
+                  <span className="block flex-1 min-w-0">
+                    {/* Top row: Name + Time */}
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        {chat.isPinned && (
+                          <Pin className="w-3 h-3 text-[var(--text-tertiary)] flex-shrink-0" />
+                        )}
+                        <span className="font-medium text-[var(--text-primary)] truncate">
+                          {chat.title}
                         </span>
-                      )}
-                    </div>
-                    <span className={cn(
-                      'text-xs flex-shrink-0',
-                      chat.unreadCount ? 'text-[var(--color-primary-500)] font-medium' : 'text-[var(--text-tertiary)]'
-                    )}>
-                      {formatTime(chat.lastMessage?.time)}
-                    </span>
-                  </div>
-
-                  {/* Bottom row: Last message + Unread badge */}
-                  <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <div className="flex items-center gap-1 min-w-0 text-sm text-[var(--text-secondary)]">
-                      {/* Read status for own messages */}
-                      {chat.lastMessage?.isOwn && (
-                        chat.lastMessage.isRead ? (
-                          <CheckCheck className="w-4 h-4 text-[var(--color-primary-500)] flex-shrink-0" />
-                        ) : (
-                          <Check className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" />
-                        )
-                      )}
-                      <span className="truncate">
-                        {chat.lastMessage ? (
-                          <>
-                            {chat.lastMessage.isOwn && <span className="text-[var(--text-tertiary)]">Вы: </span>}
-                            {truncateMessage(chat.lastMessage.content)}
-                          </>
-                        ) : (
-                          <span className="text-[var(--text-tertiary)] italic">Нет сообщений</span>
+                        {chat.type === 'agent' && (
+                          <span className="flex-shrink-0 px-1 py-0.5 text-[9px] font-medium rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+                            AI
+                          </span>
                         )}
                       </span>
-                    </div>
-                    
-                    {/* Unread badge OR muted icon */}
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      {chat.isMuted && (
-                        <VolumeX className="w-4 h-4 text-[var(--text-tertiary)]" />
-                      )}
-                      {(chat.unreadCount ?? 0) > 0 && (
-                        <span className={cn(
-                          'min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs font-medium rounded-full text-white',
-                          chat.isMuted ? 'bg-gray-400' : 'bg-[var(--color-primary-500)]'
-                        )}>
-                          {(chat.unreadCount ?? 0) > 99 ? '99+' : chat.unreadCount}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Bindings indicator */}
-                  {chat.bindings && chat.bindings.length > 0 && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <Link2 className="w-3 h-3 text-[var(--text-tertiary)]" />
-                      <span className="text-xs text-[var(--text-tertiary)] truncate">
-                        {chat.bindings.map(b => b.rowTitle).join(', ')}
+                      <span className={cn(
+                        'text-xs flex-shrink-0',
+                        chat.unreadCount ? 'text-[var(--color-primary-500)] font-medium' : 'text-[var(--text-tertiary)]'
+                      )}>
+                        {formatTime(chat.lastMessage?.time)}
                       </span>
-                    </div>
-                  )}
-                </div>
+                    </span>
 
-                {/* Context Menu */}
-                {contextMenuChatId === chat.id && (
-                  <div 
-                    className="absolute right-2 top-2 z-10 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-lg py-1 min-w-[160px]"
-                    onClick={e => e.stopPropagation()}
+                    {/* Bottom row: Last message + Unread badge */}
+                    <span className="flex items-center justify-between gap-2 mt-0.5">
+                      <span className="flex items-center gap-1 min-w-0 text-sm text-[var(--text-secondary)]">
+                        {/* Read status for own messages */}
+                        {chat.lastMessage?.isOwn && (
+                          chat.lastMessage.isRead ? (
+                            <CheckCheck className="w-4 h-4 text-[var(--color-primary-500)] flex-shrink-0" />
+                          ) : (
+                            <Check className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0" />
+                          )
+                        )}
+                        <span className="truncate">
+                          {chat.lastMessage ? (
+                            <>
+                              {chat.lastMessage.isOwn && <span className="text-[var(--text-tertiary)]">{t('aiChat.ui.youLabel')}</span>}
+                              {truncateMessage(chat.lastMessage.content)}
+                            </>
+                          ) : (
+                            <span className="text-[var(--text-secondary)] italic">{t('aiChat.ui.noMessages')}</span>
+                          )}
+                        </span>
+                      </span>
+                    
+                      {/* Unread badge OR muted icon */}
+                      <span className="flex items-center gap-1 flex-shrink-0">
+                        {chat.isMuted && (
+                          <VolumeX className="w-4 h-4 text-[var(--text-tertiary)]" />
+                        )}
+                        {(chat.unreadCount ?? 0) > 0 && (
+                          <span className={cn(
+                            'min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs font-medium rounded-full text-white',
+                            chat.isMuted ? 'bg-gray-400' : 'bg-[var(--color-primary-500)]'
+                          )}>
+                            {(chat.unreadCount ?? 0) > 99 ? '99+' : chat.unreadCount}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+
+                    {/* Bindings indicator */}
+                    {chat.bindings && chat.bindings.length > 0 && (
+                      <span className="flex items-center gap-1 mt-1">
+                        <Link2 className="w-3 h-3 text-[var(--text-tertiary)]" />
+                        <span className="text-xs text-[var(--text-tertiary)] truncate">
+                          {chat.bindings.map(b => b.rowTitle).join(', ')}
+                        </span>
+                      </span>
+                    )}
+                  </span>
+
+                </button>
+
+                {/* Native disclosure keeps actions separate from chat selection. */}
+                {(onPinChat || onMuteChat || onDeleteChat) && (
+                  <details
+                    className="absolute right-2 top-3 z-10 open:z-20"
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false;
+                    }}
                   >
-                    {onPinChat && (
-                      <button
-                        onClick={() => {
-                          onPinChat(chat.id);
-                          setContextMenuChatId(null);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
-                      >
-                        <Pin className="w-4 h-4" />
-                        {chat.isPinned ? 'Открепить' : 'Закрепить'}
-                      </button>
-                    )}
-                    {onMuteChat && (
-                      <button
-                        onClick={() => {
-                          onMuteChat(chat.id);
-                          setContextMenuChatId(null);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
-                      >
-                        {chat.isMuted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                        {chat.isMuted ? 'Включить уведомления' : 'Отключить'}
-                      </button>
-                    )}
-                    {onDeleteChat && (
-                      <button
-                        onClick={() => {
-                          onDeleteChat(chat.id);
-                          setContextMenuChatId(null);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-[var(--bg-tertiary)]"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Удалить
-                      </button>
-                    )}
-                  </div>
+                    <summary
+                      onKeyDown={handleMenuKeyDown}
+                      aria-label={`${t('aiChat.ui.more')}: ${chat.title}`}
+                      className="list-none cursor-pointer rounded p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary-500)] [&::-webkit-details-marker]:hidden"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </summary>
+                    <div className="absolute right-0 top-full bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-lg py-1 min-w-[160px]">
+                      {[
+                        { action: onPinChat, label: chat.isPinned ? t('aiChat.ui.unpin') : t('aiChat.ui.pin'), icon: <Pin className="w-4 h-4" /> },
+                        { action: onMuteChat, label: chat.isMuted ? t('aiChat.ui.enableNotifications') : t('settings.2fa.disable'), icon: chat.isMuted ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" /> },
+                        { action: onDeleteChat, label: t('aiChat.ui.delete'), icon: <Trash2 className="w-4 h-4" />, danger: true },
+                      ].map(({ action, label, icon, danger }, index) => action && (
+                        <button
+                          key={index}
+                          type="button"
+                          onKeyDown={handleMenuKeyDown}
+                          onClick={(event) => {
+                            const menu = event.currentTarget.closest('details');
+                            if (menu) {
+                              menu.open = false;
+                              menu.querySelector('summary')?.focus();
+                            }
+                            action(chat.id);
+                          }}
+                          className={cn('w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--bg-tertiary)] focus-visible:bg-[var(--bg-tertiary)]', danger ? 'text-red-600 dark:text-red-400' : 'text-[var(--text-primary)]')}
+                        >
+                          {icon}{label}
+                        </button>
+                      ))}
+                    </div>
+                  </details>
                 )}
               </div>
             ))}
@@ -340,7 +354,7 @@ export function ChatListView({
       <button
         onClick={onCreateChat}
         className="absolute bottom-4 right-4 w-14 h-14 rounded-full bg-[var(--color-primary-500)] text-white shadow-lg hover:bg-[var(--color-primary-600)] transition-colors flex items-center justify-center"
-        title="Новый чат"
+        title={t('aiChat.ui.newChat')}
       >
         <Edit3 className="w-6 h-6" />
       </button>

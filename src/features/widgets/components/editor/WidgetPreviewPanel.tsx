@@ -63,6 +63,7 @@ export function WidgetPreviewPanel({
     id: 0,
     dashboard_id: 0,
     source_widget_id: null,
+    is_module: false, module_id: null, sidebar_order: null, sidebar_icon: null, access_level: null, is_pinned: null,
     widget_type: 'custom',
     preset_name: null,
     code,

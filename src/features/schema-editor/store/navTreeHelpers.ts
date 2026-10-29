@@ -8,7 +8,9 @@ export interface TreeNodeData {
   color?: string;
   theme_primary?: string;
   widget_type?: string;
-  main_table_id?: number;
+  preset_name?: string;
+  config?: unknown;
+  main_table_id?: number | string | null;
 }
 
 export interface TreeApiNode {
@@ -50,6 +52,12 @@ export const isFormsFolder = (node: NavTreeNode): boolean => {
   return node.id.includes('virtual:forms') || label === 'forms';
 };
 
+// main_table_id comes from the widget config and may be a numeric string.
+const toTableId = (value: unknown): number | undefined => {
+  const id = Number(value);
+  return Number.isFinite(id) && id > 0 ? id : undefined;
+};
+
 export const transformApiNodeToNavNode = (
   node: TreeApiNode,
   parentId: string | null
@@ -69,6 +77,8 @@ export const transformApiNodeToNavNode = (
     tableCount: node.data?.count || (node.children?.length || 0),
     color: node.data?.color || node.data?.theme_primary,
     widgetType: node.data?.widget_type,
-    mainTableId: node.data?.main_table_id,
+    presetName: node.data?.preset_name,
+    widgetConfig: node.data?.config,
+    mainTableId: toTableId(node.data?.main_table_id),
   };
 };

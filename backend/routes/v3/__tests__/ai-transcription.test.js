@@ -15,7 +15,7 @@ process.env.SKIP_DEV_USER = 'true';
 const JWT_SECRET = 'test-secret-key';
 process.env.JWT_SECRET = JWT_SECRET;
 
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import express from 'express';
@@ -30,6 +30,8 @@ describe('ADR-027: Voice Transcription API', () => {
   let testProjectId;
   let operatorsTableId;
   let openaiOperatorId;
+
+  afterEach(() => vi.unstubAllGlobals());
 
   beforeAll(async () => {
     await setupTestDatabase();
@@ -189,9 +191,8 @@ describe('ADR-027: Voice Transcription API', () => {
     });
 
     it('should accept audio and return transcription (mock test)', async () => {
-      // NOTE: This test uses a fake API key, so OpenAI returns 401.
-      // In a real environment with a valid key, this would return 200.
-      // We test that the endpoint correctly processes the request up to the API call.
+      const fetchMock = vi.fn(async () => Response.json({ text: 'fixture transcription' }));
+      vi.stubGlobal('fetch', fetchMock);
       const mockAudioBase64 = Buffer.from('mock audio data for testing').toString('base64');
 
       const response = await request(app)
@@ -204,22 +205,15 @@ describe('ADR-027: Voice Transcription API', () => {
           language: 'ru'
         });
 
-      // With test API key, OpenAI returns 401
-      // This confirms our code correctly formats and sends the request
-      expect([200, 401]).toContain(response.status);
-      
-      // If 401, it means OpenAI rejected our fake key (expected behavior)
-      if (response.status === 401) {
-        expect(response.body.success).toBe(false);
-        expect(response.body.error.message).toContain('Transcription failed');
-      } else {
-        // If 200, API key was valid
-        expect(response.body.success).toBe(true);
-        expect(typeof response.body.data.text).toBe('string');
-      }
+      expect(response.status).toBe(200);
+      expect(response.body.data.data.text).toBe('fixture transcription');
+      expect(fetchMock).toHaveBeenCalledWith('https://api.openai.com/v1/audio/transcriptions',
+        expect.objectContaining({ headers: { Authorization: 'Bearer sk-test-key-12345' } }));
     });
 
     it('should use default operator if not specified (mock test)', async () => {
+      const fetchMock = vi.fn(async () => new Response('denied', { status: 401, statusText: 'Unauthorized' }));
+      vi.stubGlobal('fetch', fetchMock);
       // First set default operator in space settings
       await dbRun(`
         UPDATE spaces SET settings = ? WHERE id = ?
@@ -245,13 +239,10 @@ describe('ADR-027: Voice Transcription API', () => {
           format: 'webm'
         });
 
-      // With test API key, OpenAI returns 401
-      expect([200, 401]).toContain(response.status);
-      if (response.status === 401) {
-        expect(response.body.success).toBe(false);
-      } else {
-        expect(response.body.success).toBe(true);
-      }
+      expect(response.status).toBe(401);
+      expect(response.body.error.code).toBe('WHISPER_API_ERROR');
+      expect(fetchMock).toHaveBeenCalledWith('https://api.openai.com/v1/audio/transcriptions',
+        expect.objectContaining({ headers: { Authorization: 'Bearer sk-test-key-12345' } }));
     });
   });
 

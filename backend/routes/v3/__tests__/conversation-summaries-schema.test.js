@@ -73,9 +73,13 @@ describe('ADR-024 Phase 2: conversation_summaries Schema', () => {
       expect(columnNames).toContain('id');
       expect(columnNames).toContain('conversation_id');
       expect(columnNames).toContain('summary');
-      expect(columnNames).toContain('message_range_start');
-      expect(columnNames).toContain('message_range_end');
-      expect(columnNames).toContain('tokens_saved');
+      // Migration 092 reconciled this table with the shape chatChunkingService.js
+      // has always written. The old range/tokens_saved trio was never read by any
+      // code path and is gone.
+      expect(columnNames).toContain('chunk_number');
+      expect(columnNames).toContain('messages_start_id');
+      expect(columnNames).toContain('messages_end_id');
+      expect(columnNames).toContain('messages_count');
       expect(columnNames).toContain('created_at');
     });
 
@@ -122,9 +126,9 @@ describe('ADR-024 Phase 2: conversation_summaries Schema', () => {
     it('should insert and retrieve summary', async () => {
       const insertResult = await dbRun(
         `INSERT INTO conversation_summaries
-         (conversation_id, summary, message_range_start, message_range_end, tokens_saved, created_at)
-         VALUES ($1, $2, $3, $4, $5, NOW())`,
-        [testConversationId, 'User discussed login bug', 1, 10, 500]
+         (conversation_id, chunk_number, summary, messages_start_id, messages_end_id, messages_count, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [testConversationId, 1, 'User discussed login bug', 1, 10, 10]
       );
 
       const summaryId = insertResult.lastInsertRowid;
@@ -138,20 +142,33 @@ describe('ADR-024 Phase 2: conversation_summaries Schema', () => {
 
       expect(summary).toBeDefined();
       expect(summary.conversation_id).toBe(testConversationId);
-      expect(summary.message_range_start).toBe(1);
-      expect(summary.message_range_end).toBe(10);
+      expect(summary.chunk_number).toBe(1);
+      expect(summary.messages_start_id).toBe(1);
+      expect(summary.messages_end_id).toBe(10);
       expect(summary.summary).toBe('User discussed login bug');
     });
 
-    it.skip('should enforce unique constraint on (conversation_id, chunk_number) - chunk_number removed in PG schema', async () => {
+    it('should enforce unique constraint on (conversation_id, chunk_number)', async () => {
+      // Un-skipped: this was parked as "chunk_number removed in PG schema" — the
+      // symptom of the 020-never-ran drift that migration 092 closes.
+      const insert = (chunk) => dbRun(
+        `INSERT INTO conversation_summaries
+         (conversation_id, chunk_number, summary, messages_start_id, messages_end_id, messages_count, created_at)
+         VALUES ($1, $2, 'chunk', 1, 10, 10, NOW())`,
+        [testConversationId, chunk]
+      );
+
+      await insert(1);
+      await expect(insert(1)).rejects.toThrow();
+      await expect(insert(2)).resolves.toBeDefined();
     });
 
     it('should cascade delete summaries when conversation is deleted', async () => {
       // Insert summary
       await dbRun(
         `INSERT INTO conversation_summaries
-         (conversation_id, summary, message_range_start, message_range_end, created_at)
-         VALUES ($1, 'Summary to delete', 1, 10, NOW())`,
+         (conversation_id, chunk_number, summary, messages_start_id, messages_end_id, messages_count, created_at)
+         VALUES ($1, 1, 'Summary to delete', 1, 10, 10, NOW())`,
         [testConversationId]
       );
 
@@ -184,22 +201,22 @@ describe('ADR-024 Phase 2: conversation_summaries Schema', () => {
       for (let i = 1; i <= 3; i++) {
         await dbRun(
           `INSERT INTO conversation_summaries
-           (conversation_id, summary, message_range_start, message_range_end, created_at)
-           VALUES ($1, $2, $3, $4, NOW())`,
-          [testConversationId, `Summary for range ${i}`, (i - 1) * 10 + 1, i * 10]
+           (conversation_id, chunk_number, summary, messages_start_id, messages_end_id, messages_count, created_at)
+           VALUES ($1, $2, $3, $4, $5, 10, NOW())`,
+          [testConversationId, i, `Summary for range ${i}`, (i - 1) * 10 + 1, i * 10]
         );
       }
 
       // Retrieve all summaries
       const summaries = await dbAll(
-        'SELECT * FROM conversation_summaries WHERE conversation_id = $1 ORDER BY message_range_start',
+        'SELECT * FROM conversation_summaries WHERE conversation_id = $1 ORDER BY messages_start_id',
         [testConversationId]
       );
 
       expect(summaries).toHaveLength(3);
-      expect(summaries[0].message_range_start).toBe(1);
-      expect(summaries[1].message_range_start).toBe(11);
-      expect(summaries[2].message_range_start).toBe(21);
+      expect(summaries[0].messages_start_id).toBe(1);
+      expect(summaries[1].messages_start_id).toBe(11);
+      expect(summaries[2].messages_start_id).toBe(21);
     });
   });
 });

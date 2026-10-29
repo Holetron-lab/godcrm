@@ -66,7 +66,7 @@ export function ItemMenu({
   if (!isOpen) return null;
 
   const menuContent = (
-    <div
+    <div role="presentation"
       ref={menuRef}
       className="fixed z-[9999] bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-lg py-1 min-w-[180px]"
       style={{ top: position.top, left: position.left }}

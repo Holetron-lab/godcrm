@@ -5,6 +5,7 @@ import { ForgotPasswordForm } from '@/features/auth/components/ForgotPasswordFor
 import { LanguageSwitcher } from '@/shared/components/ui';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { isSafeReturnPath, resolvePostLoginTarget } from '@/features/auth/utils/postLoginTarget';
 import { TorusBrand } from '@/components/brand/TorusBrand';
 
 const LoginPage = () => {
@@ -24,15 +25,14 @@ const LoginPage = () => {
     const searchParams = new URLSearchParams(location.search);
     const redirectParam = searchParams.get('redirect');
 
-    if (redirectParam) {
-      const decodedRedirect = decodeURIComponent(redirectParam);
-      window.location.href = decodedRedirect;
+    if (isSafeReturnPath(redirectParam)) {
+      // URLSearchParams already decoded the outer return parameter. Preserve OIDC bytes.
+      window.location.href = redirectParam;
       return;
     }
 
-    const redirectState = location.state as { from?: string } | null;
-    const target = redirectState?.from && typeof redirectState.from === 'string' ? redirectState.from : '/spaces';
-    navigate(target, { replace: true });
+    // Never return to an auth page or an off-site URL (1552/229244).
+    navigate(resolvePostLoginTarget(location.state), { replace: true });
   }, [initialized, user, navigate, location.state, location.search]);
 
   if (!initialized) {

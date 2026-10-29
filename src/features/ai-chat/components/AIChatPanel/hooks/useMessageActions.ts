@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * useMessageActions — Message-level action handlers (copy, forward, delete, checkbox, reactions).
  * Extracted from AIChatPanel.tsx (lines 832-1030).
@@ -13,7 +14,7 @@ import {
   denormalizeCheckboxes,
   getCheckboxContext,
 } from '@/shared/utils/markdownCheckbox';
-import type { ChatMessage } from '../../types';
+import type { ChatMessage } from '@/features/ai-chat/types';
 import type { CheckboxClickInfo } from '@/shared/components/MarkdownPreview';
 
 interface UseMessageActionsParams {
@@ -42,6 +43,7 @@ export function useMessageActions({
   messageReactions,
   chatPartner,
 }: UseMessageActionsParams) {
+  const { t } = useLanguage();
   // Handle reaction toggle on message
   const handleReaction = useCallback(async (messageId: number, emoji: string) => {
     try {
@@ -120,7 +122,7 @@ export function useMessageActions({
 
     const prefix = context.heading ? `[${context.heading}] ` : '';
     const status = isNowChecked ? '✅' : '⬜';
-    const userName = currentUser?.name || 'User';
+    const userName = currentUser?.name || t('aiChat.ui.user');
     const systemText = `${status} ${prefix}${isNowChecked ? 'Checked' : 'Unchecked'}: "${context.lineText}" — ${userName}`;
 
     const convId = userConversationId || currentConversationId;
@@ -131,7 +133,7 @@ export function useMessageActions({
         logger.error('Failed to send checkbox system message:', e);
       }
     }
-  }, [currentUser?.name, userConversationId, currentConversationId, sendUserMessageMutateAsync, refetchUserMessages]);
+  }, [currentUser?.name, userConversationId, currentConversationId, sendUserMessageMutateAsync, refetchUserMessages, t]);
 
   // Legacy: handle checkbox click info (append to input)
   const handleCheckboxClick = useCallback((info: CheckboxClickInfo) => {
@@ -145,7 +147,7 @@ export function useMessageActions({
   // Handle forward message
   const handleForwardMessage = useCallback((message: ChatMessage) => {
     if (!message.content) {
-      showToast('Сообщение пустое — нечего пересылать', 'error');
+      showToast(t('aiChat.ui.emptyForward'), 'error');
       return;
     }
     const senderLabel = message.sender_name || message.agentName || message.role;
@@ -157,12 +159,12 @@ export function useMessageActions({
     ].join('\n');
 
     navigator.clipboard.writeText(forwardedText).then(() => {
-      showToast('Сообщение скопировано в буфер. Вставьте в нужный чат.', 'success');
+      showToast(t('aiChat.ui.forwardCopied'), 'success');
     }).catch(() => {
-      showToast('Пересылка сообщений скоро будет доступна', 'info');
+      showToast(t('aiChat.ui.forwardUnavailable'), 'info');
     });
     logger.debug('Forward message copied to clipboard:', message.id);
-  }, []);
+  }, [t]);
 
   // Handle soft delete message
   const handleDeleteMessage = useCallback(async (messageId: number) => {

@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useRef } from 'react';
 import { Search, PenSquare, RefreshCw, MailOpen, Menu, Settings } from 'lucide-react';
 import { Button, Input } from '@/shared/components/ui';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 export interface MailToolbarProps {
   query: string;
@@ -33,7 +34,7 @@ export interface MailToolbarProps {
 }
 
 const Divider = () => (
-  <div className="mx-1 h-6 w-px bg-[var(--border-primary)]" aria-hidden="true" />
+  <div className="mx-1 hidden h-6 w-px bg-[var(--border-primary)] md:block" aria-hidden="true" />
 );
 
 /**
@@ -51,6 +52,7 @@ function SelectAllCheckbox({
   disabled?: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useLanguage();
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.indeterminate = indeterminate;
@@ -62,8 +64,8 @@ function SelectAllCheckbox({
       checked={checked}
       disabled={disabled}
       onChange={onToggle}
-      aria-label="Выбрать все письма"
-      title="Выбрать все"
+      aria-label={t('mail.toolbar.selectAll')}
+      title={t('mail.toolbar.selectAllShort')}
       className="ml-1 h-4 w-4 flex-shrink-0 cursor-pointer accent-[var(--accent-primary)] disabled:cursor-not-allowed disabled:opacity-40"
     />
   );
@@ -94,14 +96,15 @@ export function MailToolbar({
   bulkSlot,
   accountSwitcher,
 }: MailToolbarProps) {
+  const { t } = useLanguage();
   return (
-    <div className="flex items-center gap-2 overflow-x-auto scrollbar-none border-b border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2">
+    <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-[var(--border-primary)] bg-[var(--bg-primary)] px-2 py-2 max-md:[&>button]:h-11 max-md:[&>button]:min-w-11 md:flex-nowrap md:gap-2 md:overflow-x-auto md:px-3">
       {/* Left — hamburger collapses/expands the vertical folder rail. */}
       <button
         type="button"
-        aria-label={railOpen ? 'Свернуть папки' : 'Развернуть папки'}
+        aria-label={railOpen ? t('mail.toolbar.collapseFolders') : t('mail.toolbar.expandFolders')}
         aria-expanded={railOpen}
-        title="Папки"
+        title={t('mail.toolbar.folders')}
         onClick={onToggleRail}
         className="rounded-md p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
       >
@@ -123,8 +126,8 @@ export function MailToolbar({
       <button
         type="button"
         aria-pressed={unreadOnly}
-        title="Только непрочитанные"
-        aria-label="Только непрочитанные"
+        title={t('mail.toolbar.unreadOnly')}
+        aria-label={t('mail.toolbar.unreadOnly')}
         onClick={() => onUnreadOnlyChange(!unreadOnly)}
         className={cn(
           'flex-shrink-0 rounded-md p-1.5 transition-colors',
@@ -136,16 +139,14 @@ export function MailToolbar({
         <MailOpen size={16} />
       </button>
 
-      {/* Search — sits right of the unread filter. Shrinkable so the bar stays one
-          row (it scrolls-x rather than wrapping, which blew up its height on mobile);
-          shrinks further to make room when the bulk-action slot appears. */}
-      <div className="min-w-[7rem] flex-1">
+      {/* On phones search and account selection each get a full row. */}
+      <div className="order-1 min-w-0 basis-full md:order-none md:min-w-[7rem] md:flex-1 md:basis-auto">
         <Input
-          placeholder="Search mail"
+          placeholder={t('mail.toolbar.search')}
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           leftAddon={<Search size={16} />}
-          aria-label="Search mail"
+          aria-label={t('mail.toolbar.search')}
         />
       </div>
 
@@ -154,8 +155,8 @@ export function MailToolbar({
         variant="ghost"
         size="sm"
         className="flex-shrink-0"
-        aria-label="Sync mail"
-        title="Sync mail"
+        aria-label={t('mail.toolbar.sync')}
+        title={t('mail.toolbar.sync')}
         disabled={!canSync || syncing}
         onClick={onSync}
       >
@@ -165,17 +166,17 @@ export function MailToolbar({
       {/* Bulk actions for the checkbox selection — appear right of Sync the moment
           one or more rows are checked. */}
       {bulkSlot && (
-        <>
+        <div className="order-3 flex w-full items-center overflow-x-auto md:order-none md:w-auto md:shrink-0">
           <Divider />
           {bulkSlot}
-        </>
+        </div>
       )}
 
       {/* Compose — icon-only on mobile so it doesn't push the account switcher onto
           a new line; label returns at ≥sm. */}
-      <Button size="sm" className="flex-shrink-0" aria-label="Написать письмо" onClick={onCompose}>
+      <Button size="sm" className="flex-shrink-0" aria-label={t('mail.toolbar.composeLabel')} onClick={onCompose}>
         <PenSquare size={14} />
-        <span className="ml-1.5 hidden sm:inline">Compose</span>
+        <span className="ml-1.5 hidden sm:inline">{t('mail.toolbar.compose')}</span>
       </Button>
 
       <Divider />
@@ -184,8 +185,8 @@ export function MailToolbar({
           account switcher. */}
       <button
         type="button"
-        title="Настройки почты"
-        aria-label="Настройки почты"
+        title={t('mail.toolbar.settings')}
+        aria-label={t('mail.toolbar.settings')}
         onClick={onOpenSettings}
         className="flex-shrink-0 rounded-md p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
       >
@@ -193,7 +194,7 @@ export function MailToolbar({
       </button>
 
       {/* Right — account switcher pinned to the far edge. */}
-      {accountSwitcher && <div className="w-40 flex-shrink-0 sm:w-48">{accountSwitcher}</div>}
+      {accountSwitcher && <div className="order-2 min-w-0 basis-full md:order-none md:w-48 md:shrink-0 md:basis-auto">{accountSwitcher}</div>}
     </div>
   );
 }

@@ -261,15 +261,15 @@ async function rewriteInScopeRelations(perTableMeta, tableMap, rowMap) {
 async function rollback(tracking) {
   try {
     for (const tid of tracking.tables) {
-      try { await dbRun('DELETE FROM table_rows WHERE table_id = ?', [tid]); } catch {}
-      try { await dbRun('DELETE FROM table_columns WHERE table_id = ?', [tid]); } catch {}
-      try { await dbRun('DELETE FROM universal_tables WHERE id = ?', [tid]); } catch {}
+      try { await dbRun('DELETE FROM table_rows WHERE table_id = ?', [tid]); } catch { /* Best-effort rollback; attempt remaining deletions after a failure. */ }
+      try { await dbRun('DELETE FROM table_columns WHERE table_id = ?', [tid]); } catch { /* Best-effort rollback; attempt remaining deletions after a failure. */ }
+      try { await dbRun('DELETE FROM universal_tables WHERE id = ?', [tid]); } catch { /* Best-effort rollback; attempt remaining deletions after a failure. */ }
     }
     for (const pid of tracking.projects) {
-      try { await dbRun('DELETE FROM projects WHERE id = ?', [pid]); } catch {}
+      try { await dbRun('DELETE FROM projects WHERE id = ?', [pid]); } catch { /* Continue cleanup of the remaining resources. */ }
     }
     for (const sid of tracking.spaces) {
-      try { await dbRun('DELETE FROM spaces WHERE id = ?', [sid]); } catch {}
+      try { await dbRun('DELETE FROM spaces WHERE id = ?', [sid]); } catch { /* Continue cleanup of the remaining resources. */ }
     }
   } catch (e) {
     aiLogger.error({ err: e.message }, 'copy-tools rollback failed');

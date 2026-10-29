@@ -5,7 +5,7 @@
  * (`settings_override.filter`: column + value; optional use-document-number flag).
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useId, useState, useEffect, useMemo } from 'react';
 import { Plus, RefreshCcw, Database, Loader2, Trash2, Settings2, CheckCircle2, Filter } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useDocumentsContext } from '../DocumentsContext';
@@ -55,6 +55,7 @@ const DOC_NUMBER_INCOMPATIBLE_TYPES = new Set([
 ]);
 
 export function WidgetSettingsSection({ item, tableId }: WidgetSettingsSectionProps) {
+  const fieldId = useId();
   const ctx = useDocumentsContext();
   const widgetId = typeof item.widget_ref === 'number' ? item.widget_ref : null;
   const widgetQuery = useWidget(widgetId ?? 0);
@@ -64,7 +65,7 @@ export function WidgetSettingsSection({ item, tableId }: WidgetSettingsSectionPr
     : null;
   const tableQuery = useTableById(sourceTableId ? String(sourceTableId) : undefined);
   const columnsQuery = useTableColumns(sourceTableId ? String(sourceTableId) : undefined);
-  const columns = columnsQuery.data ?? [];
+  const columns = useMemo(() => columnsQuery.data ?? [], [columnsQuery.data]);
   const presetName = widget?.preset_name || '';
   const presetIcon = presetName ? (WIDGET_PRESET_ICONS[presetName] || '🧩') : '🧩';
   const updateWidget = useUpdateWidget();
@@ -334,8 +335,8 @@ export function WidgetSettingsSection({ item, tableId }: WidgetSettingsSectionPr
           </div>
 
           <div>
-            <label className="block text-[11px] text-[var(--text-tertiary)] mb-1">Колонка</label>
-            <select
+            <label htmlFor={`${fieldId}-0`} className="block text-[11px] text-[var(--text-tertiary)] mb-1">Колонка</label>
+            <select id={`${fieldId}-0`}
               value={filterColumn}
               onChange={(e) => { setFilterColumn(e.target.value); mark(); }}
               disabled={ctx.isReadOnly || columnsQuery.isLoading}

@@ -74,6 +74,9 @@ interface CsvConfigureSectionProps {
 
   // Translation
   t: (key: string, params?: Record<string, string | number>) => string;
+
+  // Rendered right under the file tabs (Excel sheet panel)
+  beforeContent?: React.ReactNode;
 }
 
 export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
@@ -96,7 +99,7 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
     applyNotionTransform, updateNotionIdsByName, undoNotionImport,
     notionNameColumnMap, setNotionNameColumnMap,
     expandedColumns, columnPreviewIndex, setColumnPreviewIndex,
-    CSV_COLUMN_TYPES, t,
+    CSV_COLUMN_TYPES, t, beforeContent,
   } = props;
 
   const csvPreviewRows = useMemo(() => {
@@ -129,6 +132,8 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
         setCsvStep={setCsvStep}
         t={t}
       />
+
+      {beforeContent}
 
       {/* Table Info */}
       <div className="space-y-3 p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-primary)]">
@@ -280,6 +285,7 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
           </span>
         </label>
 
+        {currentCsvFile?.source !== 'excel' && (
         <button
           type="button"
           onClick={() => setNotionImportPanelVisible(!notionImportPanelVisible)}
@@ -289,6 +295,7 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
           <Link2 className="w-3.5 h-3.5" />
           Notion Import
         </button>
+        )}
       </div>
 
       {/* Notion Import Panel */}
@@ -331,8 +338,8 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
             .sort((a, b) => {
               if (a.name === 'notion_id') return -1;
               if (b.name === 'notion_id') return 1;
-              const aColIdx = csvHeaders.indexOf(a.csvColumn);
-              const bColIdx = csvHeaders.indexOf(b.csvColumn);
+              const aColIdx = a.colIndex;
+              const bColIdx = b.colIndex;
               const aValues = csvData.slice(1).map(row => row[aColIdx] || '');
               const bValues = csvData.slice(1).map(row => row[bColIdx] || '');
               const aLooksLikeRelation = notionImportPanelVisible && isNotionRelationColumn(aValues);
@@ -349,7 +356,7 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
             })
             .map((def) => {
             const isExpanded = expandedColumns.has(def.colIndex);
-            const colIdx = csvHeaders.indexOf(def.csvColumn);
+            const colIdx = def.colIndex; // source coordinate: duplicate/blank headers must not collide
             const columnValues = csvData.slice(1).map(row => row[colIdx] || '');
             const looksLikeRelation = notionImportPanelVisible && isNotionRelationColumn(columnValues);
             const isRelation = def.type === 'relation' || def.isNotionRelation || looksLikeRelation;
@@ -486,14 +493,14 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
                                     className="w-full px-2 py-1.5 rounded-md bg-[var(--bg-primary)] border border-purple-500/30 text-xs text-[var(--text-primary)]"
                                   >
                                     <option value="comma">a, b</option>
-                                    <option value="json">["a","b"]</option>
+                                    <option value="json">[&quot;a&quot;,&quot;b&quot;]</option>
                                     <option value="semicolon">a; b</option>
                                     <option value="single">{t('tables.create.single')}</option>
                                   </select>
                                 </div>
                               </div>
                               <div className="text-xs text-purple-200/70">
-                                → {t('tables.create.relationWith')} "{targetFile.tableDisplayName}" {t('tables.create.byColumn')} {def.relationValueColumn || 'notion_id'}
+                                → {t('tables.create.relationWith')} &quot;{targetFile.tableDisplayName}&quot; {t('tables.create.byColumn')} {def.relationValueColumn || 'notion_id'}
                                 {labelMatchesNotionId && <span className="text-green-300 ml-2">• {t('tables.create.namesMatchNotionId')}</span>}
                               </div>
                             </>
@@ -622,7 +629,7 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
                       )}
 
                       {(() => {
-                        const colIndex = csvHeaders.indexOf(def.csvColumn);
+                        const colIndex = def.colIndex;
                         const dataRows = csvData.slice(1);
                         const totalRows = dataRows.length;
                         const currentIdx = columnPreviewIndex[def.csvColumn] || 0;
@@ -685,7 +692,7 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
           {/* Excluded Columns */}
           {csvColumnDefinitions.filter(c => c.excluded).map(def => {
             const isExpanded = expandedColumns.has(def.colIndex);
-            const colIdx = csvHeaders.indexOf(def.csvColumn);
+            const colIdx = def.colIndex; // source coordinate: duplicate/blank headers must not collide
             const sampleValue = csvData[1]?.[colIdx] || '';
             const truncated = sampleValue.length > 100 ? sampleValue.slice(0, 100) + '...' : sampleValue;
             const tooltipText = `${t('tables.create.details')}\n\n${t('tables.create.example')}:\n${truncated || `(${t('tables.create.empty')})`}`;
@@ -778,7 +785,7 @@ export const CsvConfigureSection = (props: CsvConfigureSectionProps) => {
                 {csvPreviewRows.map((row, i) => (
                   <tr key={i} className="border-t border-[var(--border-primary)]">
                     {csvColumnDefinitions.filter(d => !d.excluded).map((def) => {
-                      const colIdx = csvHeaders.indexOf(def.csvColumn);
+                      const colIdx = def.colIndex; // source coordinate: duplicate/blank headers must not collide
                       return (<td key={`td-${def.colIndex}`} className="px-3 py-2 text-[var(--text-primary)] whitespace-nowrap max-w-[150px] truncate">{row[colIdx] || '—'}</td>);
                     })}
                   </tr>

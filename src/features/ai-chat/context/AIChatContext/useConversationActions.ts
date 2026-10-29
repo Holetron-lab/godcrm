@@ -216,8 +216,9 @@ export function useConversationActions({
     // Don't create in DB yet - will be created on first message
   }, [setMessages, setError, currentConversationIdRef]);
 
-  // Delete conversation
-  const deleteConversation = useCallback(async (id: number) => {
+  // Delete conversation. Resolves true only when the backend confirmed the
+  // delete, so callers can drop their own view of it instead of polling a 404.
+  const deleteConversation = useCallback(async (id: number): Promise<boolean> => {
     try {
       await apiClient.delete(`/chat/conversations/${id}`);
       setConversations(prev => prev.filter(c => c.id !== id));
@@ -226,8 +227,10 @@ export function useConversationActions({
         setCurrentConversationId(null);
         setMessages([]);
       }
+      return true;
     } catch (err) {
       logger.error('Failed to delete conversation:', err);
+      return false;
     }
   }, [currentConversationId, setMessages]);
 

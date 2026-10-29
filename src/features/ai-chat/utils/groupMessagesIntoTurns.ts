@@ -1,4 +1,8 @@
 import type { ChatMessage } from '../types';
+import type { Turn } from './turn.types';
+export type { Turn } from './turn.types';
+import { liftForeignStepGroups, type AnnotatedMessage, type ResolveAgentIdentity } from './stepGroupMessages';
+export { liftForeignStepGroups, isMessageInStepGroup, type ResolveAgentIdentity } from './stepGroupMessages';
 
 // ---------------------------------------------------------------------------
 // Agent invocation detection in thinking blocks
@@ -24,53 +28,13 @@ function detectInvocations(content: string | undefined | null): string[] {
   return matches;
 }
 
-// ---------------------------------------------------------------------------
-// Turn — the unit rendered by <ChatTurn />
-// ---------------------------------------------------------------------------
-
-export interface Turn {
-  /** Stable key for React — uses first message id or a generated index-based id */
-  id: string;
-  /** 'human' for user messages, 'agent' for assistant/tool/thinking groups */
-  turnType: 'human' | 'agent';
-  /** Display name for the turn header */
-  senderName: string;
-  /** One message for human turns; potentially many for agent turns (steps + final text) */
-  messages: ChatMessage[];
-  /** Reactions keyed by message id */
-  reactions: Record<string, { user_id: number; user_name: string }[]>;
-  /** Whether this turn is still being processed (streaming / agent working) */
-  isProcessing: boolean;
-  /** First turn in a consecutive group from the same sender type — show header */
-  isFirstInGroup: boolean;
-  /** Last turn in a consecutive group from the same sender type — show footer/border */
-  isLastInGroup: boolean;
-  /** Chain identifier for grouping concurrent agent work (e.g. "agent_Developer_42") */
-  agentChainId?: string;
-  /** Agent color from agent table (hex or CSS color) */
-  agentColor?: string;
-  /** Agent icon emoji */
-  agentIcon?: string;
-  /** Agent invocation mode — ⚡ for `command`, 🤖 otherwise (ADR-0057) */
-  agentInvocationMode?: 'mention' | 'command' | 'both' | null;
-  /** True if this agent turn is a continuation of a chain interrupted by other turns */
-  isContinuation?: boolean;
-  /** True if another segment of this agent chain exists later in the conversation */
-  hasMoreSegments?: boolean;
-  /** Agent slugs invoked in reasoning (<<@slug>> detected in thinking blocks) */
-  invokedAgents?: string[];
-  /** ISO timestamp of the last message in this turn — used for stale detection on processing bubbles */
-  lastMessageAt?: string;
-  /** True if the same agent (by senderName) has ANY processing turn in the chat */
-  isAgentActiveInChat?: boolean;
-  /** Sender avatar URL (from message sender_avatar field) */
-  senderAvatar?: string;
-  /** ADR-0031: turn is a row_mutation event emitted by the system on behalf of
-   *  an actor. The header still shows the actor's avatar + name (so it reads
-   *  like the actor's message), but the role badge is replaced with a "system"
-   *  badge to clarify the message was authored by the service, not typed. */
-  isSystemEvent?: boolean;
-}
+/** agent_status row whose run is over (backend flips placeholder=false on
+ *  finished/error) and that carries no text. Synthetic step-group carriers
+ *  always have placeholder=true, so they never match. */
+const isSettledEmptyStatus = (m: ChatMessage): boolean =>
+  m.contentType === 'agent_status' &&
+  (m.metadata as Record<string, unknown> | undefined)?.placeholder === false &&
+  !(m.content || '').trim();
 
 /**
  * Groups a flat list of ChatMessages into Turn objects suitable for rendering
@@ -86,6 +50,8 @@ export function groupMessagesIntoTurns(
   messageReactions: Record<number, Record<string, { user_id: number; user_name: string }[]>>,
   isAgentProcessing: boolean,
   currentUserId?: number,
+  activeAgents: readonly { agent_name: string; started_at: string | null; inflight_status?: string }[] = [],
+  resolveAgent?: ResolveAgentIdentity,
 ): Turn[] {
   if (!messages || !Array.isArray(messages)) return [];
   const turns: Turn[] = [];
@@ -106,10 +72,13 @@ export function groupMessagesIntoTurns(
   // notifications — should render with the actor's avatar/name but with a
   // microchip badge so the reader knows it was emitted by the system, not
   // typed via the frontend. Trigger: `role === 'system'` AND an identifiable
-  // actor (sender_id or metadata.actor.id). Truly anonymous system errors
+  // actor (sender_id or metadata.actor.id), or an explicit system sender.
+  // Legacy watchdog notices used role assistant with senderType system.
+  // Truly anonymous system errors
   // (no actor) fall through to the regular agent path and are NOT marked
   // system-event here.
   const isSystemEventMessage = (m: ChatMessage): boolean => {
+    if (m.senderType === 'system') return true;
     if (m.role !== 'system') return false;
     const meta = m.metadata as { actor?: { id?: number | string } } | undefined;
     return meta?.actor?.id != null || m.sender_id != null;
@@ -137,7 +106,7 @@ export function groupMessagesIntoTurns(
     if (isSystemEventMessage(m)) return `system_event_${systemEventActorKey(m)}`;
     const slug = m.metadata?.agent_slug as string | undefined;
     const name = m.agentName || (m as any).agent_name || m.metadata?.agent_name || m.sender_name;
-    const rowId = m.metadata?.agent_row_id || m.agentId;
+    const rowId = m.metadata?.agent_row_id || m.agentId || (m as ChatMessage & { agent_id?: number }).agent_id;
     if (rowId) return `agent_${name || slug || 'AI'}_${rowId}`;
     if (name) return `agent_${name}`;
     if (slug) return `agent_slug_${slug}`;
@@ -198,7 +167,7 @@ export function groupMessagesIntoTurns(
       firstMsg.sender_name ||
       slugDisplay ||
       'AI';
-    const agentRowId = firstMsg.metadata?.agent_row_id || firstMsg.agentId;
+    const agentRowId = firstMsg.metadata?.agent_row_id || firstMsg.agentId || (firstMsg as ChatMessage & { agent_id?: number }).agent_id;
     const chainId = agentRowId
       ? `agent_${agentName}_${agentRowId}`
       : (slug && !firstMsg.sender_name && !firstMsg.agentName && !firstMsg.metadata?.agent_name && !(firstMsg as any).agent_name)
@@ -298,54 +267,14 @@ export function groupMessagesIntoTurns(
       humanSenderName = isMe ? 'You' : firstMsg.sender_name;
     }
 
-    // Strip _step_groups_after from human messages — those belong to agent turns, not human.
-    // We'll create a synthetic agent turn for them below.
-    const lastHumanMsg = currentHumanMessages[currentHumanMessages.length - 1];
-    const orphanedStepGroupsAfter = (lastHumanMsg as any)?._step_groups_after;
-    const orphanedTotalHiddenAfter = (lastHumanMsg as any)?._total_hidden_after;
-    // Also check _step_groups_before on the FIRST human message
-    const orphanedStepGroupsBefore = (firstMsg as any)?._step_groups_before;
-    const orphanedTotalHiddenBefore = (firstMsg as any)?._total_hidden_before;
-
-    // Create clean copies without step group annotations
-    const cleanMessages = currentHumanMessages.map(m => {
-      const hasAnnotations = (m as any)._step_groups_after || (m as any)._step_groups_before;
-      if (!hasAnnotations) return m;
-      const clean = { ...m };
-      delete (clean as any)._step_groups_after;
-      delete (clean as any)._total_hidden_after;
-      delete (clean as any)._step_groups_before;
-      delete (clean as any)._total_hidden_before;
-      return clean;
-    });
-
-    // If there are orphaned step groups BEFORE the user message, create a synthetic agent turn first
-    if (orphanedStepGroupsBefore && orphanedStepGroupsBefore.length > 0) {
-      // Extract agent info from step groups (first group with agent_name wins)
-      const agentInfo = orphanedStepGroupsBefore.find((g: Record<string, unknown>) => g.agent_name);
-      const syntheticMsg: ChatMessage = {
-        id: `synthetic_agent_before_${firstMsg.id || turnCounter}`,
-        role: 'assistant',
-        content: '',
-        contentType: 'agent_status',
-        senderType: 'agent',
-        timestamp: firstMsg.timestamp,
-        metadata: {
-          placeholder: true, synthetic: true,
-          ...(agentInfo ? { agent_name: agentInfo.agent_name, agent_icon: agentInfo.agent_icon, agent_color: agentInfo.agent_color } : {}),
-        },
-        _step_groups_before: orphanedStepGroupsBefore,
-        _total_hidden_before: orphanedTotalHiddenBefore || 0,
-      } as any;
-      turns.push(buildAgentTurn([syntheticMsg], false));
-    }
-
+    // Step groups that were attached to human messages have already been lifted
+    // into synthetic agent messages by liftForeignStepGroups — nothing to strip.
     turns.push({
       id: firstMsg.id ? `turn_human_${firstMsg.id}` : `turn_human_idx_${turnCounter}`,
       turnType: 'human',
       senderName: humanSenderName,
       senderAvatar: firstMsg.sender_avatar || undefined,
-      messages: [...cleanMessages],
+      messages: [...currentHumanMessages],
       reactions,
       isProcessing: false,
       isFirstInGroup: true,
@@ -353,67 +282,14 @@ export function groupMessagesIntoTurns(
     });
     turnCounter++;
 
-    // If there are orphaned step groups AFTER the user message, create a synthetic agent turn
-    if (orphanedStepGroupsAfter && orphanedStepGroupsAfter.length > 0) {
-      // Extract agent info from step groups (first group with agent_name wins)
-      const agentInfoAfter = orphanedStepGroupsAfter.find((g: Record<string, unknown>) => g.agent_name);
-      const syntheticMsg: ChatMessage = {
-        id: `synthetic_agent_after_${lastHumanMsg.id || turnCounter}`,
-        role: 'assistant',
-        content: '',
-        contentType: 'agent_status',
-        senderType: 'agent',
-        timestamp: lastHumanMsg.timestamp,
-        metadata: {
-          placeholder: true, synthetic: true,
-          ...(agentInfoAfter ? { agent_name: agentInfoAfter.agent_name, agent_icon: agentInfoAfter.agent_icon, agent_color: agentInfoAfter.agent_color } : {}),
-        },
-        _step_groups_after: orphanedStepGroupsAfter,
-        _total_hidden_after: orphanedTotalHiddenAfter || 0,
-      } as any;
-      turns.push(buildAgentTurn([syntheticMsg], false));
-    }
-
     currentHumanMessages = [];
     currentHumanSenderId = undefined;
   };
 
-  // ── Pre-process: strip stale step group annotations ──
-  // When the cache contains BOTH annotated messages (from initial lazy load)
-  // AND actual step messages (from incremental polling), the annotations are stale.
-  // Without this, flushHumanMessages creates a synthetic agent turn from _step_groups_after,
-  // and then the real step messages create ANOTHER agent turn → duplicate bubble.
-  const STEP_TYPES = new Set(['thinking', 'tool_call', 'tool_result', 'tool_approval', 'plan', 'agent_status']);
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i];
-    // Strip _step_groups_after when real agent messages follow
-    if ((m as any)._step_groups_after) {
-      for (let j = i + 1; j < messages.length; j++) {
-        if (messages[j].role === 'user') break;
-        const nextCt = messages[j].contentType;
-        if (STEP_TYPES.has(nextCt || '') ||
-            (messages[j].role === 'assistant' && (nextCt === 'text' || !nextCt))) {
-          delete (m as any)._step_groups_after;
-          delete (m as any)._total_hidden_after;
-          break;
-        }
-      }
-    }
-    // Strip _step_groups_before when real agent messages precede
-    if ((m as any)._step_groups_before && i > 0) {
-      for (let j = i - 1; j >= 0; j--) {
-        if (messages[j].role === 'user') break;
-        const prevCt = messages[j].contentType;
-        if (STEP_TYPES.has(prevCt || '')) {
-          delete (m as any)._step_groups_before;
-          delete (m as any)._total_hidden_before;
-          break;
-        }
-      }
-    }
-  }
-
-  for (const msg of messages) {
+  // ── Pre-process: drop stale annotations, give every agent its own carrier ──
+  // A synthetic agent message between two human messages also keeps them from
+  // merging into one human turn (it flushes the batch like any agent message).
+  for (const msg of liftForeignStepGroups(messages, resolveAgent)) {
     const ct = msg.contentType;
 
     // ── User messages: group consecutive from same sender ──
@@ -430,15 +306,6 @@ export function groupMessagesIntoTurns(
           currentHumanSenderId === '__me__');
 
       if (isSameSender) {
-        const prevMsg = currentHumanMessages[currentHumanMessages.length - 1];
-        const prevHasStepsAfter = prevMsg && (prevMsg as any)._step_groups_after;
-        const currentHasStepsBefore = (msg as any)._step_groups_before;
-        if (prevHasStepsAfter || currentHasStepsBefore) {
-          flushHumanMessages();
-          currentHumanSenderId = senderId;
-          currentHumanMessages.push(msg);
-          continue;
-        }
         currentHumanMessages.push(msg);
         if (currentHumanSenderId === '__me__' && senderId !== '__me__') {
           currentHumanSenderId = senderId;
@@ -517,8 +384,31 @@ export function groupMessagesIntoTurns(
       }
     }
 
-    // Regular message (old conversations without contentType, or plain assistant text)
-    flushAllAgentStepBuffers();
+    // A handoff status can arrive before the invoking agent's final answer.
+    // Keep status-only placeholders buffered so the first real step fills that
+    // bubble after the answer. Status text (e.g. Processing...) is not a step.
+    for (const [chainId, buffer] of agentStepBuffers) {
+      const onlyPlaceholders = buffer.every(message => {
+        const annotated = message as AnnotatedMessage;
+        return message.contentType === 'agent_status'
+          && message.metadata?.placeholder === true
+          && message.metadata?.synthetic !== true
+          && !annotated._step_groups_before?.length
+          && !annotated._step_groups_after?.length;
+      });
+      if (msg.role !== 'assistant' || !onlyPlaceholders) flushAgentStepBuffer(chainId);
+    }
+
+    // An invocation flushes thinking early. Its final answer still belongs to
+    // that bubble unless another participant has actually spoken in between.
+    const lastTurn = turns[turns.length - 1];
+    if (msg.role === 'assistant' && ct === 'text' && agentTextBuffers.size === 0
+      && lastTurn?.invokedAgents?.length && lastTurn.agentChainId === getChainId(msg)
+      && !lastTurn.messages.some(m => (m.contentType === 'text' || !m.contentType) && m.role === 'assistant')) {
+      Object.assign(lastTurn, buildAgentTurn([...lastTurn.messages, msg], false));
+      lastTurn.hasMoreSegments = false;
+      continue;
+    }
 
     const isAgent = msg.role === 'assistant' || msg.role === 'tool' || msg.role === 'system';
 
@@ -574,6 +464,14 @@ export function groupMessagesIntoTurns(
     flushAllAgentStepBuffers();
   }
 
+  // Drop turns that are nothing but a settled status row: a finished/error
+  // placeholder has no steps and no text (TurnBody ignores it once
+  // placeholder=false), so all that would render is an empty header. Real
+  // runs keep their status row because it sits next to their steps.
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].turnType === 'agent' && turns[i].messages.every(isSettledEmptyStatus)) turns.splice(i, 1);
+  }
+
   // Post-process: mark agent turns as processing when appropriate.
   // 1. Any turn containing an agent-pending-* message is ALWAYS processing
   //    (optimistic bubble from onMutate — isAgentProcessing state may lag behind).
@@ -622,14 +520,52 @@ export function groupMessagesIntoTurns(
     }
   }
 
+  // A running placeholder may remain in an earlier, sealed bubble. Carry
+  // activity to the latest segment of that agent, never back to old segments.
+  const latestAgentTurns = new Map<string, Turn>();
+  const processingChains = new Set<string>();
+  const latestAgentPlans = new Map<string, ChatMessage>();
+  for (const turn of turns) {
+    if (turn.turnType !== 'agent' || !turn.agentChainId) continue;
+    latestAgentTurns.set(turn.agentChainId, turn);
+    turn.planMessage = null;
+    for (const message of turn.messages) {
+      if (message.contentType === 'plan') latestAgentPlans.set(turn.agentChainId, message);
+    }
+    if (turn.isProcessing) processingChains.add(turn.agentChainId);
+    turn.isProcessing = false;
+  }
+  for (const [chainId, turn] of latestAgentTurns) {
+    turn.planMessage = latestAgentPlans.get(chainId) ?? null;
+    const hasFinalText = turn.messages.some(
+      (m) => (m.contentType === 'text' || !m.contentType) && m.role === 'assistant',
+    );
+    // A text answer seals a bubble, not necessarily its job. The conversation
+    // flag/status placeholder can settle before later tool work finishes.
+    const confirmedActive = activeAgents.some(agent => {
+      if (agent.agent_name !== turn.senderName) return false;
+      if (agent.inflight_status && agent.inflight_status !== 'running') return false;
+      if (!agent.started_at) return false;
+      const startedAt = new Date(agent.started_at).getTime();
+      return turn.messages.some(message => {
+        const createdAt = 'createdAt' in message ? message.createdAt : undefined;
+        const timestamp = (typeof createdAt === 'string' || createdAt instanceof Date)
+          ? createdAt : message.timestamp;
+        return timestamp != null && new Date(timestamp).getTime() >= startedAt;
+      });
+    });
+    turn.isProcessing = (processingChains.has(chainId) || confirmedActive) && !hasFinalText;
+  }
+
   // Populate lastMessageAt for agent turns (used for stale detection on processing bubbles)
   for (const turn of turns) {
     if (turn.turnType !== 'agent' || turn.messages.length === 0) continue;
     const lastMsg = turn.messages[turn.messages.length - 1];
-    if (lastMsg.createdAt) {
-      turn.lastMessageAt = typeof lastMsg.createdAt === 'string'
-        ? lastMsg.createdAt
-        : new Date(lastMsg.createdAt).toISOString();
+    const createdAt = 'createdAt' in lastMsg ? lastMsg.createdAt : undefined;
+    if (typeof createdAt === 'string') {
+      turn.lastMessageAt = createdAt;
+    } else if (createdAt instanceof Date) {
+      turn.lastMessageAt = createdAt.toISOString();
     }
   }
 

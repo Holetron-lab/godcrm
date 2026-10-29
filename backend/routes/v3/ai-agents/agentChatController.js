@@ -60,7 +60,7 @@ router.post('/chat', async (req, res) => {
 
     if (!isLocal && !apiKey) return badRequest(res, 'No API key configured for this agent');
 
-    const { isClaudeCode, isCopilot, isAnthropic } = sharedDetectProvider(providerName, model);
+    const { isClaudeCode, isCopilot, isCodex, isKimi, isAnthropic } = sharedDetectProvider(providerName, model);
 
     apiLogger.debug({ context: 'AI Chat', model, providerName, isAnthropic, isClaudeCode, isCopilot }, 'Final config');
 
@@ -116,7 +116,7 @@ router.post('/chat', async (req, res) => {
           tokensOut: cliResult.usage?.completionTokens || 0
         });
       }
-    } else if (isClaudeCode) {
+    } else if (isClaudeCode || isCodex || isKimi) {
       const onEvent = conversationId ? (event) => {
         if (event.type === 'assistant' && event.message?.content) {
           for (const block of event.message.content) {
@@ -149,8 +149,12 @@ router.post('/chat', async (req, res) => {
         }
       } : undefined;
 
-      const cliResult = await aiExecutionService.executeClaudeCode({
-        model, messages, systemPrompt, maxTokens: resolvedMaxTokens, onEvent
+      const runCli = isCodex
+        ? aiExecutionService.executeCodexCli
+        : isKimi ? aiExecutionService.executeKimiCli : aiExecutionService.executeClaudeCode;
+      const cliResult = await runCli({
+        model, messages, systemPrompt, maxTokens: resolvedMaxTokens, onEvent,
+        ...(isKimi ? { agentId, spaceId: agentSpaceId } : {})
       });
       responseText = cliResult.content;
       usage = {

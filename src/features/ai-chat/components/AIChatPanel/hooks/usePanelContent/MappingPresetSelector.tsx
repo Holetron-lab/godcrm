@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * MappingPresetSelector — T-141631 / ADR-0031 follow-up.
  * One <select> replacing the 4-dropdown manual mapping UX. Falls back to
@@ -34,6 +35,7 @@ export function MappingPresetSelector({
   onSelectPreset,
   onSelectCustom,
 }: MappingPresetSelectorProps) {
+  const { t } = useLanguage();
   const applicable = React.useMemo(
     () => getApplicablePresets(kind, tableId, CHAT_SOURCE_PRESETS),
     [kind, tableId],
@@ -59,7 +61,7 @@ export function MappingPresetSelector({
 
   return (
     <div>
-      <label className="block text-[10px] text-[var(--text-tertiary)] mb-1 uppercase font-medium">Пресет</label>
+      <label className="block text-[10px] text-[var(--text-tertiary)] mb-1 uppercase font-medium">{t('aiChat.ui.preset')}</label>
       <select
         value={selectedValue}
         onChange={handleChange}
@@ -68,7 +70,7 @@ export function MappingPresetSelector({
         {applicable.map(p => (
           <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>
         ))}
-        <option value={CUSTOM_VALUE}>— Свой маппинг —</option>
+        <option value={CUSTOM_VALUE}>{t('aiChat.ui.customMapping')}</option>
       </select>
     </div>
   );

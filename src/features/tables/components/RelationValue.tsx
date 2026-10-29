@@ -96,22 +96,23 @@ export function RelationValue({
       );
     
     case 'badge':
-    default:
-      const bgColor = item.color ? hexToRgba(item.color, 0.15) : 'var(--bg-tertiary)';
-      const textColor = item.color || 'var(--text-secondary)';
+    default: {
+        const bgColor = item.color ? hexToRgba(item.color, 0.15) : 'var(--bg-tertiary)';
+        const textColor = item.color || 'var(--text-secondary)';
       
-      return (
-        <span
-          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}
-          style={{
-            backgroundColor: bgColor,
-            color: textColor,
-            border: item.color ? `1px solid ${hexToRgba(item.color, 0.3)}` : undefined
-          }}
-        >
-          {item.label}
-        </span>
-      );
+        return (
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}
+            style={{
+              backgroundColor: bgColor,
+              color: textColor,
+              border: item.color ? `1px solid ${hexToRgba(item.color, 0.3)}` : undefined
+            }}
+          >
+            {item.label}
+          </span>
+        );
+    }
   }
 }
 

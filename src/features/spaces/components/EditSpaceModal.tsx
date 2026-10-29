@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useId, useState, useEffect, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/shared/components/ui/Modal';
 import { Input } from '@/shared/components/ui/Input';
@@ -22,11 +22,9 @@ import { ImportModal } from '@/features/tables/components/modals/ImportModal';
 import { SpaceVariablesTab } from './SpaceVariablesTab';
 import { SpaceVisibilitySettings } from './SpaceVisibilitySettings';
 import { SpaceInvitations } from './SpaceInvitations';
-// Space Access Manager (extracted sub-components)
-import { SpaceAccessManager } from './space-access';
 import { SpaceConnectorsTab } from '@/features/connectors/components/SpaceConnectorsTab';
 import { SpaceSecretsTab } from '@/features/secrets/components/SpaceSecretsTab';
-import { FolderTree, Settings, Shield, Calculator, Loader2, Users, Mail, Plug, KeyRound } from 'lucide-react';
+import { FolderTree, Settings, Shield, Calculator, Loader2, Mail, Plug, KeyRound } from 'lucide-react';
 
 interface EditSpaceModalProps {
   open: boolean;
@@ -42,7 +40,7 @@ interface EditSpaceModalProps {
   };
 }
 
-type TabId = 'display' | 'structure' | 'variables' | 'access' | 'users' | 'invitations' | 'connectors' | 'secrets';
+type TabId = 'display' | 'structure' | 'variables' | 'access' | 'invitations' | 'connectors' | 'secrets';
 
 export const EditSpaceModal = ({ open, onOpenChange, onDeleteClick, space }: EditSpaceModalProps) => {
   const { t } = useLanguage();
@@ -113,7 +111,7 @@ export const EditSpaceModal = ({ open, onOpenChange, onDeleteClick, space }: Edi
       onOpenChange(false);
     },
     onError: (err: Error) => {
-      setError(err.message || 'Failed to update space');
+      setError(err.message || t('spaces.edit.updateFailed'));
     }
   });
 
@@ -136,7 +134,7 @@ export const EditSpaceModal = ({ open, onOpenChange, onDeleteClick, space }: Edi
 
   const handleSubmit = () => {
     if (!name.trim()) {
-      setError('Name is required');
+      setError(t('spaces.errors.nameRequired'));
       return;
     }
     updateMutation.mutate();
@@ -148,14 +146,13 @@ export const EditSpaceModal = ({ open, onOpenChange, onDeleteClick, space }: Edi
   };
 
   const tabs: { id: TabId; label: string; icon?: React.ReactNode }[] = [
-    { id: 'display', label: 'Отображение', icon: <Settings className="w-4 h-4" /> },
-    { id: 'structure', label: 'Структура', icon: <FolderTree className="w-4 h-4" /> },
-    { id: 'variables', label: 'Переменные', icon: <Calculator className="w-4 h-4" /> },
-    { id: 'connectors', label: 'Коннекторы', icon: <Plug className="w-4 h-4" /> },
-    { id: 'secrets', label: 'Секреты', icon: <KeyRound className="w-4 h-4" /> },
-    { id: 'access', label: 'Доступ', icon: <Shield className="w-4 h-4" /> },
-    { id: 'users', label: 'Пользователи', icon: <Users className="w-4 h-4" /> },
-    { id: 'invitations', label: 'Приглашения', icon: <Mail className="w-4 h-4" /> },
+    { id: 'display', label: t('spaces.edit.display'), icon: <Settings className="w-4 h-4" /> },
+    { id: 'structure', label: t('spaces.edit.structure'), icon: <FolderTree className="w-4 h-4" /> },
+    { id: 'variables', label: t('spaces.edit.variables'), icon: <Calculator className="w-4 h-4" /> },
+    { id: 'connectors', label: t('spaces.edit.connectors'), icon: <Plug className="w-4 h-4" /> },
+    { id: 'secrets', label: t('spaces.edit.secrets'), icon: <KeyRound className="w-4 h-4" /> },
+    { id: 'access', label: t('userAccess.tabs.access'), icon: <Shield className="w-4 h-4" /> },
+    { id: 'invitations', label: t('spaces.edit.invitations'), icon: <Mail className="w-4 h-4" /> },
   ];
 
   return (
@@ -164,7 +161,7 @@ export const EditSpaceModal = ({ open, onOpenChange, onDeleteClick, space }: Edi
       open={open}
       onOpenChange={onOpenChange}
       title={`${space.name} (ID: ${space.id})`}
-      description="Редактирование пространства"
+      description={t('spaces.edit.description')}
       size="xl"
       fixedHeight={true}
       heightOffset={200}
@@ -181,13 +178,14 @@ export const EditSpaceModal = ({ open, onOpenChange, onDeleteClick, space }: Edi
           )}
           {activeTab === 'structure' && (
             <span className="text-sm text-[var(--text-tertiary)] ml-2">
-              {stats.projects} проектов · {stats.tables} таблиц · {stats.widgets} виджетов
+              {t('spaces.edit.stats', stats)}
             </span>
           )}
         </div>
       }
       primaryAction={{
-        label: updateMutation.isPending ? 'Сохранение...' : t('common.save'),
+        variant: 'secondary',
+        label: updateMutation.isPending ? t('common.saving') : t('common.save'),
         onClick: handleSubmit,
         disabled: updateMutation.isPending
       }}
@@ -214,7 +212,7 @@ export const EditSpaceModal = ({ open, onOpenChange, onDeleteClick, space }: Edi
               className={`flex items-center justify-center gap-1 px-2.5 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm'
-                  : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
               {tab.icon}
@@ -305,14 +303,6 @@ export const EditSpaceModal = ({ open, onOpenChange, onDeleteClick, space }: Edi
             />
           )}
 
-          {/* Users Tab - granular per-user access management */}
-          {activeTab === 'users' && (
-            <SpaceAccessManager
-              spaceId={space.id}
-              currentUserLevel={currentUserLevel}
-            />
-          )}
-
           {/* Invitations Tab */}
           {activeTab === 'invitations' && (
             <SpaceInvitations spaceId={space.id} />
@@ -330,7 +320,7 @@ export const EditSpaceModal = ({ open, onOpenChange, onDeleteClick, space }: Edi
 
           {/* Secrets Tab (ADR-0040 P2) — owner-only */}
           {activeTab === 'secrets' && (
-            <SpaceSecretsTab spaceId={space.id} />
+            <SpaceSecretsTab key={space.id} spaceId={space.id} />
           )}
 
         </div>
@@ -404,6 +394,8 @@ interface PersonalizationSectionProps {
 }
 
 const PersonalizationSection = ({ spaceId, spaceType }: PersonalizationSectionProps) => {
+  const { t } = useLanguage();
+  const fieldId = useId();
   const { spacesOrder, getSpaceOrder, updateSpaceOrder, isUpdating } = useSpacesOrder();
 
   // Local order state for this space
@@ -427,12 +419,12 @@ const PersonalizationSection = ({ spaceId, spaceType }: PersonalizationSectionPr
 
   return (
     <div>
-      <label className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
-        Порядок в меню
+      <label htmlFor={`${fieldId}-label-0`} className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+        {t('spaces.edit.menuOrder')}
       </label>
       <div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] p-3">
         <div className="flex items-center gap-3">
-          <input
+          <input id={`${fieldId}-label-0`}
             type="number"
             min="1"
             max="999"
@@ -447,8 +439,8 @@ const PersonalizationSection = ({ spaceId, spaceType }: PersonalizationSectionPr
           />
           <span className="text-sm text-[var(--text-tertiary)]">
             {isFixed
-              ? (spaceType === 'personal' ? '🏠 Personal всегда первый' : '⚙️ Admin всегда последний')
-              : 'Меньше число = выше в списке'
+              ? (spaceType === 'personal' ? t('spaces.edit.personalOrder') : t('spaces.edit.adminOrder'))
+              : t('spaces.edit.orderHint')
             }
           </span>
         </div>

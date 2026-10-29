@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * AgentWorkingIndicator — Real-time agent work visibility component.
  *
@@ -31,23 +32,23 @@ interface AgentWorkingIndicatorProps {
 }
 
 const STATUS_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
-  starting: { icon: Sparkles, label: 'Запускается', color: 'text-blue-400' },
-  thinking: { icon: Brain, label: 'Думает', color: 'text-purple-400' },
-  tool_call: { icon: Wrench, label: 'Инструмент', color: 'text-orange-400' },
-  generating: { icon: Sparkles, label: 'Генерирует ответ', color: 'text-green-400' },
-  error: { icon: AlertCircle, label: 'Ошибка', color: 'text-red-400' },
+  starting: { icon: Sparkles, label: 'aiChat.ui.starting', color: 'text-blue-400' },
+  thinking: { icon: Brain, label: 'aiChat.ui.thinking', color: 'text-purple-400' },
+  tool_call: { icon: Wrench, label: 'aiChat.ui.tool', color: 'text-orange-400' },
+  generating: { icon: Sparkles, label: 'aiChat.ui.generating', color: 'text-green-400' },
+  error: { icon: AlertCircle, label: 'aiChat.ui.error', color: 'text-red-400' },
 };
 
-export const AgentWorkingIndicator: React.FC<AgentWorkingIndicatorProps> = React.memo(({ metadata }) => {
+export const AgentWorkingIndicator: React.FC<AgentWorkingIndicatorProps> = React.memo(function AgentWorkingIndicator({ metadata }) {
+  const { t } = useLanguage();
   const status = metadata.agent_status || 'starting';
-  const action = metadata.agent_action || '';
+  const action = metadata.placeholder && status === 'starting' ? '' : metadata.agent_action || '';
   const toolsUsed = metadata.tools_used || 0;
   const toolsCompleted = metadata.tools_completed || 0;
   const startedAt = metadata.started_at;
   const isPlaceholder = metadata.placeholder !== false;
 
-  // Don't render if agent is finished
-  if (!isPlaceholder && status === 'finished') return null;
+  const isFinished = !isPlaceholder && status === 'finished';
 
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.starting;
   const StatusIcon = config.icon;
@@ -55,9 +56,10 @@ export const AgentWorkingIndicator: React.FC<AgentWorkingIndicatorProps> = React
   // Live elapsed timer — updates every second
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
+    if (isFinished) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [isFinished]);
 
   const elapsed = useMemo(() => {
     if (!startedAt) return null;
@@ -68,6 +70,8 @@ export const AgentWorkingIndicator: React.FC<AgentWorkingIndicatorProps> = React
     if (seconds >= 60) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
     return `${seconds}s`;
   }, [startedAt, now]);
+
+  if (isFinished) return null;
 
   return (
     <div className="flex items-center gap-2.5 py-1.5">
@@ -82,7 +86,7 @@ export const AgentWorkingIndicator: React.FC<AgentWorkingIndicatorProps> = React
       {/* Current action — the main real-time content */}
       <div className="min-w-0 flex-1">
         <span className={`text-xs font-medium ${config.color}`}>
-          {config.label}
+          {t(config.label)}
         </span>
         {action && (
           <span className="text-xs text-[var(--text-secondary)] ml-1.5">

@@ -20,7 +20,7 @@ export function DocumentTicketsProvider({
   const { data: ticketsData } = useQuery({
     queryKey: ['tickets', projectId, ticketConfig?.table_id],
     queryFn: async () => {
-      const response = await apiClient.get(`/tables/${ticketConfig!.table_id}/rows?limit=5000`);
+      const response = await apiClient.get<{ data: { rows: TicketRow[] } }>(`/tables/${ticketConfig!.table_id}/rows?limit=5000`);
       return response.data;
     },
     enabled: enabled && !!ticketConfig?.table_id,

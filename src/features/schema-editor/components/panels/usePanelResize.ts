@@ -41,6 +41,7 @@ export const usePanelResize = () => {
   return {
     panelRef,
     panelWidth,
+    setPanelWidth,
     isResizing,
     handleMouseDown,
   };

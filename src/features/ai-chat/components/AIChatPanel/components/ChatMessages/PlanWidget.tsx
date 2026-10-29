@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * PlanWidget.tsx
  * ADR-113: Agent Runtime Planning Tool — read-only plan checklist widget.
@@ -63,6 +64,7 @@ function taskStatusIcon(status: PlanTask['status']): { icon: React.ReactNode; co
 // ---------------------------------------------------------------------------
 
 export const PlanWidget: React.FC<PlanWidgetProps> = ({ tasks }) => {
+  const { t } = useLanguage();
   if (!tasks || tasks.length === 0) return null;
 
   const completedCount = tasks.filter((t) => t.status === 'completed').length;
@@ -87,8 +89,7 @@ export const PlanWidget: React.FC<PlanWidgetProps> = ({ tasks }) => {
         <div className="flex items-center gap-2">
           <ClipboardList className="w-4 h-4 text-purple-400" />
           <span className="text-sm font-medium text-[var(--text-primary)]">
-            Agent Plan
-          </span>
+            {t('aiChat.ui.agentPlan')}</span>
         </div>
         <span
           className={cn(

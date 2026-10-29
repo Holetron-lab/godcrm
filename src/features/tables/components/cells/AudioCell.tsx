@@ -1,3 +1,4 @@
+import { CaptionedMedia } from '@/shared/components/CaptionedMedia';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, ExternalLink } from 'lucide-react';
 
@@ -39,7 +40,7 @@ const parseAudioUrl = (value: unknown, config?: AudioConfig, rowData?: Record<st
     return resolveFormula(config.formula, rowData);
   }
   
-  let url = String(value).trim();
+  const url = String(value).trim();
   if (!url) return '';
   
   // Apply prefix/suffix
@@ -171,17 +172,6 @@ export const AudioCell: React.FC<AudioCellProps> = ({
     setIsMuted(!isMuted);
   }, [isMuted]);
 
-  const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    const audio = audioRef.current;
-    if (!audio || !duration) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percent = x / rect.width;
-    audio.currentTime = percent * duration;
-  }, [duration]);
-
   // RAW mode - показываем URL
   if (rawMode) {
     if (!audioUrl) {
@@ -217,9 +207,9 @@ export const AudioCell: React.FC<AudioCellProps> = ({
   const progress = duration > 0 ? currentTime / duration : 0;
 
   return (
-    <div className="flex items-center gap-2 py-1 px-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] min-w-[200px]">
+    <div className="flex flex-wrap items-center gap-2 py-1 px-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] min-w-[200px]">
       {/* Hidden audio element */}
-      <audio ref={audioRef} src={audioUrl} preload="metadata" />
+      <CaptionedMedia key={audioUrl} kind="audio" audioRef={audioRef} src={audioUrl} preload="metadata" controls={false} containerClassName="basis-full order-last" />
 
       {/* Play/Pause button */}
       <button
@@ -239,10 +229,19 @@ export const AudioCell: React.FC<AudioCellProps> = ({
 
       {/* Waveform / Progress bar */}
       <div 
-        className="flex-1 cursor-pointer" 
-        onClick={handleSeek}
+        className="relative flex-1 cursor-pointer rounded focus-within:ring-2 focus-within:ring-[var(--color-primary-500)]"
         title={`${formatDuration(currentTime)} / ${formatDuration(duration)}`}
       >
+        <input type="range" min={0} max={duration || 0} step={0.1}
+          value={Math.min(currentTime, duration || 0)} disabled={!duration}
+          aria-label="Позиция воспроизведения"
+          aria-valuetext={`${formatDuration(currentTime)} / ${formatDuration(duration)}`}
+          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+          onChange={e => {
+            const time = Number(e.target.value);
+            if (audioRef.current) audioRef.current.currentTime = time;
+            setCurrentTime(time);
+          }} />
         {showWaveform ? (
           <Waveform isPlaying={isPlaying} progress={progress} />
         ) : (

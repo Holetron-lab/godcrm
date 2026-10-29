@@ -56,7 +56,7 @@ export function AIAgentsSection() {
           <li className="flex items-start gap-4">
             <span className="flex-shrink-0 w-8 h-8 rounded-full bg-violet-500 text-white font-semibold flex items-center justify-center">1</span>
             <div>
-              <h4 className="font-medium text-[var(--text-primary)]">Создайте пространство "AI Agents"</h4>
+              <h4 className="font-medium text-[var(--text-primary)]">Создайте пространство &quot;AI Agents&quot;</h4>
               <p className="text-sm text-[var(--text-secondary)]">
                 Или используйте существующее. В пространстве должны быть таблицы: Agents, Models, Providers, API Keys.
               </p>
@@ -157,7 +157,7 @@ export function AIAgentsSection() {
               <div className="space-y-2 text-sm">
                 <div className="flex items-start gap-2">
                   <span className="px-2 py-1 bg-primary-500/20 text-primary-400 rounded text-xs">Вопрос</span>
-                  <span className="text-[var(--text-secondary)]">"Найди товары похожие на iPhone 15"</span>
+                  <span className="text-[var(--text-secondary)]">&quot;Найди товары похожие на iPhone 15&quot;</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs">Агент</span>
@@ -177,13 +177,13 @@ export function AIAgentsSection() {
               <div className="space-y-2 text-sm">
                 <div className="flex items-start gap-2">
                   <span className="px-2 py-1 bg-primary-500/20 text-primary-400 rounded text-xs">Вопрос</span>
-                  <span className="text-[var(--text-secondary)]">"Где информация про работу с клиентами?"</span>
+                  <span className="text-[var(--text-secondary)]">&quot;Где информация про работу с клиентами?&quot;</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs">Агент</span>
                   <span className="text-[var(--text-secondary)]">
                     Ищет документы семантически связанные с CRM, клиентским сервисом, продажами →
-                    находит "CRM Руководство", "Обработка заявок", "Скрипты продаж"
+                    находит &quot;CRM Руководство&quot;, &quot;Обработка заявок&quot;, &quot;Скрипты продаж&quot;
                   </span>
                 </div>
               </div>
@@ -197,7 +197,7 @@ export function AIAgentsSection() {
               <div className="space-y-2 text-sm">
                 <div className="flex items-start gap-2">
                   <span className="px-2 py-1 bg-primary-500/20 text-primary-400 rounded text-xs">Вопрос</span>
-                  <span className="text-[var(--text-secondary)]">"Что ещё может понравиться клиенту, который купил ноутбук для дизайна?"</span>
+                  <span className="text-[var(--text-secondary)]">&quot;Что ещё может понравиться клиенту, который купил ноутбук для дизайна?&quot;</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs">Агент</span>
@@ -270,7 +270,7 @@ export function AIAgentsSection() {
         <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-4">📝 Логи сообщений</h2>
         <div className="bg-[var(--bg-secondary)] rounded-xl p-6 border border-[var(--border-primary)]">
           <p className="text-[var(--text-secondary)] mb-4">
-            Все взаимодействия с агентами автоматически логируются в таблицу "Message Logs":
+            Все взаимодействия с агентами автоматически логируются в таблицу &quot;Message Logs&quot;:
           </p>
           <div className="grid grid-cols-3 gap-2 text-sm">
             <div className="p-2 rounded bg-[var(--bg-primary)]">
@@ -308,7 +308,7 @@ export function AIAgentsSection() {
           <div className="p-4 rounded-xl bg-primary-500/10 border border-primary-500/30">
             <h4 className="font-medium text-[var(--text-primary)] mb-1">Системный промпт</h4>
             <p className="text-sm text-[var(--text-secondary)]">
-              Чётко определите роль агента. Например: "Ты аналитик продаж. Отвечай кратко и по делу."
+              Чётко определите роль агента. Например: &quot;Ты аналитик продаж. Отвечай кратко и по делу.&quot;
             </p>
           </div>
           <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">

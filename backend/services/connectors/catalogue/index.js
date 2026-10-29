@@ -8,7 +8,7 @@
  * @property {string} slug
  * @property {string} display_name
  * @property {string} icon
- * @property {'oauth2'|'api_key'} auth_kind
+ * @property {'oauth2'|'api_key'|'mcp'} auth_kind
  * @property {string} [authorize_url]                  - oauth2 branded only
  * @property {string} [token_url]                      - oauth2 branded only
  * @property {string[]} scopes_default
@@ -21,6 +21,8 @@
  * @property {(args:{code:string, redirect_uri:string, env:object}) => Promise<object>} [exchangeCode]
  * @property {(tokenResponse:object) => Promise<{account_label?:string, scopes_granted?:string[]}>} [extractAccountInfo]
  * @property {(decrypted:object) => Promise<{ok:boolean, error?:string}>} [test]
+ * @property {() => object} [config]     - mcp kinds: server-side pin (allowed agent/space, launcher)
+ * @property {() => object} [describe]   - mcp kinds: public projection of config()
  * @property {(decrypted:object, oauthEnv?:object) => Promise<{ok:boolean, error?:string}>} [revoke]
  */
 
@@ -32,6 +34,9 @@ import github from './github.js';
 import imap from './imap.js';
 import custom_oauth2 from './custom_oauth2.js';
 import custom_api_key from './custom_api_key.js';
+import blender_mcp from './blender_mcp.js';
+import { remoteMcpTypes } from './remote_mcp.js';
+import midjourney from './midjourney.js';
 
 /** @type {Map<string, ConnectorType>} */
 const CATALOGUE = new Map([
@@ -43,6 +48,9 @@ const CATALOGUE = new Map([
   [imap.slug, imap],
   [custom_oauth2.slug, custom_oauth2],
   [custom_api_key.slug, custom_api_key],
+  [blender_mcp.slug, blender_mcp],
+  ...remoteMcpTypes.map((type) => [type.slug, type]),
+  [midjourney.slug, midjourney],
 ]);
 
 /**
@@ -73,6 +81,7 @@ export function listConnectorTypes() {
     client_env: t.client_env || null,
     fields: t.fields,
     refresh_supported: !!t.refresh_supported,
+    ...(typeof t.describe === 'function' ? { mcp: t.describe() } : {}),
   }));
 }
 

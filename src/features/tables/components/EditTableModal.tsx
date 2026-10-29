@@ -4,7 +4,7 @@
  */
 
 import { logger } from '@/shared/utils/logger';
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/shared/components/ui/Modal';
 import { Input } from '@/shared/components/ui/Input';
@@ -13,9 +13,10 @@ import { tablesApi } from '../api/tablesApi';
 import { apiClient } from '@/shared/utils/apiClient';
 import { UserAccessPanel } from '@/shared/components/access/UserAccessPanel';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { EmojiPicker } from './UniversalTable/EmojiPicker';
 import { TableMenuWidgetToggle } from './TableMenuWidgetToggle';
-import { ColumnsEditingTab } from './ColumnsEditingTab';
+import { ColumnsEditingTab, type ColumnsEditingTabHandle } from './ColumnsEditingTab';
 import { DataMaintenanceTab } from './DataMaintenanceTab';
 import {
   ChevronDown, ChevronRight, AlertTriangle, Key,
@@ -47,9 +48,10 @@ const ColorPicker = ({ value, onChange, label }: {
   onChange: (color: string | null) => void; 
   label?: string;
 }) => {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value || '');
-  
+
   // Sync input with value
   useEffect(() => {
     setInputValue(value || '');
@@ -113,7 +115,7 @@ const ColorPicker = ({ value, onChange, label }: {
                   backgroundImage: c ? undefined : 'linear-gradient(45deg, #666 25%, transparent 25%), linear-gradient(-45deg, #666 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #666 75%), linear-gradient(-45deg, transparent 75%, #666 75%)',
                   backgroundSize: c ? undefined : '4px 4px'
                 }}
-                title={c || 'Без цвета'}
+                title={c || t('tables.edit.noColor')}
               />
             ))}
           </div>
@@ -124,9 +126,11 @@ const ColorPicker = ({ value, onChange, label }: {
 };
 
 export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, projectId, spaceId, defaultTab = 'display' }: EditTableModalProps) => {
+  const fieldId = useId();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  
+  const { t } = useLanguage();
+
   const [activeTab, setActiveTab] = useState<TabId>(defaultTab);
   
   // Reset to defaultTab when modal opens
@@ -138,13 +142,14 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
   const [displayName, setDisplayName] = useState('');
   const [icon, setIcon] = useState('📋');
   const [color, setColor] = useState<string | null>(null);
-  const [showInNav, setShowInNav] = useState(true);
+  const [showInNav, setShowInNav] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
   const [comment, setComment] = useState('');
   const [userPermissions, setUserPermissions] = useState<UserAccessPermissionWithUser[]>([]);
   const [error, setError] = useState('');
   const [menuWidgetId, setMenuWidgetId] = useState<number | null>(null);
   const [menuToggleTouched, setMenuToggleTouched] = useState(false);
+  const columnsTabRef = useRef<ColumnsEditingTabHandle>(null);
   
   // Row height settings
   const [minRowHeight, setMinRowHeight] = useState<number | ''>(40);
@@ -232,11 +237,15 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: async () => {
+      // Column edits staged on the Editing tab are part of this Save too.
+      await columnsTabRef.current?.savePendingEdits();
       return tablesApi.updateTable(String(tableId), {
         displayName: displayName.trim(),
         icon: icon,
         color: color,
-        show_in_nav: showInNav,
+        // Untouched toggle must not rewrite show_in_nav: with no menu widget it
+        // defaults to false and would hide the table from the project nav.
+        ...(menuToggleTouched ? { show_in_nav: showInNav } : {}),
         comment: comment,
         min_row_height: minRowHeight === '' ? 24 : minRowHeight,
         max_row_height: maxRowHeight === '' ? 1200 : maxRowHeight,
@@ -255,7 +264,7 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
               await apiClient.request(`/widgets/${menuWidgetId}`, {
                 method: 'PATCH',
                 body: JSON.stringify({
-                  title: displayName.trim() || tableData?.displayName || tableData?.name || 'Таблица',
+                  title: displayName.trim() || tableData?.displayName || tableData?.name || t('tables.create.tableDefault'),
                   icon: icon || '📋',
                   config: { table_id: Number(tableId) }
                 })
@@ -269,7 +278,7 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                 body: JSON.stringify({
                   widget_type: 'preset',
                   preset_name: 'table_view',
-                  title: displayName.trim() || tableData?.displayName || tableData?.name || 'Таблица',
+                  title: displayName.trim() || tableData?.displayName || tableData?.name || t('tables.create.tableDefault'),
                   icon: icon || '📋',
                   config: { table_id: Number(tableId) },
                   position: { x: 0, y: 0, w: 12, h: 6 }
@@ -304,7 +313,6 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
       setDisplayName(tableData.displayName);
       setIcon(tableData.icon || '📋');
       setColor(tableData.color || null);
-      setShowInNav(tableData.show_in_nav !== false);
       setIsPublic(tableData.is_public !== false);
       setComment(tableData.comment || '');
       setTableKey(tableData.name);
@@ -321,8 +329,9 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
     if (open) {
       setMenuToggleTouched(false);
       setMenuWidgetId(null);
+      setShowInNav(false);
     }
-  }, [open]);
+  }, [open, tableId]);
 
   useEffect(() => {
     const resolvedProjectId = projectId ?? tableData?.project_id ?? null;
@@ -340,8 +349,8 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
         );
         if (isActive) {
           setMenuWidgetId(widget?.id ?? null);
-          if (widget?.id && !menuToggleTouched) {
-            setShowInNav(true);
+          if (!menuToggleTouched) {
+            setShowInNav(Boolean(widget));
           }
         }
       } catch (widgetError) {
@@ -358,7 +367,7 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
 
   const handleSubmit = () => {
     if (!displayName.trim()) {
-      setError('Название не может быть пустым');
+      setError(t('tables.edit.nameRequired'));
       return;
     }
     updateMutation.mutate();
@@ -370,17 +379,17 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
   };
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: 'display', label: 'Отображение' },
-    { id: 'access', label: 'Доступ' },
-    { id: 'personalization', label: 'Редактирование' },
-    { id: 'data', label: 'Данные' }
+    { id: 'display', label: t('tables.edit.tabDisplay') },
+    { id: 'access', label: t('tables.edit.tabAccess') },
+    { id: 'personalization', label: t('tables.edit.tabEditing') },
+    { id: 'data', label: t('tables.edit.tabData') }
   ];
 
   return (
-    <Modal 
-      open={open} 
-      onOpenChange={onOpenChange} 
-      title={`Редактирование таблицы "${tableData?.displayName || tableData?.name || ''}"`}
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('tables.edit.title', { name: tableData?.displayName || tableData?.name || '' })}
       size="xl"
       fixedHeight
       heightOffset={150}
@@ -426,25 +435,25 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                     <EmojiPicker 
                       value={icon} 
                       onChange={setIcon}
-                      label="Иконка"
+                      label={t('tables.edit.icon')}
                       size="md"
                     />
                     <div className="flex-1">
                       <Input
-                        label="Название таблицы"
+                        label={t('tables.edit.tableName')}
                         value={displayName}
                         onChange={(e) => setDisplayName(e.target.value)}
-                        placeholder="Введите название"
+                        placeholder={t('tables.edit.tableNamePlaceholder')}
                       />
                     </div>
-                    <ColorPicker value={color} onChange={setColor} label="Цвет" />
+                    <ColorPicker value={color} onChange={setColor} label={t('tables.edit.color')} />
                   </div>
                   
                   {/* Table Key with checkbox - moved up */}
                   <div className="p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)]">
                     <div className="flex items-center gap-3 mb-3">
                       <Key className="w-4 h-4 text-[var(--text-tertiary)]" />
-                      <span className="text-sm font-medium text-[var(--text-primary)]">Ключ таблицы</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">{t('tables.edit.tableKey')}</span>
                       <div className="flex-1" />
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
@@ -453,7 +462,7 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                           onChange={(e) => setKeyEditEnabled(e.target.checked)}
                           className="w-4 h-4 rounded border-[var(--border-primary)] bg-[var(--bg-primary)] accent-[var(--color-primary-500)]"
                         />
-                        <span className="text-xs text-[var(--text-secondary)]">Разрешить редактирование</span>
+                        <span className="text-xs text-[var(--text-secondary)]">{t('tables.edit.allowKeyEdit')}</span>
                       </label>
                     </div>
                     
@@ -469,7 +478,7 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                       <div className="mt-2 p-2 rounded bg-amber-500/10 border border-amber-500/30 flex items-start gap-2">
                         <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                         <p className="text-xs text-amber-400">
-                          Изменение ключа таблицы может привести к потере связей и зависимостей.
+                          {t('tables.edit.keyEditWarning')}
                         </p>
                       </div>
                     )}
@@ -477,14 +486,15 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                   
                   {/* Comment - 4 rows */}
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)] mb-1">
+                    <label htmlFor={`${fieldId}-0`} className="flex items-center gap-2 text-sm font-medium text-[var(--text-secondary)] mb-1">
                       <MessageSquare className="w-4 h-4" />
-                      Комментарий к таблице
+                      {t('tables.edit.comment')}
                     </label>
                     <textarea
+                      id={`${fieldId}-0`}
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
-                      placeholder="Описание назначения таблицы..."
+                      placeholder={t('tables.edit.commentPlaceholder')}
                       rows={4}
                       className="w-full px-3 py-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)] resize-none"
                     />
@@ -494,13 +504,14 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                   <div className="p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)]">
                     <div className="flex items-center gap-2 mb-3">
                       <ArrowUpDown className="w-4 h-4 text-[var(--text-tertiary)]" />
-                      <span className="text-sm font-medium text-[var(--text-primary)]">Высота строк</span>
+                      <span className="text-sm font-medium text-[var(--text-primary)]">{t('tables.edit.rowHeight')}</span>
                     </div>
                     
                     <div className="grid grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-xs text-[var(--text-secondary)] mb-1">Минимальная (px)</label>
+                        <label htmlFor={`${fieldId}-1`} className="block text-xs text-[var(--text-secondary)] mb-1">{t('tables.edit.minHeight')}</label>
                         <input
+                          id={`${fieldId}-1`}
                           type="number"
                           value={minRowHeight}
                           onChange={(e) => setMinRowHeight(e.target.value === '' ? '' : Number(e.target.value))}
@@ -512,8 +523,9 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-[var(--text-secondary)] mb-1">Максимальная (px)</label>
+                        <label htmlFor={`${fieldId}-2`} className="block text-xs text-[var(--text-secondary)] mb-1">{t('tables.edit.maxHeight')}</label>
                         <input
+                          id={`${fieldId}-2`}
                           type="number"
                           value={maxRowHeight}
                           onChange={(e) => setMaxRowHeight(e.target.value === '' ? '' : Number(e.target.value))}
@@ -525,13 +537,14 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-[var(--text-secondary)] mb-1">Фиксированная (px)</label>
+                        <label htmlFor={`${fieldId}-3`} className="block text-xs text-[var(--text-secondary)] mb-1">{t('tables.edit.fixedHeight')}</label>
                         <input
+                          id={`${fieldId}-3`}
                           type="number"
                           value={fixedRowHeight ?? ''}
                           onChange={(e) => setFixedRowHeight(e.target.value === '' ? null : Number(e.target.value))}
                           onBlur={() => setFixedRowHeight(prev => prev !== null && prev < 24 ? 24 : prev !== null && prev > 1200 ? 1200 : prev)}
-                          placeholder="Авто"
+                          placeholder={t('tables.edit.auto')}
                           min={24}
                           max={1200}
                           className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]"
@@ -539,7 +552,7 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                       </div>
                     </div>
                     <p className="text-xs text-[var(--text-tertiary)] mt-2">
-                      Фиксированная высота переопределяет мин/макс. При переполнении ячейки добавляется скролл.
+                      {t('tables.edit.rowHeightHint')}
                     </p>
                   </div>
 
@@ -550,7 +563,6 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                       setShowInNav(checked);
                       setMenuToggleTouched(true);
                     }}
-                    description="Отображать таблицу в левом меню как виджет"
                   />
 
                   {/* Public visibility (ADR-0060 opt-out) */}
@@ -559,9 +571,9 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                       <div className="flex items-start gap-2">
                         <Globe className="w-4 h-4 mt-0.5 text-[var(--accent-primary)] flex-shrink-0" />
                         <div className="space-y-1">
-                          <div className="text-sm font-medium text-[var(--text-primary)]">Видна в публичном пространстве</div>
+                          <div className="text-sm font-medium text-[var(--text-primary)]">{t('tables.edit.publicVisible')}</div>
                           <p className="text-xs text-[var(--text-secondary)]">
-                            Если space опубликована, таблица доступна read-only посетителям. Выключите, чтобы скрыть таблицу из публичного viewer.
+                            {t('tables.edit.publicVisibleDesc')}
                           </p>
                         </div>
                       </div>
@@ -573,7 +585,7 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                   {tableData && (
                     <div className="text-xs text-[var(--text-tertiary)] flex gap-4">
                       <span>ID: {tableData.id}</span>
-                      <span>Исходный ключ: <code className="font-mono bg-[var(--bg-tertiary)] px-1 rounded">{tableData.name}</code></span>
+                      <span>{t('tables.edit.sourceKey')} <code className="font-mono bg-[var(--bg-tertiary)] px-1 rounded">{tableData.name}</code></span>
                     </div>
                   )}
                 </div>
@@ -590,15 +602,14 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                         </div>
                         <div>
                           <h4 className="text-lg font-medium text-[var(--text-primary)] mb-2">
-                            Управление доступами недоступно
+                            {t('tables.edit.accessUnavailable')}
                           </h4>
                           <p className="text-sm text-[var(--text-secondary)] mb-3">
-                            Для управления доступами таблица должна принадлежать пространству. 
-                            Эта таблица создана вне пространства или пространство не определено.
+                            {t('tables.edit.accessUnavailableDesc')}
                           </p>
                           <div className="text-xs text-[var(--text-tertiary)] space-y-1">
-                            <p>• Переместите таблицу в проект внутри пространства</p>
-                            <p>• Или используйте права доступа на уровне проекта</p>
+                            <p>{t('tables.edit.accessHintMove')}</p>
+                            <p>{t('tables.edit.accessHintProject')}</p>
                           </div>
                         </div>
                       </div>
@@ -617,18 +628,20 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
               )}
               {activeTab === 'access' && !tableData && (
                 <div className="flex items-center justify-center h-[300px] text-[var(--text-tertiary)]">
-                  <p>Загрузка данных...</p>
+                  <p>{t('tables.edit.loading')}</p>
                 </div>
               )}
 
-              {/* Editing Tab (was Personalization) */}
-              {activeTab === 'personalization' && (
+              {/* Editing Tab (was Personalization) — stays mounted while the
+                  modal is open so staged column edits survive a tab switch. */}
+              <div className={activeTab === 'personalization' ? undefined : 'hidden'}>
                 <ColumnsEditingTab
+                  ref={columnsTabRef}
                   tableId={tableId}
                   projectId={projectId}
                   isOpen={open && activeTab === 'personalization'}
                 />
-              )}
+              </div>
 
               {/* Data Tab - Normalization and maintenance */}
               {activeTab === 'data' && (
@@ -644,7 +657,7 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                   onClick={handleDeleteClick}
                   className="px-4 py-2 text-sm font-medium text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 hover:border-red-500/50 transition-colors"
                 >
-                  Удалить таблицу
+                  {t('tables.deleteTable')}
                 </button>
               )}
               {!onDeleteClick && <div />}
@@ -654,14 +667,14 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                   onClick={() => onOpenChange(false)}
                   className="px-4 py-2 text-sm font-medium text-[var(--text-secondary)] border border-[var(--border-primary)] rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors"
                 >
-                  Отмена
+                  {t('tables.create.cancel')}
                 </button>
-                <Button 
-                  variant="primary" 
+                <Button
+                  variant="primary"
                   onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
-                  {updateMutation.isPending ? 'Сохранение...' : 'Сохранить'}
+                  {updateMutation.isPending ? t('tables.edit.saving') : t('tables.edit.save')}
                 </Button>
               </div>
             </div>

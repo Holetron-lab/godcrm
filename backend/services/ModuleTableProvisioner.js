@@ -13,7 +13,7 @@
  *
  * Blueprint shape (declarative, documents-style column templates):
  *   {
- *     key: 'my_module',
+ *     key: 'sc_sim',
  *     tables: [{
  *       key: 'schemes',                 // logical key used in the returned mapping
  *       name: 'sim_schemes',            // universal_tables.name — MUST be ASCII snake_case
@@ -33,7 +33,7 @@
  * ship demo/default rows alongside its tables — the "module carries its own data"
  * primitive that lets a fresh install open on a working project instead of an empty one:
  *   {
- *     key: 'my_module',
+ *     key: 'sc_sim',
  *     tables: [...],
  *     seed: [{
  *       table: 'schemes',        // logical table key — resolved through the mapping
@@ -45,7 +45,7 @@
  *   }
  */
 
-import { dbRun, dbGet, withTransactionAsync, sqlNow } from '../database/connection.js';
+import { dbRun, dbGet, dbAll, withTransactionAsync, sqlNow } from '../database/connection.js';
 import { apiLogger } from '../utils/logger.js';
 import { generateBaseId } from '../utils/baseId.js';
 
@@ -69,9 +69,20 @@ function assertAsciiKey(kind, value) {
  * @param {object} blueprint - { key, tables: [...] }
  * @param {object} [opts]
  * @param {number} [opts.userId] - creator (created_by)
- * @returns {Promise<Record<string, {table_id:number,name:string,created:boolean,columns:Array}>>}
+ * @param {object} [opts.trx] - an OPEN transaction handle (exposing `get`/`run`) to provision
+ *   within — the same contract seedModuleRows takes below. Pass it to make an install
+ *   all-or-nothing: `withTransactionAsync(trx => { provisionModuleTables(pid, bp, { trx });
+ *   seedModuleRows(map, bp, { trx }); })`. Omit it and every statement autocommits, exactly as
+ *   before. provisionModuleTables NEVER opens a transaction of its own — no nested BEGIN.
+ * @param {boolean} [opts.reconcile] - ADR-200 W2. Default false: an already-existing table is
+ *   reused as-is (its columns are never inspected), which is what every pre-W2 caller expects.
+ *   With `reconcile: true` an existing table also gets the blueprint's MISSING columns appended
+ *   — add-only, always: a column present in the table but absent from the blueprint is left
+ *   alone, and a column whose type disagrees is NOT retyped (that would be a data-loss tool,
+ *   see ADR-200 §W2). What was added comes back per table as `columns_added`.
+ * @returns {Promise<Record<string, {table_id:number,name:string,created:boolean,columns:Array,columns_added:string[]}>>}
  */
-export async function provisionModuleTables(projectId, blueprint, { userId = null } = {}) {
+export async function provisionModuleTables(projectId, blueprint, { userId = null, trx = null, reconcile = false } = {}) {
   if (!projectId) throw new Error('provisionModuleTables: projectId is required');
   if (!blueprint || !Array.isArray(blueprint.tables) || blueprint.tables.length === 0) {
     throw new Error('provisionModuleTables: blueprint.tables must be a non-empty array');
@@ -83,29 +94,40 @@ export async function provisionModuleTables(projectId, blueprint, { userId = nul
     for (const col of (t.columns || [])) assertAsciiKey('column_name', col.column_name);
   }
 
+  // Every read/write goes through the caller's transaction when one was given, and through
+  // the autocommit helpers otherwise. Same statements, same order — only the handle differs.
+  const get = trx ? (sql, params) => trx.get(sql, params) : dbGet;
+  const run = trx ? (sql, params) => trx.run(sql, params) : dbRun;
+  const all = trx ? (sql, params) => trx.all(sql, params) : dbAll;
+
   const mapping = {};
 
   for (const table of blueprint.tables) {
-    const existing = await dbGet(
+    const existing = await get(
       `SELECT id FROM universal_tables WHERE project_id = ? AND name = ?`,
       [projectId, table.name]
     );
 
     if (existing) {
+      const columnsAdded = reconcile
+        ? await addMissingColumns(existing.id, table.columns || [], { all, run })
+        : [];
+
       mapping[table.key] = {
         table_id: existing.id,
         name: table.name,
         created: false,
         columns: (table.columns || []).map(pickColMeta),
+        columns_added: columnsAdded,
       };
       apiLogger.debug(
-        { projectId, table: table.name, tableId: existing.id, module: blueprint.key },
+        { projectId, table: table.name, tableId: existing.id, columnsAdded, module: blueprint.key },
         '[ModuleTableProvisioner] table already exists — reused'
       );
       continue;
     }
 
-    const res = await dbRun(
+    const res = await run(
       `INSERT INTO universal_tables (project_id, name, display_name, table_type, icon, base_id, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -120,13 +142,14 @@ export async function provisionModuleTables(projectId, blueprint, { userId = nul
     );
     const tableId = res.lastInsertRowid ?? res.lastID;
 
-    await createColumns(tableId, table.columns || []);
+    await createColumns(tableId, table.columns || [], run);
 
     mapping[table.key] = {
       table_id: tableId,
       name: table.name,
       created: true,
       columns: (table.columns || []).map(pickColMeta),
+      columns_added: [], // reconcile-only field: a table created here has no "added later" columns
     };
     apiLogger.info(
       { projectId, table: table.name, tableId, columns: (table.columns || []).length, module: blueprint.key },
@@ -141,10 +164,11 @@ function pickColMeta(col) {
   return { column_name: col.column_name, display_name: col.display_name, type: col.type };
 }
 
-async function createColumns(tableId, columns) {
+// `run` is the write handle chosen by the caller — the caller's trx or plain dbRun.
+async function createColumns(tableId, columns, run = dbRun) {
   for (let i = 0; i < columns.length; i++) {
     const col = columns[i];
-    await dbRun(
+    await run(
       `INSERT INTO table_columns (table_id, column_name, display_name, type, order_index, is_visible, config)
        VALUES (?, ?, ?, ?, ?, 1, ?)`,
       [
@@ -157,6 +181,51 @@ async function createColumns(tableId, columns) {
       ]
     );
   }
+}
+
+/**
+ * ADR-200 W2 — add-only reconciliation of an EXISTING table against the blueprint.
+ *
+ * A module that adds a field in v2 could never roll it out onto installations that already
+ * had the table: provisionModuleTables saw the name, reused it and never looked at columns.
+ * This closes that, and it closes it in one direction only. Missing columns are appended;
+ * extra columns (the user's own, or a previous version's) are untouched; a column whose type
+ * disagrees with the blueprint is left as it is — retyping or dropping a column that already
+ * holds user data turns "upgrade the module" into "lose the data".
+ *
+ * `order_index` continues after the table's current maximum, so appended columns land at the
+ * end instead of colliding with the existing layout.
+ *
+ * @returns {Promise<string[]>} names of the columns actually appended
+ */
+async function addMissingColumns(tableId, columns, { all, run }) {
+  if (columns.length === 0) return [];
+
+  const existing = await all(
+    `SELECT column_name, order_index FROM table_columns WHERE table_id = ?`,
+    [tableId]
+  );
+  const present = new Set(existing.map((c) => c.column_name));
+  const missing = columns.filter((c) => !present.has(c.column_name));
+  if (missing.length === 0) return [];
+
+  let nextOrder = existing.reduce((max, c) => Math.max(max, Number(c.order_index) || 0), 0);
+  for (const col of missing) {
+    nextOrder += 1;
+    await run(
+      `INSERT INTO table_columns (table_id, column_name, display_name, type, order_index, is_visible, config)
+       VALUES (?, ?, ?, ?, ?, 1, ?)`,
+      [
+        tableId,
+        col.column_name,
+        col.display_name || col.column_name,
+        col.type || 'text',
+        nextOrder,
+        col.config ? JSON.stringify(col.config) : null,
+      ]
+    );
+  }
+  return missing.map((c) => c.column_name);
 }
 
 /**
@@ -275,13 +344,13 @@ export async function seedModuleRows(mapping, blueprint, { userId = null, trx = 
   return counts;
 }
 
-function parseData(data) {
+export function parseData(data) {
   if (data == null) return {};
   return typeof data === 'string' ? JSON.parse(data || '{}') : data;
 }
 
 // A stable, order-independent signature of a row's natural-key values. JSON.stringify of
 // an array preserves the declared key order and cleanly distinguishes null/number/string.
-function keySignature(row, keyCols) {
+export function keySignature(row, keyCols) {
   return JSON.stringify(keyCols.map((k) => row?.[k] ?? null));
 }

@@ -19,9 +19,15 @@
  */
 
 import express from 'express';
+import { z } from 'zod';
+import path from 'node:path';
+import { access } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 
-import { dbGet, dbAll, dbRun } from '../../database/connection.js';
+import { dbGet, dbAll, dbRun, withTransactionAsync } from '../../database/connection.js';
 import { checkUserSpaceAccess } from '../../services/space/access.js';
+import { storeMailAttachments } from '../../services/mail/attachmentStorage.js';
+import { resolveUploadScope } from '../../services/file-upload-scope.js';
 import { imapFetch } from '../../services/mail/imapFetch.js';
 import { extractReplyToken } from '../../services/mail/replyToken.js';
 import { normalizeRecipients, RecipientError } from '../../services/mail/recipients.js';
@@ -48,10 +54,43 @@ const FOLDERS = [
   { id: 'inbox', label: 'Inbox' },
   { id: 'sent', label: 'Sent' },
   { id: 'drafts', label: 'Drafts' },
-  { id: 'archive', label: 'Archive' },
   { id: 'trash', label: 'Trash' },
 ];
 const FOLDER_IDS = new Set(FOLDERS.map((f) => f.id));
+const folderNameSchema = z.object({ name: z.string().trim().min(1).max(120) });
+const folderKeySchema = z.string().regex(/^(archive|spam|f[1-9]\d*)$/);
+const optionalId = z.coerce.number().int().positive().safe().optional();
+
+async function seedFolders(spaceId) {
+  // Tombstones keep a deleted default folder from reappearing on the next read.
+  await dbRun(`INSERT INTO mail_folders (space_id, key, name, order_index)
+    VALUES (?, 'archive', 'Архив', 0), (?, 'spam', 'Спам', 1)
+    ON CONFLICT (space_id, key) DO NOTHING`, [spaceId, spaceId]);
+}
+
+async function validFolder(spaceId, folder) {
+  if (FOLDER_IDS.has(folder)) return true;
+  if (!folderKeySchema.safeParse(folder).success) return false;
+  await seedFolders(spaceId);
+  return !!(await dbGet('SELECT id FROM mail_folders WHERE space_id = ? AND key = ? AND NOT deleted', [spaceId, folder]));
+}
+
+async function mailProject(req, res, spaceId) {
+  const projectId = req.body?.project_id ?? req.query?.project_id;
+  if (projectId == null) return { projectId: null };
+  const scope = await resolveUploadScope({ spaceId, projectId }, req.user);
+  if (scope.error) {
+    if (scope.status === 403) forbidden(res, scope.error);
+    else badRequest(res, scope.error);
+    return null;
+  }
+  return scope;
+}
+
+function toFolder(row) {
+  return { id: row.key, label: row.name, system: false, unread: 0 };
+}
+
 
 // ─── helpers ────────────────────────────────────────────────────────
 
@@ -107,6 +146,7 @@ function toMailMessage(r, labels = []) {
     date: r.date ? new Date(r.date).toISOString() : null,
     read: !!r.is_read,
     starred: !!r.starred,
+    repliedAt: r.replied_at ? new Date(r.replied_at).toISOString() : null,
     // ADR-158 §P5 — attachment metadata (filename/contentType/size); [] when none.
     attachments: Array.isArray(r.attachments)
       ? r.attachments
@@ -263,9 +303,50 @@ router.get('/spaces/:spaceId/mail/folders', async (req, res) => {
     for (const c of counts) unread[c.folder] = Number(c.unread) || 0;
   }
 
+  await seedFolders(spaceId);
+  const custom = await dbAll('SELECT * FROM mail_folders WHERE space_id = ? AND NOT deleted ORDER BY order_index, id', [spaceId]);
   return success(res, {
-    folders: FOLDERS.map((f) => ({ ...f, unread: unread[f.id] || 0 })),
+    folders: [...FOLDERS.map((f) => ({ ...f, system: true })), ...custom.map(toFolder)]
+      .map((f) => ({ ...f, unread: unread[f.id] || 0 })),
   });
+});
+
+router.post('/spaces/:spaceId/mail/folders', async (req, res) => {
+  const spaceId = Number(req.params.spaceId);
+  if (!(await ensureSpaceAccess(req, res, spaceId))) return;
+  const parsed = folderNameSchema.safeParse(req.body);
+  if (!parsed.success) return badRequest(res, 'Folder name must contain 1–120 characters');
+  await seedFolders(spaceId);
+  const row = await dbGet(`WITH n AS (SELECT nextval('mail_folders_id_seq') AS id)
+    INSERT INTO mail_folders (id, space_id, key, name, order_index)
+    SELECT id, ?, 'f' || id, ?, id::integer FROM n RETURNING *`, [spaceId, parsed.data.name]);
+  return created(res, { folder: toFolder(row) });
+});
+
+router.patch('/spaces/:spaceId/mail/folders/:key', async (req, res) => {
+  const spaceId = Number(req.params.spaceId);
+  if (!(await ensureSpaceAccess(req, res, spaceId))) return;
+  const parsed = folderNameSchema.safeParse(req.body);
+  if (!parsed.success || !folderKeySchema.safeParse(req.params.key).success) return badRequest(res, 'Invalid folder or name');
+  await seedFolders(spaceId);
+  const row = await dbGet(`UPDATE mail_folders SET name = ?
+    WHERE space_id = ? AND key = ? AND NOT deleted RETURNING *`, [parsed.data.name, spaceId, req.params.key]);
+  return row ? success(res, { folder: toFolder(row) }) : notFound(res, 'Folder');
+});
+
+router.delete('/spaces/:spaceId/mail/folders/:key', async (req, res) => {
+  const spaceId = Number(req.params.spaceId);
+  if (!(await ensureSpaceAccess(req, res, spaceId))) return;
+  const key = req.params.key;
+  if (!folderKeySchema.safeParse(key).success) return badRequest(res, 'Cannot delete system folder');
+  await seedFolders(spaceId);
+  const row = await withTransactionAsync(async (tx) => {
+    const deleted = await tx.get(`UPDATE mail_folders SET deleted = true
+      WHERE space_id = ? AND key = ? AND NOT deleted RETURNING id`, [spaceId, key]);
+    if (deleted) await tx.run("UPDATE mail_messages SET folder = 'inbox', updated_at = now() WHERE space_id = ? AND folder = ?", [spaceId, key]);
+    return deleted;
+  });
+  return row ? success(res, { deleted: true, id: key }) : notFound(res, 'Folder');
 });
 
 // ─── GET /spaces/:spaceId/mail/messages ─────────────────────────────
@@ -297,7 +378,7 @@ router.get('/spaces/:spaceId/mail/messages', async (req, res) => {
     );
   } else {
     const folder = String(req.query.folder || 'inbox');
-    if (!FOLDER_IDS.has(folder)) return badRequest(res, `Unknown folder: ${folder}`);
+    if (!(await validFolder(spaceId, folder))) return badRequest(res, `Unknown folder: ${folder}`);
     rows = await dbAll(
       `SELECT * FROM mail_messages
         WHERE space_id = ? AND connector_id = ? AND folder = ?
@@ -357,6 +438,59 @@ router.get('/spaces/:spaceId/mail/messages/:msgId/ref', async (req, res) => {
   return success(res, { ref: toMailRef(row) });
 });
 
+// Uses the existing authenticate middleware, including access_token cookies.
+router.get('/spaces/:spaceId/mail/messages/:msgId/attachments/:index', async (req, res) => {
+  const spaceId = Number(req.params.spaceId);
+  if (!(await ensureSpaceAccess(req, res, spaceId))) return;
+  const parsed = z.object({ msgId: z.coerce.number().int().positive().safe(),
+    index: z.coerce.number().int().min(0).max(99) }).safeParse(req.params);
+  if (!parsed.success || (req.query.download != null && !['0', '1'].includes(req.query.download))) return badRequest(res, 'Invalid attachment request');
+  const { msgId, index } = parsed.data;
+  const message = await dbGet('SELECT * FROM mail_messages WHERE id = ? AND space_id = ?', [msgId, spaceId]);
+  if (!message) return notFound(res, 'Message');
+  let attachments = parseJsonb(message.attachments);
+  if (!attachments[index]) return notFound(res, 'Attachment');
+  let file = attachments[index].fileId ? await dbGet('SELECT * FROM files WHERE id = ? AND space_id = ?', [attachments[index].fileId, spaceId]) : null;
+  if (file && !(await access(file.path).then(() => true, () => false))) file = null;
+  if (!file) {
+    if (!message.imap_uid) return notFound(res, 'Attachment bytes are unavailable for this legacy message');
+    const conn = await loadImapConnector(spaceId, message.connector_id);
+    if (!conn) return notFound(res, 'Mailbox');
+    try {
+      const [fresh] = await imapFetch({ creds: conn.creds, folder: message.imap_folder || message.folder,
+        uid: Number(message.imap_uid), includeAttachmentContent: true });
+      if (!fresh || !fresh.attachments[index]) return notFound(res, 'Attachment on IMAP server');
+      if ((!message.message_id && !message.imap_uid_validity)
+        || (message.message_id && message.message_id !== fresh.message_id)
+        || (message.imap_uid_validity && message.imap_uid_validity !== fresh.imap_uid_validity)) {
+        return error(res, 'IMAP_IDENTITY_CHANGED', 'Stored message no longer matches the IMAP message', 409);
+      }
+      const scope = await mailProject(req, res, spaceId);
+      if (!scope) return;
+      attachments = await storeMailAttachments({ spaceId, connectorId: conn.id,
+        messageId: fresh.message_id || `${message.imap_folder}:${fresh.imap_uid_validity}:${fresh.imap_uid}`,
+        attachments: fresh.attachments, projectId: scope.projectId, userId: req.user.id });
+      await dbRun('UPDATE mail_messages SET attachments = ?::jsonb, imap_uid_validity = ?, updated_at = now() WHERE id = ? AND space_id = ?',
+        [JSON.stringify(attachments), fresh.imap_uid_validity ?? null, msgId, spaceId]);
+      file = await dbGet('SELECT * FROM files WHERE id = ? AND space_id = ?', [attachments[index].fileId, spaceId]);
+    } catch (err) {
+      log.error({ err, spaceId, msgId }, 'mail attachment recovery failed');
+      return error(res, 'ATTACHMENT_FETCH_FAILED', 'Could not retrieve attachment', 502);
+    }
+  }
+  if (!file) return notFound(res, 'File');
+  const root = path.resolve(process.env.UPLOAD_PATH || '/var/lib/business-crm-data/uploads');
+  const filePath = path.resolve(file.path);
+  if (!filePath.startsWith(root + path.sep)) return forbidden(res, 'Invalid file path');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Cache-Control', 'private, no-store');
+  // Only passive raster images render inline; HTML/SVG always download.
+  if (req.query.download === '1' || !/\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i.test(filePath)) {
+    return res.download(filePath, file.original_name);
+  }
+  return res.sendFile(filePath);
+});
+
 // ─── PATCH /spaces/:spaceId/mail/messages/:msgId ────────────────────
 // ADR-158 §P1 — mutate a message's flags/placement in one call:
 //   { is_read?, starred?, folder? }
@@ -390,7 +524,7 @@ router.patch('/spaces/:spaceId/mail/messages/:msgId', async (req, res) => {
   }
   if ('folder' in body) {
     const folder = String(body.folder);
-    if (!FOLDER_IDS.has(folder)) return badRequest(res, `Unknown folder: ${folder}`);
+    if (!(await validFolder(spaceId, folder))) return badRequest(res, `Unknown folder: ${folder}`);
     sets.push('folder = ?');
     params.push(folder);
   }
@@ -398,12 +532,16 @@ router.patch('/spaces/:spaceId/mail/messages/:msgId', async (req, res) => {
     return badRequest(res, 'Provide at least one of: is_read, starred, folder');
   }
 
-  const row = await dbGet(
-    `UPDATE mail_messages SET ${sets.join(', ')}, updated_at = now()
-      WHERE id = ? AND space_id = ?
-      RETURNING *`,
-    [...params, id, spaceId]
-  );
+  const row = await withTransactionAsync(async (tx) => {
+    if (body.folder && !FOLDER_IDS.has(body.folder) && !(await tx.get(
+      'SELECT id FROM mail_folders WHERE space_id = ? AND key = ? AND NOT deleted FOR SHARE', [spaceId, body.folder]
+    ))) return undefined;
+    return tx.get(
+      `UPDATE mail_messages SET ${sets.join(', ')}, updated_at = now()
+        WHERE id = ? AND space_id = ? RETURNING *`, [...params, id, spaceId]
+    );
+  });
+  if (row === undefined) return badRequest(res, 'Folder was deleted');
   if (!row) return notFound(res, 'Message');
   return success(res, { message: toMailMessage(row) });
 });
@@ -467,15 +605,17 @@ router.post('/spaces/:spaceId/mail/sync', async (req, res) => {
   if (!space) return;
 
   const folder = String(req.body?.folder || 'inbox');
-  if (!FOLDER_IDS.has(folder)) return badRequest(res, `Unknown folder: ${folder}`);
+  if (!(await validFolder(spaceId, folder))) return badRequest(res, `Unknown folder: ${folder}`);
   const limit = Math.min(Math.max(Number(req.body?.limit) || 50, 1), 200);
 
   const conn = await loadImapConnector(spaceId, Number(req.body?.connector_id) || null);
   if (!conn) return badRequest(res, 'No imap connector for this space');
 
+  const scope = await mailProject(req, res, spaceId);
+  if (!scope) return;
   let fetched;
   try {
-    fetched = await imapFetch({ creds: conn.creds, folder, limit });
+    fetched = await imapFetch({ creds: conn.creds, folder, limit, includeAttachmentContent: true });
   } catch (err) {
     log.error({ err, spaceId, connectorId: conn.id, folder }, 'mail sync: imap fetch failed');
     return error(res, 'IMAP_FETCH_FAILED', err?.message || 'IMAP fetch failed', 502);
@@ -508,16 +648,31 @@ router.post('/spaces/:spaceId/mail/sync', async (req, res) => {
   let linked = 0;
   let labeled = 0;
   for (const m of fetched) {
+    const prior = await dbGet(`SELECT message_id, imap_uid_validity FROM mail_messages
+      WHERE space_id = ? AND connector_id = ? AND imap_folder = ? AND imap_uid = ?`, [spaceId, conn.id, folder, m.imap_uid]);
+    if (prior && ((prior.imap_uid_validity && m.imap_uid_validity && prior.imap_uid_validity !== m.imap_uid_validity)
+      || (prior.message_id && m.message_id && prior.message_id !== m.message_id))) {
+      return error(res, 'IMAP_IDENTITY_CHANGED', 'Mailbox identity changed; refusing to overwrite stored mail', 409);
+    }
+    let attachmentMeta;
+    try {
+      attachmentMeta = await storeMailAttachments({ spaceId, connectorId: conn.id,
+        messageId: m.message_id || `${folder}:${m.imap_uid_validity || ''}:${m.imap_uid}`,
+        attachments: m.attachments || [], projectId: scope.projectId, userId: req.user.id });
+    } catch (err) {
+      log.error({ err, spaceId, connectorId: conn.id }, 'mail attachment storage failed');
+      return error(res, 'ATTACHMENT_STORAGE_FAILED', 'Could not store mail attachments', 502);
+    }
     // RETURNING (xmax = 0) tells insert from ON CONFLICT update: a fresh tuple
     // has xmax 0, an updated one carries the locking xid. We use it to fire
     // rule-labeling ONLY on a genuine new message — a re-sync must not re-tag
     // (which would resurrect a label the user manually removed). Verified on PG.
     const up = await dbGet(
       `INSERT INTO mail_messages
-         (space_id, connector_id, folder, imap_uid, message_id, from_name, from_address,
-          to_addresses, subject, preview, body_text, body_html, date, is_read, attachments)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?::jsonb)
-       ON CONFLICT (connector_id, folder, imap_uid) DO UPDATE SET
+         (space_id, connector_id, folder, imap_folder, imap_uid, message_id, from_name, from_address,
+          to_addresses, subject, preview, body_text, body_html, date, is_read, attachments, imap_uid_validity)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
+       ON CONFLICT (connector_id, imap_folder, imap_uid) DO UPDATE SET
             message_id = EXCLUDED.message_id,
             from_name = EXCLUDED.from_name,
             from_address = EXCLUDED.from_address,
@@ -528,16 +683,20 @@ router.post('/spaces/:spaceId/mail/sync', async (req, res) => {
             body_html = EXCLUDED.body_html,
             date = EXCLUDED.date,
             -- Sticky read: a sync must never un-read a message. We mark read only
-            -- in our DB (we don't push \Seen back to IMAP), so EXCLUDED.is_read is
+            -- in our DB (we don't push \\Seen back to IMAP), so EXCLUDED.is_read is
             -- almost always false on re-sync. OR-merge keeps a local read read, and
             -- still honors a server-side read made from another client. (ADR-158)
             is_read = mail_messages.is_read OR EXCLUDED.is_read,
             attachments = EXCLUDED.attachments,
+            imap_uid_validity = EXCLUDED.imap_uid_validity,
             updated_at = now()
+       WHERE (mail_messages.message_id IS NULL OR EXCLUDED.message_id IS NULL OR mail_messages.message_id = EXCLUDED.message_id)
+         AND (mail_messages.imap_uid_validity IS NULL OR EXCLUDED.imap_uid_validity IS NULL OR mail_messages.imap_uid_validity = EXCLUDED.imap_uid_validity)
        RETURNING id, (xmax = 0) AS inserted`,
       [
         spaceId,
         conn.id,
+        folder,
         folder,
         m.imap_uid ?? null,
         m.message_id,
@@ -550,9 +709,11 @@ router.post('/spaces/:spaceId/mail/sync', async (req, res) => {
         m.body_html,
         m.date,
         m.is_read,
-        JSON.stringify(m.attachments || []),
+        JSON.stringify(attachmentMeta),
+        m.imap_uid_validity ?? null,
       ]
     );
+    if (!up) return error(res, 'IMAP_IDENTITY_CHANGED', 'Mailbox identity changed during sync', 409);
     synced += 1;
 
     // ADR-158 §P2 — auto-link an inbound reply back to its CRM row via the
@@ -653,6 +814,16 @@ router.post('/spaces/:spaceId/mail/send', async (req, res) => {
   const conn = await loadImapConnector(spaceId, Number(req.body?.connector_id) || null);
   if (!conn) return badRequest(res, 'No imap connector for this space');
 
+  const replyInput = optionalId.safeParse(req.body?.in_reply_to_id);
+  if (!replyInput.success) return badRequest(res, 'Invalid in_reply_to_id');
+  const inReplyToId = replyInput.data ?? null;
+  if (inReplyToId && !(await dbGet('SELECT id FROM mail_messages WHERE id = ? AND space_id = ? AND connector_id = ?', [inReplyToId, spaceId, conn.id]))) {
+    return notFound(res, 'Reply message');
+  }
+
+  const scope = await mailProject(req, res, spaceId);
+  if (!scope) return;
+
   // ADR-158 §P6 — optional deferred send. A future `scheduledAt` (ISO) queues
   // the fully-composed message in mail_outbox instead of sending now; the
   // minute-poll worker delivers it via the same deliverMail() path when due.
@@ -665,6 +836,14 @@ router.post('/spaces/:spaceId/mail/send', async (req, res) => {
     if (when.getTime() <= Date.now()) {
       return badRequest(res, '`scheduledAt` must be in the future');
     }
+    const messageId = `<${randomUUID()}@godcrm.ai>`;
+    try {
+      await storeMailAttachments({ spaceId, connectorId: conn.id, messageId, attachments,
+        projectId: scope.projectId, userId: req.user.id });
+    } catch (err) {
+      log.error({ err, spaceId }, 'mail queued attachment storage failed');
+      return error(res, 'ATTACHMENT_STORAGE_FAILED', 'Could not store queued attachments', 502);
+    }
     // Store attachment bytes as canonical base64 (re-decoded by the worker).
     const storedAttachments = attachments.map((a) => ({
       filename: a.filename,
@@ -675,8 +854,8 @@ router.post('/spaces/:spaceId/mail/send', async (req, res) => {
       `INSERT INTO mail_outbox
          (space_id, connector_id, to_addresses, cc_addresses, bcc_addresses,
           subject, body, is_html, attachments, linked_table_id, linked_row_id,
-          scheduled_at, status, created_by)
-       VALUES (?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?::jsonb, ?, ?, ?, 'pending', ?)
+          scheduled_at, status, created_by, in_reply_to_id, project_id, message_id)
+       VALUES (?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?, ?, ?, ?::jsonb, ?, ?, ?, 'pending', ?, ?, ?, ?)
        RETURNING *`,
       [
         spaceId,
@@ -692,6 +871,9 @@ router.post('/spaces/:spaceId/mail/send', async (req, res) => {
         linked ? linkedRowId : null,
         when.toISOString(),
         req.user?.id ?? null,
+        inReplyToId,
+        scope.projectId,
+        messageId,
       ]
     );
     return created(res, { scheduled: toScheduled(row) });
@@ -712,6 +894,9 @@ router.post('/spaces/:spaceId/mail/send', async (req, res) => {
       attachments,
       linkedTableId: linked ? linkedTableId : null,
       linkedRowId: linked ? linkedRowId : null,
+      inReplyToId,
+      projectId: scope.projectId,
+      userId: req.user.id,
     });
   } catch (err) {
     if (err instanceof MailSendError) return badRequest(res, err.message);
@@ -759,14 +944,20 @@ router.post('/spaces/:spaceId/mail/drafts', async (req, res) => {
     if (err instanceof AttachmentError) return badRequest(res, err.message);
     throw err;
   }
-  const attachmentMeta = attachments.map((a) => ({
-    filename: a.filename,
-    contentType: a.contentType,
-    size: a.content.length,
-  }));
 
   const conn = await loadImapConnector(spaceId, Number(req.body?.connector_id) || null);
   if (!conn) return badRequest(res, 'No imap connector for this space');
+  const scope = await mailProject(req, res, spaceId);
+  if (!scope) return;
+  let attachmentMeta;
+  try {
+    attachmentMeta = await storeMailAttachments({ spaceId, connectorId: conn.id,
+      messageId: `draft:${req.body?.id || randomUUID()}`, attachments,
+      projectId: scope.projectId, userId: req.user.id });
+  } catch (err) {
+    log.error({ err, spaceId }, 'mail draft attachment storage failed');
+    return error(res, 'ATTACHMENT_STORAGE_FAILED', 'Could not store draft attachments', 502);
+  }
 
   const linkedTableId = Number(req.body?.linked_table_id);
   const linkedRowId = Number(req.body?.linked_row_id);
@@ -942,26 +1133,29 @@ router.patch('/spaces/:spaceId/mail/scheduled/:id', async (req, res) => {
     content: a.content.toString('base64'),
   }));
 
-  const row = await dbGet(
-    `UPDATE mail_outbox
+  let row;
+  try {
+    row = await withTransactionAsync(async (tx) => {
+      const current = await tx.get('SELECT * FROM mail_outbox WHERE id = ? AND space_id = ? FOR UPDATE', [id, spaceId]);
+      if (!current || current.status !== 'pending') return null;
+      const combined = [...parseJsonb(current.attachments), ...appended];
+      const attachments = normalizeAttachments(combined);
+      const messageId = current.message_id || `<${randomUUID()}@godcrm.ai>`;
+      await storeMailAttachments({ spaceId, connectorId: current.connector_id, messageId,
+        attachments, projectId: current.project_id, userId: req.user.id });
+      return tx.get(`UPDATE mail_outbox
         SET to_addresses = ?::jsonb, cc_addresses = ?::jsonb, bcc_addresses = ?::jsonb,
             subject = ?, body = ?, is_html = ?, scheduled_at = ?,
-            attachments = COALESCE(attachments, '[]'::jsonb) || ?::jsonb, updated_at = now()
-      WHERE id = ? AND space_id = ? AND status = 'pending'
-      RETURNING *`,
-    [
-      JSON.stringify(toList),
-      JSON.stringify(ccList),
-      JSON.stringify(bccList),
-      subject,
-      body || '',
-      !!html,
-      when.toISOString(),
-      JSON.stringify(appended),
-      id,
-      spaceId,
-    ]
-  );
+            attachments = ?::jsonb, message_id = ?, updated_at = now()
+        WHERE id = ? AND space_id = ? AND status = 'pending' RETURNING *`,
+      [JSON.stringify(toList), JSON.stringify(ccList), JSON.stringify(bccList), subject,
+        body || '', !!html, when.toISOString(), JSON.stringify(combined), messageId, id, spaceId]);
+    });
+  } catch (err) {
+    if (err instanceof AttachmentError) return badRequest(res, err.message);
+    log.error({ err, spaceId, id }, 'mail scheduled attachment storage failed');
+    return error(res, 'ATTACHMENT_STORAGE_FAILED', 'Could not store queued attachments', 502);
+  }
   if (!row) {
     // Distinguish "not here" from "too late to edit" — mirror the cancel contract.
     const existing = await dbGet('SELECT status FROM mail_outbox WHERE id = ? AND space_id = ?', [id, spaceId]);

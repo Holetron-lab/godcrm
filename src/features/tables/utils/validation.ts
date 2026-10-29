@@ -1,8 +1,9 @@
 /**
-import { logger } from '@/shared/utils/logger';
  * Cell Validation Utilities
  * Provides validation rules for table cells
  */
+
+import { logger } from '@/shared/utils/logger';
 
 export interface ValidationRule {
   id: string;

@@ -48,7 +48,7 @@ const SpacesPage = () => {
 
   const setMaxCols = (n: number) => {
     setMaxColsState(n);
-    try { localStorage.setItem(MAX_COLS_STORAGE_KEY, String(n)); } catch {}
+    try { localStorage.setItem(MAX_COLS_STORAGE_KEY, String(n)); } catch { /* Keep the selected column count in state if browser storage cannot persist it. */ }
   };
 
   // Fetch home dashboard for Quick Access widgets

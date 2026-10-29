@@ -322,6 +322,7 @@ async function _tryRedispatchJob(job) {
       messageContent: continuationMessage,
       options,
       triggerMessageId: job.trigger_message_id,
+      invocationType: context.invocation_type || null, // keeps the D4 timeout on recovery (Bug 1552/228714)
       recoveredFromJobId,
       restartAttempt: restartCount,
     });

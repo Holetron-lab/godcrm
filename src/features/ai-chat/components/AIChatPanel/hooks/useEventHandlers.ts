@@ -1,3 +1,5 @@
+import type { useConversationSpace } from './useConversationSpace';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * useEventHandlers — Event handler callbacks for AIChatPanel.
  * ADR-119: Extracted from AIChatPanel.tsx (handleSubmit, handleFileSelect, handleDrop, handleAgentSelect, handleCheckboxClick).
@@ -12,11 +14,15 @@ import { validateAndWrapCommands, stripInvocationTokens } from '../../../utils/i
 import { generateConversationTitle } from '../../../context/AIChatContext/helpers';
 import type { MentionUser } from '../../MentionInput';
 import type { AIAgent, ChatMessage } from '../../../types';
-import type { BoundRow } from '../../RowBindingV2';
+import { boundRowToAttachment, type BoundRow } from '../../RowBindingV2';
+
+import type { ChatActions } from '../types';
 
 interface UseEventHandlersParams {
+  conversationSpace?: Pick<ReturnType<typeof useConversationSpace>, 'ensureConversation' | 'ensureSpace' | 'assertActive'>;
   inputValue: string;
   setInputValue: (v: string | ((prev: string) => string)) => void;
+  bindDraftToConversation?: (id: number) => void;
   attachments: File[];
   setAttachments: (v: File[] | ((prev: File[]) => File[])) => void;
   mentionedUsers: MentionUser[];
@@ -34,6 +40,7 @@ interface UseEventHandlersParams {
   setUserConversationId: (id: number | null) => void;
   currentSpaceId: number | undefined;
   effectiveSpaceId: number | undefined;
+  voiceBusy?: boolean;
   availableMentionUsers: MentionUser[];
   availableSlashAgents: MentionUser[];
   // Context actions
@@ -44,7 +51,7 @@ interface UseEventHandlersParams {
   // Mutations
   sendUserMessageMutation: { mutateAsync: (params: any) => Promise<any> };
   // State setters for agent select
-  setChatMode: (mode: string) => void;
+  setChatMode: ChatActions['setChatMode'];
   setChatPartner: (v: any) => void;
   setChatParticipants: (v: any) => void;
   setBoundRows: (v: any) => void;
@@ -72,6 +79,7 @@ interface UseEventHandlersParams {
 }
 
 export function useEventHandlers(params: UseEventHandlersParams) {
+  const { t } = useLanguage();
   // Hold params in a ref so handler identities stay stable across renders.
   // Handlers read latest values from paramsRef.current at invocation time —
   // prevents per-keystroke prop churn that re-renders MessagesArea.
@@ -79,6 +87,7 @@ export function useEventHandlers(params: UseEventHandlersParams) {
   paramsRef.current = params;
 
   const isSendingRef = useRef(false);
+  const uploadedFiles = useRef(new WeakMap<File, Map<number, { id: string; name: string; type: string; size: number; url: string }>>());
   const queryClient = useQueryClient();
 
   // ADR-0031 P5: physically move queued messages from their source conversations
@@ -117,26 +126,26 @@ export function useEventHandlers(params: UseEventHandlersParams) {
         queryClient.invalidateQueries({ queryKey: ['conversation', srcId] });
       } catch (err: any) {
         const status = err?.status;
-        const msg = err?.data?.error?.message || err?.data?.message || err?.message || 'Ошибка переноса';
+        const msg = err?.data?.error?.message || err?.data?.message || err?.message || t('aiChat.ui.moveFailed');
         logger.error('[Chat v2] move failed:', err);
-        if (status === 403) showToast('Нет прав переносить из этого чата', 'error');
+        if (status === 403) showToast(t('aiChat.ui.moveForbidden'), 'error');
         else showToast(msg, 'error');
       }
     }
     queryClient.invalidateQueries({ queryKey: ['conversation-messages', targetConvId] });
     queryClient.invalidateQueries({ queryKey: ['conversation', targetConvId] });
     queryClient.invalidateQueries({ queryKey: ['inbox-conversations'] });
-    if (movedTotal > 0) showToast(`Перенесено сообщений: ${movedTotal}`, 'success');
-  }, [queryClient]);
+    if (movedTotal > 0) showToast(t('aiChat.ui.messagesMoved', { count: movedTotal }), 'success');
+  }, [queryClient, t]);
 
   const handleSubmit = useCallback(async (e?: React.FormEvent) => {
     const {
-      inputValue, setInputValue, attachments, setAttachments,
+      inputValue, setInputValue, bindDraftToConversation, attachments, setAttachments,
       mentionedUsers, setMentionedUsers, messageBoundRows, setMessageBoundRows,
       boundRows,
       setLocalError, chatPartner, currentAgent,
       agentMode, thinkingEnabled,
-      userConversationId, setUserConversationId, currentSpaceId, effectiveSpaceId,
+      userConversationId, setUserConversationId, effectiveSpaceId,
       availableSlashAgents,
       sendMessage, aiSendMessage, sendUserMessageMutation,
       setChatMode, setChatPartner, setChatParticipants, setBoundRows,
@@ -146,21 +155,24 @@ export function useEventHandlers(params: UseEventHandlersParams) {
       forwardMessages = [], setForwardMessages,
       moveMessages = [], setMoveMessages,
       setQuoteMessage,
-      replyTo, setReplyTo,
+      replyTo, setReplyTo, conversationSpace,
     } = paramsRef.current;
     e?.preventDefault();
+    if (paramsRef.current.voiceBusy) return;
     let trimmed = inputValue.trim();
     // ADR-116: Only wrap /commands automatically. Bare @mentions stay as references.
     // Invocation @mentions (<<@slug>>) are inserted by the MentionInput dropdown.
     trimmed = validateAndWrapCommands(trimmed, availableSlashAgents || []);
     if (!trimmed && attachments.length === 0 && messageBoundRows.length === 0 && forwardMessages.length === 0 && moveMessages.length === 0) return;
 
+    const forwardedAttachments = forwardMessages.flatMap(message => message.attachments ?? []);
+
     // Build forwarded content block
     if (forwardMessages.length > 0) {
       const fwdBlocks = forwardMessages.map(msg => {
         // ADR-0031: row_mutation = service-authored. sender_name from JOIN is
         // the actor's name, but the message's true author is "system".
-        const isSystemEvent = msg.role === 'system' && msg.contentType === 'row_mutation';
+        const isSystemEvent = msg.senderType === 'system' || (msg.role === 'system' && msg.contentType === 'row_mutation');
         const sender = isSystemEvent
           ? 'system'
           : (msg.sender_name || msg.agentName || (msg.role === 'user' ? 'User' : 'Agent'));
@@ -173,7 +185,6 @@ export function useEventHandlers(params: UseEventHandlersParams) {
         return `> **${sender}** ${ts ? `(${ts})` : ''}\n> ${safeContent.split('\n').join('\n> ')}\n> _чат #${convId}, сообщение #${msgId}${footerColor}_`;
       }).join('\n\n');
       trimmed = fwdBlocks + (trimmed ? '\n\n' + trimmed : '');
-      setForwardMessages?.([]);
     }
 
     // ADR-0031 P5: snapshot move queue, clear UI immediately. Actual physical
@@ -191,54 +202,71 @@ export function useEventHandlers(params: UseEventHandlersParams) {
     if (isSendingRef.current) return;
     isSendingRef.current = true;
     setLocalError(null);
+    const clearSentDraft = () => {
+      const current = paramsRef.current;
+      if (current.chatPartner?.type !== chatPartner?.type || current.chatPartner?.id !== chatPartner?.id) return;
+      const originalId = chatPartner?.type === 'agent' ? currentConversationId : userConversationId;
+      const nowId = chatPartner?.type === 'agent' ? current.currentConversationId : current.userConversationId;
+      if (originalId && originalId !== nowId) return;
+      setForwardMessages?.(value => value.filter(message => !forwardMessages.includes(message)));
+      setInputValue(value => value === inputValue ? '' : value);
+      setAttachments(value => value.filter(file => !attachments.includes(file)));
+      setMentionedUsers(value => value.filter(user => !mentionedUsers.includes(user)));
+      setMessageBoundRows(value => value.filter(row => !messageBoundRows.includes(row)));
+    };
+    const uploadAttachments = async (files: File[], conversationId?: number | null) => {
+      if (!files.length) return [];
+      let spaceId = effectiveSpaceId;
+      if (conversationSpace) {
+        spaceId = await conversationSpace.ensureSpace();
+        conversationSpace.assertActive();
+      } else if (conversationId) {
+        const response = await apiClient.get<{ data: { space_id: number | null } }>(`/chat/conversations/${conversationId}`);
+        spaceId = response.data.space_id ?? undefined;
+      }
+      if (!spaceId) throw new Error(t('aiChat.ui.attachmentSpaceUnknown'));
+      const missing = files.filter(file => !uploadedFiles.current.get(file)?.has(spaceId));
+      if (missing.length) {
+        const response = await filesApi.upload(missing, { spaceId });
+        const uploaded = Array.isArray(response) ? response : [response];
+        if (uploaded.length !== missing.length || uploaded.some(file => !file?.url)) {
+          throw new Error(t('aiChat.ui.attachmentUploadFailed'));
+        }
+        missing.forEach((file, index) => {
+          const cache = uploadedFiles.current.get(file) ?? new Map();
+          cache.set(spaceId, { id: uploaded[index].id, name: file.name, type: file.type, size: file.size, url: uploaded[index].url });
+          uploadedFiles.current.set(file, cache);
+        });
+      }
+      return files.map(file => uploadedFiles.current.get(file)!.get(spaceId)!);
+    };
     try {
+      const ensuredId = await conversationSpace?.ensureConversation();
+      conversationSpace?.assertActive();
       if (chatPartner?.type === 'agent' && currentAgent) {
         // Variant B: Use aiSendMessage (useConversationMessages) for optimistic updates in React Query cache.
         // Falls back to context sendMessage if aiSendMessage not available (e.g., no conversation yet).
         const files = [...attachments];
         const mentions = mentionedUsers.length > 0 ? mentionedUsers.map(u => ({ id: u.id, name: u.name, type: u.type })) : undefined;
-        const rowAtts = messageBoundRows.length > 0 ? messageBoundRows.map(br => ({
-          id: `row_${br.table_id}_${br.row_id}`, name: br.row_title || `Row #${br.row_id}`,
-          type: 'row_reference', size: 0,
-          rowReference: { table_id: br.table_id, row_id: br.row_id, table_name: br.table_name || '', table_icon: br.table_icon, row_title: br.row_title }
-        })) : undefined;
-        setInputValue(''); setAttachments([]); setMentionedUsers([]); setMessageBoundRows([]);
+        const rowAtts = messageBoundRows.length > 0 ? messageBoundRows.map(boundRowToAttachment) : undefined;
         // Trigger scroll-to-bottom BEFORE optimistic update — sets sticky flag
         // so scroll management keeps scrolling through re-renders (optimistic → server replace → polling).
         scrollToBottom?.();
 
         if (aiSendMessage) {
-          // Upload files first if any
-          let uploadedAtts: Array<{ name: string; type: string; size: number; url?: string; rowReference?: any }> | undefined;
-          if (files.length > 0) {
-            try {
-              const res = await filesApi.upload(files, { spaceId: effectiveSpaceId });
-              const arr = Array.isArray(res) ? res : [res];
-              uploadedAtts = files.map((f, i) => ({
-                name: f.name, type: f.type, size: f.size, url: arr[i]?.url || ''
-              }));
-            } catch {
-              uploadedAtts = files.map(f => ({ name: f.name, type: f.type, size: f.size }));
-            }
-          }
-          // Add row reference attachments
-          const allAtts = [
-            ...(uploadedAtts || []),
-            ...(rowAtts?.map(r => ({ name: r.name, type: r.type, size: r.size, rowReference: r.rowReference })) || [])
-          ];
-
           // Ensure conversation exists — create if needed (also required when only
           // a move queue is present, so we have a target id for /messages/move).
-          let convIdOverride: number | undefined;
-          const existingConvId = currentConversationId;
+          let convIdOverride = ensuredId && ensuredId !== currentConversationId ? ensuredId : undefined;
+          const existingConvId = ensuredId ?? currentConversationId;
           if (!existingConvId) {
             // Carry over conv-level row binding so backend persists it on creation —
             // BoundRowsStrip can only PATCH after a conv exists; first send is the only chance.
             const convBound = boundRows[0];
             const createResp = await apiClient.post<{ success: boolean; data: { id: number } }>('/chat/conversations', {
-              title: generateConversationTitle(trimmed || 'Перенос'),
+              title: generateConversationTitle(trimmed || t('aiChat.ui.move')),
               type: 'chat',
-              space_id: currentSpaceId || effectiveSpaceId,
+              space_id: effectiveSpaceId,
+              sub_agents: [currentAgent.id],
               ...(labId && { lab_id: labId }),
               ...(convBound && {
                 bound_table_id: convBound.table_id,
@@ -247,10 +275,18 @@ export function useEventHandlers(params: UseEventHandlersParams) {
             });
             if (createResp.success && createResp.data) {
               convIdOverride = createResp.data.id;
+              bindDraftToConversation?.(convIdOverride);
               setCurrentConversationId?.(convIdOverride);
             }
           }
           const targetConvId = convIdOverride ?? existingConvId ?? null;
+          if (!targetConvId) throw new Error(t('aiChat.ui.sendMessageFailed'));
+          const uploadedAtts = await uploadAttachments(files, targetConvId);
+          conversationSpace?.assertActive();
+          const allAtts = [
+            ...forwardedAttachments, ...uploadedAtts,
+            ...(rowAtts?.map(r => ({ name: r.name, type: r.type, size: r.size, rowReference: r.rowReference })) || []),
+          ];
 
           // Set processing state for fast polling
           if (agentMode === 'agent' && hasOtherContent) setIsAgentProcessing?.(true);
@@ -264,6 +300,7 @@ export function useEventHandlers(params: UseEventHandlersParams) {
               ...(convIdOverride && { overrideConversationId: convIdOverride }),
               ...(replyTo && { replyTo }),
             });
+            clearSentDraft();
             setReplyTo?.(null);
           }
 
@@ -279,7 +316,10 @@ export function useEventHandlers(params: UseEventHandlersParams) {
           const convBound = boundRows[0];
           const convBoundPayload = convBound ? { table_id: convBound.table_id, row_id: convBound.row_id } : undefined;
           if (hasOtherContent) {
-            await sendMessage(trimmed, files.length > 0 ? files : undefined, undefined, mentions, agentMode === 'agent', undefined, undefined, rowAtts, convBoundPayload, replyTo || undefined);
+            const uploaded = await uploadAttachments(files, ensuredId ?? currentConversationId);
+            conversationSpace?.assertActive();
+            await sendMessage(trimmed, undefined, undefined, mentions, agentMode === 'agent', undefined, undefined, [...forwardedAttachments, ...uploaded, ...(rowAtts ?? [])], convBoundPayload, replyTo || undefined);
+            clearSentDraft();
             setReplyTo?.(null);
           }
           if (moveQueue.length > 0 && currentConversationId) {
@@ -290,34 +330,19 @@ export function useEventHandlers(params: UseEventHandlersParams) {
       }
       if (chatPartner?.type === 'user' || chatPartner?.type === 'group') {
         const pIds = chatPartner.type === 'group' ? ((chatPartner as any).participants?.map((p: any) => p.id) || []) : [chatPartner.id];
-        let convId = userConversationId;
+        let convId = ensuredId ?? userConversationId;
         if (!convId) {
-          const resp = await apiClient.post<any>('/chat/conversations', { type: 'chat', participant_ids: pIds, space_id: currentSpaceId });
+          const resp = await apiClient.post<any>('/chat/conversations', { type: 'chat', participant_ids: pIds, space_id: effectiveSpaceId });
           convId = resp.data.id;
+          bindDraftToConversation?.(convId!);
           setUserConversationId(convId);
         }
         const hasAgentTrigger = /(^|\s)[/@][a-z0-9_-]+/i.test(trimmed);
         const uMentions = mentionedUsers.length > 0 ? mentionedUsers.map(u => ({ user_id: u.id, name: u.name, type: u.type })) : undefined;
-        let uploadedAtts: any[] | undefined;
-        if (attachments.length > 0) {
-          try {
-            const res = await filesApi.upload([...attachments], { spaceId: effectiveSpaceId });
-            const arr = Array.isArray(res) ? res : [res];
-            uploadedAtts = attachments.map((f, i) => ({
-              id: arr[i]?.id || `att_${Date.now()}_${f.name}`, name: f.name, type: f.type, size: f.size,
-              url: arr[i]?.url || '', preview: f.type.startsWith('image/') ? (arr[i]?.url || URL.createObjectURL(f)) : undefined
-            }));
-          } catch {
-            uploadedAtts = attachments.map(f => ({ id: `att_${Date.now()}_${f.name}`, name: f.name, type: f.type, size: f.size }));
-          }
-        }
-        const rowRefs = messageBoundRows.map(br => ({
-          id: `row_${br.table_id}_${br.row_id}`, name: br.row_title || `Row #${br.row_id}`,
-          type: 'row_reference', size: 0,
-          rowReference: { table_id: br.table_id, row_id: br.row_id, table_name: br.table_name || '', table_icon: br.table_icon, row_title: br.row_title }
-        }));
-        const allAtts = [...(uploadedAtts || []), ...rowRefs];
-        setInputValue(''); setAttachments([]); setMentionedUsers([]); setMessageBoundRows([]);
+        const uploadedAtts = await uploadAttachments(attachments, convId);
+        conversationSpace?.assertActive();
+        const rowRefs = messageBoundRows.map(boundRowToAttachment);
+        const allAtts = [...forwardedAttachments, ...(uploadedAtts || []), ...rowRefs];
         scrollToBottom?.();
         if (hasOtherContent) {
           await sendUserMessageMutation.mutateAsync({
@@ -327,6 +352,7 @@ export function useEventHandlers(params: UseEventHandlersParams) {
             ...(allAtts.length > 0 && { attachments: allAtts }),
             ...(replyTo && { replyTo })
           });
+          clearSentDraft();
           setReplyTo?.(null);
         }
         // ADR-0031 P5: physical move via API.
@@ -335,13 +361,14 @@ export function useEventHandlers(params: UseEventHandlersParams) {
         }
         return;
       }
-      if (!currentAgent && !chatPartner) setLocalError('Выберите агента или пользователя для чата');
+      if (!currentAgent && !chatPartner) setLocalError(t('aiChat.ui.chooseChatPartner'));
     } catch (err: any) {
-      const msg = err?.response?.data?.error || err?.message || 'Ошибка отправки сообщения';
+      try { conversationSpace?.assertActive(); } catch { return; }
+      const msg = err?.response?.data?.error || err?.message || t('aiChat.ui.sendMessageFailed');
       logger.error('[Chat v2] Error sending message:', err);
-      setLocalError(typeof msg === 'string' ? msg : 'Ошибка отправки сообщения');
+      setLocalError(typeof msg === 'string' ? msg : t('aiChat.ui.sendMessageFailed'));
     } finally { isSendingRef.current = false; }
-  }, []);
+  }, [t]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const { setAttachments } = paramsRef.current;

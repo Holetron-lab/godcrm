@@ -10,12 +10,14 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useDocumentsContext } from '../DocumentsContext';
 import { printDocument } from './utils/printDocument';
 import { copyDocumentAsMarkdown, exportDocumentAsMarkdown } from './utils/markdownExport';
 
 export function ToolbarExportActions() {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
 
   const handleExportMarkdown = () => {
     if (!ctx.selectedDocument) return;
@@ -40,7 +42,7 @@ export function ToolbarExportActions() {
     if (!ctx.selectedDocumentId || !ctx.selectedDocument) return;
 
     const docName = ctx.selectedDocument.name;
-    if (!confirm(`Удалить документ "${docName}"? Это действие нельзя отменить.`)) return;
+    if (!confirm(t('documents.deleteConfirmation', { name: docName }))) return;
 
     try {
       await ctx.deleteDocument({ documentId: ctx.selectedDocumentId });
@@ -54,20 +56,20 @@ export function ToolbarExportActions() {
 
   return (
     <>
-      <button onClick={ctx.refresh} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]" title="Обновить">
+      <button onClick={ctx.refresh} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]" title={t('common.refresh')}>
         <RefreshCw className="w-4 h-4" />
       </button>
 
       {ctx.selectedDocument && (
         <>
           <div className="w-px h-4 bg-[var(--border-primary)]" />
-          <button onClick={handleExportMarkdown} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]" title="Экспорт MD">
+          <button onClick={handleExportMarkdown} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]" title={t('documents.exportMarkdown')}>
             <Download className="w-4 h-4" />
           </button>
-          <button onClick={handlePrint} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]" title="Печать">
+          <button onClick={handlePrint} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]" title={t('documents.print')}>
             <Printer className="w-4 h-4" />
           </button>
-          <button onClick={handleCopyAsMarkdown} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]" title="Копировать MD">
+          <button onClick={handleCopyAsMarkdown} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]" title={t('documents.copyMarkdown')}>
             {ctx.copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
           </button>
           {/* Delete document - hidden in read-only (ADR-105) */}
@@ -76,7 +78,7 @@ export function ToolbarExportActions() {
               onClick={handleDeleteDocument}
               disabled={ctx.isDeleting}
               className="p-1.5 rounded-md hover:bg-red-500/10 text-red-500"
-              title="Удалить документ"
+              title={t('documents.deleteDocument')}
             >
               {ctx.isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
             </button>
@@ -84,10 +86,11 @@ export function ToolbarExportActions() {
 
           {/* View Scale Slider - far right */}
           <div className="w-px h-4 bg-[var(--border-primary)] ml-2" />
-          <div className="flex items-center gap-2 ml-2" title="Масштаб просмотра (не влияет на печать)">
+          <div className="flex items-center gap-2 ml-2" title={t('documents.viewScale')}>
             <ZoomOut className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
             <input
               type="range"
+              aria-label={t('documents.viewScale')}
               min="50"
               max="150"
               step="10"

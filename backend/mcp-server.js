@@ -28,6 +28,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 // Import CRM tool system
 import { executeTool } from './services/agent-tools/executor.js';
+import { takeJobMessages } from './services/agent-job/single-active.js';
 import { buildToolList } from './services/mcp/buildToolList.js';
 
 // ADR-0040: this stdio MCP server is a SEPARATE process from the Express boot,
@@ -137,6 +138,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const context = {
       spaceId: parseInt(process.env.MCP_SPACE_ID || '11', 10),
       source: 'mcp',
+      jobId: Number(process.env.MCP_JOB_ID) || null,
       principal: { kind: 'system', label: 'mcp-system', userId: null },
     };
 
@@ -154,11 +156,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     const result = await executeTool(name, args || {}, 1, context);
 
+    // Bound to this runtime, never to a job id supplied by tool arguments.
+    // Inbox failure must not turn an already executed tool into a retry.
+    const pending = await takeJobMessages(context.jobId).catch(err => {
+      console.error('[godcrm-mcp] Follow-up delivery failed:', err.message);
+      return [];
+    });
     const isError = result?.error ? true : false;
     const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
 
     return {
-      content: [{ type: 'text', text }],
+      content: [{ type: 'text', text }, ...pending.map(message => ({
+        type: 'text',
+        text: `New chat message addressed to your current run. Incorporate it into the ongoing task:\n${JSON.stringify(message)}`,
+      }))],
       isError,
     };
   } catch (err) {

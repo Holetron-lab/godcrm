@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ProcessingStatusBar — self-contained "agent is working… Xs" indicator.
  *
@@ -79,6 +80,7 @@ function ProcessingStatusBarImpl({
   activeAgents,
   onRetryAgent,
 }: ProcessingStatusBarProps) {
+  const { t } = useLanguage();
   // Single 1Hz tick drives elapsed strings for the bar (and each agent row in
   // multi mode). Avoids N timers when many agents are running.
   const [, setTick] = useState(0);
@@ -142,7 +144,7 @@ function ProcessingStatusBarImpl({
                 )}
                 <span className={cn('truncate', status === 'failed' && 'text-red-400')}>
                   {agent.agent_name || 'AI'}
-                  {status === 'running' && (dead ? ' — возможно завис' : slow ? ' — работает давно' : '')}
+                  {status === 'running' && (dead ? t('aiChat.ui.possiblyStuck') : slow ? t('aiChat.ui.runningLong') : '')}
                 </span>
                 {reasonChip && (
                   <span
@@ -162,7 +164,7 @@ function ProcessingStatusBarImpl({
                     'text-[10px] tabular-nums flex-shrink-0',
                     countdown === 'overdue' ? 'text-amber-400 font-medium' : 'opacity-70'
                   )}>
-                    {countdown === 'overdue' ? 'overdue' : `resume in ${countdown}`}
+                    {countdown === 'overdue' ? t('aiChat.ui.overdue') : t('aiChat.ui.resumeIn', { time: countdown })}
                   </span>
                 )}
                 {status === 'running' && (
@@ -177,11 +179,10 @@ function ProcessingStatusBarImpl({
                       else console.warn('[ProcessingStatusBar] retry handler not wired for', agent.agent_slug || agent.agent_name);
                     }}
                     className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-red-500/20 hover:bg-red-500/30 text-red-300 hover:text-red-200 transition-colors flex-shrink-0"
-                    title="Retry agent"
+                    title={t('aiChat.ui.retryAgent')}
                   >
                     <RotateCcw className="w-3 h-3" />
-                    Retry
-                  </button>
+                    {t('aiChat.ui.retry')}</button>
                 )}
               </div>
             );
@@ -190,10 +191,10 @@ function ProcessingStatusBarImpl({
         <button
           onClick={stopAgent}
           className="flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 transition-colors flex-shrink-0"
-          title="Остановить агентов"
+          title={t('aiChat.ui.stopAgents')}
         >
           <Square className="w-3 h-3 fill-current" />
-          <span>Стоп</span>
+          <span>{t('aiChat.ui.stop')}</span>
         </button>
       </div>
     );
@@ -216,7 +217,7 @@ function ProcessingStatusBarImpl({
           : <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-primary-500)]" />}
         <span>
           {processingAgentName || 'AI'}
-          {elapsed >= 1500 ? ' — возможно завис' : elapsed >= 600 ? ' — работает давно' : ''}
+          {elapsed >= 1500 ? t('aiChat.ui.possiblyStuck') : elapsed >= 600 ? t('aiChat.ui.runningLong') : ''}
         </span>
         {elapsed > 0 && (
           <span className="opacity-70 tabular-nums">
@@ -227,10 +228,10 @@ function ProcessingStatusBarImpl({
       <button
         onClick={stopAgent}
         className="flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 transition-colors"
-        title="Остановить агента"
+        title={t('aiChat.ui.stopAgent')}
       >
         <Square className="w-3 h-3 fill-current" />
-        <span>Стоп</span>
+        <span>{t('aiChat.ui.stop')}</span>
       </button>
     </div>
   );

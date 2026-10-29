@@ -138,17 +138,18 @@ export const TableGridHeader = ({
                   style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)' }}
                 >
                   <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                    <span className="text-sm" aria-hidden="true">
+                      {col.config?.appearance?.indicator?.value || '📋'}
+                    </span>
+                    {/* Same affordance as a visible header: the title opens the settings */}
                     <button
                       type="button"
                       onClick={() => onOpenColumnSettings?.(col.id)}
-                      className="text-sm hover:scale-110 transition-transform cursor-pointer"
+                      className="min-w-0 flex-1 truncate text-left text-xs font-medium hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary-500)]"
                       title={`Настройки: ${col.displayName || col.name}`}
                     >
-                      {col.config?.appearance?.indicator?.value || '📋'}
-                    </button>
-                    <span className="text-xs font-medium truncate flex-1">
                       {rawMode ? col.name : (col.displayName || col.name)}
-                    </span>
+                    </button>
                   </div>
                 </th>
               ))}

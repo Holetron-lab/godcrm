@@ -30,10 +30,10 @@ run_step() {
   echo ""
   if "$@"; then
     RESULTS+=("  PASS  $name")
-    ((PASS++))
+    ((++PASS))
   else
     RESULTS+=("  FAIL  $name")
-    ((FAIL++))
+    ((++FAIL))
   fi
 }
 

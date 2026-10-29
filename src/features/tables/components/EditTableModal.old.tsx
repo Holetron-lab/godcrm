@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useId, useState, useEffect, useMemo } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -61,6 +61,7 @@ const DEFAULT_ACCESS_CONTROL: AccessControlConfig = {
 };
 
 export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, projectId }: EditTableModalProps) => {
+  const fieldId = useId();
   const queryClient = useQueryClient();
   
   const [activeTab, setActiveTab] = useState<TabId>('display');
@@ -293,10 +294,10 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                         </p>
                       )}
                     </div>
-                    <div className="w-32">
-                      <label className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+                    <div role="group" aria-labelledby={`${fieldId}-label-0`} className="w-32">
+                      <span id={`${fieldId}-label-0`} className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
                         Цвет
-                      </label>
+                      </span>
                       <div className="flex flex-wrap gap-1">
                         {[
                           null,
@@ -325,20 +326,20 @@ export const EditTableModal = ({ open, onOpenChange, onDeleteClick, tableId, pro
                     </div>
                   </div>
 
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+                  <div role="group" aria-labelledby={`${fieldId}-label-1`}>
+                    <span id={`${fieldId}-label-1`} className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
                       Иконка
-                    </label>
+                    </span>
                     <div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] p-3">
                       <div className="mb-3 flex items-center gap-3">
                         <div className="flex-1 flex items-center justify-center rounded-lg bg-[var(--bg-secondary)] py-4">
                           <span className="text-5xl">{icon}</span>
                         </div>
                         <div className="flex flex-col gap-1">
-                          <label className="text-xs text-[var(--text-tertiary)]">
+                          <label htmlFor={`${fieldId}-label-2`} className="text-xs text-[var(--text-tertiary)]">
                             Своя иконка
                           </label>
-                          <input
+                          <input id={`${fieldId}-label-2`}
                             type="text"
                             value={icon}
                             onChange={(e) => {

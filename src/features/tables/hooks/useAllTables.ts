@@ -51,7 +51,7 @@ interface SpaceWithProjects {
   projects: ProjectWithContext[];
 }
 
-interface AllTablesData {
+export interface AllTablesData {
   /** All spaces with all projects (for "create new table" mode) */
   spaces: SpaceWithProjects[];
   /** Spaces with only projects that have tables (for "select existing" mode) */

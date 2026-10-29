@@ -92,6 +92,7 @@ export const DEFAULT_CONTEXT_SETTINGS: ContextSettings = {
 
 // Agent type (alias for AIAgent from parent types)
 export interface Agent {
+  agent_slug?: string | null;
   id: number;
   name: string;
   description?: string;
@@ -245,6 +246,7 @@ export interface InboxConversation {
   agent_icon?: string | null;
   bound_table_id?: number | null;
   bound_row_id?: number | null;
+  bound_table_name?: string | null;
   messages_count?: number;
   last_message?: string | null;
   /** 'inbox' = user chat from GET /chat/conversations, 'ai' = AI chat from GET /ai/conversations */

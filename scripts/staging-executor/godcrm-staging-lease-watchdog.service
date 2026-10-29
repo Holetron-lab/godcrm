@@ -1,0 +1,9 @@
+[Unit]
+Description=GOD CRM staging lease watchdog (expire stale maintenance leases)
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/godcrm-staging-executor/executor.env
+ExecStart=/bin/bash /opt/godcrm-staging-executor/current/lease-watchdog.sh

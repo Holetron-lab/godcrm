@@ -135,12 +135,14 @@ export function DocumentWidgetItem({
         "group relative py-4 transition-colors",
         isSelected && 'bg-[var(--color-primary-500)]/10'
       )}
-      onClick={() => {
+
+    >
+      <div role="presentation" onClick={() => {
         ctx.setSelectedItemId(item.id);
         ctx.setRightPanelMode('settings');
         ctx.setRightPanelOpen(true);
-      }}
-    >
+      }}>
+        <button type="button" className="text-xs text-[var(--text-tertiary)] underline">Настройки: {widgetTitle}</button>
       {/* ADR-0005 C-15: visually hidden title anchor — present even before
           mount so screen readers can announce the region while the skeleton
           is still in place. */}
@@ -243,13 +245,14 @@ export function DocumentWidgetItem({
           <span>Виджет #{widgetId} не найден</span>
         </div>
       ) : (
-        <div
+        <div role="presentation"
           className="rounded-lg border border-[var(--border-primary)] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <WidgetRenderer widget={effectiveWidget} data={filteredData} />
         </div>
       )}
+    </div>
     </div>
   );
 }

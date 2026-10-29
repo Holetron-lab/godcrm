@@ -50,6 +50,7 @@ export function useChatUnreadSummary(options: Options = {}) {
     total: query.data?.total ?? 0,
     byConversation: query.data?.by_conversation ?? [],
     isLoading: query.isLoading,
+    isSuccess: query.isSuccess,
     refetch: query.refetch,
   };
 }

@@ -35,13 +35,9 @@ export const RateLimitSettings = () => {
   const [config, setConfig] = useState<RateLimitConfig>(DEFAULT_CONFIG);
   const [showWarning, setShowWarning] = useState(false);
 
-  // Only owner can see this
-  if (user?.role !== 'owner') {
-    return null;
-  }
-
   const { isLoading } = useQuery({
     queryKey: ['rate-limit-config'],
+    enabled: user?.role === 'owner',
     queryFn: async () => {
       try {
         const response = await apiClient.request<{ data: RateLimitConfig }>('/system/rate-limit-config');
@@ -90,6 +86,11 @@ export const RateLimitSettings = () => {
 
   const isModified = JSON.stringify(config) !== JSON.stringify(RECOMMENDED_CONFIG);
   const isAboveRecommended = config.auth_max_attempts > RECOMMENDED_CONFIG.auth_max_attempts;
+
+  // Only owner can see this
+  if (user?.role !== 'owner') {
+    return null;
+  }
 
   if (isLoading) {
     return (

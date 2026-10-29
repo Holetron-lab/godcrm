@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * TasksPanelInline — Tasks panel render extracted from AIChatPanel.tsx renderTasksPanel().
  */
@@ -34,6 +35,7 @@ export function TasksPanelInline({
   createNewConversation, selectConversation, setBoundRows, setActivePanel,
   effectiveSpaceId, TasksSourceInlineSelector,
 }: TasksPanelInlineProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col h-full">
       {tasksSource ? (
@@ -44,13 +46,13 @@ export function TasksPanelInline({
                 <ListTodo className="w-3.5 h-3.5" />
                 <span>{tasksSource.tableIcon || '📋'} {tasksSource.tableName}</span>
               </div>
-              <button onClick={() => updateTasksSource(undefined)} className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">Изменить</button>
+              <button onClick={() => updateTasksSource(undefined)} className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">{t('common.edit')}</button>
             </div>
           </div>
           <div className="px-3 py-2 border-b border-[var(--border-secondary)]">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-              <input type="text" value={tasksSearch} onChange={(e) => setTasksSearch(e.target.value)} placeholder="Поиск задач..."
+              <input type="text" value={tasksSearch} onChange={(e) => setTasksSearch(e.target.value)} placeholder={t('aiChat.ui.searchTasks')}
                 className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30" />
               {tasksSearch && (
                 <button onClick={() => setTasksSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-[var(--bg-secondary)] rounded">
@@ -63,16 +65,16 @@ export function TasksPanelInline({
             {isLoadingTasks ? (
               <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-tertiary)]" /></div>
             ) : taskRows.length === 0 ? (
-              <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">Нет записей</div>
+              <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{t('kanban.noRecords')}</div>
             ) : filteredTaskRows.length === 0 && tasksSearch.trim() ? (
-              <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">Ничего не найдено по запросу &quot;{tasksSearch}&quot;</div>
+              <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{t('aiChat.ui.searchNoResults', { query: tasksSearch })}</div>
             ) : (
               filteredTaskRows.map(row => {
                 type ConvMeta = typeof conversations[number] & { metadata?: { boundRow?: { row_id: number; table_id: number } } };
                 const rowChats = (conversations as ConvMeta[]).filter(c => c.metadata?.boundRow && c.metadata.boundRow.row_id === row.id && c.metadata.boundRow.table_id === tasksSource?.tableId);
                 const chatCount = rowChats.length;
                 const isExpanded = expandedTaskChats === row.id;
-                const rowTitle = getTaskRowTitle(row, tasksSource);
+                const rowTitle = getTaskRowTitle(row, tasksSource, t);
                 const rowDesc = getTaskRowField(row, tasksSource?.descriptionColumn) as string | undefined;
                 const statusVal = getTaskRowField(row, tasksSource?.statusColumn);
                 const statusName = statusVal && taskStatusDict.length > 0 ? taskStatusDict.find(s => s.id === Number(statusVal))?.name || '' : '';
@@ -92,7 +94,7 @@ export function TasksPanelInline({
                         else if (chatCount === 1) { selectConversation(rowChats[0].id); setActivePanel('none'); }
                         else { setExpandedTaskChats(isExpanded ? null : row.id); }
                       }} className={cn("flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors flex-shrink-0 mt-0.5", chatCount > 0 ? "bg-[var(--color-primary-500)]/10 text-[var(--color-primary-500)]" : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]")}
-                        title={chatCount === 0 ? 'Новый чат' : chatCount === 1 ? 'Открыть чат' : `${chatCount} чатов`}>
+                        title={chatCount === 0 ? t('aiChat.ui.newChat') : chatCount === 1 ? t('rowActions.openChat') : t('aiChat.ui.chatCount', { count: chatCount })}>
                         <MessageSquare className="w-3.5 h-3.5" />
                         {chatCount > 1 && (<><span>{chatCount}</span><ChevronDown className={cn("w-3 h-3 transition-transform", isExpanded && "rotate-180")} /></>)}
                         {chatCount === 0 && <Plus className="w-3 h-3" />}
@@ -104,13 +106,13 @@ export function TasksPanelInline({
                           <button key={chat.id} onClick={() => { selectConversation(chat.id); setActivePanel('none'); setExpandedTaskChats(null); }}
                             className="w-full flex items-center gap-2 px-3 py-2 pl-12 hover:bg-[var(--bg-secondary)] transition-colors text-left">
                             <MessageSquare className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                            <span className="flex-1 text-xs text-[var(--text-secondary)] truncate">{chat.title || 'Чат'}</span>
+                            <span className="flex-1 text-xs text-[var(--text-secondary)] truncate">{chat.title || t('columnTypes.chat.label')}</span>
                             <span className="text-[10px] text-[var(--text-tertiary)]">{new Date(chat.updatedAt).toLocaleDateString()}</span>
                           </button>
                         ))}
                         <button onClick={() => { createNewConversation(); setBoundRows([{ table_id: tasksSource!.tableId, table_name: tasksSource!.tableName, table_icon: tasksSource!.tableIcon, row_id: row.id, row_title: rowTitle }]); setActivePanel('none'); setExpandedTaskChats(null); }}
                           className="w-full flex items-center gap-2 px-3 py-2 pl-12 hover:bg-[var(--bg-secondary)] transition-colors text-left text-[var(--color-primary-500)]">
-                          <Plus className="w-3.5 h-3.5" /><span className="text-xs">Новый чат</span>
+                          <Plus className="w-3.5 h-3.5" /><span className="text-xs">{t('aiChat.ui.newChat')}</span>
                         </button>
                       </div>
                     )}
@@ -124,8 +126,8 @@ export function TasksPanelInline({
         <div className="flex flex-col h-full px-4 py-4">
           <div className="flex flex-col items-center text-center mb-4">
             <ListTodo className="w-10 h-10 text-[var(--text-tertiary)] mb-3" />
-            <p className="text-sm text-[var(--text-secondary)] mb-1">Источник не настроен</p>
-            <p className="text-xs text-[var(--text-tertiary)]">Выберите таблицу для задач</p>
+            <p className="text-sm text-[var(--text-secondary)] mb-1">{t('aiChat.ui.sourceIsNotConfigured')}</p>
+            <p className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.selectATaskTable')}</p>
           </div>
           <TasksSourceInlineSelector defaultSpaceId={effectiveSpaceId} onSelect={(config) => updateTasksSource(config)} onCancel={() => {}} showHeader={false} />
         </div>

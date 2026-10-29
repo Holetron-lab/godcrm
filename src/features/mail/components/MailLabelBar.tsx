@@ -4,6 +4,7 @@ import { cn } from '@/shared/utils/cn';
 import { useMailLabels, useTagMessage, useUntagMessage } from '../hooks/useMailLabels';
 import { hexToRgba } from '../utils/labelColor';
 import type { MailLabel, MailMessage } from '../types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 export interface MailLabelBarProps {
   spaceId: number | undefined;
@@ -21,6 +22,7 @@ export interface MailLabelBarProps {
  * bare flex group — no bar chrome/border of its own.
  */
 export function MailLabelBar({ spaceId, message }: MailLabelBarProps) {
+  const { t } = useLanguage();
   const labelsQuery = useMailLabels(spaceId);
   const tag = useTagMessage(spaceId);
   const untag = useUntagMessage(spaceId);
@@ -52,7 +54,7 @@ export function MailLabelBar({ spaceId, message }: MailLabelBarProps) {
             key={label.id}
             type="button"
             aria-pressed={on}
-            title={on ? `Снять «${label.name}»` : `Пометить «${label.name}»`}
+            title={on ? t('mail.labelBar.untag', { name: label.name }) : t('mail.labelBar.tag', { name: label.name })}
             onClick={() => setTagged(label, !on)}
             className={cn(
               'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium transition-colors',
@@ -84,7 +86,7 @@ export function MailLabelBar({ spaceId, message }: MailLabelBarProps) {
             <span className="truncate">{label.name}</span>
             <button
               type="button"
-              aria-label={`Снять ярлык «${label.name}»`}
+              aria-label={t('mail.labelBar.removeLabel', { name: label.name })}
               onClick={() => untag.mutate({ msgId: message.id, labelId: label.id })}
               className="rounded-full opacity-70 hover:opacity-100"
             >
@@ -101,7 +103,7 @@ export function MailLabelBar({ spaceId, message }: MailLabelBarProps) {
             type="button"
             className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--border-primary)] px-2 py-0.5 text-xs text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
           >
-            <Plus size={12} /> Ярлык
+            <Plus size={12} /> {t('mail.labelBar.label')}
           </button>
         }
         content={

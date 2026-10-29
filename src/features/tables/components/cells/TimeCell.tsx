@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useId, useState, useRef, useEffect } from 'react';
 import { Clock, Calendar, Repeat } from 'lucide-react';
 
 /**
@@ -118,6 +118,7 @@ export const TimeCell: React.FC<TimeCellProps> = ({
   onSave,
   onCancel,
 }) => {
+  const fieldId = useId();
   const parsed = parseCronValue(value);
   
   // Состояние для редактирования
@@ -184,8 +185,8 @@ export const TimeCell: React.FC<TimeCellProps> = ({
     return (
       <div className="flex flex-col gap-3 p-3 bg-[var(--bg-primary)] rounded-lg border border-[var(--color-primary-500)] min-w-[280px]">
         {/* Периодичность */}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-[var(--text-tertiary)]">Периодичность</label>
+        <div role="group" aria-labelledby={`${fieldId}-label-0`} className="flex flex-col gap-1">
+          <span id={`${fieldId}-label-0`} className="text-xs text-[var(--text-tertiary)]">Периодичность</span>
           <div className="flex gap-1">
             <button
               type="button"
@@ -322,7 +323,7 @@ export const TimeCell: React.FC<TimeCellProps> = ({
       <Clock className={`w-3.5 h-3.5 ${isRecurring ? 'text-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)]'}`} />
       <span className="text-[var(--text-primary)]">{displayText}</span>
       {isRecurring && (
-        <Repeat className="w-3 h-3 text-[var(--color-primary-500)]" title="Повторяющееся событие" />
+        <span title="Повторяющееся событие"><Repeat className="w-3 h-3 text-[var(--color-primary-500)]" /></span>
       )}
     </div>
   );

@@ -356,6 +356,7 @@ ALTER SEQUENCE public._inflight_runs_id_seq OWNED BY public._inflight_runs.id;
 --
 
 CREATE TABLE public._secrets (
+    space_id integer DEFAULT 11 NOT NULL,
     id integer NOT NULL,
     key text NOT NULL,
     encrypted_payload jsonb NOT NULL,
@@ -933,9 +934,13 @@ CREATE TABLE public.conversation_summaries (
     id integer NOT NULL,
     conversation_id integer NOT NULL,
     summary text NOT NULL,
-    message_range_start integer NOT NULL,
-    message_range_end integer NOT NULL,
-    tokens_saved integer DEFAULT 0,
+    chunk_number integer NOT NULL,
+    messages_start_id integer NOT NULL,
+    messages_end_id integer NOT NULL,
+    messages_count integer NOT NULL,
+    summary_model character varying(100),
+    embedding jsonb,
+    embedding_model character varying(100),
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -3901,11 +3906,10 @@ ALTER TABLE ONLY public._inflight_runs
 
 
 --
--- Name: _secrets _secrets_key_unique; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: idx_secrets_space_key; Type: INDEX; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public._secrets
-    ADD CONSTRAINT _secrets_key_unique UNIQUE (key);
+CREATE UNIQUE INDEX idx_secrets_space_key ON public._secrets USING btree (space_id, key);
 
 
 --
@@ -3986,6 +3990,14 @@ ALTER TABLE ONLY public.conversation_participants
 
 ALTER TABLE ONLY public.conversation_summaries
     ADD CONSTRAINT conversation_summaries_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: conversation_summaries conversation_summaries_conversation_id_chunk_number_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.conversation_summaries
+    ADD CONSTRAINT conversation_summaries_conversation_id_chunk_number_unique UNIQUE (conversation_id, chunk_number);
 
 
 --

@@ -81,7 +81,7 @@ export function TablesSection() {
               Контейнер выделенных
             </h3>
             <p className="text-sm text-[var(--text-secondary)] mb-3">
-              Badge справа от кнопки "Фильтры" показывает количество выделенных строк.
+              Badge справа от кнопки &quot;Фильтры&quot; показывает количество выделенных строк.
               Клик открывает меню с действиями:
             </p>
             <div className="bg-[var(--bg-tertiary)] rounded-lg p-4 space-y-2 text-sm">
@@ -111,7 +111,7 @@ export function TablesSection() {
               Массовая замена (Find & Replace)
             </h3>
             <p className="text-sm text-[var(--text-secondary)] mb-4">
-              Кнопка "🔄 Замена" справа от контейнера открывает модалку для массового изменения данных.
+              Кнопка &quot;🔄 Замена&quot; справа от контейнера открывает модалку для массового изменения данных.
             </p>
 
             <div className="space-y-3">
@@ -159,7 +159,7 @@ export function TablesSection() {
               <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/30 text-sm">
                 <p className="text-amber-600 dark:text-amber-400 flex items-center gap-2">
                   <span>💡</span>
-                  <span>Пример: найти "Draft" и заменить на "Active" в колонке Status для 5 выделенных строк</span>
+                  <span>Пример: найти &quot;Draft&quot; и заменить на &quot;Active&quot; в колонке Status для 5 выделенных строк</span>
                 </p>
               </div>
             </div>

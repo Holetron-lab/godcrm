@@ -15,8 +15,8 @@ export interface DocumentAtom {
   key: string;
   title: string;
   content: string;
-  content_en?: string;
-  content_ru?: string;
+  content_en?: string | null;
+  content_ru?: string | null;
   type?: 'endpoint' | 'concept' | 'howto' | 'code' | 'reference' | 'component' | 'hook' | 'store';
   http_method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   http_path?: string;

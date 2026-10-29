@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 // NotificationMatrix.tsx — ADR-0064 WP-C.
 //
 // Shared form used by Personal, Per-chat, Space-default, and Global-default
@@ -124,6 +125,7 @@ export function NotificationMatrix({
   showTestButtons = false,
   disabled = false,
 }: Props) {
+  const { t } = useLanguage();
   const enabled = (value.enabled ?? null) as ToggleVal;
   const soundEnabled = (value.sound_enabled ?? null) as ToggleVal;
   const volume = typeof value.sound_volume === 'number' ? value.sound_volume : 0.6;
@@ -143,23 +145,23 @@ export function NotificationMatrix({
     <div className="space-y-3">
       <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-tertiary)]">
         <div>
-          <div className="text-xs text-[var(--text-primary)]">Уведомления включены</div>
-          <div className="text-[10px] text-[var(--text-tertiary)]">Master switch для этого слоя</div>
+          <div className="text-xs text-[var(--text-primary)]">{t('aiChat.ui.notificationsEnabled')}</div>
+          <div className="text-[10px] text-[var(--text-tertiary)]">{t('aiChat.ui.masterSwitchForThisSettingsLevel')}</div>
         </div>
         <ToggleCell val={enabled} onChange={(v) => onChange({ ...value, enabled: v })} triState={triState} disabled={disabled} />
       </div>
 
       <div className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-tertiary)]">
         <div>
-          <div className="text-xs text-[var(--text-primary)]">Звук</div>
-          <div className="text-[10px] text-[var(--text-tertiary)]">Глобальный sound master</div>
+          <div className="text-xs text-[var(--text-primary)]">{t('aiChat.ui.sound')}</div>
+          <div className="text-[10px] text-[var(--text-tertiary)]">{t('aiChat.ui.globalSoundSwitch')}</div>
         </div>
         <ToggleCell val={soundEnabled} onChange={(v) => onChange({ ...value, sound_enabled: v })} triState={triState} disabled={disabled} />
       </div>
 
       <div className="p-2 rounded-lg bg-[var(--bg-tertiary)]">
         <div className="flex items-center justify-between mb-1">
-          <div className="text-xs text-[var(--text-primary)]">Громкость</div>
+          <div className="text-xs text-[var(--text-primary)]">{t('aiChat.ui.volume')}</div>
           <div className="text-[10px] text-[var(--text-tertiary)]">{Math.round(volume * 100)}%</div>
         </div>
         <input
@@ -176,7 +178,7 @@ export function NotificationMatrix({
 
       {(['humans', 'agents'] as const).map((block) => {
         const cells = block === 'humans' ? humans : agents;
-        const label = block === 'humans' ? 'Люди' : 'AI агенты';
+        const label = block === 'humans' ? t('aiChat.contacts.filterHumans') : t('aiChat.ui.aIAgents');
         return (
           <div key={block} className="p-2 rounded-lg bg-[var(--bg-tertiary)]">
             <div className="flex items-center justify-between mb-2">
@@ -187,8 +189,7 @@ export function NotificationMatrix({
                   onClick={() => onTestSound(block === 'humans' ? 'human' : 'agent')}
                   className="text-[10px] px-2 py-0.5 rounded bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--color-primary-500)]/10"
                 >
-                  ▶ Test
-                </button>
+                  {t('aiChat.ui.testSound')}</button>
               )}
             </div>
             <div className="grid grid-cols-3 gap-2">

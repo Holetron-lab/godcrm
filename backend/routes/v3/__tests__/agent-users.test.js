@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import { dbGet, dbAll, dbRun, sqlNow, isPostgres, resetAdapter } from '../../../database/connection.js';
 
 // Skip all tests if using SQLite (agent-users.js uses PostgreSQL syntax)
@@ -79,10 +80,28 @@ describePostgres('Agent User API', () => {
     `, [testAgentTableId, 'test-agent-1', JSON.stringify(agentData)]);
     testAgentRowId = rowResult.lastInsertRowid;
   });
+
+  // ADR-165 WP-4 added `users_agent_residence_unique` — at most one agent user
+  // per (managed_by_agent_table_id, managed_by_agent_row_id). Cases that each
+  // called createAgentUser() against the SHARED testAgentRowId were creating a
+  // second residence for the same agent and getting {success:false} back, so
+  // `result.user` was undefined. Give every such case its own agent row.
+  async function createAgentRow(name) {
+    const row = await dbRun(`
+      INSERT INTO table_rows (table_id, base_id, data, created_at, updated_at)
+      VALUES (?, ?, ?, ${sqlNow()}, ${sqlNow()})
+    `, [
+      testAgentTableId,
+      `test-agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      JSON.stringify({ name, description: 'A test AI agent', status: 'active' })
+    ]);
+    return row.lastInsertRowid;
+  }
   
   afterAll(async () => {
     // Cleanup test data (may fail if tables dropped - ignore errors)
     try {
+      await dbRun(`DELETE FROM api_keys WHERE project_id = ?`, [testProjectId]);
       await dbRun(`DELETE FROM table_rows WHERE table_id = ?`, [testAgentTableId]);
       await dbRun(`DELETE FROM universal_tables WHERE id = ?`, [testAgentTableId]);
       await dbRun(`DELETE FROM projects WHERE id = ?`, [testProjectId]);
@@ -117,7 +136,7 @@ describePostgres('Agent User API', () => {
       
       const result = await createAgentUser({
         agentTableId: testAgentTableId,
-        agentRowId: testAgentRowId,
+        agentRowId: await createAgentRow('Test Agent'),
         createdBy: 1
       });
       
@@ -135,7 +154,7 @@ describePostgres('Agent User API', () => {
       
       const result = await createAgentUser({
         agentTableId: testAgentTableId,
-        agentRowId: testAgentRowId,
+        agentRowId: await createAgentRow('Test Agent Config'),
         agentConfig,
         createdBy: 1
       });
@@ -148,7 +167,7 @@ describePostgres('Agent User API', () => {
       
       const result = await createAgentUser({
         agentTableId: testAgentTableId,
-        agentRowId: 999999,
+        agentRowId: NON_EXISTENT_ID,
         createdBy: 1
       });
       
@@ -189,10 +208,10 @@ describePostgres('Agent User API', () => {
     it('should generate API key for agent user', async () => {
       const { createAgentUser, generateUserApiKey } = await import('../agent-users.js');
       
-      // First create an agent user
+      // First create an agent user (own row — see users_agent_residence_unique)
       const createResult = await createAgentUser({
         agentTableId: testAgentTableId,
-        agentRowId: testAgentRowId,
+        agentRowId: await createAgentRow('Test Agent Key'),
         createdBy: 1
       });
       
@@ -201,15 +220,17 @@ describePostgres('Agent User API', () => {
       // Generate API key
       const keyResult = await generateUserApiKey(userId, { createdBy: 1 });
       
-      expect(keyResult.success).toBe(true);
+      expect(keyResult.success, keyResult.error).toBe(true);
       expect(keyResult.apiKey).toBeDefined();
       expect(keyResult.apiKey).toMatch(/^sk-agent-/);
+      const stored = await dbGet('SELECT project_id FROM api_keys WHERE user_id = ?', [userId]);
+      expect(stored.project_id).toBe(testProjectId);
     });
     
     it('should fail for non-existent user', async () => {
       const { generateUserApiKey } = await import('../agent-users.js');
       
-      const result = await generateUserApiKey(999999, { createdBy: 1 });
+      const result = await generateUserApiKey(NON_EXISTENT_ID, { createdBy: 1 });
       
       expect(result.success).toBe(false);
       expect(result.error).toContain('User not found');

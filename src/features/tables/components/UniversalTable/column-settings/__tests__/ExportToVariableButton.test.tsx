@@ -51,7 +51,7 @@ describe('ExportToVariableButton', () => {
   });
 
   it('shows loading state during export', async () => {
-    const onExport = vi.fn(() => new Promise((resolve) => setTimeout(resolve, 100)));
+    const onExport = vi.fn(() => new Promise<void>((resolve) => setTimeout(resolve, 100)));
     render(
       <ExportToVariableButton enabled={true} linked={null} onExport={onExport} />
     );
@@ -62,6 +62,7 @@ describe('ExportToVariableButton', () => {
     await waitFor(() => {
       expect(button).toHaveAttribute('disabled');
     });
+    await waitFor(() => expect(button).toBeEnabled());
   });
 
   it('shows error state on export failure', async () => {

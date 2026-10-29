@@ -63,15 +63,15 @@ export function TerminalInput({ onSubmit, isExecuting, cwd, history = [] }: Term
     : '~';
 
   return (
-    <div
+    <label
       className="flex items-center gap-2 px-3 py-2 border-t border-slate-700 bg-slate-900/50"
-      onClick={() => inputRef.current?.focus()}
     >
       <span className="text-blue-400 text-sm font-mono shrink-0">{shortCwd}</span>
       <span className="text-green-400 font-mono shrink-0">$</span>
       <input
         ref={inputRef}
         type="text"
+        aria-label="Terminal command"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -82,8 +82,8 @@ export function TerminalInput({ onSubmit, isExecuting, cwd, history = [] }: Term
         autoComplete="off"
       />
       {isExecuting && (
-        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />
+        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />
       )}
-    </div>
+    </label>
   );
 }

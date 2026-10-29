@@ -50,7 +50,7 @@ export function DocumentTile({ doc, onClick, isSelected }: DocumentTileProps) {
     (async () => {
       try {
         const lang = ctx.currentLanguage || 'en';
-        let rows: Array<Record<string, unknown>> = [];
+        let rows: Array<{ data?: Record<string, unknown> }> = [];
 
         if (canFetchPublic) {
           const response = await publicApi.getWidgetDocumentAtoms(
@@ -59,7 +59,7 @@ export function DocumentTile({ doc, onClick, isSelected }: DocumentTileProps) {
             doc.slug,
           );
           if (cancelled) return;
-          rows = (response.data?.rows || []) as Array<Record<string, unknown>>;
+          rows = response.data?.rows || [];
         } else {
           const response = await apiClient.get<{ data?: { rows?: Array<Record<string, unknown>> } }>(
             `/tables/${tableId}/rows?limit=10`,
@@ -69,14 +69,14 @@ export function DocumentTile({ doc, onClick, isSelected }: DocumentTileProps) {
         }
 
         const textItems = rows
-          .filter((row: Record<string, unknown>) => {
+          .filter((row) => {
             const data = row.data as Record<string, unknown> | undefined;
             return data?.level === 'text' || (!data?.level && data?.content);
           })
           .slice(0, 3);
 
         const previewText = textItems
-          .map((row: Record<string, unknown>) => {
+          .map((row) => {
             const data = row.data as Record<string, unknown> | undefined;
             return (data?.[`content_${lang}`] || data?.content_en || data?.content_ru || data?.content || '') as string;
           })

@@ -3,13 +3,45 @@
  * Handles: GET /tables/:tableId/rows (with pagination, filtering, search)
  */
 import express from 'express';
+import { z } from 'zod';
 import { dbAll, dbGet } from '../../../database/connection.js';
 import { apiLogger } from '../../../utils/logger.js';
-import { success, forbidden, error } from '../../../utils/response.js';
-import { checkTableAccess } from './helpers.js';
+import { isMysqlSource, openMysqlConnection } from '../../../services/data-source/mysql.js';
+import { forbidden, error } from '../../../utils/response.js';
+import { checkTableAccess, respondRows } from './helpers.js';
 import { buildOrderClause } from '../../../services/orderClause.js';
 
 const router = express.Router();
+const sortingSchema = z.object({
+  sortColumn: z.string().regex(/^(\d+|__(sys_created_at|sys_updated_at|row_id|base_id))$/).optional(),
+  sortDirection: z.enum(['asc', 'desc']).optional(),
+}).refine(value => Boolean(value.sortColumn) === Boolean(value.sortDirection));
+
+const SOURCE_IDENTIFIER = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Resolves ?sortColumn/?sortDirection for a data-source table to a column of the
+ * source table — the only place its rows can be ordered before LIMIT/OFFSET.
+ * null = the source's natural order (no sort requested, a virtual column whose
+ * values live in table_rows, or a sort key the source has no column for);
+ * false = the column does not belong to this table.
+ */
+async function resolveSourceSort(tableId, idColumn, { sortColumn, sortDirection }) {
+  if (!sortColumn) return null;
+  let name = { __row_id: idColumn, __base_id: idColumn }[sortColumn];
+  if (!name) {
+    if (!/^\d+$/.test(sortColumn)) return null;
+    const column = await dbGet(
+      'SELECT column_name, is_from_source FROM table_columns WHERE table_id = ? AND id = ?',
+      [tableId, Number(sortColumn)]
+    );
+    if (!column) return false;
+    if (column.is_from_source === 0 || column.is_from_source === false) return null;
+    name = column.column_name;
+  }
+  if (!SOURCE_IDENTIFIER.test(name)) return null;
+  return { name, direction: sortDirection.toUpperCase() };
+}
 
 /**
  * GET /api/v3/tables/:tableId/rows
@@ -20,6 +52,7 @@ const router = express.Router();
 router.get('/tables/:tableId/rows', async (req, res) => {
   try {
     const { tableId } = req.params;
+    const sendRows = (payload) => respondRows(res, payload, { tableId, include: req.query.include, user: req.user });
     const { page = 1, limit = 50, mode, filter, search, searchColumns } = req.query;
     const rawMode = mode === 'raw';
     const offset = (Number(page) - 1) * Number(limit);
@@ -58,7 +91,7 @@ router.get('/tables/:tableId/rows', async (req, res) => {
         const { rows, total } = await getMailMessagesPage(table.project_id, {
           search, searchColumns, filter: filterObj, page, limit
         });
-        return success(res, {
+        return await sendRows({
           rows,
           pagination: {
             page: Number(page),
@@ -108,7 +141,7 @@ router.get('/tables/:tableId/rows', async (req, res) => {
       const end = offset + Number(limit);
       const paginatedRows = systemRowsResult.slice(start, end);
 
-      return success(res, {
+      return await sendRows({
         rows: paginatedRows,
         pagination: {
           page: Number(page),
@@ -126,12 +159,20 @@ router.get('/tables/:tableId/rows', async (req, res) => {
       const dataSourceService = new DataSourceService();
       const dataSource = await dataSourceService.get(table.data_source_id);
 
+      // Header sorting is pushed down to the source; the grid shows one page at a time
+      // and cannot order the rest client-side.
+      const sorting = sortingSchema.safeParse(req.query);
+      if (!sorting.success) return error(res, 'INVALID_SORT', 'Provide a column ID and asc/desc direction together', 400);
+      const sourceSort = await resolveSourceSort(tableId, table.source_id_column || 'id', sorting.data);
+      if (sourceSort === false) return error(res, 'INVALID_SORT', 'Sort column does not belong to this table', 400);
+
       // Internal data source - read from local database tables
       if (dataSource.type === 'internal') {
         apiLogger.debug({ tableName: table.source_table_name }, 'Reading from local database table');
 
+        const orderClause = sourceSort ? `ORDER BY "${sourceSort.name}" ${sourceSort.direction} NULLS LAST` : '';
         const internalRows = await dbAll(
-          `SELECT * FROM "${table.source_table_name}" LIMIT ? OFFSET ?`,
+          `SELECT * FROM "${table.source_table_name}" ${orderClause} LIMIT ? OFFSET ?`,
           [Number(limit), offset]
         );
 
@@ -175,7 +216,7 @@ router.get('/tables/:tableId/rows', async (req, res) => {
           };
         });
 
-        return success(res, {
+        return await sendRows({
           rows,
           pagination: {
             page: Number(page),
@@ -186,15 +227,8 @@ router.get('/tables/:tableId/rows', async (req, res) => {
         });
       }
 
-      if (dataSource.type === 'local_mysql') {
-        const mysql = await import('mysql2/promise');
-        const connection = await mysql.createConnection({
-          host: dataSource.db_host,
-          port: dataSource.db_port,
-          database: dataSource.db_name,
-          user: dataSource.db_username,
-          password: ''
-        });
+      if (isMysqlSource(dataSource)) {
+        const connection = await openMysqlConnection(dataSource);
 
         try {
           // Build WHERE clause for filter
@@ -216,8 +250,9 @@ router.get('/tables/:tableId/rows', async (req, res) => {
             apiLogger.debug({ whereClause, whereValues }, 'MySQL filter WHERE');
           }
 
+          const orderClause = sourceSort ? `ORDER BY \`${sourceSort.name}\` ${sourceSort.direction}` : '';
           const [mysqlRows] = await connection.execute(
-            `SELECT * FROM \`${table.source_table_name}\` ${whereClause} LIMIT ${Number(limit)} OFFSET ${offset}`,
+            `SELECT * FROM \`${table.source_table_name}\` ${whereClause} ${orderClause} LIMIT ${Number(limit)} OFFSET ${offset}`,
             whereValues
           );
 
@@ -291,7 +326,7 @@ router.get('/tables/:tableId/rows', async (req, res) => {
 
           await connection.end();
 
-          return success(res, {
+          return await sendRows({
             rows,
             pagination: {
               page: Number(page),
@@ -341,7 +376,13 @@ router.get('/tables/:tableId/rows', async (req, res) => {
       }
     }
 
-    queryParams.push(Number(limit), offset);
+    const sorting = sortingSchema.safeParse(req.query);
+    if (!sorting.success) return error(res, 'INVALID_SORT', 'Provide a column ID and asc/desc direction together', 400);
+    const { sortColumn, sortDirection } = sorting.data;
+    const columns = await dbAll(
+      'SELECT id, column_name, type FROM table_columns WHERE table_id = ?',
+      [tableId]
+    );
 
     // ADR-151 Slice A: if this table has a typed `order` column, default-sort
     // ascending by it (NULLs/unset last), tie-broken by created_at DESC. Gated:
@@ -349,20 +390,44 @@ router.get('/tables/:tableId/rows', async (req, res) => {
     // DESC` byte-for-byte. The numeric cast is regex-guarded so a dirty/empty
     // cell can never throw and break the list (cf. the doc_* floor-guard ethos).
     let orderByClause = 'ORDER BY created_at DESC';
-    const orderCol = await dbGet(
-      `SELECT column_name FROM table_columns
-       WHERE table_id = ? AND type = 'order'
-       ORDER BY order_index ASC, id ASC
-       LIMIT 1`,
-      [tableId]
-    );
-    if (orderCol?.column_name && /^[a-zA-Z0-9_]+$/.test(orderCol.column_name)) {
-      // ADR-151: consolidated into the shared helper (was an inline duplicate).
-      orderByClause = `ORDER BY ${buildOrderClause(orderCol.column_name, {
-        mode: 'guarded',
-        tieBreak: 'created_at DESC',
-      })}`;
+    if (sortColumn) {
+      const rowField = {
+        __sys_created_at: 'created_at', __sys_updated_at: 'updated_at',
+        __row_id: 'id', __base_id: 'base_id',
+      }[sortColumn];
+      let expression = rowField;
+      if (!rowField) {
+        const column = columns.find(col => String(col.id) === sortColumn);
+        if (!column) return error(res, 'INVALID_SORT', 'Sort column does not belong to this table', 400);
+        // Current rows use field names; older rows can still use column IDs.
+        // Bind JSON keys as values, never interpolate client input into SQL.
+        const cell = 'COALESCE(data::jsonb->>?, data::jsonb->>?)';
+        const keys = [column.column_name, String(column.id)];
+        expression = cell;
+        queryParams.push(...keys);
+        if (column.type === 'number' || column.type === 'order') {
+          expression = `(CASE WHEN BTRIM(${cell}) ~ ? THEN (${cell})::numeric END)`;
+          queryParams.push('^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]{1,4})?$', ...keys);
+        }
+      }
+      orderByClause = `ORDER BY ${expression} ${sortDirection.toUpperCase()} NULLS LAST, created_at DESC, id DESC`;
+    } else {
+      const orderCol = await dbGet(
+        `SELECT column_name FROM table_columns
+         WHERE table_id = ? AND type = 'order'
+         ORDER BY order_index ASC, id ASC
+         LIMIT 1`,
+        [tableId]
+      );
+      if (orderCol?.column_name && /^[a-zA-Z0-9_]+$/.test(orderCol.column_name)) {
+        // ADR-151: consolidated into the shared helper (was an inline duplicate).
+        orderByClause = `ORDER BY ${buildOrderClause(orderCol.column_name, {
+          mode: 'guarded',
+          tieBreak: 'created_at DESC',
+        })}`;
+      }
     }
+    queryParams.push(Number(limit), offset);
 
     const rows = await dbAll(`
       SELECT
@@ -388,10 +453,6 @@ router.get('/tables/:tableId/rows', async (req, res) => {
     const pages = Math.ceil(total / Number(limit));
 
     let idToNameMap = {};
-    const columns = await dbAll(
-      'SELECT id, column_name FROM table_columns WHERE table_id = ?',
-      [tableId]
-    );
     columns.forEach(col => {
       idToNameMap[String(col.id)] = col.column_name;
     });
@@ -415,7 +476,7 @@ router.get('/tables/:tableId/rows', async (req, res) => {
       };
     });
 
-    success(res, {
+    return await sendRows({
       rows: parsedRows,
       pagination: {
         page: Number(page),

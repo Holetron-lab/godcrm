@@ -5,6 +5,16 @@ import express from 'express';
 import request from 'supertest';
 import rateLimit from 'express-rate-limit';
 
+// The limiters skip TRUSTED_IPS, and supertest connects from ::ffff:127.0.0.1 —
+// which is on that list. Every header assertion below therefore ran against a
+// request the middleware deliberately bypasses, and saw no ratelimit-* headers
+// at all. Present as an untrusted client instead, so the headers are exercised.
+const UNTRUSTED_IP = '203.0.113.9';
+const asUntrustedClient = (req, _res, next) => {
+  Object.defineProperty(req, 'ip', { value: UNTRUSTED_IP, configurable: true });
+  next();
+};
+
 describe('Rate Limiter', () => {
   describe('Module exports', () => {
     it('should export all required limiters', async () => {
@@ -31,6 +41,7 @@ describe('Rate Limiter', () => {
     beforeAll(async () => {
       const { globalLimiter } = await import('../rateLimiter.js');
       app = express();
+      app.use(asUntrustedClient);
       app.use('/api', globalLimiter);
       app.get('/api/test', (req, res) => res.json({ ok: true }));
     });
@@ -95,6 +106,7 @@ describe('Rate Limiter', () => {
       const { authLimiter } = await import('../rateLimiter.js');
       
       const app = express();
+      app.use(asUntrustedClient);
       app.use('/auth', authLimiter);
       app.post('/auth/login', (req, res) => res.json({ ok: true }));
       
@@ -148,9 +160,11 @@ describe('Rate Limiter', () => {
     });
 
     it('should use dev limits in test environment', async () => {
-      // NODE_ENV=test during vitest, should use dev values (non-production)
+      // NODE_ENV=test during vitest, should use dev values (non-production).
+      // 15000/100 are the current non-production ceilings in rateLimiter.js;
+      // this suite still asserted the 5000 it was written against.
       const { RATE_LIMIT_CONFIG } = await import('../rateLimiter.js');
-      expect(RATE_LIMIT_CONFIG.global.max).toBe(5000);
+      expect(RATE_LIMIT_CONFIG.global.max).toBe(15000);
       expect(RATE_LIMIT_CONFIG.auth.max).toBe(100);
     });
   });
@@ -159,6 +173,7 @@ describe('Rate Limiter', () => {
     it('should set ratelimit-limit header matching global config', async () => {
       const { globalLimiter, RATE_LIMIT_CONFIG } = await import('../rateLimiter.js');
       const app = express();
+      app.use(asUntrustedClient);
       app.use('/api', globalLimiter);
       app.get('/api/test', (req, res) => res.json({ ok: true }));
       const res = await request(app).get('/api/test');
@@ -168,6 +183,7 @@ describe('Rate Limiter', () => {
     it('should set ratelimit-limit header matching auth config', async () => {
       const { authLimiter, RATE_LIMIT_CONFIG } = await import('../rateLimiter.js');
       const app = express();
+      app.use(asUntrustedClient);
       app.use('/auth', authLimiter);
       app.post('/auth/login', (req, res) => res.json({ ok: true }));
       const res = await request(app).post('/auth/login');

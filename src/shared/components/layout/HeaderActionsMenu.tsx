@@ -90,8 +90,10 @@ export const HeaderActionsMenu = ({
       {isActionsMenuOpen && (
         <>
           {/* Overlay to close menu */}
-          <div
-            className="fixed inset-0 z-40"
+          <button
+            type="button"
+            aria-label={t('common.close')}
+            className="fixed inset-0 z-40 cursor-default"
             onClick={() => setIsActionsMenuOpen(false)}
           />
 
@@ -338,6 +340,7 @@ export const HeaderActionsMenu = ({
               <button
                 onClick={() => {
                   setIsActionsMenuOpen(false);
+                  menuButtonRef.current?.focus();
                   openDeleteProjectModal(currentProject.id);
                 }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-left text-sm font-medium text-[var(--color-error)] hover:bg-[var(--bg-secondary)] transition"
@@ -355,6 +358,7 @@ export const HeaderActionsMenu = ({
               <button
                 onClick={() => {
                   setIsActionsMenuOpen(false);
+                  menuButtonRef.current?.focus();
                   setIsDeleteSpaceModalOpen(true);
                 }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-left text-sm font-medium text-[var(--color-error)] hover:bg-[var(--bg-secondary)] transition"

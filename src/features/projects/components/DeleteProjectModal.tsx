@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -21,6 +21,8 @@ export const DeleteProjectModal = ({ open, onOpenChange, project }: DeleteProjec
   const navigate = useNavigate();
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [error, setError] = useState('');
+  const confirmationId = useId();
+  const confirmationRef = useRef<HTMLInputElement>(null);
 
   const deleteProject = useDeleteProjectMutation();
   
@@ -35,7 +37,10 @@ export const DeleteProjectModal = ({ open, onOpenChange, project }: DeleteProjec
   }, [open]);
 
   const handleDelete = () => {
-    if (!canDelete) return;
+    if (!canDelete || deleteProject.isPending) return;
+    setError('');
+    // Keep focus inside the dialog before the submit button becomes disabled.
+    confirmationRef.current?.focus();
     
     deleteProject.mutate(project.id, {
       onSuccess: () => {
@@ -49,35 +54,38 @@ export const DeleteProjectModal = ({ open, onOpenChange, project }: DeleteProjec
       },
       onError: (err) => {
         logger.error('Failed to delete project:', err);
-        setError(t('projects.errors.generic'));
+        setError(err instanceof Error && err.message.trim() ? err.message : t('projects.delete.failed'));
       },
     });
   };
 
   return (
     <Modal 
+      restoreFocus
       open={open} 
       onOpenChange={onOpenChange} 
       title={`⚠️ ${t('projects.delete.modalTitle')}`}
     >
       <div className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">
+          <div role="alert" className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-700 dark:text-red-300">
             {error}
           </div>
         )}
 
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
           <p className="mb-2 text-sm text-[var(--text-secondary)]">
-            {t('projects.delete.warningText')} <strong className="text-red-400">"{project.name}"</strong> {t('projects.delete.warningTextSuffix')}
+            {t('projects.delete.warningText')} <strong className="text-red-700 dark:text-red-300">&quot;{project.name}&quot;</strong>{t('projects.delete.warningTextSuffix')}
           </p>
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm text-[var(--text-secondary)]">
-            {t('projects.delete.typeToConfirm')} <strong className="font-mono text-red-400">delete</strong> {t('projects.delete.typeToConfirmSuffix')}
-          </p>
+          <label htmlFor={confirmationId} className="block text-sm text-[var(--text-secondary)]">
+            {t('projects.delete.typeToConfirm')} <strong className="font-mono text-red-700 dark:text-red-300">delete</strong> {t('projects.delete.typeToConfirmSuffix')}
+          </label>
           <input
+            id={confirmationId}
+            ref={confirmationRef}
             type="text"
             value={deleteConfirmText}
             onChange={(e) => setDeleteConfirmText(e.target.value)}
@@ -87,7 +95,6 @@ export const DeleteProjectModal = ({ open, onOpenChange, project }: DeleteProjec
               text-[var(--text-primary)]
               focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20
               placeholder:text-[var(--text-tertiary)]"
-            autoFocus
           />
         </div>
 

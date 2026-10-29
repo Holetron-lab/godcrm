@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useId, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useProjectTables } from '@/features/projects/hooks/useProjectTables';
 import { useSpacesQuery } from '@/features/spaces/hooks/useSpacesQuery';
@@ -8,6 +8,8 @@ import { TRIGGER_LABELS, ACTION_LABELS } from './automationConstants';
 
 interface AutomationModalProps {
   automation?: AutomationModel | null;
+  /** Prefill for a NEW automation (ignored when `automation` is set), e.g. opened from a column's settings. */
+  defaults?: Pick<Partial<AutomationModel>, 'name' | 'triggerType' | 'triggerConfig'>;
   tableId?: string;
   projectId?: number | string;
   spaceId?: number | null;
@@ -16,12 +18,13 @@ interface AutomationModalProps {
   language: string;
 }
 
-export function AutomationModal({ automation, tableId: initialTableId, projectId: initialProjectId, spaceId: initialSpaceId, onClose, onSave, language }: AutomationModalProps) {
+export function AutomationModal({ automation, defaults, tableId: initialTableId, projectId: initialProjectId, spaceId: initialSpaceId, onClose, onSave, language }: AutomationModalProps) {
+  const fieldId = useId();
   const t = (ru: string, en: string) => language === 'ru' ? ru : en;
-  const [name, setName] = useState(automation?.name || '');
+  const [name, setName] = useState(automation?.name || defaults?.name || '');
   const [description, setDescription] = useState(automation?.description || '');
   const [selectedTableId, setSelectedTableId] = useState(automation?.tableId || initialTableId || '');
-  const [triggerType, setTriggerType] = useState<TriggerType>(automation?.triggerType || 'column_change');
+  const [triggerType, setTriggerType] = useState<TriggerType>(automation?.triggerType || defaults?.triggerType || 'row_update');
   const [actionType, setActionType] = useState<ActionType>(automation?.actionType || 'webhook');
 
   // Space and Project selection
@@ -71,9 +74,10 @@ export function AutomationModal({ automation, tableId: initialTableId, projectId
   const [formulaColumn, setFormulaColumn] = useState(formulaConfig?.column_id || '');
   const [formulaExpr, setFormulaExpr] = useState(formulaConfig?.formula || '');
 
-  // Schedule config
-  const triggerConfig = automation?.triggerConfig as { cron?: string } | undefined;
+  // Schedule / row_update config
+  const triggerConfig = automation?.triggerConfig ?? defaults?.triggerConfig;
   const [scheduleCron, setScheduleCron] = useState(triggerConfig?.cron || '0 9 * * *');
+  const [watchField, setWatchField] = useState(triggerConfig?.watch_field || '');
 
   // Load tables for selected project
   const { data: tables = [] } = useProjectTables(selectedProjectId);
@@ -102,6 +106,11 @@ export function AutomationModal({ automation, tableId: initialTableId, projectId
     let finalTriggerConfig: Record<string, unknown> = {};
     if (triggerType === 'schedule') {
       finalTriggerConfig = { cron: scheduleCron };
+    } else if (triggerType === 'row_update') {
+      // Keep keys the engine reads but this form has no UI for (e.g. `equals`),
+      // so editing an existing automation doesn't silently strip them.
+      const { watch_field: _ignored, ...rest } = (automation?.triggerConfig ?? {}) as Record<string, unknown>;
+      finalTriggerConfig = watchField.trim() ? { ...rest, watch_field: watchField.trim() } : rest;
     }
 
     const data: Partial<AutomationModel> = {
@@ -222,8 +231,9 @@ export function AutomationModal({ automation, tableId: initialTableId, projectId
             </div>
 
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">{t('Триггер (когда запускать)', 'Trigger (when to run)')}</label>
+              <label htmlFor={`${fieldId}-trigger`} className="block text-sm text-[var(--text-secondary)] mb-1">{t('Триггер (когда запускать)', 'Trigger (when to run)')}</label>
               <select
+                id={`${fieldId}-trigger`}
                 value={triggerType}
                 onChange={(e) => setTriggerType(e.target.value as TriggerType)}
                 className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-primary-500/50"
@@ -254,8 +264,9 @@ export function AutomationModal({ automation, tableId: initialTableId, projectId
             {actionType === 'webhook' && (
               <div className="space-y-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">
                 <div>
-                  <label className="block text-sm text-[var(--text-secondary)] mb-1">Webhook URL</label>
+                  <label htmlFor={`${fieldId}-0`} className="block text-sm text-[var(--text-secondary)] mb-1">Webhook URL</label>
                   <input
+                    id={`${fieldId}-0`}
                     type="url"
                     value={webhookUrl}
                     onChange={(e) => setWebhookUrl(e.target.value)}
@@ -281,8 +292,9 @@ export function AutomationModal({ automation, tableId: initialTableId, projectId
             {actionType === 'api_sync' && (
               <div className="space-y-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">
                 <div>
-                  <label className="block text-sm text-[var(--text-secondary)] mb-1">API URL</label>
+                  <label htmlFor={`${fieldId}-1`} className="block text-sm text-[var(--text-secondary)] mb-1">API URL</label>
                   <input
+                    id={`${fieldId}-1`}
                     type="url"
                     value={apiSyncUrl}
                     onChange={(e) => setApiSyncUrl(e.target.value)}
@@ -362,6 +374,27 @@ export function AutomationModal({ automation, tableId: initialTableId, projectId
                   />
                   <p className="text-xs text-[var(--text-tertiary)] mt-1">
                     {t('Ссылайтесь на поля через {{колонка}}. Арифметика ( + − * / ) или текстовый шаблон.', 'Reference fields via {{column}}. Arithmetic ( + − * / ) or a text template.')}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {triggerType === 'row_update' && (
+              <div className="space-y-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">
+                <div>
+                  <label htmlFor={`${fieldId}-watch`} className="block text-sm text-[var(--text-secondary)] mb-1">
+                    {t('Отслеживаемое поле (ключ колонки)', 'Watched field (column key)')}
+                  </label>
+                  <input
+                    id={`${fieldId}-watch`}
+                    type="text"
+                    value={watchField}
+                    onChange={(e) => setWatchField(e.target.value)}
+                    className="w-full bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-primary-500/50 font-mono"
+                    placeholder={t('например: status', 'e.g., status')}
+                  />
+                  <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                    {t('Срабатывает только когда меняется это поле. Пусто — при любом изменении записи.', 'Fires only when this field changes. Empty — on any row update.')}
                   </p>
                 </div>
               </div>

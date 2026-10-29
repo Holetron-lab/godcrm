@@ -62,8 +62,10 @@ export interface TableModalsProps {
   // Export modal
   exportModalOpen: boolean;
   onCloseExportModal: () => void;
-  selectedRowIds: Set<string>;
+  selectedRowIds: Set<string | number>;
   totalRowsCount: number;
+  /** Loads every row of the table (print, "all rows" replace) — the view only holds the loaded window. */
+  fetchAllRows: () => Promise<RowModel[]>;
   // Import modal
   importModalOpen: boolean;
   onCloseImportModal: () => void;
@@ -121,6 +123,7 @@ export const TableModals = ({
   onCloseExportModal,
   selectedRowIds,
   totalRowsCount,
+  fetchAllRows,
   importModalOpen,
   onCloseImportModal,
   nestedTableModal,
@@ -259,6 +262,8 @@ export const TableModals = ({
         selectedRowIds={selectedRowIds}
         filteredRowIds={filteredRowIds}
         allRowIds={allRowIds}
+        totalRows={totalRowsCount}
+        fetchAllRows={fetchAllRows}
         onReplace={executeBulkReplace}
         tableInfo={table ? {
           name: table.display_name || table.name || 'Таблица',
@@ -272,9 +277,11 @@ export const TableModals = ({
         isOpen={printModalOpen}
         onClose={() => onPrintOpenChange(false)}
         columns={columns}
-        rows={rows}
+        rows={allRows}
         selectedRowIds={selectedRowIds}
         filteredRowIds={filteredRowIds}
+        totalRows={totalRowsCount}
+        fetchAllRows={fetchAllRows}
         tableName={table?.display_name || table?.name || 'Таблица'}
         spaceName={spaceName}
         projectName={projectName}

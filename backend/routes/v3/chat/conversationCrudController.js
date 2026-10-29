@@ -8,6 +8,8 @@ import {
   success, created, error, badRequest, notFound,
   requireAuth,
 } from './chatShared.js';
+import { parseAttachments } from './parseAttachments.js';
+import { canReadConversation } from '../../../services/chat/conversation-read-access.js';
 import {
   resolveAgentUser, validateSubAgentRowIds, enrichSubAgents,
   autoJoinAgentToConversation, resolveAgentInfoForMessages,
@@ -483,8 +485,10 @@ export default function registerConversationCrudRoutes(router) {
       if (convIds.length > 0) {
         const idList = convIds.join(',');
         allParticipants = await dbAll(
-          `SELECT cp.conversation_id, cp.user_id, cp.role, cp.user_type, cp.joined_at, cp.last_read_at, u.name, u.email, COALESCE(u.avatar, '') as avatar_url
+          `SELECT cp.conversation_id, cp.user_id, cp.role, cp.user_type, cp.joined_at, cp.last_read_at, u.name, u.email, COALESCE(u.avatar, '') as avatar_url,
+                  COALESCE(ar.data->>'color', u.color) AS color, ar.data->>'icon' AS agent_icon
            FROM conversation_participants cp JOIN users u ON cp.user_id = u.id
+           LEFT JOIN table_rows ar ON ar.id = u.managed_by_agent_row_id AND ar.table_id = u.managed_by_agent_table_id
            WHERE cp.conversation_id IN (${idList}) ORDER BY cp.joined_at ASC`
         );
         allUnreads = await dbAll(
@@ -549,7 +553,7 @@ export default function registerConversationCrudRoutes(router) {
           for (const e of allEnriched) {
             if (e.row_id) enrichedMap[e.row_id] = e;
           }
-        } catch (_) {}
+        } catch (_) { /* Enrichment is optional; return the unenriched conversations on failure. */ }
       }
 
       const conversationsWithParticipants = conversations.map((conv, idx) => {
@@ -581,13 +585,7 @@ export default function registerConversationCrudRoutes(router) {
   router.get('/conversations/:id', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const userId = req.user.userId;
-
-      const participant = await dbGet(
-        `SELECT * FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`,
-        [id, userId]
-      );
-      if (!participant) return notFound(res, 'Conversation not found');
+      if (!await canReadConversation(req.user, id)) return notFound(res, 'Conversation not found');
 
       const conversation = await dbGet(`SELECT * FROM conversations WHERE id = $1`, [id]);
       if (!conversation) return notFound(res, 'Conversation not found');
@@ -623,7 +621,7 @@ export default function registerConversationCrudRoutes(router) {
       messages.reverse();
 
       const parsedMessages = messages.map(m => ({
-        ...m, mentions: safeJsonParse(m.mentions) || [], attachments: safeJsonParse(m.attachments) || [],
+        ...m, mentions: safeJsonParse(m.mentions) || [], attachments: parseAttachments(m.attachments),
         contentType: m.content_type || 'text', senderType: m.sender_type || 'human',
         toolResults: m.tool_results ? safeJsonParse(m.tool_results) : null, parentId: m.parent_id || null, timestamp: m.created_at
       }));
@@ -634,7 +632,7 @@ export default function registerConversationCrudRoutes(router) {
       const rawSubAgents = safeJsonParse(conversation.sub_agents, []);
       const enrichedSubAgents = rawSubAgents.length > 0 ? await enrichSubAgents(rawSubAgents) : [];
 
-      const participantsSql = `SELECT cp.user_id, cp.role, cp.user_type, cp.joined_at, cp.last_read_at, u.name, u.email, COALESCE(u.avatar, '') as avatar_url FROM conversation_participants cp JOIN users u ON cp.user_id = u.id WHERE cp.conversation_id = $1 ORDER BY cp.joined_at ASC`;
+      const participantsSql = `SELECT cp.user_id, cp.role, cp.user_type, cp.joined_at, cp.last_read_at, u.name, u.email, COALESCE(u.avatar, '') as avatar_url, COALESCE(ar.data->>'color', u.color) AS color, ar.data->>'icon' AS agent_icon FROM conversation_participants cp JOIN users u ON cp.user_id = u.id LEFT JOIN table_rows ar ON ar.id = u.managed_by_agent_row_id AND ar.table_id = u.managed_by_agent_table_id WHERE cp.conversation_id = $1 ORDER BY cp.joined_at ASC`;
       const participants = await dbAll(participantsSql, [id]);
 
       // ADR-0068 WP-B — resolved child id (or null) for the comment-thread chip.

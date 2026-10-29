@@ -5,6 +5,8 @@ export function ProjectFilesPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const numericProjectId = projectId ? parseInt(projectId) : undefined;
 
+  if (!numericProjectId || numericProjectId < 1) return <p role="alert">Проект не найден</p>;
+
   return <FilesPanel projectId={numericProjectId} />;
 }
 

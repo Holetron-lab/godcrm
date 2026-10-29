@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { UserAccessLevel } from '@/shared/types/user-access.types';
 import type {
   DocumentsWidgetConfig,
+  DocumentCreateResponse,
   DocumentRegistryItem,
   DocumentItem,
   DocumentImportSection,
@@ -109,7 +110,7 @@ export interface DocumentsContextValue {
   importFile: File | null;
   setImportFile: (file: File | null) => void;
   importTree: SectionTreeNodeV4[];
-  setImportTree: (tree: SectionTreeNodeV4[]) => void;
+  setImportTree: Dispatch<SetStateAction<SectionTreeNodeV4[]>>;
   newDocName: string;
   setNewDocName: (name: string) => void;
   newDocCategory: string;
@@ -132,7 +133,7 @@ export interface DocumentsContextValue {
   editingImportOrder: number | null;
   setEditingImportOrder: (order: number | null) => void;
   editingImportData: { title?: string; content?: string };
-  setEditingImportData: (data: { title?: string; content?: string }) => void;
+  setEditingImportData: Dispatch<SetStateAction<{ title?: string; content?: string }>>;
 
   currentLanguage: string;
   setCurrentLanguage: (lang: string) => void;
@@ -236,7 +237,7 @@ export interface DocumentsContextValue {
   previewRef: React.RefObject<HTMLDivElement>;
   fileInputRef: React.RefObject<HTMLInputElement>;
 
-  createDocument: (params: { name: string; slug?: string; description?: string; icon?: string; category?: string; project_id?: number }) => Promise<{ success: boolean; data: { id: number; table_id: number; table_name: string } }>;
+  createDocument: (params: { name: string; slug?: string; description?: string; icon?: string; category?: string; project_id?: number }) => Promise<DocumentCreateResponse>;
   deleteDocument: (params: { documentId: number; deleteTable?: boolean }) => Promise<{ success: boolean; data: { document_id: number; table_deleted: boolean } }>;
   importSections: (params: { documentId: number; sections: DocumentImportSection[] }) => Promise<{ success: boolean }>;
   addItem: (params: { documentId: number; item: Partial<DocumentItem> }) => Promise<{ id: number; tableId: number }>;

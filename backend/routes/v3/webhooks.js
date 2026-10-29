@@ -22,6 +22,7 @@
  */
 import express from 'express';
 import { dbAll, dbGet, dbRun } from '../../database/connection.js';
+import { normalizeTypedCells } from '../../services/cellNormalizers.js';
 import { authenticate } from '../../middleware/auth.js';
 import { apiLogger } from '../../utils/logger.js';
 import { success, created, notFound, badRequest, error } from '../../utils/response.js';
@@ -448,15 +449,20 @@ async function processWebhookPayload(webhook, payload, sourceIp) {
     const columnName = key.toLowerCase().replace(/[^a-z0-9_]/g, '_');
     rowData[columnName] = value;
   }
-  
+
+  // ADR-0035 / ADR-0035-A: geo_point + address cells — same normalizer as the
+  // REST path. A bad value rejects the delivery (400) instead of storing junk.
+  const typed = normalizeTypedCells(allColumns, rowData);
+  if (!typed.ok) throw Object.assign(new Error(typed.message), { status: 400, code: typed.code });
+
   // Generate unique base_id for the row
   const baseId = `wh_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
   // Insert row with data as JSON
   await dbRun(`
     INSERT INTO table_rows (table_id, base_id, data)
     VALUES (?, ?, ?)
-  `, [tableId, baseId, JSON.stringify(rowData)]);
+  `, [tableId, baseId, JSON.stringify(typed.data)]);
 }
 
 // ============================================================================

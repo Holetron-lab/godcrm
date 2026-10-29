@@ -24,6 +24,7 @@ export { PersonColumnSettings } from './PersonColumnSettings';
 export { ColorColumnSettings } from './ColorColumnSettings';
 export { VerificationColumnSettings } from './VerificationColumnSettings';
 export { JsonColumnSettings } from './JsonColumnSettings';
+export { GeoColumnSettings } from './GeoColumnSettings';
 export { NumberSummarySettings } from './NumberSummarySettings';
 export { ValidationRulesSettings } from './ValidationRulesSettings';
 export { CellFormatSettings } from './CellFormatSettings';

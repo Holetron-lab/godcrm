@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { logger } from '@/shared/utils/logger';
 import type {
   TableNode,
+  SchemaNode,
   SchemaConnection,
   SchemaEditorState,
   ColumnData,
@@ -19,7 +20,6 @@ import {
   moveSystemDataToBottom,
   transformApiNodeToNavNode,
   type TreeApiNode,
-  type TableRowResponse,
 } from './navTreeHelpers';
 import { loadSchemaData } from './loadSchemaLogic';
 
@@ -29,8 +29,8 @@ interface SchemaEditorActions {
   reset: () => void;
 
   // Nodes
-  setNodes: (nodes: TableNode[]) => void;
-  addNode: (node: TableNode) => void;
+  setNodes: (nodes: SchemaNode[]) => void;
+  addNode: (node: SchemaNode) => void;
   updateNodePosition: (nodeId: string, x: number, y: number) => void;
   removeNode: (nodeId: string) => void;
 
@@ -69,13 +69,16 @@ interface SchemaEditorActions {
   refreshSchema: () => Promise<void>;
   refreshNavTree: () => Promise<void>;
   loadTableRows: (tableId: number) => Promise<void>;
+  setTableColumns: (tableId: number, columns: ColumnData[]) => void; // optimistic local update
   updateTableColor: (tableId: number, color: string | null) => Promise<void>;
+  toggleTablePinned: (tableId: number) => void; // lock/unlock node position (persisted in layout)
 
   // UI toggles
   toggleAIChat: () => void;
   toggleTablesList: () => void;
   toggleProjectBoundaries: () => void;
   toggleProjectConnectionLines: () => void;
+  toggleWidgets: () => void; // show / hide modules on the canvas
 
   // Edge style
   setEdgeShape: (shape: EdgeShapeType) => void;
@@ -122,6 +125,7 @@ const initialState: SchemaEditorState = {
   showTablesList: true,
   showProjectBoundaries: true,
   showProjectConnectionLines: false,
+  showWidgets: true,
   edgeShape: 'rounded', // Default edge shape
   lineStyle: 'solid', // Default line style
   edgeStyle: 'rounded', // Legacy alias
@@ -296,7 +300,7 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
       for (const pc of pendingConnections) {
         try {
           // Find source node and column
-          const sourceNode = nodes.find(n => n.data.tableId === pc.sourceTableId);
+          const sourceNode = nodes.find((n): n is TableNode => n.type === 'tableNode' && n.data.tableId === pc.sourceTableId);
           const sourceColumn = sourceNode?.data.columns?.find((c: ColumnData) => c.name === pc.sourceColumn);
 
           if (!sourceColumn) {
@@ -305,7 +309,7 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
           }
 
           // Determine labelColumn - prefer 'name' or 'title', else first text column
-          const targetNode = nodes.find(n => n.data.tableId === pc.targetTableId);
+          const targetNode = nodes.find((n): n is TableNode => n.type === 'tableNode' && n.data.tableId === pc.targetTableId);
           const targetColumns = targetNode?.data.columns || [];
           let labelColumn = pc.targetColumn;
 
@@ -343,12 +347,12 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
       // Create new edges from pending connections
       const newEdges = pendingConnections.map(pc => {
         // Find target node to check if target column exists
-        const targetNode = nodes.find(n => n.data.tableId === pc.targetTableId);
+        const targetNode = nodes.find((n): n is TableNode => n.type === 'tableNode' && n.data.tableId === pc.targetTableId);
         const targetColExists = targetNode?.data.columns?.some((c: ColumnData) => c.name === pc.targetColumn);
         const targetHandle = targetColExists ? `target-col-${pc.targetColumn}` : 'target-table-center';
 
         // Find source node to check if source column exists
-        const sourceNode = nodes.find(n => n.data.tableId === pc.sourceTableId);
+        const sourceNode = nodes.find((n): n is TableNode => n.type === 'tableNode' && n.data.tableId === pc.sourceTableId);
         const sourceColExists = sourceNode?.data.columns?.some((c: ColumnData) => c.name === pc.sourceColumn);
         const sourceHandle = sourceColExists ? `source-col-${pc.sourceColumn}` : 'source-table-center';
 
@@ -403,10 +407,11 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
       const { spaceId, nodes } = get();
       if (!spaceId) return;
 
-      const layout = nodes.map((n) => ({
+      const layout = nodes.filter((n): n is TableNode => n.type === 'tableNode').map((n) => ({
         tableId: n.data.tableId,
         x: n.position.x,
         y: n.position.y,
+        ...(n.data.isPinned ? { locked: true } : {}),
       }));
 
       try {
@@ -425,20 +430,20 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
       await loadSchema(spaceId);
 
       // Then reload rows for all tables in parallel
-      const updatedNodes = get().nodes;
+      const updatedNodes = get().nodes.filter((n): n is TableNode => n.type === 'tableNode');
       await Promise.all(
         updatedNodes.map(async (node) => {
           try {
             const response = await tablesApi.getRows(String(node.data.tableId), 1, 10);
             // tablesApi.getRows returns already parsed rows with data spread
-            const rows = response.rows.map((row: TableRowResponse) => ({
+            const rows = response.rows.map((row) => ({
               id: String(row.id),
               ...(typeof row.data === 'string' ? JSON.parse(row.data) : row.data),
             }));
 
             set((state) => ({
               nodes: state.nodes.map((n) =>
-                n.id === node.id
+                n.type === 'tableNode' && n.id === node.id
                   ? { ...n, data: { ...n.data, rowsPreview: rows, rowsLoading: false } }
                   : n
               ),
@@ -479,6 +484,16 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
       }
     },
 
+    setTableColumns: (tableId: number, columns: ColumnData[]) => {
+      set((state) => ({
+        nodes: state.nodes.map((n) =>
+          n.type === 'tableNode' && n.data.tableId === tableId
+            ? { ...n, data: { ...n.data, columns } }
+            : n
+        ),
+      }));
+    },
+
     // Load rows for a single table
     loadTableRows: async (tableId: number) => {
       const { nodes } = get();
@@ -490,7 +505,7 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
       // Set loading state
       set((state) => ({
         nodes: state.nodes.map((n) =>
-          n.data.tableId === tableId
+          n.type === 'tableNode' && n.data.tableId === tableId
             ? { ...n, data: { ...n.data, rowsLoading: true } }
             : n
         ),
@@ -500,7 +515,7 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
         const response = await tablesApi.getRows(String(tableId), 1, 10);
         logger.debug('[Schema Editor] loadTableRows response:', response);
         // tablesApi.getRows returns already parsed rows with data spread
-        const rows = response.rows.map((row: TableRowResponse) => ({
+        const rows = response.rows.map((row) => ({
           id: String(row.id),
           ...(typeof row.data === 'string' ? JSON.parse(row.data) : row.data || row),
         }));
@@ -508,7 +523,7 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
 
         set((state) => ({
           nodes: state.nodes.map((n) =>
-            n.data.tableId === tableId
+            n.type === 'tableNode' && n.data.tableId === tableId
               ? { ...n, data: { ...n.data, rowsPreview: rows, rowsLoading: false } }
               : n
           ),
@@ -517,7 +532,7 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
         logger.error(`Failed to load rows for table ${tableId}:`, err);
         set((state) => ({
           nodes: state.nodes.map((n) =>
-            n.data.tableId === tableId
+            n.type === 'tableNode' && n.data.tableId === tableId
               ? { ...n, data: { ...n.data, rowsLoading: false } }
               : n
           ),
@@ -532,14 +547,26 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
         // Update local state
         set((state) => ({
           nodes: state.nodes.map((n) =>
-            n.data.tableId === tableId
-              ? { ...n, data: { ...n.data, color } }
+            n.type === 'tableNode' && n.data.tableId === tableId
+              ? { ...n, data: { ...n.data, color: color ?? undefined } }
               : n
           ),
         }));
       } catch (err) {
         logger.error(`Failed to update table color ${tableId}:`, err);
       }
+    },
+
+    // Pin / unpin a table node: pinned nodes are not draggable and auto-layout leaves them in place
+    toggleTablePinned: (tableId: number) => {
+      set((state) => ({
+        nodes: state.nodes.map((n) => {
+          if (n.type !== 'tableNode' || n.data.tableId !== tableId) return n;
+          const isPinned = !n.data.isPinned;
+          return { ...n, draggable: !isPinned, data: { ...n.data, isPinned } };
+        }),
+      }));
+      void get().saveLayout();
     },
 
     // UI
@@ -550,6 +577,7 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
       set((state) => ({ showProjectBoundaries: !state.showProjectBoundaries })),
     toggleProjectConnectionLines: () =>
       set((state) => ({ showProjectConnectionLines: !state.showProjectConnectionLines })),
+    toggleWidgets: () => set((state) => ({ showWidgets: !state.showWidgets })),
     setEdgeShape: (shape) => set({ edgeShape: shape, edgeStyle: shape }),
     setLineStyle: (style) => set({ lineStyle: style }),
     setEdgeStyle: (style) => set({ edgeStyle: style, edgeShape: style }), // Legacy alias
@@ -601,7 +629,7 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
       const { nodes } = get();
       const visibility: Record<number, 'visible'> = {};
       nodes.forEach((n) => {
-        visibility[n.data.tableId] = 'visible';
+        if (n.type === 'tableNode') visibility[n.data.tableId] = 'visible';
       });
       set({ tableVisibility: visibility });
     },
@@ -610,7 +638,7 @@ export const useSchemaEditorStore = create<SchemaEditorState & SchemaEditorActio
       const { nodes } = get();
       const visibility: Record<number, 'hidden'> = {};
       nodes.forEach((n) => {
-        visibility[n.data.tableId] = 'hidden';
+        if (n.type === 'tableNode') visibility[n.data.tableId] = 'hidden';
       });
       set({ tableVisibility: visibility });
     },

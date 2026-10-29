@@ -16,6 +16,7 @@ import { TicketCardContent } from '@/shared/components/TicketCardContent';
 import { CardDetailModal } from '@/features/widgets/components/modals/CardDetailModal';
 import { TicketsHeader } from './TicketsHeader';
 import { TicketRowHeader } from './TicketRowHeader';
+import { tablesApi } from '@/features/tables/api/tablesApi';
 import type { ColumnModel } from '@/features/tables/types/table.types';
 import {
   useTicketConfig,
@@ -49,13 +50,13 @@ export function TicketsListView() {
   const { data: tableColumnsData } = useQuery({
     queryKey: ['table-columns', ticketConfig?.table_id],
     queryFn: async () => {
-      const response = await apiClient.get(`/tables/${ticketConfig!.table_id}/columns`);
-      return response.data?.columns || response.data || [];
+      const response = await tablesApi.getColumns(String(ticketConfig!.table_id));
+      return response.columns;
     },
     enabled: !!ticketConfig?.table_id,
     staleTime: 60_000,
   });
-  const tableColumns: ColumnModel[] = tableColumnsData || [];
+  const tableColumns = useMemo(() => tableColumnsData || [], [tableColumnsData]);
 
   // Resolve the relation tableId for the `assigned_to` column (users-in-space).
   // Mirrors KanbanCard's lookup: prefer `relation.tableId`, fall back to
@@ -387,7 +388,7 @@ export function TicketsListView() {
           <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-30" />
           <p className="text-base mb-2">Тикеты не настроены</p>
           <p className="text-sm max-w-sm mx-auto">
-            Создайте таблицу "Tickets" или "Tasks" в проекте, или настройте маппинг в настройках виджета
+            Создайте таблицу &quot;Tickets&quot; или &quot;Tasks&quot; в проекте, или настройте маппинг в настройках виджета
           </p>
         </div>
       </div>

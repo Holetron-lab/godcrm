@@ -129,18 +129,16 @@ router.post('/transcribe', authenticate, async (req, res) => {
     };
     const mimeType = mimeTypes[format] || 'audio/webm';
 
-    const FormData = (await import('form-data')).default;
     const formData = new FormData();
-    formData.append('file', audioBuffer, { filename: `audio.${format}`, contentType: mimeType });
+    formData.append('file', new Blob([audioBuffer], { type: mimeType }), `audio.${format}`);
     formData.append('model', 'whisper-1');
     if (language) formData.append('language', language);
 
-    const fetch = (await import('node-fetch')).default;
     const whisperUrl = `${apiUrl.replace(/\/$/, '')}/audio/transcriptions`;
 
     const response = await fetch(whisperUrl, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}`, ...formData.getHeaders() },
+      headers: { 'Authorization': `Bearer ${apiKey}` },
       body: formData
     });
 

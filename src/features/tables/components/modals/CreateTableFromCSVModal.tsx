@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useId, useState, useCallback, useMemo } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { Modal, Input } from '@/shared/components/ui';
 import { Upload, FileSpreadsheet, ArrowRight, Plus, ChevronDown, Table, AlertCircle, Loader2 } from 'lucide-react';
@@ -30,6 +30,7 @@ export const CreateTableFromCSVModal = ({
   onClose,
   projectId
 }: CreateTableFromCSVModalProps) => {
+  const fieldId = useId();
   const { t, language } = useLanguage();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -318,10 +319,10 @@ export const CreateTableFromCSVModal = ({
               </h4>
               
               <div className="flex items-start gap-3">
-                <div className="w-20">
-                  <label className="block text-xs text-[var(--text-secondary)] mb-1">
+                <div role="group" aria-labelledby={`${fieldId}-group-323`} className="w-20">
+                  <span id={`${fieldId}-group-323`} className="block text-xs text-[var(--text-secondary)] mb-1">
                     Иконка
-                  </label>
+                  </span>
                   <EmojiPicker
                     value={tableIcon}
                     onChange={(emoji) => setTableIcon(emoji)}
@@ -331,10 +332,11 @@ export const CreateTableFromCSVModal = ({
                   />
                 </div>
                 <div className="flex-1 min-w-0 ml-5">
-                  <label className="block text-xs text-[var(--text-secondary)] mb-1">
+                  <label htmlFor={`${fieldId}-0`} className="block text-xs text-[var(--text-secondary)] mb-1">
                     Название таблицы
                   </label>
                   <input
+                    id={`${fieldId}-0`}
                     type="text"
                     value={tableDisplayName}
                     onChange={(e) => {
@@ -564,7 +566,7 @@ function guessColumnType(name: string, values: string[]): string {
   if (nameLower.includes('email')) return 'email';
   if (nameLower.includes('phone') || nameLower.includes('tel')) return 'phone';
   if (nameLower.includes('url') || nameLower.includes('link') || nameLower.includes('website')) return 'url';
-  if (nameLower.includes('date') || nameLower.includes('created') || nameLower.includes('updated')) return 'date';
+  if (nameLower.includes('date') || nameLower.includes('created') || nameLower.includes('updated')) return 'datetime';
   if (nameLower.includes('amount') || nameLower.includes('price') || nameLower.includes('cost') || nameLower.includes('total')) return 'number';
   
   // Value-based guessing
@@ -584,7 +586,7 @@ function guessColumnType(name: string, values: string[]): string {
 
   // Check if values look like dates
   if (sampleValues.every(v => !isNaN(Date.parse(v)))) {
-    return 'date';
+    return 'datetime';
   }
 
   // Check if values look like emails
@@ -600,16 +602,19 @@ function convertValue(value: string, type: string): unknown {
   if (!value || value.trim() === '') return null;
   
   switch (type) {
-    case 'number':
-      const num = Number(value.replace(',', '.').replace(/\s/g, ''));
-      return isNaN(num) ? null : num;
-    case 'checkbox':
-      const lower = value.toLowerCase();
-      return ['true', '1', 'yes', 'да'].includes(lower);
+    case 'number': {
+        const num = Number(value.replace(',', '.').replace(/\s/g, ''));
+        return isNaN(num) ? null : num;
+    }
+    case 'checkbox': {
+        const lower = value.toLowerCase();
+        return ['true', '1', 'yes', 'да'].includes(lower);
+    }
     case 'date':
-    case 'datetime':
-      const date = new Date(value);
-      return isNaN(date.getTime()) ? value : date.toISOString();
+    case 'datetime': {
+        const date = new Date(value);
+        return isNaN(date.getTime()) ? value : date.toISOString();
+    }
     default:
       return value;
   }

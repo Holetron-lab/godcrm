@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * SummaryCarousel.tsx
  * Chat Summary — renders as an agent message with carousel navigation.
@@ -55,16 +56,15 @@ interface SummaryCarouselProps {
 
 const DEFAULT_AGENT_COLOR = '#3b82f6';
 const DEFAULT_AGENT_ICON = '📋';
-const DEFAULT_AGENT_NAME = 'Summary';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatSummaryDate(dateStr: string): string {
+function formatSummaryDate(dateStr: string, language: string): string {
   try {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('ru-RU', {
+    return date.toLocaleDateString(language, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -85,6 +85,7 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
   isVisible,
   onClose,
 }) => {
+  const { t, language } = useLanguage();
   const [summaries, setSummaries] = useState<ConversationSummary[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -193,7 +194,7 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
   // Resolve agent display info from current summary or defaults
   const agentColor = currentSummary?.agent_color || DEFAULT_AGENT_COLOR;
   const agentIcon = currentSummary?.agent_icon || DEFAULT_AGENT_ICON;
-  const agentName = currentSummary?.agent_name || DEFAULT_AGENT_NAME;
+  const agentName = currentSummary?.agent_name || t('aiChat.ui.summary');
 
   return (
     <div
@@ -232,8 +233,7 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
             style={{ backgroundColor: `${agentColor}15`, color: agentColor }}
           >
             <Bot className="w-3 h-3" />
-            Agent
-          </span>
+            {t('aiChat.ui.agent')}</span>
 
           {/* Generating spinner */}
           {isGenerating && (
@@ -255,7 +255,7 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
                     ? 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
                     : 'text-[var(--text-tertiary)] opacity-40 cursor-not-allowed',
                 )}
-                title="Previous summary"
+                title={t('aiChat.ui.previousSummary')}
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
@@ -271,7 +271,7 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
                     ? 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
                     : 'text-[var(--text-tertiary)] opacity-40 cursor-not-allowed',
                 )}
-                title="Next summary"
+                title={t('aiChat.ui.nextSummary')}
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -288,7 +288,7 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
                 ? 'text-[var(--text-tertiary)] cursor-not-allowed'
                 : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]',
             )}
-            title="Generate new summary"
+            title={t('aiChat.ui.generateSummary')}
           >
             <RefreshCw className={cn('w-3.5 h-3.5', isGenerating && 'animate-spin')} />
           </button>
@@ -296,7 +296,7 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
           {/* Timestamp */}
           {currentSummary && (
             <span className="text-[10px] text-[var(--text-tertiary)] flex-shrink-0">
-              {formatSummaryDate(currentSummary.created_at)}
+              {formatSummaryDate(currentSummary.created_at, language)}
             </span>
           )}
 
@@ -304,7 +304,7 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
           <button
             onClick={onClose}
             className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-            title="Close"
+            title={t('aiChat.ui.close')}
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -318,7 +318,7 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
           {isLoading && summaries.length === 0 ? (
             <div className="flex items-center justify-center gap-2 py-6 text-[var(--text-tertiary)]">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-xs">Loading summaries...</span>
+              <span className="text-xs">{t('aiChat.ui.loadingSummaries')}</span>
             </div>
           ) : error && summaries.length === 0 ? (
             <div className="flex items-center justify-center gap-2 py-6 text-red-400">
@@ -331,12 +331,12 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
           ) : isGenerating ? (
             <div className="flex items-center justify-center gap-2 py-6 text-[var(--text-tertiary)]">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-xs">Generating summary...</span>
+              <span className="text-xs">{t('aiChat.ui.generatingSummary')}</span>
             </div>
           ) : (
             <div className="flex items-center justify-center gap-2 py-6 text-[var(--text-tertiary)]">
               <FileText className="w-4 h-4" />
-              <span className="text-xs">No summaries yet. Click refresh to generate one.</span>
+              <span className="text-xs">{t('aiChat.ui.noSummaries')}</span>
             </div>
           )}
         </div>
@@ -345,14 +345,13 @@ export const SummaryCarousel: React.FC<SummaryCarouselProps> = ({
         {currentSummary && (
           <div className="flex items-center gap-2 mt-1 text-[10px] text-[var(--text-tertiary)]">
             <Bot className="w-3 h-3" />
-            <span>{currentSummary.summary_model} | {currentSummary.messages_count} messages</span>
+            <span>{currentSummary.summary_model} | {t('aiChat.ui.messageCount', { count: currentSummary.messages_count })}</span>
             {isGenerating && (
               <>
                 <span className="flex-1" />
                 <span className="flex items-center gap-1" style={{ color: agentColor }}>
                   <Loader2 className="w-3 h-3 animate-spin" />
-                  Generating...
-                </span>
+                  {t('aiChat.ui.generatingDots')}</span>
               </>
             )}
           </div>

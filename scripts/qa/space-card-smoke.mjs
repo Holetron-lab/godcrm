@@ -1,0 +1,68 @@
+import assert from 'node:assert/strict';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
+import { chromium } from 'playwright';
+import { expect } from '@playwright/test';
+import { createFixtureServer, openFixture } from './browser-fixture.mjs';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const artifacts = await mkdtemp(join(tmpdir(), 'space-card-'));
+const entry = 'src/tests/space-card-fixture/index.html';
+const server = await createFixtureServer({ root, artifacts, entry });
+let browser;
+try {
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  for (const width of [1440, 390]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    const create = page.getByRole('button', { name: 'Create project', exact: true });
+    const fixture = await openFixture({ server, page, entry, ready: create });
+    const events = page.getByLabel('Events');
+    await create.focus();
+    await page.keyboard.press('Enter');
+    await expect(events).toHaveText('create');
+    await page.keyboard.press('Space');
+    await expect(events).toHaveText('create,create');
+    const open = page.getByRole('button', { name: 'Open Fixture space', exact: true });
+    await page.getByRole('button', { name: 'Before card' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(open).toBeFocused();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await expect(events).toHaveText('create,create,open,open');
+    const menu = page.getByRole('button', { name: 'Actions Fixture space', exact: true });
+    await page.keyboard.press('Tab');
+    await expect(menu).toBeFocused();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Settings', exact: true }).press('Enter');
+    await expect(events).toHaveText('create,create,open,open,settings');
+    await expect(menu).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(page.getByRole('menu')).toBeVisible();
+    await page.screenshot({ path: join(artifacts, `${width}-menu.png`), fullPage: true });
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeFocused();
+    await menu.click();
+    await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
+    await expect(events).toHaveText('create,create,open,open,settings,settings');
+    await page.getByRole('button', { name: /Project 0$/ }).press('Enter');
+    await expect(page.getByLabel('Location')).toHaveText('/projects/100/dashboard');
+    await expect(events).toHaveText('create,create,open,open,settings,settings');
+    const list = page.getByRole('button', { name: /Project 0$/ }).locator('..');
+    await list.hover();
+    await page.mouse.wheel(0, 200);
+    await expect.poll(() => list.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(page.getByLabel('Location')).toHaveText('/spaces/11/dashboard');
+    await open.click({ position: { x: 12, y: 40 } });
+    await expect(events).toHaveText('create,create,open,open,settings,settings,open');
+    assert.equal(await page.locator('button button, [role="button"] button').count(), 0);
+    await page.screenshot({ path: join(artifacts, `${width}-card.png`), fullPage: true });
+    const box = await open.boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= width);
+    await fixture.assertStable();
+    process.stdout.write(JSON.stringify({ width, keyboard: 'PASS', navigation: 'PASS', scroll: 'PASS' }) + '\n');
+    await page.close();
+  }
+} finally { await browser?.close(); await server.close(); process.stdout.write(`Artifacts: ${artifacts}\n`); }

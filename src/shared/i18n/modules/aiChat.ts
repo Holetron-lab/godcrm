@@ -1,5 +1,9 @@
+import { aiChatEN } from './aiChat.en';
+import { aiChatRU } from './aiChat.ru';
+
 export const aiChat = {
   en: {
+    ui: aiChatEN,
     contacts: {
       favoritesTitle: 'Favorites',
       filterAll: 'All',
@@ -14,6 +18,7 @@ export const aiChat = {
     },
   },
   ru: {
+    ui: aiChatRU,
     contacts: {
       favoritesTitle: 'Избранные',
       filterAll: 'Все',

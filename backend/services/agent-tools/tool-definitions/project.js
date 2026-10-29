@@ -25,12 +25,15 @@ export const PROJECT_TOOLS = [
     type: 'function',
     function: {
       name: 'get_document_content',
-      description: 'Get full document content (all atoms + rendered markdown) for a document in the registry bound to the given widget.',
+      description: 'Get document content (rendered markdown, plus all atoms by default) for a document in the registry bound to the given widget. Large documents (>~50K chars) exceed the tool-result limit: pass `format: "markdown"` to drop the atom payload, and page with `offset` + `max_chars` (the response then carries `markdown_total_chars` and `next_offset`; `next_offset: null` means the tail was served).',
       parameters: {
         type: 'object',
         properties: {
           widget_id: { type: 'number', description: 'ID of the Documents widget that owns the store. Find via `get_dashboard_widgets(dashboard_id)`.' },
-          document_id: { type: 'number', description: 'ID of the document row' }
+          document_id: { type: 'number', description: 'ID of the document row' },
+          format: { type: 'string', enum: ['full', 'markdown'], description: '"full" (default): document + atoms + markdown + widget_atoms. "markdown": document meta + rendered markdown only — roughly half the size.' },
+          offset: { type: 'number', description: 'Character offset into the rendered markdown to start from (default 0). Use the `next_offset` of the previous call to continue.' },
+          max_chars: { type: 'number', description: 'Maximum markdown characters to return in this call. Omit for the whole (remaining) document.' }
         },
         required: ['widget_id', 'document_id']
       }

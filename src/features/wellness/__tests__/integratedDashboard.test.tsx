@@ -70,7 +70,7 @@ vi.mock('@/features/fitness/components/MuscleHeatmap', () => ({
 
 vi.mock('@/features/fitness/components/BodyMap', () => ({
   BodyMap: ({ onPartClick }: { onPartClick?: (part: string) => void }) => (
-    <div data-testid="body-map" onClick={() => onPartClick?.('Chest')}>BodyMap</div>
+    <button type="button" data-testid="body-map" onClick={() => onPartClick?.('Chest')}>BodyMap</button>
   ),
 }));
 
@@ -94,9 +94,11 @@ const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return ({ children }: { children: React.ReactNode }) => (
+  return function QueryWrapper({ children }: { children: React.ReactNode }) {
+    return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
+  };
 };
 
 describe('IntegratedDashboard', () => {

@@ -13,7 +13,7 @@ export interface ParticipantsDropdownProps {
   participants: CallParticipant[];
   onClose: () => void;
   /** Anchor element rect — popover is positioned underneath it. */
-  anchorRef: React.RefObject<HTMLElement | null>;
+  anchorRef: React.RefObject<HTMLElement>;
 }
 
 export function ParticipantsDropdown({ open, participants, onClose, anchorRef }: ParticipantsDropdownProps) {

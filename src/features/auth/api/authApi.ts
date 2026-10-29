@@ -13,6 +13,7 @@ export interface UserProfile {
   email: string;
   name: string;
   avatar: string | null;
+  color?: string | null;
   role: string;
   totp_enabled: boolean;
   created_at: string;
@@ -66,7 +67,7 @@ export const authApi = {
   getProfile: () => 
     apiClient.request<{ success: boolean; data: UserProfile }>('/auth/profile'),
   
-  updateProfile: (data: { name?: string; avatar?: string }) =>
+  updateProfile: (data: { name?: string; avatar?: string; color?: string | null }) =>
     apiClient.request<{ success: boolean; data: UserProfile }>('/auth/profile', {
       method: 'PATCH',
       body: JSON.stringify(data)

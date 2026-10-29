@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { logger } from '@/shared/utils/logger';
+import { toSlug } from '@/shared/utils/i18n-utils';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
@@ -23,6 +24,7 @@ import type {
   WizardStep,
 } from './types';
 import { transformConfigPreset } from './utils';
+import { ensureAssigneeColumn } from '@/features/widgets/utils/ensureAssigneeColumn';
 
 export function useWidgetCreate() {
   const navigate = useNavigate();
@@ -193,6 +195,7 @@ export function useWidgetCreate() {
     },
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['widgets'] });
+      queryClient.invalidateQueries({ queryKey: ['project-widgets', Number(effectiveProjectId)] });
       const widgetId = response?.data?.id;
       if (widgetId) {
         navigate(`/widgets/${widgetId}`);
@@ -322,7 +325,7 @@ export function useWidgetCreate() {
           type: col.type,
           order_index: idx + 1,
           is_required: col.required ? 1 : 0,
-          config: col.options ? { options: col.options.map(o => ({ value: o, label: o })) } : null,
+          config: col.config || (col.options ? { options: col.options.map(o => ({ value: o, label: o })) } : null),
         }));
 
         try {
@@ -343,7 +346,7 @@ export function useWidgetCreate() {
           const response = await apiClient.request<{ data: { table: { id: number }; columns: CreatedColumn[] } }>('/tables', {
             method: 'POST',
             body: JSON.stringify({
-              name: tableReq.defaultTableName || tableReq.name,
+              name: toSlug(tableReq.defaultTableName || tableReq.name) || tableReq.key,
               displayName: tableReq.defaultTableName || tableReq.name,
               project_id: mapping.projectId,
               icon: tableIcon,
@@ -385,7 +388,7 @@ export function useWidgetCreate() {
 
           updatedMappings[i] = {
             ...mapping,
-            tableId: createdTableId ? String(createdTableId) : undefined,
+            tableId: createdTableId ? String(createdTableId) : null,
             columnMapping: autoColumnMapping,
             createNew: false,
           };
@@ -402,6 +405,18 @@ export function useWidgetCreate() {
       }
     }
 
+    if (selectedPreset.id === 'kanban_board') {
+      const mapping = updatedMappings[0];
+      if (mapping?.tableId && mapping.columnMapping.assigneeColumn === '__create_assignee__') {
+        try {
+          const assigneeColumn = await ensureAssigneeColumn(mapping.tableId);
+          updatedMappings[0] = { ...mapping, columnMapping: { ...mapping.columnMapping, assigneeColumn } };
+        } catch (error) {
+          alert(`Не удалось создать колонку исполнителя: ${error instanceof Error ? error.message : String(error)}`);
+          return;
+        }
+      }
+    }
     setTableMappings(updatedMappings);
 
     // Build config from tableMappings
@@ -440,6 +455,7 @@ export function useWidgetCreate() {
         statusColumn: mapping.columnMapping.statusColumn,
         titleColumn: mapping.columnMapping.titleColumn,
         descriptionColumn: mapping.columnMapping.descriptionColumn,
+        assigneeColumn: mapping.columnMapping.assigneeColumn || undefined,
         lanes: []
       };
     }
@@ -534,6 +550,8 @@ export function useWidgetCreate() {
     });
   };
 
+  const prepareAndCreateWidget = useMutation({ mutationFn: handleCreateWidget });
+
   // Get step names for progress
   const getSteps = () => {
     let steps = ['preset', 'table', 'config'];
@@ -594,8 +612,8 @@ export function useWidgetCreate() {
     dashboardLoading,
     dashboardError,
     // Create
-    createWidget,
-    handleCreateWidget,
+    createWidget: { ...createWidget, isPending: prepareAndCreateWidget.isPending || createWidget.isPending },
+    handleCreateWidget: () => prepareAndCreateWidget.mutateAsync(),
     // Steps
     getSteps,
   };

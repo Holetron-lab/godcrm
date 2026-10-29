@@ -3,9 +3,9 @@
  * @description Tests for WidgetRenderer component that selects and renders correct widget type
  * @see ADR-034: Feature Tests Coverage
  */
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { describe, it, expect } from 'vitest';
+import { screen } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { WidgetRenderer } from '../components/WidgetRenderer';
 import { AIChatProvider } from '@/features/ai-chat/context/AIChatContext';
 import type { Widget } from '../types/widget.types';
@@ -19,16 +19,19 @@ describe('WidgetRenderer', () => {
     it.todo('should render ChartWidget for chart_widget type');
     it.todo('should render CustomWidget for custom type');
     it('should render LabsWidget for labs preset type', () => {
-      const queryClient = new QueryClient({
-        defaultOptions: {
-          queries: { retry: false },
-          mutations: { retry: false },
-        },
-      });
-      
       const mockWidget: Widget = {
         id: 92,
         dashboard_id: 121,
+        source_widget_id: null,
+        code: null,
+        code_version: 1,
+        description: null,
+        is_module: false,
+        module_id: null,
+        sidebar_order: null,
+        sidebar_icon: null,
+        access_level: null,
+        is_pinned: null,
         widget_type: 'preset',
         preset_name: 'labs',
         title: 'Labs',
@@ -43,11 +46,9 @@ describe('WidgetRenderer', () => {
       };
 
       render(
-        <QueryClientProvider client={queryClient}>
-          <AIChatProvider spaceId={1}>
-            <WidgetRenderer widget={mockWidget} data={[]} />
-          </AIChatProvider>
-        </QueryClientProvider>
+        <AIChatProvider spaceId={1}>
+          <WidgetRenderer widget={mockWidget} data={[]} />
+        </AIChatProvider>
       );
       
       // Should not show unknown widget error

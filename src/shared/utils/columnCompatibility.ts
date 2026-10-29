@@ -39,7 +39,9 @@ export const SYNONYM_GROUPS: string[][] = [
  * Type compatibility matrix
  * Defines which column types can be mapped to each other
  */
-const TYPE_COMPATIBILITY: Record<ColumnType, ColumnType[]> = {
+// Legacy types remain readable; missing entries allow identity mappings only.
+type CompatibleColumnType = ColumnType | 'dialog' | 'chat';
+const TYPE_COMPATIBILITY: Partial<Record<CompatibleColumnType, CompatibleColumnType[]>> = {
   text: ['text', 'number', 'email', 'url', 'phone', 'select', 'multi-select'],
   number: ['number', 'text'],
   email: ['email', 'text'],
@@ -150,9 +152,10 @@ export function isValueCompatible(value: unknown, columnType: ColumnType): boole
         strValue === 'no'
       );
       
-    case 'datetime':
-      const date = new Date(strValue);
-      return !isNaN(date.getTime()) && date.getFullYear() > 1900 && date.getFullYear() < 2200;
+    case 'datetime': {
+        const date = new Date(strValue);
+        return !isNaN(date.getTime()) && date.getFullYear() > 1900 && date.getFullYear() < 2200;
+    }
       
     case 'time':
       return /^([01]?\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(strValue);

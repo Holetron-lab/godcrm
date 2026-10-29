@@ -6,11 +6,12 @@
  */
 import { apiClient } from '@/shared/utils/apiClient';
 
-export type ConnectorAuthKind = 'oauth2' | 'api_key';
+export type ConnectorAuthKind = 'oauth2' | 'api_key' | 'mcp';
 
 export type ConnectorStatus =
   | 'pending'
   | 'active'
+  | 'disabled'
   | 'expired'
   | 'revoked'
   | 'error';
@@ -39,6 +40,26 @@ export interface CatalogueType {
   client_env: { id: string; secret: string } | null;
   fields: CatalogueField[];
   refresh_supported: boolean;
+  mcp?: McpConfig;
+}
+
+export interface McpConfig {
+  configured: boolean;
+  allowed_agent_id: number | null;
+  allowed_space_id: number | null;
+  safe_mode: true;
+}
+
+export interface ConnectorCheck {
+  ok: boolean;
+  checked_at: string;
+  latency_ms?: number;
+  tool_count?: number;
+  server_name?: string;
+  server_version?: string;
+  server_info?: Record<string, unknown>;
+  error?: string;
+  error_code?: 'timeout' | 'exit' | 'protocol' | 'spawn' | 'disabled' | 'gate' | 'remote';
 }
 
 export interface SpaceConnector {
@@ -59,6 +80,9 @@ export interface SpaceConnector {
   created_at: string;
   updated_at: string;
   has_payload: boolean;
+  enabled?: boolean;
+  last_checked_at?: string | null;
+  mcp?: McpConfig;
 
   // ── ADR-159 identity block (Google-shaped UserInfo claims) ──────────
   // Promoted to plain columns server-side and returned verbatim, so the
@@ -97,6 +121,19 @@ export interface StartOAuthBody {
    * Persisted into row payload so refresh works without re-paste.
    */
   client_overrides?: { client_id: string; client_secret: string };
+}
+
+export interface McpTool {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
+export interface CreateMcpBody {
+  type_slug: string;
+  display_name: string;
+  fields?: { url: string; bearer_token?: string };
+  allowed_tools?: string[];
 }
 
 export interface CreateApiKeyBody {
@@ -163,6 +200,49 @@ export const connectorsApi = {
       `/spaces/${spaceId}/connectors/${id}/refresh`
     );
     return r.data.connector;
+  },
+
+  async createMcp(spaceId: number, body: CreateMcpBody): Promise<SpaceConnector> {
+    const r = await apiClient.post<SuccessEnvelope<{ connector: SpaceConnector }>>(
+      `/spaces/${spaceId}/connectors`, body
+    );
+    return r.data.connector;
+  },
+
+  async discoverTools(spaceId: number, id: number): Promise<McpTool[]> {
+    const r = await apiClient.get<SuccessEnvelope<{ tools: McpTool[] }>>(
+      `/spaces/${spaceId}/connectors/${id}/tools`
+    );
+    return r.data.tools;
+  },
+
+  async setAllowedTools(spaceId: number, id: number, allowed_tools: string[]): Promise<SpaceConnector> {
+    const r = await apiClient.patch<SuccessEnvelope<{ connector: SpaceConnector }>>(
+      `/spaces/${spaceId}/connectors/${id}`, { allowed_tools }
+    );
+    return r.data.connector;
+  },
+
+  async setEnabled(spaceId: number, id: number, enabled: boolean): Promise<SpaceConnector> {
+    const r = await apiClient.patch<SuccessEnvelope<{ connector: SpaceConnector }>>(
+      `/spaces/${spaceId}/connectors/${id}`, { enabled }
+    );
+    return r.data.connector;
+  },
+
+  /** Edit the user-facing CRM name (`display_name`); identity columns stay server-owned. */
+  async rename(spaceId: number, id: number, display_name: string): Promise<SpaceConnector> {
+    const r = await apiClient.patch<SuccessEnvelope<{ connector: SpaceConnector }>>(
+      `/spaces/${spaceId}/connectors/${id}`, { display_name }
+    );
+    return r.data.connector;
+  },
+
+  async test(spaceId: number, id: number): Promise<{ connector: SpaceConnector; check: ConnectorCheck }> {
+    const r = await apiClient.post<SuccessEnvelope<{ connector: SpaceConnector; check: ConnectorCheck }>>(
+      `/spaces/${spaceId}/connectors/${id}/test`
+    );
+    return r.data;
   },
 
   async revoke(spaceId: number, id: number): Promise<{ id: number; status: 'revoked' }> {

@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { CalendarSettingsProps } from './types';
 
 export function CalendarWidgetSettings({
@@ -19,14 +20,16 @@ export function CalendarWidgetSettings({
   calendarColorColumn,
   setCalendarColorColumn,
 }: CalendarSettingsProps) {
+  const fieldId = useId();
   return (
     <>
       {/* Title Column */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-calendarTitleColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Колонка заголовка события *
         </label>
         <select
+          id={`${fieldId}-calendarTitleColumn`}
           value={calendarTitleColumn}
           onChange={(e) => setCalendarTitleColumn(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -44,10 +47,11 @@ export function CalendarWidgetSettings({
       {/* Date columns row */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <label htmlFor={`${fieldId}-dateColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
             Дата начала *
           </label>
           <select
+            id={`${fieldId}-dateColumn`}
             value={dateColumn}
             onChange={(e) => setDateColumn(e.target.value)}
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -63,10 +67,11 @@ export function CalendarWidgetSettings({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <label htmlFor={`${fieldId}-calendarEndDateColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
             Дата окончания
           </label>
           <select
+            id={`${fieldId}-calendarEndDateColumn`}
             value={calendarEndDateColumn}
             onChange={(e) => setCalendarEndDateColumn(e.target.value)}
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -87,10 +92,11 @@ export function CalendarWidgetSettings({
 
       {/* Description Column */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-calendarDescriptionColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Колонка описания
         </label>
         <select
+          id={`${fieldId}-calendarDescriptionColumn`}
           value={calendarDescriptionColumn}
           onChange={(e) => setCalendarDescriptionColumn(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -110,10 +116,11 @@ export function CalendarWidgetSettings({
 
       {/* Color Column */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-calendarColorColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Колонка цвета
         </label>
         <select
+          id={`${fieldId}-calendarColorColumn`}
           value={calendarColorColumn}
           onChange={(e) => {
             if (e.target.value === '__create_color__') {
@@ -132,7 +139,7 @@ export function CalendarWidgetSettings({
             </option>
           ))}
           <option value="__create_color__" className="text-[var(--color-primary-500)]">
-            + Создать колонку "Цвет"
+            + Создать колонку &quot;Цвет&quot;
           </option>
         </select>
         <p className="text-xs text-[var(--text-tertiary)] mt-1">

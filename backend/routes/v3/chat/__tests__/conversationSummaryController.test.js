@@ -23,6 +23,11 @@ import { Router } from 'express';
 const dbGetMock = vi.fn();
 const dbAllMock = vi.fn();
 
+vi.mock('../../../../database/connection.js', () => ({
+  dbGet: (...args) => dbGetMock(...args), dbAll: (...args) => dbAllMock(...args), dbRun: vi.fn(),
+  safeJsonParse: (v, fallback) => typeof v === 'string' ? JSON.parse(v) : v ?? fallback,
+}));
+
 function fakeRequireAuth(req, _res, next) {
   const id = Number(req.headers['x-test-user-id']);
   req.user = { userId: id, id, role: 'user' };
@@ -83,9 +88,12 @@ describe('GET /conversations/:id/summary — ADR-0031 §Z / WP-24', () => {
       .mockResolvedValueOnce({ user_id: 7 })
       // 3) participants total count (full count = 5, preview cap = 3)
       .mockResolvedValueOnce({ total: 5 })
+      // Message count precedes agent and bound-row lookups.
+      .mockResolvedValueOnce({ total: 12 })
+      .mockResolvedValueOnce({ total: 2 }) // unread count
       // 4) agent row lookup
       .mockResolvedValueOnce({ id: 218, data: '{"name":"Architect","icon":"🏛️"}' })
-      // 5) bound row lookup
+      // 7) bound row lookup
       .mockResolvedValueOnce({
         id: 141024,
         row_title: 'Implement ChatLinkCard',
@@ -111,6 +119,8 @@ describe('GET /conversations/:id/summary — ADR-0031 §Z / WP-24', () => {
       title: 'Discussing T-141024',
       type: 'group',
       participants_total: 5,
+      message_count: 12,
+      unread_count: 2,
       agent: { id: 218, name: 'Architect', icon: '🏛️' },
       bound_row: { table_id: 1708, row_id: 141024, title: 'Implement ChatLinkCard' },
       icon: '🎫',
@@ -149,12 +159,12 @@ describe('GET /conversations/:id/summary — ADR-0031 §Z / WP-24', () => {
   });
 
   it('200 with { id, title, deleted: true } for soft-deleted conversation', async () => {
-    // settings.deleted === true short-circuits; no participant check runs.
+    // Deleted metadata is only visible after authorization.
     dbGetMock.mockResolvedValueOnce({
       id: 3090, title: 'Old chat', type: 'group',
       settings: '{"deleted":true}', agent_id: 218,
       bound_table_id: 1708, bound_row_id: 141024, space_id: 11,
-    });
+    }).mockResolvedValueOnce({ user_id: 7 });
 
     const app = buildApp();
     const res = await request(app)
@@ -166,9 +176,8 @@ describe('GET /conversations/:id/summary — ADR-0031 §Z / WP-24', () => {
     expect(res.body.data).toEqual({
       id: 3090, title: 'Old chat', deleted: true,
     });
-    // Soft-delete short-circuits BEFORE the access check, BEFORE any
-    // participants/agent/bound_row queries.
-    expect(dbGetMock).toHaveBeenCalledTimes(1);
+    // Access is checked before returning the deleted title.
+    expect(dbGetMock).toHaveBeenCalledTimes(2);
     expect(dbAllMock).not.toHaveBeenCalled();
   });
 

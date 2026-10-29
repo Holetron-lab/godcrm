@@ -8,7 +8,7 @@ import { dbRun, dbGet, dbAll } from '../database/connection.js';
 import { logger } from '../utils/logger.js';
 import { registerWidgetSafe } from './WidgetLibraryService.js';
 
-const VALID_ACCESS_LEVELS = ['admin', 'member', 'viewer'];
+export const VALID_ACCESS_LEVELS = ['admin', 'member', 'viewer'];
 
 /**
  * Get all modules for a space (sidebar list)
@@ -73,10 +73,13 @@ export async function getModulesBySpace(spaceId) {
 /**
  * Get module by ID
  * @param {number} moduleId - Module ID
+ * @param {object} [opts]
+ * @param {object} [opts.trx] - read inside an open transaction (ADR-200 W3)
  * @returns {Promise<object|null>}
  */
-export async function getModuleById(moduleId) {
-  const row = await dbGet(`
+export async function getModuleById(moduleId, { trx = null } = {}) {
+  const get = trx ? (sql, params) => trx.get(sql, params) : dbGet;
+  const row = await get(`
     SELECT
       m.id as module_id,
       m.widget_id,
@@ -130,9 +133,16 @@ export async function getModuleById(moduleId) {
 /**
  * Register a widget as a sidebar module
  * @param {object} data - { widget_id, space_id, sidebar_order, sidebar_icon, access_level }
+ * @param {object} [opts]
+ * @param {object} [opts.trx] - an OPEN transaction handle (`get`/`run`) to register within, so
+ *   a module install commits its sidebar entry together with the widget it points at
+ *   (ADR-200 W3 / AC#1). Omit it and every statement autocommits, exactly as before.
+ *   NOTE: with `trx`, the ADR-073 widget-library auto-registration is SKIPPED — it runs on its
+ *   own connection and cannot see rows this transaction has not committed yet, so it would
+ *   silently fail into its own catch. The caller registers after commit (see ModuleInstaller).
  * @returns {Promise<object>} Created module
  */
-export async function createModule(data) {
+export async function createModule(data, { trx = null } = {}) {
   const {
     widget_id,
     space_id,
@@ -150,19 +160,22 @@ export async function createModule(data) {
     throw new Error(`access_level must be one of: ${VALID_ACCESS_LEVELS.join(', ')}`);
   }
 
+  const get = trx ? (sql, params) => trx.get(sql, params) : dbGet;
+  const run = trx ? (sql, params) => trx.run(sql, params) : dbRun;
+
   // Check widget exists
-  const widget = await dbGet('SELECT id FROM widgets WHERE id = ?', [widget_id]);
+  const widget = await get('SELECT id FROM widgets WHERE id = ?', [widget_id]);
   if (!widget) throw new Error('Widget not found');
 
   // Check space exists
-  const space = await dbGet('SELECT id FROM spaces WHERE id = ?', [space_id]);
+  const space = await get('SELECT id FROM spaces WHERE id = ?', [space_id]);
   if (!space) throw new Error('Space not found');
 
   // Check widget not already a module
-  const existing = await dbGet('SELECT id FROM modules WHERE widget_id = ?', [widget_id]);
+  const existing = await get('SELECT id FROM modules WHERE widget_id = ?', [widget_id]);
   if (existing) throw new Error('Widget is already registered as a module');
 
-  const result = await dbRun(`
+  const result = await run(`
     INSERT INTO modules (widget_id, space_id, sidebar_order, sidebar_icon, access_level, is_pinned, is_default)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `, [widget_id, space_id, sidebar_order, sidebar_icon, access_level, is_pinned ? 1 : 0, is_default ? 1 : 0]);
@@ -170,18 +183,21 @@ export async function createModule(data) {
   const moduleId = result.lastInsertRowid || result.lastID;
   logger.debug({ moduleId, widget_id, space_id }, 'Module created');
 
-  // ADR-073: Auto-register widget in widget_library for Widget Picker
-  try {
-    await registerWidgetSafe(widget_id, space_id, {
-      is_public: false,
-      tags: []
-    });
-  } catch (err) {
-    // Non-critical error, log and continue
-    logger.warn({ widget_id, space_id, error: err.message }, 'Failed to auto-register widget in library');
+  // ADR-073: Auto-register widget in widget_library for Widget Picker.
+  // Skipped under `trx` — see the note on the signature; the caller does it after commit.
+  if (!trx) {
+    try {
+      await registerWidgetSafe(widget_id, space_id, {
+        is_public: false,
+        tags: []
+      });
+    } catch (err) {
+      // Non-critical error, log and continue
+      logger.warn({ widget_id, space_id, error: err.message }, 'Failed to auto-register widget in library');
+    }
   }
 
-  return await getModuleById(moduleId);
+  return await getModuleById(moduleId, { trx });
 }
 
 /**

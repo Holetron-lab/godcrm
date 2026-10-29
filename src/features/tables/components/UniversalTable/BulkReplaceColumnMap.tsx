@@ -73,7 +73,8 @@ export const BulkReplaceColumnMap = ({
       </div>
 
       {/* Columns list */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-2 py-1">
+      {/* Bounded so the map scrolls on its own now that the modal body is content-sized */}
+      <div className="max-h-56 overflow-y-auto px-2 py-1">
         <div className="space-y-0.5 text-xs">
           {/* Special variables for formula mode */}
           {showSpecialVariables && (

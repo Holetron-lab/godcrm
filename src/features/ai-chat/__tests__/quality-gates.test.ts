@@ -24,7 +24,8 @@ describe('Import smoke tests', () => {
     const mod = await import('../components/AIChatPanel');
     expect(mod).toBeDefined();
     expect(mod.AIChatPanel).toBeDefined();
-  });
+  }, 15_000); // Cold Vite transform of the full panel dependency graph.
+
 
   it('useChatQueries hook resolves and is a function', async () => {
     const mod = await import('../components/AIChatPanel/hooks/useChatQueries');
@@ -77,14 +78,13 @@ describe('Import smoke tests', () => {
   it('ChatListView component resolves', async () => {
     const mod = await import('../components/ChatListView');
     expect(mod).toBeDefined();
-    // Default or named export
-    expect(mod.default || mod.ChatListView).toBeDefined();
+    expect(mod.ChatListView).toBeDefined();
   });
 
   it('InboxPanel component resolves', async () => {
     const mod = await import('../components/AIChatPanel/components/ChatPanels/InboxPanel');
     expect(mod).toBeDefined();
-    expect(mod.default || mod.InboxPanel).toBeDefined();
+    expect(mod.InboxPanel).toBeDefined();
   });
 
   it('InboxPanelInline component resolves', async () => {
@@ -95,7 +95,7 @@ describe('Import smoke tests', () => {
   it('TicketsPanel component resolves', async () => {
     const mod = await import('../components/AIChatPanel/components/ChatPanels/TicketsPanel');
     expect(mod).toBeDefined();
-    expect(mod.default || mod.TicketsPanel).toBeDefined();
+    expect(mod.TicketsPanel).toBeDefined();
   });
 
   it('ChatTurn component resolves', async () => {

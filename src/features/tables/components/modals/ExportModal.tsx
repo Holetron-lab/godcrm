@@ -6,7 +6,7 @@
 import { logger } from '@/shared/utils/logger';
 import { Modal, Button } from '@/shared/components/ui';
 import { Download, FileJson2, FileSpreadsheet, AlertTriangle, Check, Shield, FileCode } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useId, useState, useMemo } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { useQuery } from '@tanstack/react-query';
 import type { ColumnModel, RowModel } from '../../types/table.types';
@@ -32,7 +32,7 @@ interface ExportModalProps {
   columns?: ColumnModel[];
   filteredRows?: RowModel[];
   allRows?: RowModel[];
-  selectedRowIds?: Set<string>;
+  selectedRowIds?: Set<string | number>;
   onExportCSV?: (scope: ExportScope, settings: ExportSettings) => void;
   // Initial tab
   initialFormat?: ExportFormat;
@@ -51,6 +51,7 @@ export const ExportModal = ({
   onExportCSV,
   initialFormat = 'json',
 }: ExportModalProps) => {
+  const fieldId = useId();
   const [format, setFormat] = useState<ExportFormat>(initialFormat);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -244,10 +245,10 @@ export const ExportModal = ({
             )}
 
             {/* Mode selector */}
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+            <div role="group" aria-labelledby={`${fieldId}-label-0`}>
+              <span id={`${fieldId}-label-0`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Режим экспорта:
-              </label>
+              </span>
               <div className="space-y-2">
                 {jsonModeOptions.map(option => {
                   const Icon = option.icon;
@@ -294,10 +295,10 @@ export const ExportModal = ({
         {format === 'csv' && (
           <>
             {/* Scope selector */}
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+            <div role="group" aria-labelledby={`${fieldId}-label-1`}>
+              <span id={`${fieldId}-label-1`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Экспортировать:
-              </label>
+              </span>
               <div className="space-y-2">
                 {csvScopeOptions.map(option => (
                   <label
@@ -334,10 +335,10 @@ export const ExportModal = ({
             </div>
 
             {/* Column headers format */}
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+            <div role="group" aria-labelledby={`${fieldId}-label-2`}>
+              <span id={`${fieldId}-label-2`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Заголовки колонок:
-              </label>
+              </span>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: false, label: 'Названия', hint: 'Имя, Email' },

@@ -40,6 +40,12 @@ interface CalendarWidgetProps extends PresetWidgetProps {
   onAddEvent?: (date: Date) => void;
 }
 
+function parseEventDate(value: unknown): Date {
+  if (typeof value === 'string') return parseISO(value);
+  if (value instanceof Date) return value;
+  return new Date(typeof value === 'number' ? value : NaN);
+}
+
 // Default colors for events without specific color
 const DEFAULT_EVENT_COLORS = [
   '#3b82f6', // blue
@@ -235,12 +241,12 @@ export function CalendarWidget({
       }
       
       try {
-        const startDate = typeof dateValue === 'string' ? parseISO(dateValue) : new Date(dateValue);
+        const startDate = parseEventDate(dateValue);
         if (isNaN(startDate.getTime())) return;
         
         // Handle multi-day events
         const endValue = endDateColumn ? row.data?.[endDateColumn] : null;
-        const endDate = endValue ? (typeof endValue === 'string' ? parseISO(endValue) : new Date(endValue)) : startDate;
+        const endDate = endValue ? parseEventDate(endValue) : startDate;
         
         // Add event to all days it spans
         const daysDiff = differenceInDays(endDate, startDate);
@@ -317,13 +323,6 @@ export function CalendarWidget({
     setDraggedEvent(null);
   };
 
-  // Handle day click to add event
-  const handleDayClick = (day: Date, e: React.MouseEvent) => {
-    // Only trigger if clicking empty space (not an event)
-    if ((e.target as HTMLElement).closest('.calendar-event')) return;
-    onAddEvent?.(day);
-  };
-
   // Empty state
   if (!data || data.length === 0) {
     return (
@@ -340,6 +339,8 @@ export function CalendarWidget({
       {/* Header with navigation */}
       <div className="flex items-center justify-between p-3 border-b border-[var(--border-primary)]">
         <button 
+          type="button"
+          aria-label="Предыдущий месяц"
           onClick={() => setCurrentMonth(m => subMonths(m, 1))}
           className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
         >
@@ -351,6 +352,7 @@ export function CalendarWidget({
             {format(currentMonth, 'LLLL yyyy', { locale: ru })}
           </h2>
           <button
+            type="button"
             onClick={() => setCurrentMonth(new Date())}
             className="px-2 py-1 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors text-[var(--text-secondary)]"
           >
@@ -359,6 +361,8 @@ export function CalendarWidget({
         </div>
         
         <button 
+          type="button"
+          aria-label="Следующий месяц"
           onClick={() => setCurrentMonth(m => addMonths(m, 1))}
           className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
         >
@@ -370,12 +374,10 @@ export function CalendarWidget({
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Weekday headers */}
         <div className="grid grid-cols-7 border-b border-[var(--border-primary)] flex-shrink-0 bg-[var(--bg-primary)]">
-          {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day, idx) => (
+          {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day) => (
             <div 
               key={day}
-              className={`p-2 text-center text-xs font-medium bg-[var(--bg-secondary)] border-r border-[var(--border-primary)] last:border-r-0 ${
-                idx >= 5 ? 'text-[var(--text-tertiary)]' : 'text-[var(--text-secondary)]'
-              }`}
+              className="p-2 text-center text-xs font-medium bg-[var(--bg-secondary)] border-r border-[var(--border-primary)] last:border-r-0 text-[var(--text-secondary)]"
             >
               {day}
             </div>
@@ -404,7 +406,6 @@ export function CalendarWidget({
             return (
               <div
                 key={key}
-                onClick={(e) => handleDayClick(day, e)}
                 onDragOver={(e) => handleDragOver(e, key)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, key)}
@@ -416,14 +417,22 @@ export function CalendarWidget({
                   hover:bg-[var(--bg-secondary)]/50
                 `}
               >
+                {onAddEvent && (
+                  <button
+                    type="button"
+                    aria-label={`Добавить событие: ${key}`}
+                    onClick={() => onAddEvent(day)}
+                    className="absolute inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-primary-500)]"
+                  />
+                )}
                 {/* Day number - compact */}
-                <div className="flex items-center justify-between mb-0.5 flex-shrink-0">
+                <div className="relative pointer-events-none flex items-center justify-between mb-0.5 flex-shrink-0">
                   <div className={`
                     text-[10px] sm:text-xs font-medium w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center rounded-full transition-all
                     ${isToday 
-                      ? 'bg-[var(--color-primary-500)] text-white shadow-sm' 
+                      ? 'bg-[var(--color-primary-800)] text-white shadow-sm'
                       : !isCurrentMonth 
-                        ? 'text-[var(--text-tertiary)]' 
+                        ? 'text-[var(--text-secondary)]'
                         : 'text-[var(--text-primary)]'
                     }
                   `}>
@@ -433,11 +442,12 @@ export function CalendarWidget({
                   {/* Add event button (on hover) - hidden on mobile */}
                   {onAddEvent && (
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         onAddEvent(day);
                       }}
-                      className="hidden sm:block opacity-0 group-hover:opacity-100 p-0.5 hover:bg-[var(--bg-tertiary)] rounded transition-all"
+                      className="pointer-events-auto hidden sm:block opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5 hover:bg-[var(--bg-tertiary)] rounded transition-all"
                       title="Добавить событие"
                     >
                       <Plus className="w-3 h-3 text-[var(--text-tertiary)]" />
@@ -446,7 +456,7 @@ export function CalendarWidget({
                 </div>
                 
                 {/* Events - smart display: 2 lines if few events, 1 line if many */}
-                <div className="space-y-px overflow-hidden flex-1">
+                <div className="relative pointer-events-none space-y-px overflow-hidden flex-1">
                   {visibleEvents.map((event, idx) => {
                     const eventColor = getEventColor(event, event._rowIndex || idx);
                     const isMultiDay = event._isMultiDay;
@@ -456,8 +466,12 @@ export function CalendarWidget({
                     const useCompactMode = events.length > 2;
                     
                     return (
-                      <div
+                      <button
                         key={`${event.id || idx}-${event._dayIndex || 0}`}
+                        type="button"
+                        aria-label={String(event.data?.[titleColumn] || 'Untitled')}
+                        aria-disabled={!onEventClick}
+                        tabIndex={onEventClick ? 0 : -1}
                         draggable={!!onEventUpdate}
                         onDragStart={(e) => handleDragStart(e, event)}
                         onClick={(e) => {
@@ -465,7 +479,8 @@ export function CalendarWidget({
                           onEventClick?.(event, 'details');
                         }}
                         className={`
-                          calendar-event text-[8px] sm:text-[9px] px-0.5 sm:px-1 py-px cursor-pointer leading-[1.15]
+                          calendar-event pointer-events-auto block w-full text-left text-[8px] sm:text-[9px] px-0.5 sm:px-1 py-px cursor-pointer leading-[1.15]
+                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-primary-500)]
                           transition-all hover:opacity-90 hover:shadow-sm
                           ${isMultiDay 
                             ? `${isFirstDay ? 'rounded-l' : 'border-l-0 -ml-0.5'} ${isLastDay ? 'rounded-r' : 'border-r-0 -mr-0.5'}`
@@ -485,18 +500,21 @@ export function CalendarWidget({
                             : '→'
                           }
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                   
                   {/* Show more/less toggle */}
                   {events.length > 3 && (
                     <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      aria-label={isExpanded ? 'Свернуть события' : undefined}
                       onClick={(e) => {
                         e.stopPropagation();
                         setExpandedDay(isExpanded ? null : key);
                       }}
-                      className="text-[8px] sm:text-[10px] text-[var(--color-primary-500)] hover:underline px-0.5 flex items-center gap-0.5"
+                      className="pointer-events-auto text-[8px] sm:text-[10px] text-[var(--color-primary-600)] hover:underline px-0.5 flex items-center gap-0.5"
                     >
                       {isExpanded ? (
                         <>
@@ -519,7 +537,7 @@ export function CalendarWidget({
       </div>
       
       {/* Footer with stats */}
-      <div className="px-3 py-2 border-t border-[var(--border-primary)] flex items-center justify-between text-xs text-[var(--text-tertiary)] bg-[var(--bg-secondary)]">
+      <div className="px-3 py-2 border-t border-[var(--border-primary)] flex items-center justify-between text-xs text-[var(--text-secondary)] bg-[var(--bg-secondary)]">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <Calendar className="w-3.5 h-3.5" />
@@ -542,7 +560,7 @@ export function CalendarWidget({
           )}
         </div>
         {onEventUpdate && (
-          <span className="text-[var(--text-tertiary)]">
+          <span>
             Перетаскивайте события для изменения даты
           </span>
         )}

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SettingsPanel } from '../SettingsPanel';
 
@@ -67,17 +68,9 @@ vi.mock('../ContextSettingsSection', () => ({
 }));
 
 // Mock icons
-vi.mock('lucide-react', () => ({
-  Bot: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="bot-icon" {...props} />,
-  Users: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="users-icon" {...props} />,
-  Settings: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="settings-icon" {...props} />,
-  User: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="user-icon" {...props} />,
-  Loader2: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="loader-icon" {...props} />,
-  Save: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="save-icon" {...props} />,
-  Trash2: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="trash-icon" {...props} />,
-  Inbox: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="inbox-icon" {...props} />,
-  AlertCircle: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="alert-circle-icon" {...props} />
-}));
+// lucide-react is auto-mocked: any icon a component adds resolves to a stub,
+// so a new <Icon/> can no longer fail every test in this file (see src/tests/lucideMock.tsx).
+vi.mock('lucide-react', async () => (await import('@/tests/lucideMock')).lucideMock());
 
 // Mock cn utility
 vi.mock('@/shared/utils/cn', () => ({
@@ -183,12 +176,16 @@ describe('SettingsPanel', () => {
   });
 
   describe('Settings Tabs', () => {
-    it('should render all three tabs', () => {
+    // ADR-0064 §Two-tier settings pane reshaped this bar: the personal row now
+    // carries FOUR sub-tabs, and the last one shipped as «Вид», not «Виджет».
+    // The old three-tab assertion described a pane that no longer exists.
+    it('should render the personal sub-tabs', () => {
       renderWithProviders(<SettingsPanel {...defaultProps} />);
-      
+
+      expect(screen.getByText('Уведомл.')).toBeInTheDocument();
       expect(screen.getByText('AI')).toBeInTheDocument();
       expect(screen.getByText('Люди')).toBeInTheDocument();
-      expect(screen.getByText('Виджет')).toBeInTheDocument();
+      expect(screen.getByText('Вид')).toBeInTheDocument();
     });
 
     it('should highlight active tab', () => {
@@ -203,8 +200,8 @@ describe('SettingsPanel', () => {
       
       fireEvent.click(screen.getByText('Люди'));
       expect(defaultProps.setSettingsTab).toHaveBeenCalledWith('people');
-      
-      fireEvent.click(screen.getByText('Виджет'));
+
+      fireEvent.click(screen.getByText('Вид'));
       expect(defaultProps.setSettingsTab).toHaveBeenCalledWith('widget');
     });
   });
@@ -302,11 +299,16 @@ describe('SettingsPanel', () => {
       expect(screen.getByText('2')).toBeInTheDocument(); // active conversations
     });
 
-    it('should render notifications toggle', () => {
+    // The inline sound switch moved out of the People tab when notifications
+    // got a sub-tab of their own: what stays here is the entry point to it.
+    it('should link to the notifications sub-tab', () => {
       renderWithProviders(<SettingsPanel {...defaultProps} settingsTab="people" />);
-      
+
       expect(screen.getByText('Уведомления')).toBeInTheDocument();
-      expect(screen.getByText('Звук при новых сообщениях')).toBeInTheDocument();
+      expect(screen.getByText('Настроить звук, попапы и бейдж →')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('Уведомления'));
+      expect(defaultProps.setSettingsTab).toHaveBeenCalledWith('notifications');
     });
 
     it('should open contacts when button clicked', () => {

@@ -110,6 +110,7 @@ export const DisplayTab = ({ draft, setDraft, t, keyEditEnabled, setKeyEditEnabl
             <input
               type="checkbox"
               checked={keyEditEnabled}
+              disabled={isSystem}
               onChange={(e) => setKeyEditEnabled(e.target.checked)}
               className="w-4 h-4 rounded border-[var(--border-primary)] bg-[var(--bg-primary)] accent-[var(--color-primary-500)]"
             />
@@ -203,6 +204,7 @@ export const DisplayTab = ({ draft, setDraft, t, keyEditEnabled, setKeyEditEnabl
               type="number"
               min={0}
               value={String(draft.orderIndex ?? 0)}
+              disabled={isSystem}
               onChange={(event) => setDraft({ ...draft, orderIndex: parseInt(event.target.value, 10) || 0 })}
             />
           </div>
@@ -293,7 +295,7 @@ export const DisplayTab = ({ draft, setDraft, t, keyEditEnabled, setKeyEditEnabl
           </div>
           <div className="flex items-center gap-3">
             <Switch
-              checked={isSystem ? true : draft.isReadonly}
+              checked={draft.isReadonly}
               disabled={isSystem}
               onCheckedChange={(checked) => {
                 if (isSystem) return; // locked on for system columns

@@ -1,24 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react';
+import { AIChatStubProvider } from '@/features/ai-chat/context/AIChatContext';
+import { ProvidersWrapper } from '@/tests/renderWithProviders';
+
+// The attachment path renders ChatAttachmentRenderer, which calls useAIChat().
+// AIChatStubProvider is the frozen no-op context shape — no API calls, no state.
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <ProvidersWrapper>
+        <AIChatStubProvider>{children}</AIChatStubProvider>
+      </ProvidersWrapper>
+    ),
+  });
 import { MessageBubble } from '../MessageBubble';
+import { apiClient } from '@/shared/utils/apiClient';
 import type { ChatMessage } from '../../../types';
 
 // Mock icons — includes icons from MessageBubble + ChatAttachmentRenderer
-vi.mock('lucide-react', () => ({
-  Bot: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="bot-icon" {...props} />,
-  User: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="user-icon" {...props} />,
-  MoreVertical: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="more-vertical-icon" {...props} />,
-  Copy: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="copy-icon" {...props} />,
-  Forward: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="forward-icon" {...props} />,
-  Trash2: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="trash-icon" {...props} />,
-  Ban: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="ban-icon" {...props} />,
-  Key: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="key-icon" {...props} />,
-  ExternalLink: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="external-link-icon" {...props} />,
-  Wrench: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="wrench-icon" {...props} />,
-  Zap: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="zap-icon" {...props} />,
-  Plus: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="plus-icon" {...props} />,
-  Eye: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="eye-icon" {...props} />
-}));
+// lucide-react is auto-mocked: any icon a component adds resolves to a stub,
+// so a new <Icon/> can no longer fail every test in this file (see src/tests/lucideMock.tsx).
+vi.mock('lucide-react', async () => (await import('@/tests/lucideMock')).lucideMock());
 
 // Mock MarkdownPreview component
 vi.mock('@/shared/components/MarkdownPreview', () => ({
@@ -43,6 +45,33 @@ vi.mock('@/features/files/api/filesApi', () => ({
 }));
 
 describe('MessageBubble', () => {
+  it('renders playable audio before the transcript', async () => {
+    const token = vi.spyOn(apiClient, 'getAccessToken').mockReturnValue('test-session');
+    const fetchMock = vi.fn().mockResolvedValue(new Response('audio', { headers: { 'content-type': 'audio/webm' } }));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('AudioContext', undefined);
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL = () => 'blob:message-audio';
+      static revokeObjectURL = vi.fn();
+    });
+    let unmount: (() => void) | undefined;
+    try {
+      const view = render(<MessageBubble message={{ id: 'audio', timestamp: new Date(), role: 'user', content: 'Voice transcript', attachments: [{ id: 'a', name: 'voice.webm', type: 'audio/webm', size: 5, url: '/uploads/voice.webm' }] }} markdownEnabled={true} />);
+      unmount = view.unmount;
+      const player = view.container.querySelector('audio');
+      expect(player).not.toHaveAttribute('src', '/uploads/voice.webm');
+      await waitFor(() => expect(player).toHaveAttribute('src', 'blob:message-audio'));
+      expect(fetchMock).toHaveBeenCalledWith(new URL('/uploads/voice.webm', location.href).href, expect.objectContaining({
+        headers: { Authorization: 'Bearer test-session' }, credentials: 'same-origin', redirect: 'error',
+      }));
+      expect(player!.compareDocumentPosition(screen.getByText('Voice transcript')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    } finally {
+      unmount?.();
+      token.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   const mockUserMessage: ChatMessage = {
     id: '1',
     content: 'Hello from user',
@@ -323,8 +352,8 @@ describe('MessageBubble', () => {
     it('should display tool results section', () => {
       render(<MessageBubble {...defaultProps} message={mockMessageWithTools} />);
       
-      expect(screen.getByText('Использовано 2 инструментов')).toBeInTheDocument();
-      expect(screen.getByText('(2 итераций)')).toBeInTheDocument();
+      expect(screen.getByText('Использовано инструментов: 2')).toBeInTheDocument();
+      expect(screen.getByText('(Итераций: 2)')).toBeInTheDocument();
       expect(screen.getByTestId('wrench-icon')).toBeInTheDocument();
     });
 

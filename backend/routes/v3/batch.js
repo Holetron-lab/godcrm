@@ -71,29 +71,31 @@ async function checkSpaceAccess(spaceId, userId, userRole) {
 async function moveItem(type, id, targetProjectId, targetFolderId = null) {
   const tableName = type === 'table' ? 'universal_tables' : 'widgets';
   const projectCol = type === 'table' ? 'project_id' : 'dashboard_id';
-  
+
   // For widgets, we need to find the dashboard for the target project
   if (type === 'widget') {
-    const dashboard = await dbGet(
-      `SELECT id FROM dashboards WHERE project_id = ? AND is_default = ${sqlTrue()} LIMIT 1`,
-      [targetProjectId]
-    );
-    
-    if (!dashboard) {
-      throw new Error(`No dashboard found for project ${targetProjectId}`);
-    }
-    
-    await dbRun(
-      `UPDATE ${tableName} SET ${projectCol} = ?, folder_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [dashboard.id, targetFolderId, id]
-    );
+    await withTransactionAsync(async trx => {
+      const dashboard = await trx.get(
+        `SELECT id FROM dashboards WHERE project_id = ? AND is_default = ${sqlTrue()} LIMIT 1 FOR KEY SHARE`,
+        [targetProjectId]
+      );
+
+      if (!dashboard) {
+        throw new Error(`No dashboard found for project ${targetProjectId}`);
+      }
+
+      await trx.run(
+        `UPDATE ${tableName} SET ${projectCol} = ?, owner_kind = 'dashboard', owner_id = ?, folder_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [dashboard.id, dashboard.id, targetFolderId, id]
+      );
+    });
   } else {
     await dbRun(
       `UPDATE ${tableName} SET project_id = ?, folder_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [targetProjectId, targetFolderId, id]
     );
   }
-  
+
   return true;
 }
 
@@ -153,46 +155,49 @@ async function duplicateTable(tableId, targetProjectId, newName, includeData = f
  * Helper: Duplicate widget
  */
 async function duplicateWidget(widgetId, targetProjectId, newTitle) {
-  // Get source widget
-  const source = await dbGet('SELECT * FROM widgets WHERE id = ?', [widgetId]);
-  if (!source) throw new Error('Widget not found');
-  
-  // Get dashboard for target project
-  let dashboard = await dbGet(
-    `SELECT id FROM dashboards WHERE project_id = ? AND is_default = ${sqlTrue()} LIMIT 1`,
-    [targetProjectId]
-  );
-  
-  if (!dashboard) {
-    // Create default dashboard
-    const result = await dbRun(`
-      INSERT INTO dashboards (project_id, name, is_default)
-      VALUES ($1, 'Main Dashboard', $2)
-    `, [targetProjectId, toBool(true)]);
-    dashboard = { id: result.lastInsertRowid || result.rows?.[0]?.id };
-  }
-  
-  // Create new widget
-  const result = await dbRun(`
-    INSERT INTO widgets (dashboard_id, widget_type, preset_name, code, code_version, title, description, icon, config, position, is_visible, order_index, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    dashboard.id,
-    source.widget_type,
-    source.preset_name,
-    source.code,
-    source.code_version,
-    newTitle || `${source.title} (copy)`,
-    source.description,
-    source.icon,
-    source.config,
-    source.position,
-    source.is_visible,
-    source.order_index,
-    source.created_by
-  ]);
-  
-  return result.lastInsertRowid;
+  return withTransactionAsync(async trx => {
+    // Get source widget
+    const source = await trx.get('SELECT * FROM widgets WHERE id = ?', [widgetId]);
+    if (!source) throw new Error('Widget not found');
+
+    // Get dashboard for target project
+    let dashboard = await trx.get(
+      `SELECT id FROM dashboards WHERE project_id = ? AND is_default = ${sqlTrue()} LIMIT 1 FOR KEY SHARE`,
+      [targetProjectId]
+    );
+
+    if (!dashboard) {
+      // Create default dashboard
+      const result = await trx.run(`
+        INSERT INTO dashboards (project_id, name, is_default)
+        VALUES ($1, 'Main Dashboard', $2)
+      `, [targetProjectId, toBool(true)]);
+      dashboard = { id: result.lastInsertRowid || result.rows?.[0]?.id };
+    }
+
+    // Create new widget
+    const result = await trx.run(`
+      INSERT INTO widgets (dashboard_id, owner_kind, owner_id, widget_type, preset_name, code, code_version, title, description, icon, config, position, is_visible, order_index, created_by)
+      VALUES (?, 'dashboard', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      dashboard.id,
+      dashboard.id,
+      source.widget_type,
+      source.preset_name,
+      source.code,
+      source.code_version,
+      newTitle || `${source.title} (copy)`,
+      source.description,
+      source.icon,
+      source.config,
+      source.position,
+      source.is_visible,
+      source.order_index,
+      source.created_by
+    ]);
+
+    return result.lastInsertRowid;
+  });
 }
 
 /**
@@ -472,7 +477,7 @@ router.get('/spaces/:spaceId/tree', async (req, res) => {
       );
       
       const rawWidgets = dashboard ? await dbAll(`
-        SELECT id, title as name, icon, description, folder_id, order_index, created_at, config
+        SELECT id, title as name, icon, description, folder_id, order_index, created_at, config, preset_name
         FROM widgets WHERE dashboard_id = ?
         ORDER BY order_index ASC
       `, [dashboard.id]) : [];

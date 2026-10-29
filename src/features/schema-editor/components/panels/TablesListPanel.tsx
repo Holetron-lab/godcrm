@@ -1,3 +1,4 @@
+import type { TableNode } from '../../types/schema-editor.types';
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, ExternalLink, Table } from 'lucide-react';
 import { useSchemaEditorStore } from '../../store/schemaEditorStore';
@@ -7,8 +8,8 @@ export const TablesListPanel = () => {
   const [isExternalExpanded, setIsExternalExpanded] = useState(false);
   const [isLocalExpanded, setIsLocalExpanded] = useState(true);
 
-  const localTables = nodes.filter((n) => !n.data.isExternal);
-  const externalTables = nodes.filter((n) => n.data.isExternal);
+  const localTables = nodes.filter((n): n is TableNode => n.type === 'tableNode' && !n.data.isExternal);
+  const externalTables = nodes.filter((n): n is TableNode => n.type === 'tableNode' && Boolean(n.data.isExternal));
 
   return (
     <div className="h-full flex flex-col bg-[var(--bg-primary)]">
@@ -21,7 +22,7 @@ export const TablesListPanel = () => {
           </h3>
         </div>
         <span className="text-xs text-[var(--text-tertiary)]">
-          {nodes.length}
+          {localTables.length + externalTables.length}
         </span>
       </div>
 

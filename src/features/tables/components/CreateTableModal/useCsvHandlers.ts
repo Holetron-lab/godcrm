@@ -1,8 +1,13 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { toSlug } from '@/shared/utils/i18n-utils';
 import { parseCSV, guessColumnType } from './csv-utils';
-import type { CSVFileData, CSVColumnDefinition, CSVColumnFieldValue } from './types';
+import { excelImportApi } from '../../api/excelImportApi';
+import {
+  applyExcelPreview, buildColumnDefinitions, createExcelFileEntry,
+  isCsvFileName, isExcelFileName, isSupportedImportFile,
+} from './excel-utils';
+import type { CSVFileData, CSVColumnDefinition, CSVColumnFieldValue, ExcelFileState } from './types';
 
 interface UseCsvHandlersParams {
   csvFiles: CSVFileData[];
@@ -18,7 +23,12 @@ interface UseCsvHandlersParams {
   setSelectedTabRightHidden: React.Dispatch<React.SetStateAction<boolean>>;
   expandedColumns: Set<number>;
   setExpandedColumns: React.Dispatch<React.SetStateAction<Set<number>>>;
+  // Excel preview is served per project (write access is checked there).
+  targetProjectId?: number | null;
+  noProjectMessage?: string;
 }
+
+const isAbort = (err: unknown) => err instanceof Error && err.name === 'AbortError';
 
 export function useCsvHandlers(params: UseCsvHandlersParams) {
   const {
@@ -35,7 +45,16 @@ export function useCsvHandlers(params: UseCsvHandlersParams) {
     setSelectedTabRightHidden,
     expandedColumns,
     setExpandedColumns,
+    targetProjectId = null,
+    noProjectMessage = 'Select a project before reading an Excel file.',
   } = params;
+
+  // One in-flight preview per Excel entry; a sheet change cancels the previous one.
+  const previewControllers = useRef(new Map<string, AbortController>());
+  useEffect(() => () => {
+    previewControllers.current.forEach(controller => controller.abort());
+    previewControllers.current.clear();
+  }, []);
 
   const updateCsvTabsScroll = useCallback(() => {
     const container = csvTabsRef.current;
@@ -65,15 +84,82 @@ export function useCsvHandlers(params: UseCsvHandlersParams) {
     });
   }, []);
 
-  // CSV file upload handler - supports multiple files
+  const patchExcelEntry = useCallback((fileId: string, patch: (entry: CSVFileData) => CSVFileData) => {
+    setCsvFiles(prev => prev.map(entry => (entry.id === fileId ? patch(entry) : entry)));
+  }, []);
+
+  // Fetches the sheet list (sheetIndex undefined) or one sheet's data.
+  const loadExcelPreview = useCallback(async (entry: CSVFileData, sheetIndex?: number) => {
+    const excel = entry.excel as ExcelFileState;
+    previewControllers.current.get(entry.id)?.abort();
+    const controller = new AbortController();
+    previewControllers.current.set(entry.id, controller);
+    if (!targetProjectId) {
+      patchExcelEntry(entry.id, current => ({
+        ...current,
+        excel: { ...(current.excel as ExcelFileState), loading: false, error: noProjectMessage },
+      }));
+      return;
+    }
+    patchExcelEntry(entry.id, current => ({
+      ...current,
+      excel: { ...(current.excel as ExcelFileState), loading: true, error: null },
+    }));
+    try {
+      let preview = await excelImportApi.preview(targetProjectId, excel.file, sheetIndex, controller.signal);
+      // A single-sheet workbook has nothing to choose; load it right away.
+      if (!preview.sheet && preview.sheets.length === 1) {
+        preview = await excelImportApi.preview(targetProjectId, excel.file, preview.sheets[0].index, controller.signal);
+      }
+      if (controller.signal.aborted) return;
+      patchExcelEntry(entry.id, current => applyExcelPreview(current, preview, toSlug));
+    } catch (err) {
+      if (isAbort(err) || controller.signal.aborted) return;
+      logger.error('Excel preview error:', err);
+      const message = err instanceof Error ? err.message : 'Excel preview failed';
+      patchExcelEntry(entry.id, current => ({
+        ...current,
+        excel: { ...(current.excel as ExcelFileState), loading: false, error: message },
+      }));
+    } finally {
+      if (previewControllers.current.get(entry.id) === controller) previewControllers.current.delete(entry.id);
+    }
+  }, [targetProjectId, noProjectMessage, patchExcelEntry]);
+
+  const commitNewFiles = useCallback((newFiles: CSVFileData[]) => {
+    if (newFiles.length === 0) return;
+    setCsvFiles(prev => [...prev, ...newFiles]);
+    setCurrentCsvFileIndex(0);
+    // Set basic info from first file
+    const firstFile = newFiles[0];
+    setBasic(prev => ({
+      ...prev,
+      displayName: firstFile.tableDisplayName,
+      name: firstFile.tableName,
+      icon: firstFile.icon
+    }));
+    setCsvStep('configure');
+    newFiles.filter(file => file.source === 'excel').forEach(file => { void loadExcelPreview(file); });
+  }, [loadExcelPreview]);
+
+  // File upload handler - supports multiple CSV files plus Excel workbooks
   const handleCsvFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
+    const excelFiles = files.filter(file => isExcelFileName(file.name));
+    const csvFileList = files.filter(file => !isExcelFileName(file.name));
+    const excelEntries = excelFiles.map((file, index) => createExcelFileEntry(file, index));
+
+    if (csvFileList.length === 0) {
+      commitNewFiles(excelEntries);
+      return;
+    }
+
     const newCsvFiles: CSVFileData[] = [];
     let processedCount = 0;
 
-    files.forEach((file, index) => {
+    csvFileList.forEach((file, index) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
@@ -83,39 +169,12 @@ export function useCsvHandlers(params: UseCsvHandlersParams) {
           if (rows.length >= 2) {
             const headers = rows[0];
             const fileName = file.name.replace(/\.csv$/i, '');
-
-            // Generate unique column names
-            const usedNames = new Set<string>();
-            const definitions: CSVColumnDefinition[] = headers.map((csvCol, colIdx) => {
-              const guessedType = guessColumnType(csvCol, rows.slice(1).map(r => r[headers.indexOf(csvCol)]));
-
-              // Generate base name from column header using multi-language transliteration
-              let baseName = toSlug(csvCol) || csvCol.toLowerCase().replace(/[^a-z0-9_]/gi, '_');
-
-              // If empty or only underscores, use type as base
-              if (!baseName || baseName === '_' || /^_+$/.test(baseName)) {
-                baseName = guessedType;
-              }
-
-              // Make unique by adding suffix if needed
-              let finalName = baseName;
-              let suffix = 1;
-              while (usedNames.has(finalName)) {
-                finalName = `${baseName}_${String(suffix).padStart(2, '0')}`;
-                suffix++;
-              }
-              usedNames.add(finalName);
-
-              return {
-                colIndex: colIdx,
-                csvColumn: csvCol,
-                name: finalName,
-                displayName: csvCol || `Column ${colIdx + 1}`,
-                type: guessedType,
-                isNotionRelation: false,
-                relationTargetFileId: undefined
-              };
-            });
+            const dataRows = rows.slice(1);
+            const definitions: CSVColumnDefinition[] = buildColumnDefinitions(
+              headers,
+              (csvCol, colIdx) => guessColumnType(csvCol, dataRows.map(r => r[colIdx])),
+              toSlug,
+            );
 
             newCsvFiles.push({
               id: `csv-${Date.now()}-${index}`,
@@ -131,7 +190,8 @@ export function useCsvHandlers(params: UseCsvHandlersParams) {
               menuWidgetDescription: '',
               data: rows,
               headers,
-              columnDefinitions: definitions
+              columnDefinitions: definitions,
+              source: 'csv',
             });
           }
         } catch (err) {
@@ -139,23 +199,13 @@ export function useCsvHandlers(params: UseCsvHandlersParams) {
         }
 
         processedCount++;
-        if (processedCount === files.length && newCsvFiles.length > 0) {
-          setCsvFiles(prev => [...prev, ...newCsvFiles]);
-          setCurrentCsvFileIndex(0);
-          // Set basic info from first file
-          const firstFile = newCsvFiles[0];
-          setBasic(prev => ({
-            ...prev,
-            displayName: firstFile.tableDisplayName,
-            name: firstFile.tableName,
-            icon: firstFile.icon
-          }));
-          setCsvStep('configure');
+        if (processedCount === csvFileList.length) {
+          commitNewFiles([...newCsvFiles, ...excelEntries]);
         }
       };
       reader.readAsText(file);
     });
-  }, []);
+  }, [commitNewFiles]);
 
   const handleCsvDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -167,7 +217,7 @@ export function useCsvHandlers(params: UseCsvHandlersParams) {
     e.stopPropagation();
 
     const files = Array.from(e.dataTransfer.files).filter(
-      file => file.type === 'text/csv' || file.name.endsWith('.csv')
+      file => isSupportedImportFile(file) || isCsvFileName(file.name)
     );
 
     if (files.length > 0) {
@@ -180,6 +230,19 @@ export function useCsvHandlers(params: UseCsvHandlersParams) {
       handleCsvFileUpload({ target: input } as React.ChangeEvent<HTMLInputElement>);
     }
   }, [handleCsvFileUpload]);
+
+  // Sheet selection re-sends the original File; stale previews are cancelled.
+  const selectExcelSheet = useCallback((fileId: string, sheetIndex: number) => {
+    const entry = csvFiles.find(file => file.id === fileId);
+    if (!entry?.excel) return;
+    void loadExcelPreview(entry, sheetIndex);
+  }, [csvFiles, loadExcelPreview]);
+
+  const retryExcelPreview = useCallback((fileId: string) => {
+    const entry = csvFiles.find(file => file.id === fileId);
+    if (!entry?.excel) return;
+    void loadExcelPreview(entry, entry.excel.sheetIndex ?? undefined);
+  }, [csvFiles, loadExcelPreview]);
 
   const updateCsvColumn = useCallback((colIndex: number, field: keyof CSVColumnDefinition, value: CSVColumnFieldValue) => {
     setCsvFiles(prev => {
@@ -318,6 +381,8 @@ export function useCsvHandlers(params: UseCsvHandlersParams) {
     handleCsvFileUpload,
     handleCsvDragOver,
     handleCsvDrop,
+    selectExcelSheet,
+    retryExcelPreview,
     updateCsvColumn,
     updateCurrentCsvFile,
     handleCsvMenuToggle,

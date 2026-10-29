@@ -13,7 +13,7 @@ export const CHAT_TOOLS = [
         properties: {
           conversation_id: { type: 'number', description: 'ID of the conversation' },
           content: { type: 'string', description: 'Message text content' },
-          role: { type: 'string', enum: ['user', 'assistant', 'system'], description: 'Message role (default: user)' },
+          role: { type: 'string', enum: ['user', 'assistant', 'system'], description: 'Message role (default: assistant when called by an agent, user otherwise)' },
           content_type: {
             type: 'string',
             enum: ['text', 'widget_embed'],

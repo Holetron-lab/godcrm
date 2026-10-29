@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link2, X, Unlink2, Paperclip, Pencil } from 'lucide-react';
@@ -25,7 +26,7 @@ interface BoundRowsStripProps {
   setShowBoundRowsBar: (v: boolean) => void;
   currentConversationId: number | null;
   userConversationId: number | null;
-  effectiveSpaceId: number;
+  effectiveSpaceId: number | undefined;
   tasksSource: any;
   favoritesConfig?: { documents?: any; custom?: any[] };
   onAttachToMessage?: (br: BoundRow) => void;
@@ -36,6 +37,7 @@ export function BoundRowsStrip({
   setShowBoundRowsBar, currentConversationId, userConversationId,
   effectiveSpaceId, tasksSource, favoritesConfig, onAttachToMessage
 }: BoundRowsStripProps) {
+  const { t } = useLanguage();
   const cid = currentConversationId || userConversationId;
   const [toolbarIdx, setToolbarIdx] = useState<number | null>(null);
   const [editorRow, setEditorRow] = useState<{ tableId: number; rowId: number } | null>(null);
@@ -100,7 +102,7 @@ export function BoundRowsStrip({
 
       {showRowBinding && boundRows.length === 0 && (
         <div className="border-t border-[var(--border-secondary)] bg-[var(--bg-secondary)]">
-          <React.Suspense fallback={<div className="text-xs text-[var(--text-tertiary)] p-2">Loading...</div>}>
+          <React.Suspense fallback={<div className="text-xs text-[var(--text-tertiary)] p-2">{t('aiChat.ui.loadingDots')}</div>}>
             <RowBindingV2
               defaultSpaceId={effectiveSpaceId} boundRows={boundRows} maxBindings={1}
               compact={true} hideHeader={true} forceExpanded={true}
@@ -156,6 +158,7 @@ interface BoundRowToolbarProps {
 }
 
 function BoundRowToolbar({ br, counter, tasksSource, favoritesConfig, onUnbind, onEdit, onAttach, onClose }: BoundRowToolbarProps) {
+  const { t } = useLanguage();
   const display = useBoundRowDisplay(br, tasksSource, favoritesConfig);
   const [openPopover, setOpenPopover] = useState<null | 'status' | 'secondary'>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -214,7 +217,7 @@ function BoundRowToolbar({ br, counter, tasksSource, favoritesConfig, onUnbind, 
         type="button"
         onClick={onEdit}
         className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--color-primary-400)] flex-shrink-0"
-        title="Редактировать"
+        title={t('dashboardPage.edit')}
       >
         <Pencil className="w-3 h-3" />
       </button>
@@ -223,7 +226,7 @@ function BoundRowToolbar({ br, counter, tasksSource, favoritesConfig, onUnbind, 
           type="button"
           onClick={onAttach}
           className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-[var(--color-primary-400)] flex-shrink-0"
-          title="Прикрепить к сообщению"
+          title={t('rowActions.attachToMessage')}
         >
           <Paperclip className="w-3 h-3" />
         </button>
@@ -232,7 +235,7 @@ function BoundRowToolbar({ br, counter, tasksSource, favoritesConfig, onUnbind, 
         type="button"
         onClick={onUnbind}
         className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:text-red-400 flex-shrink-0"
-        title="Открепить"
+        title={t('aiChat.ui.unpin')}
       >
         <Unlink2 className="w-3 h-3" />
       </button>
@@ -240,7 +243,7 @@ function BoundRowToolbar({ br, counter, tasksSource, favoritesConfig, onUnbind, 
         type="button"
         onClick={onClose}
         className="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] flex-shrink-0"
-        title="Закрыть"
+        title={t('aiChat.ui.close')}
       >
         <X className="w-3 h-3" />
       </button>
@@ -297,6 +300,7 @@ const PortalDropdown = React.forwardRef<HTMLDivElement, {
   currentId?: string | number;
   onPick: (opt: RelationOption) => void;
 }>(({ anchorRef, options, loading, currentId, onPick }, ref) => {
+  const { t } = useLanguage();
   const [pos, setPos] = useState<{ top: number; left: number; minWidth: number; openUp: boolean } | null>(null);
 
   useLayoutEffect(() => {
@@ -336,9 +340,9 @@ const PortalDropdown = React.forwardRef<HTMLDivElement, {
       }}
     >
       {loading ? (
-        <div className="px-2 py-1 text-[11px] text-[var(--text-tertiary)]">Загрузка…</div>
+        <div className="px-2 py-1 text-[11px] text-[var(--text-tertiary)]">{t('aiChat.ui.loading')}</div>
       ) : options.length === 0 ? (
-        <div className="px-2 py-1 text-[11px] text-[var(--text-tertiary)]">Нет вариантов</div>
+        <div className="px-2 py-1 text-[11px] text-[var(--text-tertiary)]">{t('aiChat.ui.noOptions')}</div>
       ) : options.map(opt => (
         <button
           key={opt.id}

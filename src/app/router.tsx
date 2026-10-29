@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { createBrowserRouter, createHashRouter, RouterProvider, useParams, Navigate } from 'react-router-dom';
+import { createBrowserRouter, createHashRouter, RouterProvider, useParams, useLocation, Navigate } from 'react-router-dom';
 import { Layout } from '@/shared/components/layout/Layout';
 import NotFoundPage from '@/pages/NotFoundPage';
 import ErrorBoundaryPage from '@/pages/ErrorBoundaryPage';
@@ -13,8 +13,12 @@ const PublicDocumentPage = lazy(() => import('@/features/public/PublicDocumentPa
 const PublicTablePage = lazy(() => import('@/features/public/PublicTablePage').then(m => ({ default: m.PublicTablePage })));
 const PublicProjectPage = lazy(() => import('@/features/public/PublicProjectPage').then(m => ({ default: m.PublicProjectPage })));
 const PublicWidgetPage = lazy(() => import('@/features/public/PublicWidgetPage').then(m => ({ default: m.PublicWidgetPage })));
+// Published table forms — FormBuilder "custom" link + iframe embed (chat 3660)
+const PublicFormPage = lazy(() => import('@/features/public/PublicFormPage').then(m => ({ default: m.PublicFormPage })));
 // Invitation acceptance (ADR-105: AC8)
 const InvitationAcceptPage = lazy(() => import('@/features/public/InvitationAcceptPage').then(m => ({ default: m.InvitationAcceptPage })));
+// ADR-140: Палевность Checker (public)
+// Вспомнил! — promo landing
 // ADR-0044: Public marketing surface (godcrm.ai/welcome)
 const LandingPage = lazy(() => import('@/pages/landing/LandingPage'));
 // Holetron umbrella hero (hltrn.cc) — Marketer TZ v2 2026-05-30
@@ -47,11 +51,17 @@ const ProjectFilesPage = lazy(() => import('@/pages/projects/ProjectFilesPage').
 const ProjectApiKeysPage = lazy(() => import('@/pages/projects/ProjectApiKeysPage').then(m => ({ default: m.ProjectApiKeysPage })));
 const HelpPage = lazy(() => import('@/pages/help'));
 const SchemaEditorPage = lazy(() => import('@/features/schema-editor').then(m => ({ default: m.SchemaEditorPage })));
+// ADR-165 SC-SIM — no standalone route: the editor lives only as the `sc_sim`
+// project-scoped widget preset (owner decision 2026-07-21). Mounting it route-less
+// (no projectId) was the root of #4/#5 "every module shows the same data" — a
+// standalone page read the shared global pack; the widget reads its project's pack.
 const AutopilotDashboardPage = lazy(() => import('@/pages/autopilot/AutopilotDashboardPage').then(m => ({ default: m.AutopilotDashboardPage })));
 // ADR-158: In-CRM Mail — P1 inbox shell (mock data until mail_messages lands)
 const MailPage = lazy(() => import('@/features/mail').then(m => ({ default: m.MailPage })));
 // ADR-176: Universal embeddable AI chat overlay — top-level, outside <Layout>
 const EmbedChatRoute = lazy(() => import('@/features/embed/EmbedChatRoute').then(m => ({ default: m.EmbedChatRoute })));
+// Table print preview — opened by PrintModal in a popup, reads its data from sessionStorage; no <Layout> chrome
+const PrintPreviewPage = lazy(() => import('@/pages/print/PrintPreviewPage').then(m => ({ default: m.PrintPreviewPage })));
 
 // Apex (`/`) router. On the marketing host (godcrm.ai / www.godcrm.ai) the bare
 // apex is the PUBLIC landing page — no auth, no "/auth/login" bounce (owner request
@@ -70,6 +80,12 @@ const RootIndex = () => {
     }
   }
   return <Navigate to="/spaces" replace />;
+};
+
+// `/login` → `/auth/login` (and `/register`), keeping `?redirect=…` and `#hash`.
+const LegacyAuthRedirect = ({ to }: { to: string }) => {
+  const { search, hash } = useLocation();
+  return <Navigate to={`${to}${search}${hash}`} replace />;
 };
 
 // Route configuration shared between browser and hash router
@@ -111,6 +127,13 @@ const routes = [
       }
     ]
   },
+  // Legacy auth paths (old links, bookmarks, mails). Without these aliases
+  // `/login` fell into Layout's `*` → the guard bounced to /auth/login with
+  // `from: '/login'`, and a successful login returned to `/login` = 404
+  // "Route empty" (Bugs 1552/229244, ADR-203 S1). Query string (`?redirect=`)
+  // and hash are preserved.
+  { path: '/login', element: <LegacyAuthRedirect to="/auth/login" /> },
+  { path: '/register', element: <LegacyAuthRedirect to="/auth/register" /> },
   {
     path: '/auth',
     errorElement: <ErrorBoundaryPage />,
@@ -133,12 +156,30 @@ const routes = [
     element: <InvitationAcceptPage />,
     errorElement: <ErrorBoundaryPage />
   },
+  // Published table forms — self-guarding (server decides open/closed), no <Layout> chrome
+  {
+    path: '/forms/:tableId',
+    element: <PublicFormPage />,
+    errorElement: <ErrorBoundaryPage />
+  },
+  {
+    path: '/forms/:tableId/embed',
+    element: <PublicFormPage embed />,
+    errorElement: <ErrorBoundaryPage />
+  },
+  // ADR-140: Палевность Checker — public page
   // ADR-176: Embeddable AI chat overlay — self-guarding (own auth check), no <Layout> chrome
   {
     path: '/embed/chat',
     element: <EmbedChatRoute />,
     errorElement: <ErrorBoundaryPage />
   },
+  {
+    path: '/print-preview',
+    element: <PrintPreviewPage />,
+    errorElement: <ErrorBoundaryPage />
+  },
+  // Вспомнил! — promo landing page
   // ADR-0044: Public marketing surface — no auth required
   {
     path: '/welcome',

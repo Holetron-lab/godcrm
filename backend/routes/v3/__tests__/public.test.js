@@ -427,7 +427,9 @@ describe('Public API Routes (v3) - ADR-0060 P1', () => {
         presetName: 'kanban_board', title: 'K', config: { table_id: tableId }
       });
       await createWidget(dashboardId, {
-        presetName: 'documents', title: 'D', config: { table_id: tableId }
+        // 'documents' joined the whitelist in ADR-0060 P6/B — use a preset that
+        // is still absent from it, or this stops testing default-deny.
+        presetName: 'ai_agents', title: 'D', config: { table_id: tableId }
       });
       await createWidget(dashboardId, {
         presetName: 'table_view', title: 'Hidden', config: { table_id: tableId },
@@ -521,7 +523,7 @@ describe('Public API Routes (v3) - ADR-0060 P1', () => {
       const dashboardId = await createDashboard(projectId, true);
       const tableId = await createTable(projectId, true);
       const widgetId = await createWidget(dashboardId, {
-        presetName: 'documents',           // NOT in PUBLIC_PRESET_WHITELIST
+        presetName: 'ai_agents',           // NOT in PUBLIC_PRESET_WHITELIST ('documents' joined it in P6/B)
         config: { table_id: tableId }
       });
 
@@ -707,7 +709,7 @@ describe('Public API Routes (v3) - ADR-0060 P1', () => {
       const dashboardId = await createDashboard(projectId, true);
       const tableId = await createTable(projectId, true);
       const widgetId = await createWidget(dashboardId, {
-        presetName: 'documents',
+        presetName: 'ai_agents',   // still absent from PUBLIC_PRESET_WHITELIST
         config: { table_id: tableId }
       });
 

@@ -19,6 +19,7 @@ import {
   type MailSignature,
   type MailTemplate,
 } from '../library';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 const fieldClass =
   'w-full rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] focus:border-[var(--color-primary-500)]';
@@ -29,6 +30,7 @@ interface MailLibrarySettingsProps {
 }
 
 export function MailLibrarySettings({ section }: MailLibrarySettingsProps = {}) {
+  const { t } = useLanguage();
   const { library, update } = useMailLibrary();
   const showSignatures = section !== 'templates';
   const showTemplates = section !== 'signatures';
@@ -40,7 +42,7 @@ export function MailLibrarySettings({ section }: MailLibrarySettingsProps = {}) 
     patch({
       signatures: [
         ...library.signatures,
-        { id: newId(), name: `Подпись ${library.signatures.length + 1}`, text: '' },
+        { id: newId(), name: t('mail.library.signatureN', { n: library.signatures.length + 1 }), text: '' },
       ],
     });
   const updateSignature = (id: string, p: Partial<MailSignature>) =>
@@ -60,7 +62,7 @@ export function MailLibrarySettings({ section }: MailLibrarySettingsProps = {}) 
     patch({
       templates: [
         ...library.templates,
-        { id: newId(), name: `Шаблон ${library.templates.length + 1}`, subject: '', body: '' },
+        { id: newId(), name: t('mail.library.templateN', { n: library.templates.length + 1 }), subject: '', body: '' },
       ],
     });
   const updateTemplate = (id: string, p: Partial<MailTemplate>) =>
@@ -75,20 +77,19 @@ export function MailLibrarySettings({ section }: MailLibrarySettingsProps = {}) 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Подписи</h3>
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">{t('mail.library.signatures')}</h3>
             <p className="text-xs text-[var(--text-tertiary)]">
-              Подпись по умолчанию (★) добавляется в новое письмо. Любую можно вставить в письмо
-              кнопкой «Подпись» на панели ввода.
+              {t('mail.library.signaturesHint')}
             </p>
           </div>
           <Button size="sm" variant="secondary" leftIcon={<Plus size={14} />} onClick={addSignature}>
-            Добавить
+            {t('mail.common.add')}
           </Button>
         </div>
 
         {library.signatures.length === 0 ? (
           <p className="rounded-md border border-dashed border-[var(--border-primary)] px-3 py-4 text-center text-xs text-[var(--text-tertiary)]">
-            Пока нет подписей.
+            {t('mail.library.noSignatures')}
           </p>
         ) : (
           library.signatures.map((s) => {
@@ -108,15 +109,15 @@ export function MailLibrarySettings({ section }: MailLibrarySettingsProps = {}) 
                   <input
                     value={s.name}
                     onChange={(e) => updateSignature(s.id, { name: e.target.value })}
-                    placeholder="Название подписи"
-                    aria-label="Название подписи"
+                    placeholder={t('mail.library.signatureName')}
+                    aria-label={t('mail.library.signatureName')}
                     className={cn(fieldClass, 'flex-1 font-medium')}
                   />
                   <button
                     type="button"
                     aria-pressed={isDefault}
-                    title={isDefault ? 'Подпись по умолчанию' : 'Сделать подписью по умолчанию'}
-                    aria-label="Подпись по умолчанию"
+                    title={isDefault ? t('mail.library.defaultSignature') : t('mail.library.makeDefault')}
+                    aria-label={t('mail.library.defaultSignature')}
                     onClick={() => toggleDefault(s.id)}
                     className={cn(
                       'flex-shrink-0 rounded-md p-1.5 transition-colors',
@@ -129,8 +130,8 @@ export function MailLibrarySettings({ section }: MailLibrarySettingsProps = {}) 
                   </button>
                   <button
                     type="button"
-                    aria-label={`Удалить подпись «${s.name}»`}
-                    title="Удалить"
+                    aria-label={t('mail.library.deleteSignature', { name: s.name })}
+                    title={t('mail.common.delete')}
                     onClick={() => removeSignature(s.id)}
                     className="flex-shrink-0 rounded-md p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)]"
                   >
@@ -140,8 +141,8 @@ export function MailLibrarySettings({ section }: MailLibrarySettingsProps = {}) 
                 <textarea
                   value={s.text}
                   onChange={(e) => updateSignature(s.id, { text: e.target.value })}
-                  placeholder={'С уважением,\nИмя Фамилия\nКомпания · +7 …'}
-                  aria-label="Текст подписи"
+                  placeholder={t('mail.library.signaturePlaceholder')}
+                  aria-label={t('mail.library.signatureText')}
                   rows={3}
                   className={cn(fieldClass, 'resize-y')}
                 />
@@ -157,63 +158,62 @@ export function MailLibrarySettings({ section }: MailLibrarySettingsProps = {}) 
       <section className={cn('flex flex-col gap-3', showSignatures && 'border-t border-[var(--border-primary)] pt-6')}>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-[var(--text-primary)]">Шаблоны</h3>
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">{t('mail.library.templates')}</h3>
             <p className="text-xs text-[var(--text-tertiary)]">
-              Готовые тема + текст. Вставляются кнопкой «Шаблон» на панели ввода (тема
-              подставляется, если поле «Тема» пустое).
+              {t('mail.library.templatesHint')}
             </p>
           </div>
           <Button size="sm" variant="secondary" leftIcon={<Plus size={14} />} onClick={addTemplate}>
-            Добавить
+            {t('mail.common.add')}
           </Button>
         </div>
 
         {library.templates.length === 0 ? (
           <p className="rounded-md border border-dashed border-[var(--border-primary)] px-3 py-4 text-center text-xs text-[var(--text-tertiary)]">
-            Пока нет шаблонов.
+            {t('mail.library.noTemplates')}
           </p>
         ) : (
-          library.templates.map((t) => (
+          library.templates.map((tpl) => (
             <div
-              key={t.id}
+              key={tpl.id}
               className="flex flex-col gap-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)]/40 p-3"
             >
               <div className="flex items-center gap-2">
                 <EmojiPicker
-                  value={t.icon ?? ''}
-                  onChange={(icon) => updateTemplate(t.id, { icon })}
+                  value={tpl.icon ?? ''}
+                  onChange={(icon) => updateTemplate(tpl.id, { icon })}
                   compact
                   size="sm"
                 />
                 <input
-                  value={t.name}
-                  onChange={(e) => updateTemplate(t.id, { name: e.target.value })}
-                  placeholder="Название шаблона"
-                  aria-label="Название шаблона"
+                  value={tpl.name}
+                  onChange={(e) => updateTemplate(tpl.id, { name: e.target.value })}
+                  placeholder={t('mail.library.templateName')}
+                  aria-label={t('mail.library.templateName')}
                   className={cn(fieldClass, 'flex-1 font-medium')}
                 />
                 <button
                   type="button"
-                  aria-label={`Удалить шаблон «${t.name}»`}
-                  title="Удалить"
-                  onClick={() => removeTemplate(t.id)}
+                  aria-label={t('mail.library.deleteTemplate', { name: tpl.name })}
+                  title={t('mail.common.delete')}
+                  onClick={() => removeTemplate(tpl.id)}
                   className="flex-shrink-0 rounded-md p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--color-error)]/10 hover:text-[var(--color-error)]"
                 >
                   <Trash2 size={16} />
                 </button>
               </div>
               <input
-                value={t.subject}
-                onChange={(e) => updateTemplate(t.id, { subject: e.target.value })}
-                placeholder="Тема письма"
-                aria-label="Тема шаблона"
+                value={tpl.subject}
+                onChange={(e) => updateTemplate(tpl.id, { subject: e.target.value })}
+                placeholder={t('mail.library.subjectPlaceholder')}
+                aria-label={t('mail.library.templateSubject')}
                 className={fieldClass}
               />
               <textarea
-                value={t.body}
-                onChange={(e) => updateTemplate(t.id, { body: e.target.value })}
-                placeholder="Текст письма…"
-                aria-label="Текст шаблона"
+                value={tpl.body}
+                onChange={(e) => updateTemplate(tpl.id, { body: e.target.value })}
+                placeholder={t('mail.library.bodyPlaceholder')}
+                aria-label={t('mail.library.templateBody')}
                 rows={4}
                 className={cn(fieldClass, 'resize-y')}
               />

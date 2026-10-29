@@ -5,6 +5,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import request from 'supertest';
 import express from 'express';
 import rowsRoutes from '../rows.js';
@@ -162,7 +163,7 @@ describe('Rows API Routes (v3)', () => {
 
     test('should return 404 for non-existent table', async () => {
       const response = await request(app)
-        .post('/api/v3/tables/99999/rows/import')
+        .post(`/api/v3/tables/${NON_EXISTENT_ID}/rows/import`)
         .send({ rows: [{ name: 'Test' }], mode: 'add' })
         .expect(404);
 

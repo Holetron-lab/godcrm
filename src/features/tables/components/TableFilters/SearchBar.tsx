@@ -116,7 +116,7 @@ export const SearchBar = ({
                     <div className="h-px bg-[var(--border-primary)] my-1" />
                     {(searchableColumns.length > 0 ? searchableColumns : (columns || [])).map(column => (
                       <label key={column.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors">
-                        <input
+                        <input aria-label={column.displayName}
                           type="checkbox"
                           checked={searchColumns.length === 0 || searchColumns.includes(column.id)}
                           onChange={() => toggleSearchColumn(column.id)}

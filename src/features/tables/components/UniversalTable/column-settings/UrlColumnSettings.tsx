@@ -19,7 +19,7 @@ export const UrlColumnSettings: React.FC<ColumnSettingsProps> = ({
   );
 
   return (
-    <div className="space-y-4 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-4 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
         🔗 Настройки ссылки
       </h4>
@@ -44,8 +44,8 @@ export const UrlColumnSettings: React.FC<ColumnSettingsProps> = ({
 
       {/* Color selector for button/badge styles */}
       {(draft.config?.url?.style === 'button' || draft.config?.url?.style === 'badge') && (
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-[var(--text-primary)]">Цвет</label>
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium text-[var(--text-primary)]">Цвет</legend>
           <div className="flex flex-wrap gap-2">
             {[
               { value: 'blue', color: 'var(--color-primary-600)', label: 'Синий (системный)' },
@@ -73,13 +73,13 @@ export const UrlColumnSettings: React.FC<ColumnSettingsProps> = ({
                 className={`w-8 h-8 rounded-lg transition-all hover:scale-110 ${
                   (draft.config?.url?.buttonColor ?? 'blue') === colorOption.value
                     ? 'ring-2 ring-offset-2 ring-[var(--color-primary-500)] scale-110'
-                    : 'hover:ring-1 hover:ring-[var(--border-color)]'
+                    : 'hover:ring-1 hover:ring-[var(--border-primary)]'
                 }`}
                 style={{ backgroundColor: colorOption.color }}
               />
             ))}
           </div>
-        </div>
+        </fieldset>
       )}
 
       <div className="flex items-center gap-3 p-3 rounded-lg bg-[var(--bg-tertiary)]">
@@ -174,7 +174,7 @@ export const UrlColumnSettings: React.FC<ColumnSettingsProps> = ({
         </p>
       </div>
 
-      <div className="p-3 bg-primary-50 dark:bg-primary-100 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
+      <div className="p-3 bg-primary-50 dark:bg-primary-900 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
         <p className="font-medium text-primary-800 dark:text-primary-200 flex items-center gap-2 mb-2">
           💡 Переменные
         </p>

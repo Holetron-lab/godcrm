@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * useVoiceInput - Hook for voice input using Web Speech API and Whisper
  * 
@@ -80,6 +81,7 @@ interface VoiceInputState {
 }
 
 export function useVoiceInput(options: VoiceInputOptions = {}) {
+  const { t } = useLanguage();
   const {
     mode = 'webSpeech',
     language = 'ru-RU',
@@ -135,8 +137,8 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
   // Start recording with Web Speech API
   const startWebSpeech = useCallback(() => {
     if (!webSpeechAvailable) {
-      setState(prev => ({ ...prev, error: 'Web Speech API не поддерживается в этом браузере' }));
-      onError?.('Web Speech API не поддерживается');
+      setState(prev => ({ ...prev, error: t('aiChat.ui.speechUnsupportedBrowser') }));
+      onError?.(t('aiChat.ui.speechUnsupported'));
       return;
     }
 
@@ -172,12 +174,12 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       const errorMessage = event.error === 'no-speech' 
-        ? 'Речь не обнаружена. Попробуйте снова.'
+        ? t('aiChat.ui.speechNotDetected')
         : event.error === 'audio-capture'
-        ? 'Микрофон не найден. Проверьте настройки.'
+        ? t('aiChat.ui.microphoneNotFound')
         : event.error === 'not-allowed'
-        ? 'Доступ к микрофону запрещён.'
-        : `Ошибка распознавания: ${event.error}`;
+        ? t('aiChat.ui.microphoneDenied')
+        : t('aiChat.ui.recognitionError', { error: event.error });
       
       setState(prev => ({ ...prev, error: errorMessage, isRecording: false }));
       stopDurationTimer();
@@ -197,7 +199,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
 
     recognitionRef.current = recognition;
     recognition.start();
-  }, [language, webSpeechAvailable, onStart, onResult, onError, onEnd, startDurationTimer, stopDurationTimer]);
+  }, [language, webSpeechAvailable, onStart, onResult, onError, onEnd, startDurationTimer, stopDurationTimer, t]);
 
   // Start recording with MediaRecorder for Whisper
   const startWhisper = useCallback(async () => {
@@ -257,7 +259,7 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
             throw new Error(response.data?.error || 'Transcription failed');
           }
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Ошибка транскрипции';
+          const errorMessage = error instanceof Error ? error.message : t('aiChat.ui.transcriptionFailed');
           setState(prev => ({ ...prev, error: errorMessage, isProcessing: false }));
           onError?.(errorMessage);
         } finally {
@@ -274,13 +276,13 @@ export function useVoiceInput(options: VoiceInputOptions = {}) {
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? (error.name === 'NotAllowedError' 
-          ? 'Доступ к микрофону запрещён.' 
+          ? t('aiChat.ui.microphoneDenied')
           : error.message)
-        : 'Не удалось получить доступ к микрофону';
+        : t('aiChat.ui.microphoneAccessFailed');
       setState(prev => ({ ...prev, error: errorMessage }));
       onError?.(errorMessage);
     }
-  }, [language, operatorId, spaceId, onStart, onResult, onError, onEnd, startDurationTimer, stopDurationTimer]);
+  }, [language, operatorId, spaceId, onStart, onResult, onError, onEnd, startDurationTimer, stopDurationTimer, t]);
 
   // Start recording
   const startRecording = useCallback(() => {

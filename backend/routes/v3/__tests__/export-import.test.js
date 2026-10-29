@@ -4,13 +4,19 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import express from 'express';
 import request from 'supertest';
 import exportImportRoutes from '../export-import.js';
 import { dbAll, dbGet, dbRun, destroyAdapter, resetAdapter, toBool } from '../../../database/connection.js';
 // Mock authenticate middleware
+// beforeAll does `mockAuthenticate.userId = userId` — but the body hardcoded
+// id: 1, so that assignment went nowhere and every request authenticated as a
+// user who owns nothing. ExportService.canExport() compares against
+// spaces.owner_id, so the export/import routes answered 403/400 instead of
+// 200/201. Read the property the suite actually sets.
 const mockAuthenticate = (req, res, next) => {
-  req.user = { id: 1 }; // Mock user
+  req.user = { id: mockAuthenticate.userId ?? 1 };
   next();
 };
 
@@ -128,7 +134,7 @@ describe('Export/Import API Routes', () => {
     
     it('returns error for non-existent table', async () => {
       const res = await request(app)
-        .post('/api/v3/tables/99999/export')
+        .post(`/api/v3/tables/${NON_EXISTENT_ID}/export`)
         .send({});
       
       // Either 403 (access denied) or 500 (not found) are valid responses

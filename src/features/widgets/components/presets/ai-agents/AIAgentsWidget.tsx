@@ -4,7 +4,6 @@ import {
   Bot,
   Trash2,
   MessageSquare,
-  Plus,
   Loader2,
   AlertCircle,
 } from 'lucide-react';
@@ -23,6 +22,7 @@ import { HistorySidebar } from './HistorySidebar';
 import { ApiKeyDialog } from './ApiKeyDialog';
 import { ChatHeader } from './ChatHeader';
 import { ChatInput } from './ChatInput';
+import { AgentWidgetSetup } from './AgentWidgetSetup';
 
 export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
   const authUser = useAuthStore((s) => s.user);
@@ -594,35 +594,8 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
   if (needsSetup) {
     return (
       <div ref={widgetRef} className="w-full h-full flex items-center justify-center bg-[var(--bg-primary)]">
-        <div className="flex flex-col items-center text-center p-8 space-y-6 max-w-md">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
-            <Bot className="w-8 h-8 text-white" />
-          </div>
-          <div>
-            <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">AI Агенты не настроены</h3>
-            <p className="text-sm text-[var(--text-tertiary)]">
-              Для работы с AI агентами нужно создать системные таблицы в проекте "System Data".
-              После создания вы сможете настроить API ключи для провайдеров.
-            </p>
-          </div>
-          {error && (
-            <div className="w-full bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-500">{error}</div>
-          )}
-          <button
-            onClick={handleCreateTables}
-            disabled={isCreatingTables || !currentSpace?.id}
-            className="flex items-center gap-2 px-6 py-3 bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-          >
-            {isCreatingTables ? (
-              <><Loader2 className="w-5 h-5 animate-spin" /><span>Создание таблиц...</span></>
-            ) : (
-              <><Plus className="w-5 h-5" /><span>Создать таблицы в System Data</span></>
-            )}
-          </button>
-          {!currentSpace?.id && (
-            <p className="text-xs text-[var(--text-tertiary)]">Выберите пространство для создания таблиц</p>
-          )}
-        </div>
+        <AgentWidgetSetup error={error} isCreatingTables={isCreatingTables}
+          spaceId={currentSpace?.id} handleCreateTables={handleCreateTables} />
       </div>
     );
   }
@@ -676,10 +649,10 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
               ) : (
                 <div className="space-y-1">
                   {enrichedConversations.map((conv) => (
-                    <div
+                    <button type="button"
                       key={conv.id}
                       className={cn(
-                        "flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors group",
+                        "w-full text-left flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors group",
                         selectedConversationId === conv.id
                           ? "bg-[var(--color-primary-50)] text-[var(--color-primary-600)]"
                           : "hover:bg-[var(--bg-tertiary)]"
@@ -700,7 +673,7 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -782,6 +755,7 @@ export function AIAgentsWidget({ widget, data }: PresetWidgetProps) {
       {showHistorySidebar && (
         <HistorySidebar
           sidebarWidth={sidebarWidth}
+          onWidthChange={setSidebarWidth}
           isResizing={isResizing}
           onMouseDown={handleMouseDown}
           onCollapse={() => setSidebarCollapsed(true)}

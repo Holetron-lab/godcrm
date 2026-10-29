@@ -1,3 +1,5 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * AttachPopup — Unified Attach Popup for Chat
  *
@@ -87,6 +89,7 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
   onAddTextSnippet,
   onRemoveTextSnippet,
 }) => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<AttachTab>('files');
   const [filesSearch, setFilesSearch] = useState('');
   const [textInput, setTextInput] = useState('');
@@ -276,8 +279,8 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
                 <Upload className="w-4 h-4 text-[var(--color-primary-500)]" />
               </div>
               <div>
-                <div className="text-sm text-[var(--text-primary)] font-medium">Upload from device</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">Images, PDF, text, CSV, JSON</div>
+                <div className="text-sm text-[var(--text-primary)] font-medium">{t('aiChat.ui.uploadFromDevice')}</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">{t('aiChat.ui.supportedFiles')}</div>
               </div>
             </button>
 
@@ -295,14 +298,14 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
                       type="text"
                       value={filesSearch}
                       onChange={(e) => setFilesSearch(e.target.value)}
-                      placeholder="Search files..."
+                      placeholder={t('aiChat.ui.searchFiles')}
                       className="w-full pl-7 pr-2 py-1 text-xs rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
                     />
                   </div>
                   <button
                     onClick={() => setFilesSource(undefined)}
                     className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] flex-shrink-0"
-                    title="Change source"
+                    title={t('aiChat.ui.changeSource')}
                   >
                     <Settings className="w-3 h-3" />
                   </button>
@@ -314,8 +317,7 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
                     </div>
                   ) : filteredFiles.length === 0 ? (
                     <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">
-                      No files in project
-                    </div>
+                      {t('aiChat.ui.noProjectFiles')}</div>
                   ) : (
                     filteredFiles.map((file: FileModel) => (
                       <button
@@ -346,7 +348,7 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
               <div className="p-3">
                 <div className="flex items-center gap-2 mb-2 text-xs text-[var(--text-tertiary)]">
                   <FolderOpen className="w-3.5 h-3.5" />
-                  <span>Select a file library source</span>
+                  <span>{t('aiChat.ui.selectFileLibrary')}</span>
                 </div>
                 <FilesSourceInlineSelector
                   defaultSpaceId={currentSpace?.id}
@@ -365,15 +367,14 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
         {activeTab === 'text' && (
           <div className="p-3 space-y-3">
             <div className="text-xs text-[var(--text-tertiary)]">
-              Attach a text snippet as context for the AI
-            </div>
+              {t('aiChat.ui.snippetContext')}</div>
 
             {/* Label (optional) */}
             <input
               type="text"
               value={textLabel}
               onChange={(e) => setTextLabel(e.target.value)}
-              placeholder="Label (optional)"
+              placeholder={t('aiChat.ui.optionalLabel')}
               className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
             />
 
@@ -381,7 +382,7 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
             <textarea
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              placeholder="Paste or type text here..."
+              placeholder={t('aiChat.ui.snippetPlaceholder')}
               rows={4}
               className="w-full px-3 py-2 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 resize-none font-mono"
             />
@@ -395,15 +396,14 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
                 disabled={!textInput.trim()}
                 className="px-3 py-1.5 text-xs font-medium bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                Attach text
-              </button>
+                {t('aiChat.ui.attachText')}</button>
             </div>
 
             {/* Already attached snippets */}
             {textSnippets.length > 0 && (
               <div className="pt-2 border-t border-[var(--border-secondary)]">
                 <div className="text-[10px] text-[var(--text-tertiary)] mb-1.5 uppercase tracking-wider">
-                  Attached snippets ({textSnippets.length})
+                  {t('aiChat.ui.snippetCount', { count: textSnippets.length })}
                 </div>
                 <div className="space-y-1">
                   {textSnippets.map((s) => (
@@ -439,7 +439,7 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
                   <button
                     onClick={() => { setRowsTableId(null); setRowsSearch(''); }}
                     className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] flex-shrink-0"
-                    title="Back to tables"
+                    title={t('aiChat.ui.backToTables')}
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
                   </button>
@@ -453,7 +453,7 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
                       type="text"
                       value={rowsSearch}
                       onChange={(e) => setRowsSearch(e.target.value)}
-                      placeholder="Search rows..."
+                      placeholder={t('aiChat.ui.searchRows')}
                       className="w-full pl-7 pr-2 py-1 text-xs rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
                     />
                   </div>
@@ -465,8 +465,7 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
                     </div>
                   ) : filteredRows.length === 0 ? (
                     <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">
-                      No rows found
-                    </div>
+                      {t('aiChat.ui.noRowsFound')}</div>
                   ) : (
                     filteredRows.map((row: { id: number; data: Record<string, unknown> }) => {
                       const data = row.data || {};
@@ -501,7 +500,7 @@ export const AttachPopup: React.FC<AttachPopupProps> = ({
                             )}
                           </div>
                           {isAlreadyBound && (
-                            <span className="text-[10px] text-green-500 flex-shrink-0">attached</span>
+                            <span className="text-[10px] text-green-500 flex-shrink-0">{t('aiChat.ui.attached')}</span>
                           )}
                         </button>
                       );
@@ -563,6 +562,8 @@ function extractTables(nodes: TreeNode[]): Array<{ id: number; name: string; ico
 }
 
 function UniversalTablePicker({ spaceId, onSelect }: UniversalTablePickerProps) {
+  const requestedFocusRef = useRequestedFocus<HTMLInputElement>(true);
+  const { t } = useLanguage();
   const [search, setSearch] = useState('');
 
   const { data: spaceTables = [], isLoading } = useQuery({
@@ -599,9 +600,9 @@ function UniversalTablePicker({ spaceId, onSelect }: UniversalTablePickerProps) 
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search tables..."
+          placeholder={t('aiChat.ui.searchTables')}
           className="flex-1 py-1 text-xs bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none"
-          autoFocus
+          ref={requestedFocusRef}
         />
       </div>
 
@@ -611,7 +612,7 @@ function UniversalTablePicker({ spaceId, onSelect }: UniversalTablePickerProps) 
         </div>
       ) : filtered.length === 0 ? (
         <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">
-          {search ? 'No tables match your search' : 'No tables in this space'}
+          {search ? t('aiChat.ui.noMatchingTables') : t('aiChat.ui.noSpaceTables')}
         </div>
       ) : (
         Object.entries(grouped).map(([projectName, tables]) => (

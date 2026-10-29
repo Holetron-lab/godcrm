@@ -1,0 +1,38 @@
+import { fireEvent, screen } from '@testing-library/react';
+import { beforeEach, expect, it, vi } from 'vitest';
+import { renderWithProviders } from '@/tests/renderWithProviders';
+import { AgentsPanelContent } from '../AgentsPanelContent';
+import { InboxPanelContent } from '../InboxPanelContent';
+import type { PanelContentDeps } from '../PanelContentTypes';
+import type { AIAgent } from '@/features/ai-chat/types';
+vi.mock('../AgentConfigurationFields', () => ({ AgentConfigurationFields: () => <div>Agent configuration</div> }));
+vi.mock('../ConversationDescription', () => ({ ConversationDescription: ({ conversationId }: { conversationId: number }) => <div>Description {conversationId}</div> }));
+vi.mock('../../../../ChatNotifications/PerChatSettingsInline', () => ({ PerChatSettingsInline: ({ conversationId }: { conversationId: number }) => <div>Settings {conversationId}</div> }));
+const agent = (id: number, name: string) => ({ id, name, is_active: true } as AIAgent);
+beforeEach(() => { localStorage.clear(); vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} }); });
+it('puts assigned agents first and lets the owner assign summary from the expanded row', () => {
+  const saveSummary = vi.fn();
+  const deps = { filteredAgents: [agent(1, 'Regular'), agent(2, 'Summarizer')], favoriteAgents: [], operators: [], defaultAgentId: null, summaryAgentId: 2, onSummaryAgentChange: saveSummary, isAdminOrOwner: true } as unknown as PanelContentDeps;
+  const { container } = renderWithProviders(<AgentsPanelContent {...deps} />);
+  const names = Array.from(container.querySelectorAll('button')).map(button => button.textContent).filter(text => text?.includes('(#'));
+  expect(names[0]).toContain('Summarizer');
+  fireEvent.click(screen.getAllByTitle('Настройки контекста')[0]);
+  const summary = screen.getByRole('checkbox', { name: 'Агент сводок' });
+  expect(summary).toBeChecked();
+  fireEvent.click(summary);
+  expect(saveSummary).toHaveBeenCalledWith(null);
+});
+it('opens settings for the clicked chat without selecting it and keeps favorites across remounts', () => {
+  const select = vi.fn();
+  const deps = { safeAgents: [], effectiveSpaceId: 11, inboxConversations: [{ id: 7, title: 'First chat', participants: [], updated_at: '2026-09-18', settings: { description: 'Saved description' } }], inboxTypeFilter: 'all', inboxRenamingId: null, setChatPartner: select } as unknown as PanelContentDeps;
+  const { unmount, container } = renderWithProviders(<InboxPanelContent {...deps} />);
+  expect(screen.getByText('Saved description')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Настройки чата' }));
+  expect(screen.getByText('Settings 7')).toBeInTheDocument();
+  expect(select).not.toHaveBeenCalled();
+  expect(container.querySelector('button button')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'В избранное' }));
+  unmount();
+  renderWithProviders(<InboxPanelContent {...deps} />);
+  expect(screen.getByRole('button', { name: 'Убрать из избранного' })).toHaveAttribute('aria-pressed', 'true');
+});

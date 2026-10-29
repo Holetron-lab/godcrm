@@ -10,6 +10,15 @@ import { dbRun, dbGet } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
 
 /**
+ * SQL predicate for an agent_status row whose run is over. Such rows are
+ * swept for ANY agent when a placeholder is created/reused: they hold no
+ * content (finalizeAgentStatus is always called with null) and only ever
+ * render as an empty bubble.
+ */
+const TERMINAL_STATUS_SQL =
+  `(content_type = 'agent_status' AND metadata->>'agent_status' IN ('finished', 'error'))`;
+
+/**
  * Create a pre-emptive placeholder message that shows agent working status.
  * This message is created BEFORE the agent starts processing, so the user
  * sees an immediate visual indicator in the chat.
@@ -45,12 +54,18 @@ export async function createAgentStatusPlaceholder(conversationId, opts) {
     started_at: new Date().toISOString(),
   });
 
-  // Delete old plan AND agent_status messages BEFORE inserting the new one —
-  // prevents showing stale data from a previous agent run.
+  // Delete THIS agent's old plan/agent_status messages BEFORE inserting the new one —
+  // prevents showing stale data from a previous run of the same agent. Other agents'
+  // ACTIVE rows stay: the placeholder is one per agent, not one per conversation
+  // (Bugs 1552/228709). Legacy rows with agent_id IS NULL are still swept, and so
+  // are other agents' finished/error rows — they carry no content, render as an
+  // empty bubble, and the status poll would otherwise resurface them at the bottom
+  // of the feed on every new run.
   try {
     await dbRun(
-      `DELETE FROM messages WHERE conversation_id = $1 AND content_type IN ('plan', 'agent_status')`,
-      [conversationId]
+      `DELETE FROM messages WHERE conversation_id = $1 AND content_type IN ('plan', 'agent_status')
+         AND (agent_id = $2 OR agent_id IS NULL OR ${TERMINAL_STATUS_SQL})`,
+      [conversationId, agentRowId]
     );
   } catch (planErr) {
     apiLogger.warn({ err: planErr.message, conversationId }, 'AgentLoopService: Failed to clear old status/plan on new placeholder (non-fatal)');
@@ -139,26 +154,26 @@ export async function resetAgentStatusForReuse(messageId, extra = {}) {
 
   apiLogger.info({ messageId }, 'AgentLoopService: Reset agent status placeholder for reuse');
 
-  // Also delete the old plan message from this conversation (if any).
-  // Without this, the frontend shows the plan from the PREVIOUS agent run
-  // until the new run creates its own plan.
+  // Also delete THIS agent's old plan message from this conversation (if any).
+  // Without this, the frontend shows the plan from the PREVIOUS run of the same
+  // agent until the new run creates its own plan. Other agents' plan/status rows
+  // stay (Bugs 1552/228709); legacy agent_id IS NULL rows are still swept.
   try {
     const statusRow = await dbGet(
-      `SELECT conversation_id FROM messages WHERE id = $1`,
+      `SELECT conversation_id, agent_id FROM messages WHERE id = $1`,
       [messageId]
     );
     if (statusRow?.conversation_id) {
-      // Delete old plan messages
       await dbRun(
-        `DELETE FROM messages WHERE conversation_id = $1 AND content_type = 'plan'`,
-        [statusRow.conversation_id]
+        `DELETE FROM messages WHERE conversation_id = $1 AND content_type = 'plan' AND (agent_id = $2 OR agent_id IS NULL)`,
+        [statusRow.conversation_id, statusRow.agent_id]
       );
-      // Delete OTHER agents' stale agent_status messages (keep only the current one).
-      // Without this, stale statuses from different agents accumulate in the DB,
-      // and the frontend's limit=N fetch returns wrong agent's status (highest ID wins).
+      // Duplicate agent_status rows of the same agent (keep only the reused one)
+      // plus other agents' finished/error leftovers — same sweep as on create.
       await dbRun(
-        `DELETE FROM messages WHERE conversation_id = $1 AND content_type = 'agent_status' AND id != $2`,
-        [statusRow.conversation_id, messageId]
+        `DELETE FROM messages WHERE conversation_id = $1 AND content_type = 'agent_status' AND id != $2
+           AND (agent_id = $3 OR agent_id IS NULL OR ${TERMINAL_STATUS_SQL})`,
+        [statusRow.conversation_id, messageId, statusRow.agent_id]
       );
     }
   } catch (planErr) {

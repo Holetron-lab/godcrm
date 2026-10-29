@@ -4,6 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID, NON_EXISTENT_ID_STR } from '../../../tests/helpers/sentinel-ids.js';
 import request from 'supertest';
 import express from 'express';
 import tablesRoutes from '../tables.js';
@@ -126,7 +127,7 @@ describe('Tables API Routes (v3) - ADR-064', () => {
 
     test('should return 404 for non-existent table', async () => {
       const res = await request(app)
-        .get('/api/v3/tables/99999')
+        .get(`/api/v3/tables/${NON_EXISTENT_ID}`)
         .expect(404);
 
       expect(res.body.success).toBe(false);
@@ -205,7 +206,7 @@ describe('Tables API Routes (v3) - ADR-064', () => {
 
     test('should return 404 for non-existent table', async () => {
       const res = await request(app)
-        .delete('/api/v3/tables/99999')
+        .delete(`/api/v3/tables/${NON_EXISTENT_ID}`)
         .expect(404);
 
       expect(res.body.success).toBe(false);
@@ -301,7 +302,7 @@ describe('Tables API Routes (v3) - ADR-064', () => {
 
     test('should return 404 for non-existent row', async () => {
       const res = await request(app)
-        .get(`/api/v3/tables/${tableId}/rows/99999`)
+        .get(`/api/v3/tables/${tableId}/rows/${NON_EXISTENT_ID}`)
         .expect(404);
 
       expect(res.body.success).toBe(false);
@@ -310,7 +311,7 @@ describe('Tables API Routes (v3) - ADR-064', () => {
 
     test('should return 404 for non-existent table', async () => {
       const res = await request(app)
-        .get('/api/v3/tables/99999/rows/1')
+        .get(`/api/v3/tables/${NON_EXISTENT_ID}/rows/1`)
         .expect(404);
 
       expect(res.body.success).toBe(false);
@@ -545,7 +546,7 @@ describe('Tables API Routes (v3) - ADR-064', () => {
       // Pass a numeric ID that does not exist in the related table
       const res = await request(app)
         .put(`/api/v3/tables/${tableId}/rows/${rowId}`)
-        .send({ data: { state: 999999 } })
+        .send({ data: { state: NON_EXISTENT_ID } })
         .expect(400);
 
       expect(res.body.success).toBe(false);
@@ -559,7 +560,7 @@ describe('Tables API Routes (v3) - ADR-064', () => {
       // Pass a numeric string ID that does not exist in the related table
       const res = await request(app)
         .put(`/api/v3/tables/${tableId}/rows/${rowId}`)
-        .send({ data: { state: '999999' } })
+        .send({ data: { state: NON_EXISTENT_ID_STR } })
         .expect(400);
 
       expect(res.body.success).toBe(false);
@@ -572,7 +573,7 @@ describe('Tables API Routes (v3) - ADR-064', () => {
 
       const res = await request(app)
         .put(`/api/v3/tables/${tableId}/rows/${rowId}`)
-        .send({ data: { state: 999999 } })
+        .send({ data: { state: NON_EXISTENT_ID } })
         .expect(400);
 
       // Error message should list valid IDs so the caller knows what to use

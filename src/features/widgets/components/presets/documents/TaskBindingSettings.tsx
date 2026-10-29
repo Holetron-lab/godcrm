@@ -6,7 +6,7 @@
  * @see ADR-038-DOCUMENTS-TASKS-SYNC.md
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useId } from 'react';
 import { 
   CheckSquare, 
   Settings2, 
@@ -69,6 +69,7 @@ export function TaskBindingSettings({
   columns = [],
   onTableSelect,
 }: TaskBindingSettingsProps) {
+  const fieldId = useId();
   const [isExpanded, setIsExpanded] = useState(!!config?.enabled);
 
   // Merge with defaults
@@ -143,6 +144,8 @@ export function TaskBindingSettings({
       {/* Header with Toggle */}
       <div className="flex items-center justify-between">
         <button
+          type="button"
+          aria-expanded={isExpanded}
           onClick={() => setIsExpanded(!isExpanded)}
           className="flex items-center gap-2 text-sm font-medium text-[var(--text-primary)] hover:text-[var(--accent-primary)]"
         >
@@ -158,6 +161,7 @@ export function TaskBindingSettings({
         <label className="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
+            aria-label="Привязка к задачам"
             checked={currentConfig.enabled}
             onChange={handleToggle}
             className="sr-only peer"
@@ -165,6 +169,7 @@ export function TaskBindingSettings({
           <div className={cn(
             'w-9 h-5 rounded-full transition-colors',
             'peer-checked:bg-[var(--accent-primary)] bg-[var(--bg-tertiary)]',
+            'peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--accent-primary)]',
             'after:content-[""] after:absolute after:top-0.5 after:left-0.5',
             'after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-transform',
             'peer-checked:after:translate-x-4'
@@ -177,11 +182,12 @@ export function TaskBindingSettings({
         <div className="pl-6 space-y-4 border-l-2 border-[var(--border-primary)]">
           {/* Table Selection */}
           <div className="space-y-1.5">
-            <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+            <label htmlFor={`${fieldId}-table`} className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
               <Table2 className="w-3.5 h-3.5" />
               Таблица задач
             </label>
             <select
+              id={`${fieldId}-table`}
               value={currentConfig.table_id}
               onChange={(e) => handleTableChange(parseInt(e.target.value, 10))}
               className={cn(
@@ -203,18 +209,19 @@ export function TaskBindingSettings({
           {/* Column Mapping */}
           {currentConfig.table_id > 0 && columns.length > 0 && (
             <div className="space-y-2">
-              <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+              <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
                 <Columns className="w-3.5 h-3.5" />
                 Маппинг колонок
-              </label>
+              </div>
               
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {(['title', 'description', 'status', 'due_date', 'assignee', 'priority'] as const).map(field => (
                   <div key={field} className="flex items-center gap-2">
-                    <span className="w-20 text-[var(--text-tertiary)] capitalize">
+                    <label htmlFor={`${fieldId}-${field}`} className="w-20 text-[var(--text-tertiary)] capitalize">
                       {field.replace('_', ' ')}
-                    </span>
+                    </label>
                     <select
+                      id={`${fieldId}-${field}`}
                       value={currentConfig.columns[field] || ''}
                       onChange={(e) => handleColumnChange(field, e.target.value)}
                       className={cn(
@@ -238,10 +245,10 @@ export function TaskBindingSettings({
 
           {/* Export Options */}
           <div className="space-y-2">
-            <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+            <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
               <FileOutput className="w-3.5 h-3.5" />
               Опции экспорта
-            </label>
+            </div>
             
             <div className="flex flex-wrap gap-2">
               {(['h1', 'h2', 'h3', 'checkbox'] as const).map(level => (
@@ -272,9 +279,10 @@ export function TaskBindingSettings({
             </label>
 
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-[var(--text-tertiary)]">Статус по умолчанию:</span>
+              <label htmlFor={`${fieldId}-default-status`} className="text-[var(--text-tertiary)]">Статус по умолчанию:</label>
               <input
                 type="text"
+                id={`${fieldId}-default-status`}
                 value={currentConfig.export_options.default_status}
                 onChange={(e) => handleExportOptionChange('default_status', e.target.value)}
                 className={cn(
@@ -288,10 +296,10 @@ export function TaskBindingSettings({
 
           {/* Display Options */}
           <div className="space-y-2">
-            <label className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+            <div className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
               <Eye className="w-3.5 h-3.5" />
               Отображать в документе
-            </label>
+            </div>
             
             <div className="grid grid-cols-2 gap-1.5">
               {([

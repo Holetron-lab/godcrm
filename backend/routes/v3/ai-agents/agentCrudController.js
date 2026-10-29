@@ -5,9 +5,10 @@
  */
 
 import { Router } from 'express';
-import { dbGet, dbAll, dbRun, isPostgres } from '../../../database/connection.js';
+import { z } from 'zod';
+import { dbGet, dbAll, dbRun, isPostgres, withTransactionAsync } from '../../../database/connection.js';
 import { apiLogger } from '../../../utils/logger.js';
-import { success, notFound, badRequest, error } from '../../../utils/response.js';
+import { success, notFound, badRequest, error, conflict, forbidden } from '../../../utils/response.js';
 import {
   safeParseJSON,
   resolveAgentRelations,
@@ -15,8 +16,46 @@ import {
 } from './shared.js';
 import { resolveEmbeddingConfig, generateEmbedding } from './sharedEmbedding.js';
 import { resolveModel, resolveProvider, parseAgentRow } from './sharedAgentResolution.js';
+import { resolvePassportAuthority } from '../../../services/passportAuthority.js';
+import { writeAudit } from '../../../services/audit/writeAudit.js';
 
 const router = Router();
+
+/**
+ * Mirror operator/model choices into the table's relation columns so the
+ * universal-table UI shows the same value the agent runtime reads from
+ * `data.operator_id` / `data.model`. `db` is `{ get, all }` — the pool
+ * helpers for the legacy PUT, the trx object inside the atomic PUT.
+ */
+async function applyRelationColumns(db, tableId, data, { operatorId, model }) {
+  const columns = await db.all(
+    'SELECT id, column_name, config FROM table_columns WHERE table_id = ?',
+    [tableId]
+  );
+  for (const col of columns) {
+    const colConfig = safeParseJSON(col.config, {});
+    if (!colConfig.relation?.enabled) continue;
+    if (col.column_name === 'operator_id' && operatorId !== undefined) {
+      data[String(col.id)] = String(operatorId);
+    } else if (col.column_name === 'model' && model !== undefined) {
+      const modelRow = await db.get(isPostgres()
+        ? `SELECT tr.id FROM table_rows tr
+           JOIN universal_tables ut ON tr.table_id = ut.id
+           WHERE (ut.name = 'AI Models' OR ut.name = 'ai_models')
+             AND tr.data->>'model_id' = $1
+           LIMIT 1`
+        : `SELECT tr.id FROM table_rows tr
+           JOIN universal_tables ut ON tr.table_id = ut.id
+           WHERE (ut.name = 'AI Models' OR ut.name = 'ai_models')
+             AND json_extract(tr.data, '$.model_id') = ?
+           LIMIT 1`,
+        [model]);
+      if (modelRow) {
+        data[String(col.id)] = String(modelRow.id);
+      }
+    }
+  }
+}
 
 /**
  * ADR-0079 P4: flip Tier-B `visibility: 'locked'` → `'unlocked'` for the agents
@@ -62,20 +101,23 @@ router.get('/agents', async (req, res) => {
       WHERE (ut.name LIKE '%Agents%' OR ut.name LIKE '%agents%' OR ut.name LIKE '%Агенты%')
         AND ut.name NOT LIKE 'doc\\_%' ESCAPE '\\'
         AND (s.owner_id = ? OR s.type = 'admin')
+      ORDER BY ut.id
     `, [userId]);
 
     if (!tables || tables.length === 0) {
       return success(res, { agents: [], total: 0, limit, offset });
     }
 
-    // Count total across all agent tables
+    // Count once per table. pg returns COUNT(*) (int8) as a string — Number() it,
+    // or `total`/`skipped` concatenate and every page re-serves the last tables.
     let total = 0;
     for (const table of tables) {
       const countResult = await dbGet(
         'SELECT COUNT(*) as cnt FROM table_rows WHERE table_id = ?',
         [table.table_id]
       );
-      total += countResult?.cnt || 0;
+      table.row_count = Number(countResult?.cnt) || 0;
+      total += table.row_count;
     }
 
     // Fetch rows with pagination across tables
@@ -86,10 +128,7 @@ router.get('/agents', async (req, res) => {
     for (const table of tables) {
       if (collected >= limit) break;
 
-      const tableCount = (await dbGet(
-        'SELECT COUNT(*) as cnt FROM table_rows WHERE table_id = ?',
-        [table.table_id]
-      ))?.cnt || 0;
+      const tableCount = table.row_count;
 
       // Skip entire table if offset hasn't been reached yet
       if (skipped + tableCount <= offset) {
@@ -102,7 +141,7 @@ router.get('/agents', async (req, res) => {
 
       const rows = await dbAll(`
         SELECT id, data, created_at FROM table_rows
-        WHERE table_id = ? ORDER BY created_at DESC
+        WHERE table_id = ? ORDER BY created_at DESC, id DESC
         LIMIT ? OFFSET ?
       `, [table.table_id, tableLimit, tableOffset]);
 
@@ -169,7 +208,7 @@ router.get('/agents/:spaceId', async (req, res) => {
       return success(res, { agents: [], total: 0, limit, offset });
     }
 
-    const total = table.row_count || 0;
+    const total = Number(table.row_count) || 0;
 
     const rows = await dbAll(`
       SELECT id, data, created_at FROM table_rows
@@ -399,34 +438,7 @@ router.put('/agents/:agentId', async (req, res) => {
       data.context_settings = deepMergeContextSettings(existing, incoming);
     }
 
-    // Update relation column values
-    const columns = await dbAll(
-      'SELECT id, column_name, config FROM table_columns WHERE table_id = ?',
-      [row.table_id]
-    );
-    for (const col of columns) {
-      const colConfig = safeParseJSON(col.config, {});
-      if (!colConfig.relation?.enabled) continue;
-      if (col.column_name === 'operator_id' && effectiveProviderId !== undefined) {
-        data[String(col.id)] = String(effectiveProviderId);
-      } else if (col.column_name === 'model' && model !== undefined) {
-        const modelRow = await dbGet(isPostgres()
-          ? `SELECT tr.id FROM table_rows tr
-             JOIN universal_tables ut ON tr.table_id = ut.id
-             WHERE (ut.name = 'AI Models' OR ut.name = 'ai_models')
-               AND tr.data->>'model_id' = $1
-             LIMIT 1`
-          : `SELECT tr.id FROM table_rows tr
-             JOIN universal_tables ut ON tr.table_id = ut.id
-             WHERE (ut.name = 'AI Models' OR ut.name = 'ai_models')
-               AND json_extract(tr.data, '$.model_id') = ?
-             LIMIT 1`,
-          [model]);
-        if (modelRow) {
-          data[String(col.id)] = String(modelRow.id);
-        }
-      }
-    }
+    await applyRelationColumns({ get: dbGet, all: dbAll }, row.table_id, data, { operatorId: effectiveProviderId, model });
 
     await dbRun(
       'UPDATE table_rows SET data = ?, updated_at = ? WHERE id = ?',
@@ -437,6 +449,166 @@ router.put('/agents/:agentId', async (req, res) => {
   } catch (err) {
     apiLogger.error({ err }, 'Error updating agent');
     return error(res, 'UPDATE_AGENT_ERROR', err.message, 500);
+  }
+});
+
+/**
+ * PUT /api/v3/ai/agents/:agentId/configuration — atomic identity edit
+ * (conversation 3692). Body: `{ data: { name?, slug?, color?, icon?,
+ * operator_id?, model?, main_instructions?, crm_instructions? } }`, edited
+ * keys only.
+ *
+ * The identity lives twice: name in the row and on the passport user, slug in
+ * the row (`slug` and/or `agent_slug` — both legacy spellings are kept in
+ * step) and as `users.handle`. One transaction updates all of it or nothing:
+ * a slug that another agent in the same table already uses, or that any user
+ * holds as a global handle, is a 409 with no partial write. Renames never
+ * issue a passport: a user without a handle keeps none, and no user row is
+ * created for an agent that has none.
+ *
+ * Authorization is derived from the agent's residence, never from the body:
+ * admin access in the residence space is required for every edit, and the
+ * full passport authority (global admin + space admin) when the agent holds a
+ * handle and its name or slug changes — that edit rewrites a global identity.
+ */
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const instructionItem = z.union([z.string(), z.object({ content: z.string() }).passthrough()]);
+const configurationSchema = z.object({
+  data: z.object({
+    name: z.string().trim().min(1, 'Name is required').max(120),
+    slug: z.string().trim().toLowerCase().max(64).regex(SLUG_RE, 'Slug must be lowercase letters, digits and hyphens'),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color must be a #rrggbb value'),
+    icon: z.string().max(64),
+    operator_id: z.number().int().positive().nullable(),
+    model: z.string().max(200),
+    main_instructions: z.union([z.string(), z.array(instructionItem)]),
+    crm_instructions: z.string(),
+  }).strict().partial().refine((d) => Object.keys(d).length > 0, { message: 'No changes supplied' }),
+}).strict();
+
+const AUTHORITY_MESSAGES = {
+  agent_principal: 'Agents cannot edit agent identities',
+  global_role_required: 'A global admin role is required to rename an agent that holds a passport',
+  space_admin_required: "Admin access in the agent's space is required to edit it",
+};
+
+router.put('/agents/:agentId/configuration', async (req, res) => {
+  const agentId = Number(req.params.agentId);
+  if (!Number.isInteger(agentId) || agentId <= 0) return badRequest(res, 'Invalid agent id');
+  const parsed = configurationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return badRequest(res, `${issue.path.join('.') || 'body'}: ${issue.message}`, 'VALIDATION_ERROR');
+  }
+  const changes = parsed.data.data;
+  const identityChanged = changes.name !== undefined || changes.slug !== undefined;
+
+  try {
+    const authority = await resolvePassportAuthority({ actorUserId: req.user?.id, rowId: agentId });
+    if (authority.reason === 'not_authenticated') return error(res, 'UNAUTHENTICATED', 'login required', 401);
+    if (authority.reason === 'residence_not_found') return notFound(res, 'Agent');
+    if (authority.reason === 'agent_principal' || !authority.space.admin) {
+      return forbidden(res, AUTHORITY_MESSAGES[authority.reason] || AUTHORITY_MESSAGES.space_admin_required);
+    }
+
+    const result = await withTransactionAsync(async (trx) => {
+      const row = await trx.get(`
+        SELECT tr.id, tr.data, tr.table_id
+        FROM table_rows tr
+        JOIN universal_tables ut ON tr.table_id = ut.id
+        WHERE tr.id = ? AND (ut.name LIKE '%Agents%' OR ut.name LIKE '%agents%' OR ut.name LIKE '%Агенты%')
+        FOR UPDATE OF tr
+      `, [agentId]);
+      if (!row) return { status: 404 };
+
+      const passport = await trx.get(
+        `SELECT id, name, handle FROM users WHERE managed_by_agent_row_id = ? AND user_type = 'agent' ORDER BY id LIMIT 1 FOR UPDATE`,
+        [agentId]
+      );
+      if (passport?.handle && identityChanged && !authority.allowed) {
+        return { status: 403, message: AUTHORITY_MESSAGES[authority.reason] || 'Forbidden' };
+      }
+
+      const data = safeParseJSON(row.data, {});
+      const prior = { name: data.name, slug: data.slug ?? data.agent_slug ?? null, handle: passport?.handle ?? null };
+
+      if (changes.slug !== undefined) {
+        // Serialize slug changes per agents table: the row has no unique index,
+        // so two concurrent renames to the same slug must not both pass the check.
+        await trx.get('SELECT pg_advisory_xact_lock(hashtext(?))', [`agent-slug:${row.table_id}`]);
+        const rowClash = await trx.get(
+          `SELECT id FROM table_rows
+           WHERE table_id = ? AND id <> ? AND (lower(data->>'slug') = ? OR lower(data->>'agent_slug') = ?)
+           LIMIT 1`,
+          [row.table_id, agentId, changes.slug, changes.slug]
+        );
+        if (rowClash) return { status: 409, message: `Slug '${changes.slug}' is already used by another agent in this table` };
+        const handleClash = await trx.get(
+          'SELECT id FROM users WHERE lower(handle) = ? AND id <> ? LIMIT 1',
+          [changes.slug, passport?.id ?? 0]
+        );
+        if (handleClash) return { status: 409, message: `Slug '${changes.slug}' is already taken as a global handle` };
+        // Keep whichever spelling(s) the row already uses; new rows get `slug`.
+        if ('agent_slug' in data) data.agent_slug = changes.slug;
+        if ('slug' in data || !('agent_slug' in data)) data.slug = changes.slug;
+      }
+
+      for (const key of ['name', 'color', 'icon', 'model', 'main_instructions', 'crm_instructions']) {
+        if (changes[key] !== undefined) data[key] = changes[key];
+      }
+      if (changes.operator_id !== undefined) data.operator_id = changes.operator_id;
+      await applyRelationColumns(trx, row.table_id, data, { operatorId: changes.operator_id, model: changes.model });
+
+      await trx.run(
+        'UPDATE table_rows SET data = ?, updated_at = ? WHERE id = ?',
+        [JSON.stringify(data), new Date().toISOString(), agentId]
+      );
+
+      let passportOut = null;
+      if (passport) {
+        // A handle is only ever moved, never minted here: null stays null.
+        const nextHandle = passport.handle ? (changes.slug ?? passport.handle) : null;
+        const nextName = changes.name ?? passport.name;
+        if (nextHandle !== passport.handle || nextName !== passport.name) {
+          await trx.run('UPDATE users SET name = ?, handle = ?, updated_at = NOW() WHERE id = ?', [nextName, nextHandle, passport.id]);
+        }
+        passportOut = { user_id: passport.id, handle: nextHandle };
+      }
+      return { status: 200, data, prior, passport: passportOut, table_id: row.table_id };
+    });
+
+    if (result.status === 404) return notFound(res, 'Agent');
+    if (result.status === 403) return forbidden(res, result.message);
+    if (result.status === 409) return conflict(res, result.message);
+
+    const { data, prior, passport } = result;
+    const handleChanged = passport?.handle && passport.handle !== prior.handle;
+    writeAudit(req, {
+      action: 'agent.identity.update',
+      entity_type: 'ai_agent',
+      entity_id: agentId,
+      details: {
+        table_id: result.table_id,
+        changed: Object.keys(changes),
+        prior,
+        next: { name: data.name, slug: data.slug ?? data.agent_slug ?? null, handle: passport?.handle ?? null },
+        passport_user_id: passport?.user_id ?? null,
+      },
+    });
+    if (handleChanged) {
+      // ADR-198: the mailbox address is minted from the handle at issue time and is
+      // keyed by user_id; it is deliberately NOT renamed here — a silently moving
+      // address loses mail. Surface it so ops can decide.
+      apiLogger.warn(
+        { agentId, userId: passport.user_id, prior_handle: prior.handle, handle: passport.handle },
+        'agent handle renamed — any provisioned mailbox keeps its old address'
+      );
+    }
+    return success(res, { id: agentId, table_id: result.table_id, ...data, passport });
+  } catch (err) {
+    if (err?.code === '23505') return conflict(res, 'Slug is already taken as a global handle');
+    apiLogger.error({ err, agentId }, 'Error updating agent configuration');
+    return error(res, 'UPDATE_AGENT_CONFIGURATION_ERROR', 'Failed to update agent configuration', 500);
   }
 });
 

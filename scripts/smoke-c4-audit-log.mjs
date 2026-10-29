@@ -20,7 +20,7 @@ const pool = new Pool({
   port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
   database: process.env.POSTGRES_DB || 'godcrm_prod',
   user: process.env.POSTGRES_USER || 'godcrm',
-  password: process.env.POSTGRES_PASSWORD || 'godcrm_dev_2026',
+  password: process.env.POSTGRES_PASSWORD || 'CHANGE_ME_LOCAL_DB_PASSWORD',
 });
 
 function hashTotpCode(code, salt = 'godcrm-bdd-audit-default-salt') {

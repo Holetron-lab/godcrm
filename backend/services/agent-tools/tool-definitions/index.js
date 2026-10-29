@@ -13,6 +13,8 @@ import { WEB_TOOLS } from './web.js';
 import { BLUESKY_TOOLS } from './bluesky.js';
 import { REDDIT_TOOLS } from './reddit.js';
 import { FILE_TOOLS } from './file.js';
+import { CSV_TOOLS } from './csv.js';
+import { UI_TOOLS } from './ui.js';
 import { TICKET_TOOLS } from './ticket.js';
 import { IMAGE_TOOLS } from './image.js';
 import { MEMORY_TOOLS } from './memory.js';
@@ -22,6 +24,7 @@ import { CALENDAR_TOOLS } from './calendar.js';
 import { PRINTER_TOOLS } from './printer.js';
 import { CONNECTOR_TOOL_DEFS } from '../connector-tools.js';
 import { PASSPORT_TOOLS } from './passport.js';
+import { OPS_TOOLS } from './ops.js';
 
 // Build a lookup so we can reference any tool by its function name.
 const byName = Object.fromEntries(
@@ -32,6 +35,8 @@ const byName = Object.fromEntries(
     ...BLUESKY_TOOLS,
     ...REDDIT_TOOLS,
     ...FILE_TOOLS,
+    ...CSV_TOOLS,
+    ...UI_TOOLS,
     ...TICKET_TOOLS,
     ...IMAGE_TOOLS,
     ...MEMORY_TOOLS,
@@ -40,7 +45,8 @@ const byName = Object.fromEntries(
     ...CALENDAR_TOOLS,
     ...PRINTER_TOOLS,
     ...CONNECTOR_TOOL_DEFS,
-    ...PASSPORT_TOOLS
+    ...PASSPORT_TOOLS,
+    ...OPS_TOOLS
   ].map((t) => [t.function.name, t])
 );
 
@@ -120,6 +126,7 @@ export const AGENT_TOOLS = [
   // === IMAGE GENERATION TOOLS ===
   t('replicate_image_generate'),
   t('replicate_3d_generate'),
+  t('replicate_video_generate'),
   t('replicate_check_prediction'),
   t('gemini_image_generate'),
 
@@ -207,5 +214,16 @@ export const AGENT_TOOLS = [
 
   // === ADR-164 Phase 2 — agent passport lifecycle ===
   t('issue_passport'),
-  t('revoke_passport')
+  t('revoke_passport'),
+
+  // === Browser scenario runner (appended last so existing prompt prefixes,
+  // and therefore the prompt cache, stay byte-identical) ===
+  t('ui_probe'),
+
+  // === Constitution v4.3 ops profiles — diagnostics / local-qa via the broker ===
+  t('ops_grant_info'),
+  t('ops_run_check'),
+  t('project_csv'),
+  t('midjourney_image_generate'),
+  t('midjourney_check_task'),
 ];

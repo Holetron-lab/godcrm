@@ -3,6 +3,7 @@
  * Used by StatusBar to open bug report modal
  */
 
+import type { TableModel, ColumnModel } from '@/features/tables/types/table.types';
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -16,8 +17,8 @@ export interface BugReportState {
   openBugModal: () => void;
   closeBugModal: () => void;
   submitBug: (data: Record<string, unknown>) => Promise<void>;
-  bugTable: { id: number; name: string; displayName?: string } | null;
-  bugColumns: unknown[];
+  bugTable: TableModel | null;
+  bugColumns: ColumnModel[];
   isLoading: boolean;
 }
 

@@ -270,7 +270,7 @@ export const TorusBrand = ({
           className={`${dims.acronymSubSize} font-medium tracking-wide text-[var(--text-secondary)] text-center`}
           style={{ textShadow: '0 0 15px rgba(96, 165, 250, 0.4), 0 0 30px rgba(147, 197, 253, 0.2)' }}
         >
-          Critical Resource Manager
+          Context · Rights · Memory
         </span>
       </div>
       <div
@@ -309,6 +309,14 @@ export const TorusBrand = ({
         }
         .torus-segment .rounded-full {
           transition: all 0.4s ease-out;
+        }
+        /* Keep every ring on its own compositor layer. Without this Chrome
+           promotes a segment only for the 0.4s hover transition and the
+           re-raster inside the rotating preserve-3d context shows a blank
+           frame — the ring "vanishes" and pops back (chat 3772, 2026-10-23). */
+        .torus-segment,
+        .torus-segment .rounded-full {
+          will-change: transform;
         }
       `}</style>
     </div>

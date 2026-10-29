@@ -14,8 +14,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
+import { exec } from 'child_process';
+import QualityGateService from '../../../services/QualityGateService.js';
 
 // ===== MOCKS =====
+
+// A route unit test must never start a real compiler or shell pipeline.
+vi.mock('child_process', () => ({ exec: vi.fn(() => { throw new Error('Unexpected shell execution'); }) }));
+vi.mock('../../../services/QualityGateService.js', () => ({
+  default: { runQualityGate: vi.fn().mockResolvedValue({ passed: true, checks: [] }) },
+}));
 
 const mockGetTicket = vi.fn();
 const mockUpdateTicketStatus = vi.fn();
@@ -170,6 +178,11 @@ describe('ADR-098: Tickets API', () => {
       expect(res.body.data.new_state_id).toBe(24277);
       expect(res.body.data.chain_id).toBe('chain-abc');
       expect(res.body.data.updated_at).toBeDefined();
+      expect(QualityGateService.runQualityGate).toHaveBeenCalledExactlyOnceWith(100, {
+        agent_id: 1, chain_id: 'chain-abc',
+      });
+      await vi.dynamicImportSettled();
+      expect(exec).not.toHaveBeenCalled();
     });
 
     it('should accept state name string and resolve to ID', async () => {

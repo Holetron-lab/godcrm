@@ -5,6 +5,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../../tests/helpers/sentinel-ids.js';
 import { dbAll, dbGet, dbRun, destroyAdapter, resetAdapter } from '../../../connection.js';
 // Helper functions
 async function createTestUser(suffix = '') {
@@ -42,9 +43,9 @@ async function createTestDashboard(projectId) {
 
 async function createTestWidget(dashboardId, presetName = 'table_view') {
   const result = await dbRun(`
-    INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `, [dashboardId, 'preset', presetName, `Widget ${presetName}`, '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+    INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `, [dashboardId, 'preset', presetName, `Widget ${presetName}`, '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
   return result.lastInsertRowid;
 }
 
@@ -132,7 +133,7 @@ describe('Widget Library Tables - ADR-073', () => {
         dbRun(`
           INSERT INTO widget_library (widget_id, space_id, is_public)
           VALUES (?, ?, ?)
-        `, [99999, spaceId, false])
+        `, [NON_EXISTENT_ID, spaceId, false])
       ).rejects.toThrow();
     });
 

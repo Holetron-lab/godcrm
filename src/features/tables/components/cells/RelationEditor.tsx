@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { createPortal } from 'react-dom';
@@ -89,6 +90,7 @@ export const RelationEditor = ({
   const [search, setSearch] = useState('');
   const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number } | null>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
+  const requestedFocusRef = useRequestedFocus<HTMLInputElement>(showPicker && pickerPosition !== null);
   
   // Track local value for immediate updates
   const [localValue, setLocalValue] = useState(value);
@@ -131,20 +133,21 @@ export const RelationEditor = ({
 
   // Parse row helper
   const parseRow = useCallback((row: Record<string, unknown>, index: number) => {
+    const { valueColumn = 'id', labelColumn = 'name' } = relation;
     const rowData = row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : row;
     const rowId = (row as { id?: string | number }).id;
     const originalId = (row as { originalId?: string | number }).originalId;
 
     let val: string;
-    if (relation.valueColumn === 'id') {
+    if (valueColumn === 'id') {
       val = String(originalId ?? rowData['id'] ?? rowId ?? '');
     } else {
-      val = String(rowData[relation.valueColumn] ?? '');
+      val = String(rowData[valueColumn] ?? '');
     }
 
     return {
       value: val,
-      label: String(rowData[relation.labelColumn] ?? ''),
+      label: String(rowData[labelColumn] ?? ''),
       description: relation.descriptionColumn ? String(rowData[relation.descriptionColumn] ?? '') || undefined : undefined,
       color: relation.colorColumn ? String(rowData[relation.colorColumn] ?? '') || getDefaultColor(val, index) : getDefaultColor(val, index),
       rowId: String(rowId ?? originalId ?? val)
@@ -290,7 +293,7 @@ export const RelationEditor = ({
 
   // Picker dropdown - new design with selected on top, available below
   const pickerDropdown = showPicker && pickerPosition ? createPortal(
-    <div
+    <div role="presentation"
       ref={pickerRef}
       className="fixed z-[9999] bg-[var(--bg-primary)] rounded-lg shadow-xl border border-[var(--border-primary)] flex flex-col"
       style={{ 
@@ -353,7 +356,7 @@ export const RelationEditor = ({
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Поиск..."
-              autoFocus
+              ref={requestedFocusRef}
               className="w-full pl-8 pr-3 py-1.5 text-sm rounded-md bg-[var(--bg-secondary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] focus:border-transparent"
             />
           </div>
@@ -375,10 +378,10 @@ export const RelationEditor = ({
             </div>
           ) : (
             filteredItems.map((item, index) => (
-              <div
+              <button type="button"
                 key={item.value || index}
                 onClick={() => addItem(item)}
-                className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors group"
+                className="w-full text-left flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors group"
               >
                 <div 
                   className="w-3 h-3 rounded-full flex-shrink-0"
@@ -395,7 +398,7 @@ export const RelationEditor = ({
                   )}
                 </div>
                 <Plus className="w-4 h-4 text-green-400 flex-shrink-0 opacity-50 group-hover:opacity-100 transition-opacity" />
-              </div>
+              </button>
             ))
           )}
         </div>

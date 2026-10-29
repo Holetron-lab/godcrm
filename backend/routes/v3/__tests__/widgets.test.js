@@ -4,6 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import request from 'supertest';
 import express from 'express';
 import widgetRoutes from '../widgets.js';
@@ -88,14 +89,14 @@ describe('Widget API Routes', () => {
     test('should return all widgets for dashboard', async () => {
       // Create 2 widgets
       await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Widget 1', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Widget 1', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'project_stats', 'Widget 2', '{}', '{"x":6,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'project_stats', 'Widget 2', '{}', '{"x":6,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       const response = await request(app)
         .get(`/api/v3/dashboards/${dashboardId}/widgets`)
@@ -107,7 +108,7 @@ describe('Widget API Routes', () => {
 
     test('should return 404 for non-existent dashboard', async () => {
       const response = await request(app)
-        .get('/api/v3/dashboards/99999/widgets')
+        .get(`/api/v3/dashboards/${NON_EXISTENT_ID}/widgets`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
@@ -190,9 +191,9 @@ describe('Widget API Routes', () => {
   describe('GET /api/v3/widgets/:widgetId', () => {
     test('should return widget by id', async () => {
       const result = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Test Widget', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Test Widget', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       const response = await request(app)
         .get(`/api/v3/widgets/${result.lastInsertRowid}`)
@@ -204,7 +205,7 @@ describe('Widget API Routes', () => {
 
     test('should return 404 for non-existent widget', async () => {
       const response = await request(app)
-        .get('/api/v3/widgets/99999')
+        .get(`/api/v3/widgets/${NON_EXISTENT_ID}`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
@@ -217,9 +218,9 @@ describe('Widget API Routes', () => {
   describe('PATCH /api/v3/widgets/:widgetId', () => {
     test('should update widget title', async () => {
       const result = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Old Title', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Old Title', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       const response = await request(app)
         .patch(`/api/v3/widgets/${result.lastInsertRowid}`)
@@ -232,9 +233,9 @@ describe('Widget API Routes', () => {
 
     test('should update widget config', async () => {
       const result = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Test', '{"table_id":1}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Test', '{"table_id":1}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       const response = await request(app)
         .patch(`/api/v3/widgets/${result.lastInsertRowid}`)
@@ -246,7 +247,7 @@ describe('Widget API Routes', () => {
 
     test('should return 404 for non-existent widget', async () => {
       const response = await request(app)
-        .patch('/api/v3/widgets/99999')
+        .patch(`/api/v3/widgets/${NON_EXISTENT_ID}`)
         .send({ title: 'New' })
         .expect(404);
 
@@ -257,9 +258,9 @@ describe('Widget API Routes', () => {
     test('should reject rename when atom_refs_count > 0 without ?force', async () => {
       // 1. Create widget
       const widgetRes = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Old Title', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Old Title', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
       const widgetId = widgetRes.lastInsertRowid;
 
       // 2. Insert an atoms_v2 row (table 3574) referencing this widget so
@@ -281,9 +282,9 @@ describe('Widget API Routes', () => {
 
     test('should allow rename when atom_refs_count > 0 and ?force=1', async () => {
       const widgetRes = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Old Title', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Old Title', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
       const widgetId = widgetRes.lastInsertRowid;
 
       await dbRun(`
@@ -302,9 +303,9 @@ describe('Widget API Routes', () => {
 
     test('should NOT block config-only update even with refs > 0', async () => {
       const widgetRes = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Stable Title', '{"table_id":1}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Stable Title', '{"table_id":1}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
       const widgetId = widgetRes.lastInsertRowid;
 
       await dbRun(`
@@ -322,9 +323,9 @@ describe('Widget API Routes', () => {
 
     test('should NOT block rename when atom_refs_count == 0', async () => {
       const widgetRes = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Lonely', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Lonely', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
       const widgetId = widgetRes.lastInsertRowid;
 
       const response = await request(app)
@@ -342,9 +343,9 @@ describe('Widget API Routes', () => {
   describe('DELETE /api/v3/widgets/:widgetId', () => {
     test('should delete widget', async () => {
       const result = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       await request(app)
         .delete(`/api/v3/widgets/${result.lastInsertRowid}`)
@@ -358,7 +359,7 @@ describe('Widget API Routes', () => {
 
     test('should return 404 for non-existent widget', async () => {
       const response = await request(app)
-        .delete('/api/v3/widgets/99999')
+        .delete(`/api/v3/widgets/${NON_EXISTENT_ID}`)
         .expect(404);
 
       expect(response.body.success).toBe(false);
@@ -371,9 +372,9 @@ describe('Widget API Routes', () => {
   describe('PATCH /api/v3/widgets/:widgetId/code', () => {
     test('should update custom widget code', async () => {
       const result = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, code, title, config, position, code_version)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'custom', 'const v1 = true;', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}', 1]);
+        INSERT INTO widgets (dashboard_id, widget_type, code, title, config, position, code_version, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'custom', 'const v1 = true;', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}', 1, 'dashboard', dashboardId]);
 
       const response = await request(app)
         .patch(`/api/v3/widgets/${result.lastInsertRowid}/code`)
@@ -387,9 +388,9 @@ describe('Widget API Routes', () => {
 
     test('should return 400 for preset widget', async () => {
       const result = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       const response = await request(app)
         .patch(`/api/v3/widgets/${result.lastInsertRowid}/code`)
@@ -401,9 +402,9 @@ describe('Widget API Routes', () => {
 
     test('should return 400 for empty code', async () => {
       const result = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, code, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'custom', 'const v1 = true;', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, code, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'custom', 'const v1 = true;', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       const response = await request(app)
         .patch(`/api/v3/widgets/${result.lastInsertRowid}/code`)
@@ -427,9 +428,9 @@ describe('Widget API Routes', () => {
 
       // Create widget
       const widgetResult = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'table_view', 'Test', JSON.stringify({ table_id: tableResult.lastInsertRowid }), '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'table_view', 'Test', JSON.stringify({ table_id: tableResult.lastInsertRowid }), '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       // Insert test row
       await dbRun(
@@ -447,9 +448,9 @@ describe('Widget API Routes', () => {
 
     test('should return empty array for widget without table_id', async () => {
       const result = await dbRun(`
-        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [dashboardId, 'preset', 'project_stats', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}']);
+        INSERT INTO widgets (dashboard_id, widget_type, preset_name, title, config, position, owner_kind, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [dashboardId, 'preset', 'project_stats', 'Test', '{}', '{"x":0,"y":0,"w":6,"h":4}', 'dashboard', dashboardId]);
 
       const response = await request(app)
         .get(`/api/v3/widgets/${result.lastInsertRowid}/data`)

@@ -107,9 +107,11 @@ export function TerminalPanel({ className = '', defaultTitle, compact = false, f
     }
   }, [focusSessionId, sessionsLoaded, switchSession]);
 
-  // Check for pending approval commands
+  // Check for pending approval commands. A command decided in this panel must
+  // not re-open the dialog while the server-side status is still catching up.
+  const decidedIdRef = useRef<number | null>(null);
   useEffect(() => {
-    const pending = commands.find(c => c.approval_status === 'pending');
+    const pending = commands.find(c => c.approval_status === 'pending' && c.id !== decidedIdRef.current);
     if (pending) {
       setPendingApproval({
         commandId: pending.id,
@@ -133,6 +135,7 @@ export function TerminalPanel({ className = '', defaultTitle, compact = false, f
 
   const handleApprove = useCallback(() => {
     if (pendingApproval) {
+      decidedIdRef.current = pendingApproval.commandId;
       approve(pendingApproval.commandId);
       setPendingApproval(null);
       setPolicyError(null);
@@ -141,6 +144,7 @@ export function TerminalPanel({ className = '', defaultTitle, compact = false, f
 
   const handleReject = useCallback(() => {
     if (pendingApproval) {
+      decidedIdRef.current = pendingApproval.commandId;
       reject(pendingApproval.commandId);
       setPendingApproval(null);
       setPolicyError(null);
@@ -152,6 +156,7 @@ export function TerminalPanel({ className = '', defaultTitle, compact = false, f
     setPolicyError(null);
     try {
       await policyMutation.mutateAsync(pendingApproval.command);
+      decidedIdRef.current = pendingApproval.commandId;
       approve(pendingApproval.commandId);
       setPendingApproval(null);
     } catch (err) {
@@ -186,11 +191,9 @@ export function TerminalPanel({ className = '', defaultTitle, compact = false, f
               // Bug #74147: Visual distinction for agent sessions
               const isAgentSession = s.title?.startsWith('Agent #');
               return (
-              <button
+              <div
                 key={s.id}
-                onClick={() => switchSession(s.id)}
-                onContextMenu={(e) => handleTabContext(e, s.id)}
-                className={`group relative flex items-center gap-1.5 shrink-0 px-3 py-2 text-[12px] border-r border-slate-800 transition-colors ${
+                className={`group relative flex items-center shrink-0 pr-3 text-[12px] border-r border-slate-800 transition-colors ${
                   s.id === sessionId
                     ? isAgentSession
                       ? 'bg-slate-950 text-purple-400'
@@ -200,26 +203,36 @@ export function TerminalPanel({ className = '', defaultTitle, compact = false, f
                       : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
                 }`}
               >
+                <button
+                  type="button"
+                  onClick={() => switchSession(s.id)}
+                  onContextMenu={(e) => handleTabContext(e, s.id)}
+                  aria-pressed={s.id === sessionId}
+                  className="flex items-center gap-1.5 pl-3 pr-1.5 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400"
+                >
                 {isAgentSession ? (
                   <Bot className="w-3 h-3 shrink-0 text-purple-400" />
                 ) : (
                   <Terminal className="w-3 h-3 shrink-0" />
                 )}
                 <span className={`truncate max-w-[100px] ${isAgentSession ? 'text-[11px] italic' : ''}`}>{s.title}</span>
-                {/* Close X on hover (or always for active) */}
-                <span
+                </button>
+                {/* Close X on hover, keyboard focus, or active session */}
+                <button
+                  type="button"
+                  aria-label={`Close ${s.title}`}
                   onClick={(e) => handleCloseTab(e, s.id)}
-                  className={`shrink-0 p-0.5 rounded hover:bg-slate-700 transition-colors ${
+                  className={`shrink-0 p-0.5 rounded hover:bg-slate-700 transition-colors focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-400 ${
                     s.id === sessionId ? 'text-slate-500 hover:text-slate-200' : 'opacity-0 group-hover:opacity-100 text-slate-600 hover:text-slate-300'
                   }`}
                 >
                   <X className="w-3 h-3" />
-                </span>
+                </button>
                 {/* Active indicator — Bug #74147: purple for agent, green for user */}
                 {s.id === sessionId && (
                   <div className={`absolute bottom-0 left-0 right-0 h-[2px] ${isAgentSession ? 'bg-purple-400' : 'bg-green-400'}`} />
                 )}
-              </button>
+              </div>
               );
             })}
           </div>

@@ -4,7 +4,9 @@ import { tablesApi } from '../api/tablesApi';
 import { useTablesStore } from '../store/tablesStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { useProjectStore } from '@/features/projects/store/projectStore';
-import type { PersonalSpaceSummary } from '../types/table.types';
+import { getDefaultTableSort } from '../utils/defaultTableSort';
+import { useTableRowsLiveSync } from './useTableRowsLiveSync';
+import type { PersonalSpaceSummary, RowModel } from '../types/table.types';
 
 interface UseTablesBootstrapOptions {
   rawMode?: boolean;
@@ -17,11 +19,13 @@ export const useTablesBootstrap = (options: UseTablesBootstrapOptions = {}) => {
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const contextUserId = useTablesStore((state) => state.contextUserId);
   const activeTableId = useTablesStore((state) => state.activeTableId);
+  const hasLoadedRows = useTablesStore((state) => Boolean(activeTableId && state.rows[activeTableId]?.length));
   const setTables = useTablesStore((state) => state.setTables);
   const setColumns = useTablesStore((state) => state.setColumns);
   const setTableRole = useTablesStore((state) => state.setTableRole);
   const setRows = useTablesStore((state) => state.setRows);
   const appendRows = useTablesStore((state) => state.appendRows);
+  const setRelations = useTablesStore((state) => state.setRelations);
   const setPagination = useTablesStore((state) => state.setPagination);
   const setLoadingMore = useTablesStore((state) => state.setLoadingMore);
   const setError = useTablesStore((state) => state.setError);
@@ -54,17 +58,24 @@ export const useTablesBootstrap = (options: UseTablesBootstrapOptions = {}) => {
 
   const rowsLimit = useTablesStore((state) => state.rowsLimit ?? 50);
   const currentPage = useTablesStore((state) => state.currentPage ?? 1);
-  const sortColumn = useTablesStore((state) => state.sortColumn);
-  const sortDirection = useTablesStore((state) => state.sortDirection);
+  const savedSort = getDefaultTableSort(columnsQuery.data?.columns ?? []);
+  const userSortColumn = useTablesStore((state) => state.sortColumn);
+  const userSortDirection = useTablesStore((state) => state.sortDirection);
+  const sortColumn = userSortColumn ?? savedSort?.column ?? null;
+  const sortDirection = userSortDirection ?? savedSort?.direction ?? null;
 
   const rowsQuery = useQuery({
     queryKey: ['rows', activeTableId ?? 'none', currentPage, rowsLimit, rawMode ? 'raw' : 'normal', sortColumn, sortDirection],
     enabled: Boolean(activeTableId && isAuthenticated),
-    queryFn: () => tablesApi.getRows(activeTableId as string, currentPage, rowsLimit, rawMode, sortColumn, sortDirection),
+    // ADR-205 D4: the grid is the single rows query site; it asks for the lens map.
+    queryFn: () => tablesApi.getRows(activeTableId as string, currentPage, rowsLimit, rawMode, sortColumn, sortDirection, { includeRelations: true }),
     retry: 1,
     staleTime: 10000, // 10 seconds cache for rows
     gcTime: 60000 // Keep rows in cache for 1 minute
   });
+
+  // Writes by other users / agents / automations land in the grid without a reload.
+  useTableRowsLiveSync(activeTableId, isAuthenticated);
 
   // Track mounted state to avoid React warning
   const mountedRef = useRef(false);
@@ -139,10 +150,14 @@ export const useTablesBootstrap = (options: UseTablesBootstrapOptions = {}) => {
     }
 
 
-    // Parse data field if it's a string
-    const parsedRows = rowsQuery.data.rows.map(row => ({
+    // Parse data field if it's a string. The API sends `updated_at`; the model
+    // reads `updatedAt` — without this mapping the signature below saw only ids,
+    // so a refetch that changed values but not ids never reached the store
+    // (the Refresh button looked dead after an automation wrote to the row).
+    const parsedRows = rowsQuery.data.rows.map((row: RowModel & { updated_at?: string }) => ({
       ...row,
-      data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data
+      data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
+      updatedAt: row.updatedAt ?? row.updated_at ?? '',
     }));
 
     const signature = `${activeTableId}:${currentPage}:${parsedRows
@@ -161,12 +176,14 @@ export const useTablesBootstrap = (options: UseTablesBootstrapOptions = {}) => {
     } else {
       appendRows(activeTableId, parsedRows);
     }
-    
+    // The lens map follows the same replace/merge rule as the rows it describes.
+    setRelations(activeTableId, rowsQuery.data.relations, currentPage === 1 ? 'replace' : 'merge');
+
     // Save pagination info
     if (rowsQuery.data.pagination) {
       setPagination(activeTableId, rowsQuery.data.pagination.pages, rowsQuery.data.pagination.total);
     }
-  }, [activeTableId, rowsQuery.data, currentPage, setRows, appendRows, setPagination]);
+  }, [activeTableId, rowsQuery.data, currentPage, setRows, appendRows, setRelations, setPagination]);
 
   useEffect(() => {
     const combinedError = tablesQuery.error || columnsQuery.error || rowsQuery.error;
@@ -174,8 +191,9 @@ export const useTablesBootstrap = (options: UseTablesBootstrapOptions = {}) => {
   }, [columnsQuery.error, rowsQuery.error, setError, tablesQuery.error]);
 
   const loading = useMemo(
-    () => Boolean(isAuthenticated) && (tablesQuery.isLoading || columnsQuery.isLoading || rowsQuery.isLoading),
-    [columnsQuery.isLoading, isAuthenticated, rowsQuery.isLoading, tablesQuery.isLoading]
+    // Keep the table mounted while appending pages so its scroll position survives.
+    () => Boolean(isAuthenticated) && (tablesQuery.isLoading || columnsQuery.isLoading || (rowsQuery.isLoading && !hasLoadedRows)),
+    [columnsQuery.isLoading, hasLoadedRows, isAuthenticated, rowsQuery.isLoading, tablesQuery.isLoading]
   );
 
   const error = tablesQuery.error || columnsQuery.error || rowsQuery.error || null;

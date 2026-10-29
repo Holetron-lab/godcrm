@@ -60,7 +60,7 @@ async function main() {
   const COMMIT = process.argv.includes('--commit');
   const PROBE = process.argv.includes('--probe');
   const adapter = await getAdapter();
-  const rows = (await adapter.query(`SELECT key, encrypted_payload FROM ${TABLE} ORDER BY key`)).rows;
+  const rows = (await adapter.query(`SELECT id, key, encrypted_payload FROM ${TABLE} ORDER BY key`)).rows;
 
   if (PROBE) {
     const key = decodeKey(process.env.SECRETS_MASTER_KEY);
@@ -88,7 +88,7 @@ async function main() {
     catch (e) { console.error(`[ABORT] decrypt(OLD) failed for ${r.key}: ${e.message} — no writes made`); process.exit(1); }
     const blob = encrypt(newKey, plain);
     if (dec(newKey, blob) !== plain) { console.error(`[ABORT] roundtrip(NEW) mismatch for ${r.key}`); process.exit(1); }
-    reenc.push({ key: r.key, blob });
+    reenc.push({ id: r.id, key: r.key, blob });
     console.log(`[ok] ${r.key} — decrypt(OLD)+reencrypt(NEW) verified`);
   }
 
@@ -100,8 +100,8 @@ async function main() {
   await withTransactionAsync(async (trx) => {
     for (const x of reenc) {
       const res = await trx.query(
-        `UPDATE ${TABLE} SET encrypted_payload = $1, updated_at = NOW() WHERE key = $2`,
-        [JSON.stringify(x.blob), x.key]
+        `UPDATE ${TABLE} SET encrypted_payload = $1, updated_at = NOW() WHERE id = $2`,
+        [JSON.stringify(x.blob), x.id]
       );
       if (res.rowCount !== 1) throw new Error(`UPDATE touched ${res.rowCount} rows for ${x.key}`);
     }

@@ -54,12 +54,7 @@
             "displayName": "Status",
             "type": "select",
             "required": true,
-            "options": [
-              "Backlog",
-              "In Progress",
-              "In Review",
-              "Done"
-            ]
+            "options": ["Backlog", "In Progress", "In Review", "Done"]
           },
           {
             "name": "description",
@@ -72,17 +67,13 @@
             "displayName": "Priority",
             "type": "select",
             "required": false,
-            "options": [
-              "Low",
-              "Medium",
-              "High",
-              "Critical"
-            ]
+            "options": ["Low", "Medium", "High", "Critical"]
           },
           {
             "name": "assignee",
             "displayName": "Assignee",
-            "type": "text",
+            "type": "user",
+            "config": { "person": { "source": "system", "allowMultiple": true } },
             "required": false
           },
           {
@@ -119,6 +110,13 @@
               "text",
               "rich_text"
             ],
+            "required": false
+          },
+          {
+            "key": "assigneeColumn",
+            "name": "Assignee",
+            "description": "Колонка исполнителя карточки",
+            "types": ["user", "person", "text", "select", "multi-select", "relation"],
             "required": false
           }
         ]
@@ -485,6 +483,20 @@
     "defaultSize": {
       "w": 12,
       "h": 8
+    },
+    "deprecated": false,
+    "tables": []
+  },
+  "agent_row": {
+    "id": "agent_row",
+    "name": "Agent Roster",
+    "description": "Agents of the space as full-width rows: avatar, name, description, model and operator, with passport actions",
+    "emoji": "🪪",
+    "color": "#8b5cf6",
+    "category": "system",
+    "defaultSize": {
+      "w": 6,
+      "h": 6
     },
     "deprecated": false,
     "tables": []
@@ -1444,20 +1456,6 @@
     "deprecated": false,
     "tables": []
   },
-  "16neo": {
-    "id": "16neo",
-    "name": "16Neo",
-    "description": "16-bit pixel art virtual office — WASD movement, proximity chat, multiplayer, pet companion",
-    "emoji": "🎮",
-    "color": "#6366f1",
-    "category": "productivity",
-    "defaultSize": {
-      "w": 12,
-      "h": 8
-    },
-    "deprecated": false,
-    "tables": []
-  },
   "tickets_list": {
     "id": "tickets_list",
     "name": "Tickets List",
@@ -1494,5 +1492,754 @@
     },
     "deprecated": false,
     "tables": []
+  },
+  "sc_sim": {
+    "id": "sc_sim",
+    "name": "SC-SIM — Конструктор симуляций",
+    "description": "Симулятор сортировочного центра: стенды, прогоны, каталог блоков, метрики (ADR-165)",
+    "emoji": "🏭",
+    "color": "#0ea5e9",
+    "category": "modules",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": [
+      {
+        "key": "schemes",
+        "name": "Sim Schemes",
+        "description": "Таблица модуля SC-SIM (sim_schemes)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Sim Schemes",
+        "icon": "🗺️",
+        "tableType": "sim_schemes",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Название",
+            "type": "text",
+            "required": true,
+            "icon": "🏷️"
+          },
+          {
+            "name": "description",
+            "displayName": "Описание",
+            "type": "text",
+            "icon": "📝"
+          },
+          {
+            "name": "status",
+            "displayName": "Статус",
+            "type": "select",
+            "icon": "📝"
+          },
+          {
+            "name": "graph_json",
+            "displayName": "Layout JSON",
+            "type": "json",
+            "icon": "🧩"
+          },
+          {
+            "name": "cloned_from_id",
+            "displayName": "Клонирован из (row_id)",
+            "type": "number",
+            "icon": "📝"
+          },
+          {
+            "name": "version",
+            "displayName": "Версия",
+            "type": "number",
+            "icon": "📝"
+          },
+          {
+            "name": "preview_url",
+            "displayName": "Превью",
+            "type": "url",
+            "icon": "📝"
+          },
+          {
+            "name": "tags",
+            "displayName": "Теги",
+            "type": "text",
+            "icon": "📝"
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Название",
+            "description": "Заголовок строки",
+            "types": [
+              "text"
+            ],
+            "required": true
+          }
+        ],
+        "seedRows": [
+          {
+            "name": "Демо-схема СЦ",
+            "description": "Демонстрационный стенд СЦ: приёмка → ворота → сортер → жёлоб/буфер → отгрузка",
+            "status": "draft",
+            "graph_json": "{\"format\":\"sc-sim-scheme\",\"version\":0,\"scheme\":{\"id\":\"demo-sc-1\",\"name\":\"Демо-схема СЦ\"},\"nodes\":[{\"id\":\"n_inbound\",\"type\":\"inbound\",\"label\":\"Приёмка\",\"pos\":{\"x\":0,\"y\":140,\"rot\":0},\"params\":{\"rate_pph\":100000}},{\"id\":\"n_dock\",\"type\":\"conveyor\",\"label\":\"Ворота (заезд)\",\"pos\":{\"x\":220,\"y\":140,\"rot\":0},\"params\":{\"lanes\":24}},{\"id\":\"n_sorter\",\"type\":\"sorter\",\"label\":\"Сортер\",\"pos\":{\"x\":440,\"y\":140,\"rot\":0},\"params\":{\"throughput_pph\":110000,\"technology\":\"crossbelt\",\"waste_fraction\":0.2}},{\"id\":\"n_chute\",\"type\":\"buffer\",\"label\":\"Жёлоб\",\"pos\":{\"x\":680,\"y\":40,\"rot\":0},\"params\":{\"capacity\":400}},{\"id\":\"n_buffer\",\"type\":\"buffer\",\"label\":\"Буфер\",\"pos\":{\"x\":680,\"y\":240,\"rot\":0},\"params\":{\"capacity\":5000}},{\"id\":\"n_outbound\",\"type\":\"outbound\",\"label\":\"Отгрузка\",\"pos\":{\"x\":920,\"y\":140,\"rot\":0},\"params\":{\"docks\":18}}],\"links\":[{\"id\":\"l_1\",\"from\":\"n_inbound\",\"to\":\"n_dock\",\"params\":{}},{\"id\":\"l_2\",\"from\":\"n_dock\",\"to\":\"n_sorter\",\"params\":{}},{\"id\":\"l_3\",\"from\":\"n_sorter\",\"to\":\"n_chute\",\"params\":{\"share\":0.7}},{\"id\":\"l_4\",\"from\":\"n_sorter\",\"to\":\"n_buffer\",\"params\":{\"share\":0.3}},{\"id\":\"l_5\",\"from\":\"n_chute\",\"to\":\"n_outbound\",\"params\":{}},{\"id\":\"l_6\",\"from\":\"n_buffer\",\"to\":\"n_outbound\",\"params\":{}}]}",
+            "version": 0
+          }
+        ]
+      },
+      {
+        "key": "configs",
+        "name": "Sim Configs",
+        "description": "Таблица модуля SC-SIM (sim_configs)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Sim Configs",
+        "icon": "⚙️",
+        "tableType": "sim_configs",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Название",
+            "type": "text",
+            "required": true,
+            "icon": "🏷️"
+          },
+          {
+            "name": "description",
+            "displayName": "Описание",
+            "type": "text",
+            "icon": "📝"
+          },
+          {
+            "name": "status",
+            "displayName": "Статус",
+            "type": "select",
+            "icon": "📝"
+          },
+          {
+            "name": "staff_count",
+            "displayName": "Персонал, чел",
+            "type": "number",
+            "icon": "👷"
+          },
+          {
+            "name": "equipment_count",
+            "displayName": "Техника, ед",
+            "type": "number",
+            "icon": "🚛"
+          },
+          {
+            "name": "inflow_pph",
+            "displayName": "Входящий поток, тов/ч",
+            "type": "number",
+            "icon": "📦"
+          },
+          {
+            "name": "shift_hours",
+            "displayName": "Длительность смены, ч",
+            "type": "number",
+            "icon": "📝"
+          },
+          {
+            "name": "shift_change_min",
+            "displayName": "Пересменка, мин",
+            "type": "number",
+            "icon": "📝"
+          },
+          {
+            "name": "breaks_min_per_shift",
+            "displayName": "Перерывы, мин/смена",
+            "type": "number",
+            "icon": "📝"
+          },
+          {
+            "name": "params_json",
+            "displayName": "Параметры JSON",
+            "type": "json",
+            "icon": "🧩"
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Название",
+            "description": "Заголовок строки",
+            "types": [
+              "text"
+            ],
+            "required": true
+          }
+        ]
+      },
+      {
+        "key": "runs",
+        "name": "Sim Runs",
+        "description": "Таблица модуля SC-SIM (sim_runs)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Sim Runs",
+        "icon": "▶️",
+        "tableType": "sim_runs",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Название",
+            "type": "text",
+            "required": true,
+            "icon": "🏷️"
+          },
+          {
+            "name": "scheme_id",
+            "displayName": "Стенд (row_id)",
+            "type": "number",
+            "icon": "🗺️"
+          },
+          {
+            "name": "scheme_name",
+            "displayName": "Стенд (название)",
+            "type": "text",
+            "icon": "📝"
+          },
+          {
+            "name": "config_id",
+            "displayName": "Конфиг (row_id)",
+            "type": "number",
+            "icon": "⚙️"
+          },
+          {
+            "name": "config_name",
+            "displayName": "Конфиг (название)",
+            "type": "text",
+            "icon": "📝"
+          },
+          {
+            "name": "status",
+            "displayName": "Статус",
+            "type": "select",
+            "icon": "📝"
+          },
+          {
+            "name": "run_date",
+            "displayName": "Дата запуска",
+            "type": "date",
+            "icon": "📅"
+          },
+          {
+            "name": "seed",
+            "displayName": "Seed",
+            "type": "number",
+            "icon": "📝"
+          },
+          {
+            "name": "throughput_pph",
+            "displayName": "Пропускная способность, тов/ч",
+            "type": "number",
+            "icon": "📈"
+          },
+          {
+            "name": "bottleneck_utilization_pct",
+            "displayName": "Утилизация узкого места, %",
+            "type": "number",
+            "icon": "📝"
+          },
+          {
+            "name": "avg_queue_length",
+            "displayName": "Средняя длина очереди",
+            "type": "number",
+            "icon": "📝"
+          },
+          {
+            "name": "bottleneck",
+            "displayName": "Узкое место",
+            "type": "text",
+            "icon": "🚧"
+          },
+          {
+            "name": "kpi_json",
+            "displayName": "KPI JSON",
+            "type": "json",
+            "icon": "🧩"
+          },
+          {
+            "name": "conclusions",
+            "displayName": "Выводы",
+            "type": "text",
+            "icon": "📝"
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Название",
+            "description": "Заголовок строки",
+            "types": [
+              "text"
+            ],
+            "required": true
+          }
+        ]
+      },
+      {
+        "key": "block_catalog",
+        "name": "Block Catalog",
+        "description": "Таблица модуля SC-SIM (sim_block_catalog)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Block Catalog",
+        "icon": "🧱",
+        "tableType": "sim_block_catalog",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Название",
+            "type": "text",
+            "required": true,
+            "icon": "🏷️"
+          },
+          {
+            "name": "category",
+            "displayName": "Категория",
+            "type": "select",
+            "icon": "📝"
+          },
+          {
+            "name": "throughput_pph",
+            "displayName": "Производительность, ед/ч",
+            "type": "number",
+            "icon": "📈"
+          },
+          {
+            "name": "staff_required",
+            "displayName": "Требуется персонала",
+            "type": "number",
+            "icon": "👷"
+          },
+          {
+            "name": "footprint_cells",
+            "displayName": "Footprint, клетки",
+            "type": "text",
+            "icon": "📝"
+          },
+          {
+            "name": "asset_3d",
+            "displayName": "3D-ассет",
+            "type": "text",
+            "icon": "🧊"
+          },
+          {
+            "name": "source_ref",
+            "displayName": "Источник цифры",
+            "type": "text",
+            "icon": "🔗"
+          },
+          {
+            "name": "comment",
+            "displayName": "Комментарий",
+            "type": "text",
+            "icon": "📝"
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Название",
+            "description": "Заголовок строки",
+            "types": [
+              "text"
+            ],
+            "required": true
+          }
+        ],
+        "seedRows": [
+          {
+            "name": "Inbound",
+            "category": "source",
+            "throughput_pph": 100000,
+            "staff_required": 4,
+            "source_ref": "ADR-165 §Frozen inputs (organizer Q&A 2026-07-16)",
+            "comment": "slug=inbound · role=source"
+          },
+          {
+            "name": "Conveyor",
+            "category": "transport",
+            "throughput_pph": 12000,
+            "staff_required": 1,
+            "source_ref": "ADR-165 §Frozen inputs (organizer Q&A 2026-07-16)",
+            "comment": "slug=conveyor · role=process"
+          },
+          {
+            "name": "Sorter",
+            "category": "sorter",
+            "throughput_pph": 10000,
+            "staff_required": 24,
+            "source_ref": "ADR-165 §Frozen inputs (organizer Q&A 2026-07-16)",
+            "comment": "slug=sorter · role=process"
+          },
+          {
+            "name": "Merge",
+            "category": "merge",
+            "throughput_pph": 20000,
+            "staff_required": 1,
+            "source_ref": "ADR-165 §Frozen inputs (organizer Q&A 2026-07-16)",
+            "comment": "slug=merge · role=process"
+          },
+          {
+            "name": "Buffer",
+            "category": "buffer",
+            "throughput_pph": 100000,
+            "source_ref": "ADR-165 §Frozen inputs (organizer Q&A 2026-07-16)",
+            "comment": "slug=buffer · role=process"
+          },
+          {
+            "name": "Outbound",
+            "category": "sink",
+            "source_ref": "ADR-165 §Frozen inputs (organizer Q&A 2026-07-16)",
+            "comment": "slug=outbound · role=sink"
+          }
+        ]
+      },
+      {
+        "key": "metric_samples",
+        "name": "Metric Samples",
+        "description": "Таблица модуля SC-SIM (sim_metric_samples)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Metric Samples",
+        "icon": "📊",
+        "tableType": "sim_metric_samples",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Название",
+            "type": "text",
+            "required": true,
+            "icon": "🏷️"
+          },
+          {
+            "name": "run_id",
+            "displayName": "Прогон (row_id)",
+            "type": "number",
+            "icon": "▶️"
+          },
+          {
+            "name": "time_window",
+            "displayName": "Окно",
+            "type": "select",
+            "icon": "⏱️"
+          },
+          {
+            "name": "elapsed_sec",
+            "displayName": "Время от начала, с",
+            "type": "number",
+            "icon": "🕐"
+          },
+          {
+            "name": "node",
+            "displayName": "Узел",
+            "type": "text",
+            "icon": "🔷"
+          },
+          {
+            "name": "metric",
+            "displayName": "Метрика",
+            "type": "select",
+            "icon": "📈"
+          },
+          {
+            "name": "value",
+            "displayName": "Значение",
+            "type": "number",
+            "icon": "🔢"
+          },
+          {
+            "name": "unit",
+            "displayName": "Единица",
+            "type": "text",
+            "icon": "📏"
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Название",
+            "description": "Заголовок строки",
+            "types": [
+              "text"
+            ],
+            "required": true
+          }
+        ]
+      },
+      {
+        "key": "nodes",
+        "name": "Sim Nodes",
+        "description": "Таблица модуля SC-SIM (sim_nodes)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Sim Nodes",
+        "icon": "🔵",
+        "tableType": "sim_nodes",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Название",
+            "type": "text",
+            "required": true,
+            "icon": "🏷️"
+          },
+          {
+            "name": "scheme_id",
+            "displayName": "Стенд (row_id)",
+            "type": "number",
+            "icon": "🗺️"
+          },
+          {
+            "name": "scheme_name",
+            "displayName": "Стенд (название)",
+            "type": "text",
+            "icon": "📝"
+          },
+          {
+            "name": "block_type_id",
+            "displayName": "Тип блока (row_id)",
+            "type": "number",
+            "icon": "🧱"
+          },
+          {
+            "name": "block_type_name",
+            "displayName": "Тип блока (название)",
+            "type": "text",
+            "icon": "📝"
+          },
+          {
+            "name": "label",
+            "displayName": "Метка",
+            "type": "text",
+            "icon": "🔖"
+          },
+          {
+            "name": "x",
+            "displayName": "X",
+            "type": "number",
+            "icon": "📐"
+          },
+          {
+            "name": "y",
+            "displayName": "Y",
+            "type": "number",
+            "icon": "📐"
+          },
+          {
+            "name": "rotation_deg",
+            "displayName": "Поворот, °",
+            "type": "number",
+            "icon": "🔄"
+          },
+          {
+            "name": "footprint_cells",
+            "displayName": "Footprint, клетки",
+            "type": "text",
+            "icon": "⬛"
+          },
+          {
+            "name": "params_json",
+            "displayName": "Параметры JSON",
+            "type": "json",
+            "icon": "🧩"
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Название",
+            "description": "Заголовок строки",
+            "types": [
+              "text"
+            ],
+            "required": true
+          }
+        ]
+      },
+      {
+        "key": "links",
+        "name": "Sim Links",
+        "description": "Таблица модуля SC-SIM (sim_links)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Sim Links",
+        "icon": "➡️",
+        "tableType": "sim_links",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Название",
+            "type": "text",
+            "required": true,
+            "icon": "🏷️"
+          },
+          {
+            "name": "scheme_id",
+            "displayName": "Стенд (row_id)",
+            "type": "number",
+            "icon": "🗺️"
+          },
+          {
+            "name": "from_node_id",
+            "displayName": "Из узла (row_id)",
+            "type": "number",
+            "icon": "🔵"
+          },
+          {
+            "name": "from_node_label",
+            "displayName": "Из узла (метка)",
+            "type": "text",
+            "icon": "🔖"
+          },
+          {
+            "name": "to_node_id",
+            "displayName": "В узел (row_id)",
+            "type": "number",
+            "icon": "🔵"
+          },
+          {
+            "name": "to_node_label",
+            "displayName": "В узел (метка)",
+            "type": "text",
+            "icon": "🔖"
+          },
+          {
+            "name": "transport_type",
+            "displayName": "Тип транспорта",
+            "type": "select",
+            "icon": "🔀"
+          },
+          {
+            "name": "delay_sec",
+            "displayName": "Задержка, сек",
+            "type": "number",
+            "icon": "⏱️"
+          },
+          {
+            "name": "capacity_units",
+            "displayName": "Ёмкость, шт",
+            "type": "number",
+            "icon": "📦"
+          },
+          {
+            "name": "params_json",
+            "displayName": "Параметры JSON",
+            "type": "json",
+            "icon": "🧩"
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Название",
+            "description": "Заголовок строки",
+            "types": [
+              "text"
+            ],
+            "required": true
+          }
+        ]
+      },
+      {
+        "key": "metrics",
+        "name": "Sim Metrics",
+        "description": "Таблица модуля SC-SIM (sim_metrics)",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Sim Metrics",
+        "icon": "📊",
+        "tableType": "sim_metrics",
+        "defaultColumns": [
+          {
+            "name": "name",
+            "displayName": "Название",
+            "type": "text",
+            "required": true,
+            "icon": "🏷️"
+          },
+          {
+            "name": "run_id",
+            "displayName": "Прогон (row_id)",
+            "type": "number",
+            "icon": "▶️"
+          },
+          {
+            "name": "run_name",
+            "displayName": "Прогон (название)",
+            "type": "text",
+            "icon": "📝"
+          },
+          {
+            "name": "node_id",
+            "displayName": "Узел (row_id)",
+            "type": "number",
+            "icon": "🔵"
+          },
+          {
+            "name": "node_label",
+            "displayName": "Узел (метка)",
+            "type": "text",
+            "icon": "🔖"
+          },
+          {
+            "name": "window",
+            "displayName": "Окно",
+            "type": "select",
+            "icon": "🪟"
+          },
+          {
+            "name": "window_start_min",
+            "displayName": "Начало окна, мин",
+            "type": "number",
+            "icon": "⏱️"
+          },
+          {
+            "name": "throughput_pph",
+            "displayName": "Throughput, тов/ч",
+            "type": "number",
+            "icon": "📈"
+          },
+          {
+            "name": "avg_queue",
+            "displayName": "Средняя очередь",
+            "type": "number",
+            "icon": "⏳"
+          },
+          {
+            "name": "utilization_pct",
+            "displayName": "Утилизация, %",
+            "type": "number",
+            "icon": "🔥"
+          },
+          {
+            "name": "losses",
+            "displayName": "Потери",
+            "type": "number",
+            "icon": "❌"
+          },
+          {
+            "name": "metric_json",
+            "displayName": "Metric JSON",
+            "type": "json",
+            "icon": "🧩"
+          }
+        ],
+        "requiredColumns": [
+          {
+            "key": "titleColumn",
+            "name": "Название",
+            "description": "Заголовок строки",
+            "types": [
+              "text"
+            ],
+            "required": true
+          }
+        ]
+      }
+    ]
   }
 }

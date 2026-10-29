@@ -352,18 +352,20 @@ export function AddWidgetModal({
     // build the standalone preset config — no registry_table_id, scope by table.
     const isTicketsListFromTable = widgetType.id === 'tickets_list' && selected.kind === 'table';
 
-    const config: Record<string, unknown> = isTicketsListFromTable
-      ? {
-          preset: 'tickets-list',
-          mode: 'full',
-          tickets_table_id: tableId,
-        }
-      : {
-          table_id: tableId,
-          ...(selected.kind === 'widget' && selected.data.preset_name === widgetType.id && selected.data.config
-            ? { column_mapping: (selected.data.config as Record<string, unknown>).column_mapping }
-            : {}),
-        };
+    let config: Record<string, unknown>;
+    if (widgetType.id === 'documents' && selected.kind === 'widget') {
+      // Documents resolve their store from the registry/project binding, not table_id.
+      config = { project_id: selected.data.project_id, ...selected.data.config };
+    } else if (isTicketsListFromTable) {
+      config = { preset: 'tickets-list', mode: 'full', tickets_table_id: tableId };
+    } else {
+      config = {
+        table_id: tableId,
+        ...(selected.kind === 'widget' && selected.data.preset_name === widgetType.id && selected.data.config
+          ? { column_mapping: (selected.data.config as Record<string, unknown>).column_mapping }
+          : {}),
+      };
+    }
 
     const sharedFields = {
       widget_type: 'preset' as const,

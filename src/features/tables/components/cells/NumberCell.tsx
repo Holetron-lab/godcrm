@@ -1,5 +1,6 @@
 import { Star } from 'lucide-react';
 import type { NumberColumnConfig } from '../../types/table.types';
+import { parseTrendCell, trendOf, TONE_CLASS } from './trend';
 
 interface NumberCellProps {
   value: unknown;
@@ -91,6 +92,21 @@ export const NumberCell = ({
         {String(value)}
       </span>
     );
+  }
+
+  // Trend display: value + coloured delta from the sidecar JSON column (document 239321)
+  if (displayStyle === 'trend') {
+    const cell = config?.trendField ? parseTrendCell(rowData?.[config.trendField]) : null;
+    if (cell) {
+      const t = trendOf(cell);
+      return (
+        <span className="inline-flex items-baseline gap-1.5 text-sm font-mono text-[var(--text-primary)]" title={t.title}>
+          {t.marker && <span aria-hidden="true">{t.marker}</span>}
+          <span>{t.value}</span>
+          {t.delta !== null && <span className={`text-xs font-medium ${TONE_CLASS[t.tone]}`}>{t.delta}</span>}
+        </span>
+      );
+    }
   }
 
   // Progress calculations

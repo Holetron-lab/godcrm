@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useState, useEffect } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, Brain, Wrench, Sparkles, PlayCircle, ShieldAlert } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
@@ -50,6 +51,7 @@ export const AgentStatusBadge: React.FC<AgentStatusBadgeProps> = ({
   toolsUsed,
   toolsCompleted,
 }) => {
+  const { t } = useLanguage();
   const [elapsed, setElapsed] = useState('');
   const isWorking = status !== 'finished' && status !== 'error' && status !== 'auth_failure';
 
@@ -112,7 +114,7 @@ export const AgentStatusBadge: React.FC<AgentStatusBadgeProps> = ({
       {/* Worker completion: "2/5 tools" */}
       {toolsUsed != null && toolsUsed > 0 && (
         <span className="text-[10px] text-[var(--text-tertiary)] flex-shrink-0 tabular-nums">
-          {toolsCompleted ?? 0}/{toolsUsed} tools
+          {t('aiChat.ui.toolsProgress', { done: toolsCompleted ?? 0, total: toolsUsed })}
         </span>
       )}
 
@@ -135,13 +137,15 @@ interface ContinueButtonProps {
   agentColor?: string;
 }
 
-export const ContinueButton: React.FC<ContinueButtonProps> = ({ onClick, agentColor }) => (
+export const ContinueButton: React.FC<ContinueButtonProps> = ({ onClick, agentColor }) => {
+  const { t } = useLanguage();
+  return ((
   <button
     onClick={onClick}
     className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
     style={agentColor ? { color: agentColor } : undefined}
   >
     <PlayCircle className="w-3.5 h-3.5" />
-    Continue
-  </button>
-);
+    {t('aiChat.ui.continueAction')}</button>
+));
+};

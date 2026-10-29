@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
@@ -6,6 +7,8 @@ import { Link2, Loader2, Search, X, ChevronDown, Hash, Check } from 'lucide-reac
 import { useAllTables } from '@/features/tables/hooks/useAllTables';
 import { RowBindingTabBar } from './RowBindingV2.TabBar';
 import { RowList } from './RowBindingV2.RowList';
+import type { ChatAttachment } from '../types';
+import type { MailMessageRef } from '@/features/mail/types';
 
 interface RowInfo {
   id: number;
@@ -23,6 +26,41 @@ export interface BoundRow {
   table_icon?: string;
   row_title?: string;
   project_name?: string;
+  /**
+   * ADR-158 §P5 — present when the "row" is a mail message (not a universal
+   * table row): `table_id` is 0 and the chip/attachment render from this ref.
+   */
+  mailRef?: MailMessageRef;
+}
+
+/**
+ * One bound row → one chat attachment. The single place that knows the two
+ * attachment shapes (`row_reference` for table rows, `mail_message_ref` for
+ * mail), so every submit path builds identical payloads.
+ */
+export function boundRowToAttachment(br: BoundRow): ChatAttachment {
+  if (br.mailRef) {
+    return {
+      id: `mail_${br.mailRef.messageId}`,
+      name: br.row_title || br.mailRef.subject || '(без темы)',
+      type: 'mail_message_ref',
+      size: 0,
+      mailRef: br.mailRef,
+    };
+  }
+  return {
+    id: `row_${br.table_id}_${br.row_id}`,
+    name: br.row_title || `Row #${br.row_id}`,
+    type: 'row_reference',
+    size: 0,
+    rowReference: {
+      table_id: br.table_id,
+      row_id: br.row_id,
+      table_name: br.table_name || '',
+      table_icon: br.table_icon,
+      row_title: br.row_title,
+    },
+  };
 }
 
 /** Tasks source config for auto-mapping. Mirrors TicketsSourceConfig in
@@ -112,6 +150,7 @@ export function RowBindingV2({
   customSources,
   showAddButton = true
 }: RowBindingV2Props) {
+  const { t } = useLanguage();
   const [isExpandedInternal, setIsExpandedInternal] = useState(false);
   const isExpanded = forceExpanded !== undefined ? forceExpanded : isExpandedInternal;
   const setIsExpanded = (value: boolean) => {
@@ -219,7 +258,7 @@ export function RowBindingV2({
   });
 
   // Column name aliases for auto-detection (same as AIChatPanel.utils)
-  const TITLE_ALIASES = ['title', 'what', 'name', 'subject', 'Название'];
+  const TITLE_ALIASES = ['title', 'what', 'name', 'subject', t('aiChat.ui.name')];
 
   // Get display value for a row
   const getRowDisplayValue = (row: RowInfo, displayField?: string) => {
@@ -301,8 +340,7 @@ export function RowBindingV2({
             onClick={() => setIsExpanded(true)}
             className="text-xs text-[var(--color-primary-500)] hover:underline"
           >
-            + добавить
-          </button>
+            {t('aiChat.ui.addPlus')}</button>
         )}
       </div>
     );
@@ -322,7 +360,7 @@ export function RowBindingV2({
         >
           <div className="flex items-center gap-2">
             <Link2 className="w-4 h-4" />
-            <span>{isExpanded ? 'Свернуть' : 'Привязать к записи'}</span>
+            <span>{isExpanded ? t('aiChat.ui.collapse') : t('aiChat.ui.linkToRecordLabel')}</span>
             {boundRows.length > 0 && (
               <span className="text-xs px-1.5 py-0.5 rounded-full bg-[var(--color-primary-500)]/20 text-[var(--color-primary-400)]">
                 {boundRows.length}
@@ -368,7 +406,7 @@ export function RowBindingV2({
                         boundRows={boundRows}
                         maxBindings={maxBindings}
                         onBind={onBind}
-                        searchPlaceholder="Поиск задач..."
+                        searchPlaceholder={t('aiChat.ui.searchTasks')}
                         showAddButton={showAddButton}
                       />
                     )}
@@ -391,14 +429,13 @@ export function RowBindingV2({
                         {/* Project selector with optgroups by Space */}
                         <div>
                           <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1">
-                            Проект
-                          </label>
+                            {t('columnSettings.relation.project')}</label>
                           <select
                             value={selectedProjectId ? String(selectedProjectId) : ''}
                             onChange={(e) => handleProjectChange(e.target.value)}
                             className="w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
                           >
-                            <option value="">— Выберите проект —</option>
+                            <option value="">{t('columnSettings.relation.selectProject')}</option>
                             {filteredSpaces.map((space) => (
                               <optgroup key={space.id} label={`${space.icon || '⚙️'} ${space.name}`}>
                                 {space.projects.map((project) => (
@@ -414,8 +451,7 @@ export function RowBindingV2({
                         {/* Table selector */}
                         <div>
                           <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1">
-                            Таблица
-                          </label>
+                            {t('columnSettings.relation.table')}</label>
                           <select
                             value={selectedTableId ? String(selectedTableId) : ''}
                             onChange={(e) => handleTableChange(e.target.value)}
@@ -425,7 +461,7 @@ export function RowBindingV2({
                               !selectedProjectId && "opacity-50 cursor-not-allowed"
                             )}
                           >
-                            <option value="">— Выберите таблицу —</option>
+                            <option value="">{t('columnSettings.relation.selectTable')}</option>
                             {projectTables.map((table) => (
                               <option key={table.id} value={table.id}>
                                 {table.icon || '📋'} {table.displayName} ({table.id})
@@ -446,15 +482,14 @@ export function RowBindingV2({
                         {selectedTableId && (
                           <div>
                             <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-1">
-                              Выберите запись
-                            </label>
+                              {t('aiChat.ui.selectARecord')}</label>
                             <div className="relative mb-2">
                               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
                               <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Поиск записей..."
+                                placeholder={t('aiChat.ui.searchRecords')}
                                 className="w-full pl-8 pr-8 py-2 text-sm rounded-lg border border-[var(--border-primary)] bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
                               />
                               {searchQuery && (
@@ -473,7 +508,7 @@ export function RowBindingV2({
                                 </div>
                               ) : tableRows.length === 0 ? (
                                 <div className="py-4 text-center text-xs text-[var(--text-tertiary)]">
-                                  {searchQuery ? 'Не найдено' : 'Нет записей'}
+                                  {searchQuery ? t('aiChat.contacts.notFound') : t('kanban.noRecords')}
                                 </div>
                               ) : (
                                 tableRows.map(row => {
@@ -495,7 +530,7 @@ export function RowBindingV2({
                                         {getRowDisplayValue(row)}
                                       </span>
                                       {bound && (
-                                        <span className="text-[10px] text-[var(--text-tertiary)]">привязано</span>
+                                        <span className="text-[10px] text-[var(--text-tertiary)]">{t('aiChat.ui.linked')}</span>
                                       )}
                                     </button>
                                   );

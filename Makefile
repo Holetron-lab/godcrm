@@ -8,7 +8,16 @@
 -include scripts/deploy.local.env
 DEV_HOST ?= root@<DEV_IP>
 
-.PHONY: dev prod sync-db build restart restart-prod status logs logs-dev publish-adr
+.PHONY: dev prod sync-db sync-db-local build restart restart-prod status logs logs-dev publish-adr test test-baseline test-clean lease-check
+
+# Shared staging lock + maintenance gate (scripts/staging-lease.sh): every staging
+# entry point below runs under `staging-lease.sh run`, which holds one exclusive
+# lock for the whole operation and refuses while maintenance is active — so a
+# direct `make dev`, the Telegram /deploy_dev or the refresh timer cannot slip
+# in between a gate check and the operation. `make lease-check` is the readback.
+STAGING_RUN = bash scripts/staging-lease.sh run --
+lease-check:
+	bash scripts/staging-lease.sh status
 
 # Deploy to DEV (sync + build + restart)
 # Touches: rsync /root/production/business-crm/ → $(DEV_HOST):/root/production/business-crm/
@@ -17,7 +26,7 @@ DEV_HOST ?= root@<DEV_IP>
 # Does NOT touch: PROD nginx (/var/www/business-crm/), PROD PM2
 dev:
 	@echo "[make dev] Destinations: DEV code (rsync), DEV dist (ssh build), DEV PM2 (ssh restart). PROD untouched."
-	bash scripts/deploy.sh dev
+	$(STAGING_RUN) bash scripts/deploy.sh dev
 
 # Deploy to PROD (build + copy dist + restart)
 # Touches: local build → /root/production/business-crm/dist/
@@ -31,11 +40,43 @@ prod:
 # Sync PROD DB → DEV
 # Touches: pg_dump godcrm_prod (public schema) on this box (master A) → /tmp/godcrm_prod.dump
 #          scp → DEV ($(DEV_HOST)):/tmp/godcrm_prod.dump
-#          pg_restore --clean --if-exists on DEV godcrm_prod
+#          restore into godcrm_test_incoming on DEV, swap into godcrm_test,
+#          rsync uploads .128 → .72 one-way (no --delete)
 # Does NOT touch: PROD DB writes, code, nginx
 sync-db:
-	@echo "[make sync-db] Destinations: pg_dump local master A (public schema), scp DEV, pg_restore --clean DEV godcrm_prod. PROD DB read-only."
-	bash scripts/deploy.sh sync-db
+	@echo "[make sync-db] pg_dump local master A (public schema, read-only) → .72: restore-and-swap into godcrm_test + uploads mirror. Same job as godcrm-dev-refresh.timer (04:00 MSK)."
+	$(STAGING_RUN) bash scripts/dev-refresh.sh
+
+# Refresh the LOCAL godcrm_test from the local master (ADR-0009 §Phase 7)
+# Touches: pg_dump local master (public schema, read-only) → DROP/CREATE local
+#          godcrm_test → pg_restore
+# Does NOT touch: the master, DEV, any remote box
+sync-db-local:
+	bash scripts/sync-test-db.sh
+
+# Run the suite against the local godcrm_test.
+# Safe on .128: backend/test/contour.js pins POSTGRES_DB=godcrm_test, and the
+# ADR-0009 guard allows a production host only over loopback to a *_test DB.
+# Serial under the lock is the gate configuration (ADR-203-A1, G9): a baseline
+# comparison only means something in the configuration the baseline was
+# recorded in, and it is recorded at --maxWorkers=1. On one shared godcrm_test
+# three workers push DB-suite hooks past the pinned 5000 ms and cascade into
+# "Called end on pool more than once"; one worker gives 0 on the same SHA.
+# `flock -n` makes the run single-tenant on the box and refuses (exit 1)
+# instead of queueing behind another executor. A run at any other worker
+# count is not a BASELINE GREEN/RED verdict — test-baseline.mjs refuses it.
+test:
+	flock -n /tmp/godcrm-test.lock npm test -- --maxWorkers=1
+
+# Regression check against tests/baseline-failures.json: fails only on tests
+# that pass in the baseline and fail here. Use this, not "is it green" — the
+# suite has a large known-red set on main.
+test-baseline:
+	flock -n /tmp/godcrm-test.lock npm run test:baseline -- --maxWorkers=1
+
+# Sweep fixture rows left behind by crashed runs (test.godcrm.local namespace)
+test-clean:
+	npm run test:clean
 
 # Build frontend only
 build:
@@ -43,7 +84,7 @@ build:
 
 # Restart DEV PM2 (safe — only affects the DEV box)
 restart:
-	ssh $(DEV_HOST) "cd /root/production/business-crm && pm2 restart godcrm --update-env"
+	$(STAGING_RUN) ssh $(DEV_HOST) "cd /root/production/business-crm && pm2 restart godcrm --update-env"
 
 # Restart PROD PM2 (requires explicit confirmation)
 restart-prod:

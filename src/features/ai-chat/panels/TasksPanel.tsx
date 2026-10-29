@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * TasksPanel — extracted from AIChatPanel.renderTasksPanel()
  * Displays tasks from a configured table source with search and chat binding.
@@ -62,7 +63,8 @@ const TITLE_ALIASES = ['title', 'what', 'name', 'subject', 'Название'];
 /** Get task row title using configured column or fallback aliases */
 function getTaskRowTitle(
   row: { id: number; data: Record<string, unknown> },
-  config?: TasksSourceConfig
+  config: TasksSourceConfig | undefined,
+  t: (key: string, params?: Record<string, unknown>) => string
 ): string {
   const d = row.data;
   if (config?.displayColumn && d[config.displayColumn]) {
@@ -71,7 +73,7 @@ function getTaskRowTitle(
   for (const alias of TITLE_ALIASES) {
     if (d[alias]) return String(d[alias]);
   }
-  return `Запись #${row.id}`;
+  return t('aiChat.ui.recordNumber', { id: row.id });
 }
 
 /** Get task row field value */
@@ -122,6 +124,7 @@ export function TasksPanel({
   effectiveSpaceId,
   TasksSourceInlineSelector,
 }: TasksPanelProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col h-full">
       {tasksSource ? (
@@ -136,8 +139,7 @@ export function TasksPanel({
                 onClick={() => updateTasksSource(undefined)}
                 className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
               >
-                Изменить
-              </button>
+                {t('common.edit')}</button>
             </div>
           </div>
           {/* Search input for tasks */}
@@ -148,7 +150,7 @@ export function TasksPanel({
                 type="text"
                 value={tasksSearch}
                 onChange={(e) => setTasksSearch(e.target.value)}
-                placeholder="Поиск задач..."
+                placeholder={t('aiChat.ui.searchTasks')}
                 className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
               />
               {tasksSearch && (
@@ -168,11 +170,10 @@ export function TasksPanel({
               </div>
             ) : taskRows.length === 0 ? (
               <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-                Нет записей
-              </div>
+                {t('kanban.noRecords')}</div>
             ) : filteredTaskRows.length === 0 && tasksSearch.trim() ? (
               <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-                Ничего не найдено по запросу &quot;{tasksSearch}&quot;
+                {t('aiChat.ui.searchNoResults', { query: tasksSearch })}
               </div>
             ) : (
               filteredTaskRows.map(row => {
@@ -186,7 +187,7 @@ export function TasksPanel({
                 const chatCount = rowChats.length;
                 const isExpanded = expandedTaskChats === row.id;
 
-                const rowTitle = getTaskRowTitle(row, tasksSource);
+                const rowTitle = getTaskRowTitle(row, tasksSource, t);
                 const rowDesc = getTaskRowField(row, tasksSource?.descriptionColumn) as string | undefined;
                 const statusVal = getTaskRowField(row, tasksSource?.statusColumn);
                 const statusName = statusVal && taskStatusDict.length > 0
@@ -240,7 +241,7 @@ export function TasksPanel({
                             ? "bg-[var(--color-primary-500)]/10 text-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/20"
                             : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
                         )}
-                        title={chatCount === 0 ? 'Новый чат' : chatCount === 1 ? 'Открыть чат' : `${chatCount} чатов`}
+                        title={chatCount === 0 ? t('aiChat.ui.newChat') : chatCount === 1 ? t('rowActions.openChat') : t('aiChat.ui.chatCount', { count: chatCount })}
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
                         {chatCount > 1 && (
@@ -266,7 +267,7 @@ export function TasksPanel({
                           >
                             <MessageSquare className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
                             <span className="flex-1 text-xs text-[var(--text-secondary)] truncate">
-                              {chat.title || 'Чат'}
+                              {chat.title || t('columnTypes.chat.label')}
                             </span>
                             <span className="text-[10px] text-[var(--text-tertiary)]">
                               {new Date(chat.updatedAt).toLocaleDateString()}
@@ -289,7 +290,7 @@ export function TasksPanel({
                           className="w-full flex items-center gap-2 px-3 py-2 pl-12 hover:bg-[var(--bg-secondary)] transition-colors text-left text-[var(--color-primary-500)]"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span className="text-xs">Новый чат</span>
+                          <span className="text-xs">{t('aiChat.ui.newChat')}</span>
                         </button>
                       </div>
                     )}
@@ -303,8 +304,8 @@ export function TasksPanel({
         <div className="flex flex-col h-full px-4 py-4">
           <div className="flex flex-col items-center text-center mb-4">
             <ListTodo className="w-10 h-10 text-[var(--text-tertiary)] mb-3" />
-            <p className="text-sm text-[var(--text-secondary)] mb-1">Источник не настроен</p>
-            <p className="text-xs text-[var(--text-tertiary)]">Выберите таблицу для задач</p>
+            <p className="text-sm text-[var(--text-secondary)] mb-1">{t('aiChat.ui.sourceIsNotConfigured')}</p>
+            <p className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.selectATaskTable')}</p>
           </div>
           <TasksSourceInlineSelector
             defaultSpaceId={effectiveSpaceId}

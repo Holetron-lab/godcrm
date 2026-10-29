@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
+import { Database, FileSpreadsheet, Table2 } from 'lucide-react';
 import { logger } from '@/shared/utils/logger';
 import { Input, Select, Modal } from '@/shared/components/ui';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
@@ -24,6 +25,8 @@ import { useCsvCreate } from './CreateTableModal/useCsvCreate';
 import { CsvUploadSection } from './CreateTableModal/CsvUploadSection';
 import { CsvConfigureSection } from './CreateTableModal/CsvConfigureSection';
 import { CsvCreatingSection } from './CreateTableModal/CsvCreatingSection';
+import { ExcelSheetPanel } from './CreateTableModal/ExcelSheetPanel';
+import { isExcelFileReady } from './CreateTableModal/excel-utils';
 import { ExternalTableSection } from './CreateTableModal/ExternalTableSection';
 import { LocalTableColumnEditor } from './CreateTableModal/LocalTableColumnEditor';
 
@@ -180,6 +183,7 @@ export const CreateTableModal = ({ open, onOpenChange, projectId, projects, onOp
   // === Extracted hooks ===
   const {
     handleCsvFileUpload, handleCsvDragOver, handleCsvDrop,
+    selectExcelSheet, retryExcelPreview,
     updateCsvColumn, updateCurrentCsvFile, handleCsvMenuToggle,
     updateCsvTabsScroll, scrollCsvTabs, toggleColumnExpanded,
   } = useCsvHandlers({
@@ -188,6 +192,7 @@ export const CreateTableModal = ({ open, onOpenChange, projectId, projects, onOp
     setCanScrollCsvTabsLeft, setCanScrollCsvTabsRight,
     setSelectedTabLeftHidden, setSelectedTabRightHidden,
     expandedColumns, setExpandedColumns,
+    targetProjectId, noProjectMessage: t('tables.create.excel.noProject'),
   });
 
   const {
@@ -204,7 +209,7 @@ export const CreateTableModal = ({ open, onOpenChange, projectId, projects, onOp
 
   const { handleCsvCreate, handleSubmit, createTable } = useCsvCreate({
     csvFiles, csvFilesBeforeNotionImport, targetProjectId, useFirstRowAsHeaders,
-    setCsvCreating, setCsvStep, resetState, onOpenChange,
+    setCsvCreating, setCsvStep, setCsvFiles, resetState, onOpenChange,
     tableType, basic, derivedName, hierarchy, columns,
     selectedDataSource, selectedExternalTable, selectedRelatedTables,
     showInMenu, menuWidgetTitle, menuWidgetIcon, menuWidgetDescription, slugify,
@@ -290,17 +295,19 @@ export const CreateTableModal = ({ open, onOpenChange, projectId, projects, onOp
 
   const isSubmitDisabled = useMemo(() => {
     if (tableType === 'csv') {
-      return csvCreating || !basic.displayName.trim() || !targetProjectId || csvStep !== 'configure';
+      // Excel entries must have a chosen, loaded sheet before anything is created.
+      return csvCreating || !basic.displayName.trim() || !targetProjectId || csvStep !== 'configure'
+        || !csvFiles.every(isExcelFileReady);
     }
-    return createTable.isLoading || !basic.displayName.trim();
-  }, [tableType, csvCreating, basic.displayName, targetProjectId, csvStep, createTable.isLoading]);
+    return createTable.isPending || !basic.displayName.trim();
+  }, [tableType, csvCreating, basic.displayName, targetProjectId, csvStep, createTable.isPending, csvFiles]);
 
   const submitLabel = useMemo(() => {
     if (tableType === 'csv') {
       return csvCreating ? t('tables.create.creating') : t('tables.create.createTables');
     }
-    return createTable.isLoading ? t('tables.create.creating') : t('tables.create.createTable');
-  }, [tableType, csvCreating, createTable.isLoading, t]);
+    return createTable.isPending ? t('tables.create.creating') : t('tables.create.createTable');
+  }, [tableType, csvCreating, createTable.isPending, t]);
 
   // ============ RENDER ============
   return (
@@ -331,48 +338,51 @@ export const CreateTableModal = ({ open, onOpenChange, projectId, projects, onOp
             <button
               type="button"
               onClick={() => setTableType('local')}
+              aria-pressed={tableType === 'local'}
               className={`flex-1 flex items-center gap-3 rounded-lg border p-3 transition ${
                 tableType === 'local'
                   ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10'
                   : 'border-[var(--border-primary)] hover:border-[var(--color-primary-300)]'
               }`}
             >
-              <span className="text-xl">📋</span>
+              <Table2 className="h-5 w-5 shrink-0" aria-hidden="true" />
               <div className="text-left">
                 <div className="text-sm font-medium text-[var(--text-primary)]">{t('tables.create.localTable')}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">{t('tables.create.localTableDesc')}</div>
+                <div className="text-[10px] text-[var(--text-secondary)]">{t('tables.create.localTableDesc')}</div>
               </div>
             </button>
 
             <button
               type="button"
               onClick={() => setTableType('external')}
+              aria-pressed={tableType === 'external'}
               className={`flex-1 flex items-center gap-3 rounded-lg border p-3 transition ${
                 tableType === 'external'
                   ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10'
                   : 'border-[var(--border-primary)] hover:border-[var(--color-primary-300)]'
               }`}
             >
-              <span className="text-xl">🔗</span>
+              <Database className="h-5 w-5 shrink-0" aria-hidden="true" />
               <div className="text-left">
                 <div className="text-sm font-medium text-[var(--text-primary)]">{t('tables.create.externalTable')}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">{t('tables.create.externalTableDesc')}</div>
+                <div className="text-[10px] text-[var(--text-secondary)]">{t('tables.create.externalTableDesc')}</div>
               </div>
             </button>
 
             <button
               type="button"
               onClick={() => setTableType('csv')}
+              aria-pressed={tableType === 'csv'}
               className={`flex-1 flex items-center gap-3 rounded-lg border p-3 transition ${
                 tableType === 'csv'
                   ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10'
                   : 'border-[var(--border-primary)] hover:border-[var(--color-primary-300)]'
               }`}
             >
-              <span className="text-xl">📄</span>
+              <FileSpreadsheet className="h-5 w-5 shrink-0" aria-hidden="true" />
               <div className="text-left">
-                <div className="text-sm font-medium text-[var(--text-primary)]">{t('tables.create.fromCsv')}</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">{t('tables.create.fromCsvDesc')}</div>
+                <div className="text-sm font-medium text-[var(--text-primary)]">{t('tables.create.fromFile')}</div>
+                <div className="text-[10px] text-[var(--text-secondary)]">{t('tables.create.fromFileDesc')}</div>
               </div>
             </button>
           </div>
@@ -441,6 +451,14 @@ export const CreateTableModal = ({ open, onOpenChange, projectId, projects, onOp
                 setColumnPreviewIndex={setColumnPreviewIndex}
                 CSV_COLUMN_TYPES={CSV_COLUMN_TYPES}
                 t={t}
+                beforeContent={currentCsvFile?.source === 'excel' ? (
+                  <ExcelSheetPanel
+                    file={currentCsvFile}
+                    onSelectSheet={selectExcelSheet}
+                    onRetryPreview={retryExcelPreview}
+                    t={t}
+                  />
+                ) : null}
               />
             )}
 
@@ -581,10 +599,10 @@ export const CreateTableModal = ({ open, onOpenChange, projectId, projects, onOp
               <div className="grid gap-3 grid-cols-2">
                 <Input label="Parent key" placeholder="parent_id" value={hierarchy.parentField ?? ''}
                   onChange={(event) => setHierarchy((prev) => ({ ...prev, parentField: event.target.value }))}
-                  description={t('tables.create.parentFieldDesc')} />
+                  hint={t('tables.create.parentFieldDesc')} />
                 <Input label="Child key / relation" placeholder="child_ids" value={hierarchy.childField ?? ''}
                   onChange={(event) => setHierarchy((prev) => ({ ...prev, childField: event.target.value }))}
-                  description={t('tables.create.nestedColumnDesc')} />
+                  hint={t('tables.create.nestedColumnDesc')} />
               </div>
             )}
           </section>

@@ -2,6 +2,7 @@
  * Panel for adding users to the space access table.
  */
 
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useMemo } from 'react';
 import {
   UserPlus,
@@ -30,6 +31,7 @@ export const AddUserPanel = ({
   onCancel,
   isSubmitting
 }: AddUserPanelProps) => {
+  const { t } = useLanguage();
   const filteredSystemUsers = useMemo(() => {
     const available = systemUsers.filter(u => !existingUserIds.includes(u.id));
     if (!searchQuery) return available.slice(0, 20);
@@ -48,7 +50,7 @@ export const AddUserPanel = ({
       <div className="flex items-center justify-between">
         <h5 className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2">
           <UserPlus className="w-4 h-4 text-[var(--accent-primary)]" />
-          Добавить пользователей
+          {t('userAccess.panel.addUsers')}
           {selectedUsers.length > 0 && (
             <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--accent-primary)] text-white">
               {selectedUsers.length}
@@ -57,6 +59,7 @@ export const AddUserPanel = ({
         </h5>
         <button
           type="button"
+          aria-label={t('common.close')}
           onClick={onCancel}
           className="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
         >
@@ -66,8 +69,9 @@ export const AddUserPanel = ({
 
       {/* Default role */}
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-[var(--text-tertiary)]">Роль по умолчанию:</span>
+        <span className="text-[var(--text-tertiary)]">{t('userAccess.panel.defaultRole')}</span>
         <select
+          aria-label={t('userAccess.panel.defaultRole')}
           value={defaultLevel}
           onChange={(e) => onDefaultLevelChange(e.target.value as UserAccessLevel)}
           className="px-2 py-1 text-sm rounded border bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/50"
@@ -81,7 +85,7 @@ export const AddUserPanel = ({
       {/* Selected users chips */}
       {selectedUsers.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs text-[var(--text-tertiary)] font-medium">Выбранные:</div>
+          <div className="text-xs text-[var(--text-tertiary)] font-medium">{t('userAccess.panel.selectedUsers')}</div>
           <div className="flex flex-wrap gap-2">
             {selectedUsers.map(({ userId, level }) => {
               const user = systemUsers.find(u => u.id === userId);
@@ -101,6 +105,7 @@ export const AddUserPanel = ({
                   </div>
                   <span className="text-xs text-[var(--text-primary)]">{user.name}</span>
                   <select
+                    aria-label={t('userAccess.panel.roleFor', { name: user.name })}
                     value={level}
                     onChange={(e) => onUpdateLevel(userId, e.target.value as UserAccessLevel)}
                     className="px-1 py-0.5 text-[10px] rounded border-0 bg-transparent focus:outline-none cursor-pointer"
@@ -112,6 +117,7 @@ export const AddUserPanel = ({
                   </select>
                   <button
                     type="button"
+                    aria-label={t('userAccess.panel.deselectUser', { name: user.name })}
                     onClick={() => onToggleUser(userId)}
                     className="p-0.5 text-[var(--text-tertiary)] hover:text-red-500 transition-colors"
                   >
@@ -131,7 +137,8 @@ export const AddUserPanel = ({
           type="text"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Поиск по имени, email или ID..."
+          placeholder={t('userAccess.panel.searchPlaceholder')}
+          aria-label={t('userAccess.panel.searchPlaceholder')}
           className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/20"
         />
       </div>
@@ -141,7 +148,7 @@ export const AddUserPanel = ({
         {filteredSystemUsers.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-[var(--text-tertiary)]">
             <Users className="w-6 h-6 mx-auto mb-2 opacity-50" />
-            {systemUsers.length === 0 ? 'Загрузка пользователей...' : 'Все пользователи уже добавлены'}
+            {systemUsers.length === 0 ? t('userAccess.panel.loadingUsers') : t('userAccess.panel.allUsersAdded')}
           </div>
         ) : (
           filteredSystemUsers.map(u => {
@@ -150,6 +157,7 @@ export const AddUserPanel = ({
               <button
                 key={u.id}
                 type="button"
+                aria-pressed={isSelected}
                 onClick={() => onToggleUser(u.id)}
                 className={`w-full px-3 py-2.5 text-left hover:bg-[var(--bg-tertiary)] transition-colors flex items-center gap-3 ${isSelected ? 'bg-[var(--accent-primary)]/10' : ''}`}
               >
@@ -177,11 +185,12 @@ export const AddUserPanel = ({
       <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border-secondary)]">
         <button
           type="button"
+          aria-label={t('common.close')}
           onClick={onCancel}
           disabled={isSubmitting}
           className="px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-md hover:bg-[var(--bg-tertiary)] transition-colors disabled:opacity-50"
         >
-          Отмена
+          {t('userAccess.panel.cancel')}
         </button>
         <button
           type="button"
@@ -192,12 +201,12 @@ export const AddUserPanel = ({
           {isSubmitting ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Добавление...
+              {t('userAccess.panel.adding')}
             </>
           ) : (
             <>
               <UserPlus className="w-4 h-4" />
-              Добавить ({selectedUsers.length})
+              {t('userAccess.panel.addCount', { count: selectedUsers.length })}
             </>
           )}
         </button>

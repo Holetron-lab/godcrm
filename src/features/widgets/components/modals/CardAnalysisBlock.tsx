@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
 import type { ColumnModel } from '@/features/tables/types/table.types';
@@ -49,7 +50,7 @@ interface ParsedAnalysis {
  * drags the line taller than its neighbours.
  */
 const LEADING_EMOJI =
-  /^(?:[←-⇿⌀-➿⬀-⯿️‍⃣™ℹ]|[\uD83C-\uD83E][\uDC00-\uDFFF]|\s)+/;
+  /^(?:[0-9#*]\uFE0F?\u20E3|[←-⇿⌀-➿⬀-⯿™ℹ\u{1F000}-\u{1FBFF}]|\uFE0F|\u200D|\u20E3|\s)+/u;
 
 const stripEmoji = (text: string) => text.replace(LEADING_EMOJI, '').trim();
 
@@ -168,6 +169,8 @@ export function CardAnalysisBlock({
   onSubmit,
   onCancel,
 }: CardAnalysisBlockProps) {
+  const editorId = useId();
+  const requestedFocusRef = useRequestedFocus<HTMLTextAreaElement>(editing);
   const { leadTitle, leadBody, entries } = useMemo(() => parseAnalysis(content), [content]);
 
   /** Only the newest entry starts open — the rest are history, not the state. */
@@ -181,17 +184,18 @@ export function CardAnalysisBlock({
   if (editing) {
     return (
       <section className="space-y-2">
-        <label className="block text-xs font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
+        <label htmlFor={editorId} className="block text-xs font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
           {label}
         </label>
         <textarea
+          id={editorId}
           value={draft}
           onChange={(e) => onDraftChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') onCancel();
           }}
           rows={18}
-          autoFocus
+          ref={requestedFocusRef}
           className="w-full resize-y rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]"
         />
         <div className="flex items-center gap-1.5">
@@ -263,6 +267,7 @@ export function CardAnalysisBlock({
                 >
                   <button
                     type="button"
+                    aria-expanded={open}
                     // A click toggles; the double click that opens the editor
                     // belongs to the container, so stop it dying on the button.
                     onClick={() => setOpenIndex(open ? null : index)}

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useId } from 'react';
 import { ColumnSettingsProps } from './types';
 import { BarChart3, Calculator, Info, Zap, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/shared/components/ui';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 /**
  * Вкладка "Сводка" - настройки агрегаций и будущий конструктор переменных
@@ -10,6 +11,8 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
   draft,
   setDraft,
 }) => {
+  const { t } = useLanguage();
+  const fieldId = useId();
   const isNumericType = ['number', 'integer', 'float', 'decimal'].includes(draft.type);
   const isTextType = ['text', 'email', 'url', 'phone'].includes(draft.type);
   const isSelectType = ['select', 'multi-select', 'multi_select'].includes(draft.type);
@@ -23,7 +26,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-[var(--text-tertiary)]" />
           <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
-            Суммарная строка
+            {t('columnSettings.summaryTab.title')}
           </span>
         </div>
         
@@ -32,7 +35,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
           {isNumericType && (
             <div className="space-y-3">
               <div className="text-sm font-medium text-[var(--text-primary)]">
-                Числовые агрегации
+                {t('columnSettings.summaryTab.numeric')}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -48,7 +51,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">Σ Сумма</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.sum')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -63,7 +66,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">Среднее</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.avg')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -78,7 +81,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">Минимум</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.min')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -93,7 +96,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">Максимум</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.max')}</span>
                 </label>
               </div>
             </div>
@@ -103,7 +106,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
           {isCheckboxType && (
             <div className="space-y-3">
               <div className="text-sm font-medium text-[var(--text-primary)]">
-                Статистика чекбоксов
+                {t('columnSettings.summaryTab.checkboxStats')}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -119,7 +122,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">✓ Отмеченных</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.checked')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -134,7 +137,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">○ Не отмеченных</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.unchecked')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -149,7 +152,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">% Выполнено</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.percentChecked')}</span>
                 </label>
               </div>
             </div>
@@ -159,7 +162,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
           {isDateType && (
             <div className="space-y-3">
               <div className="text-sm font-medium text-[var(--text-primary)]">
-                Статистика дат
+                {t('columnSettings.summaryTab.dateStats')}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -175,7 +178,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">📅 Самая ранняя</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.earliest')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -190,7 +193,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">📅 Самая поздняя</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.latest')}</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -205,7 +208,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">📆 Диапазон</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.dateRange')}</span>
                 </label>
               </div>
             </div>
@@ -214,7 +217,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
           {/* Общие агрегации (для всех типов) */}
           <div className="p-4 rounded-lg bg-[var(--bg-tertiary)] space-y-3">
             <div className="text-sm font-medium text-[var(--text-primary)]">
-              Общая статистика
+              {t('columnSettings.summaryTab.general')}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -230,7 +233,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                   }))}
                   className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                 />
-                <span className="text-sm text-[var(--text-primary)]">Количество</span>
+                <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.count')}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -245,7 +248,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                   }))}
                   className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                 />
-                <span className="text-sm text-[var(--text-primary)]">Уникальных</span>
+                <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.countUnique')}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -260,7 +263,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                   }))}
                   className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                 />
-                <span className="text-sm text-[var(--text-primary)]">Пустых</span>
+                <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.countEmpty')}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -275,7 +278,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                   }))}
                   className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                 />
-                <span className="text-sm text-[var(--text-primary)]">Заполненных</span>
+                <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.countFilled')}</span>
               </label>
               {(isTextType || isSelectType) && (
                 <label className="flex items-center gap-2 cursor-pointer col-span-2">
@@ -291,7 +294,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     }))}
                     className="w-4 h-4 rounded border-gray-300 text-[var(--color-primary-500)]"
                   />
-                  <span className="text-sm text-[var(--text-primary)]">% Заполнения</span>
+                  <span className="text-sm text-[var(--text-primary)]">{t('columnSettings.summaryTab.percentFilled')}</span>
                 </label>
               )}
             </div>
@@ -304,35 +307,35 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
         <div className="flex items-center gap-2">
           <Calculator className="w-4 h-4 text-[var(--accent-primary)]" />
           <span className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
-            Вычисляемые переменные
+            {t('columnSettings.summaryTab.variables')}
           </span>
         </div>
         
         <div className="p-4 rounded-lg bg-[var(--bg-tertiary)] space-y-4">
           {/* Formula input */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-[var(--text-primary)]">
-              Формула колонки
+            <label htmlFor={fieldId} className="text-sm font-medium text-[var(--text-primary)]">
+              {t('columnSettings.summaryTab.formula')}
             </label>
-            <textarea
+            <textarea id={fieldId}
               value={draft.formula || ''}
               onChange={(e) => setDraft(prev => ({
                 ...prev,
                 formula: e.target.value
               }))}
-              placeholder="Например: {{price}} * {{quantity}} или SUM({{amount}})"
+              placeholder={t('columnSettings.summaryTab.formulaPlaceholder')}
               rows={2}
-              className="w-full px-3 py-2 text-sm font-mono bg-[var(--bg-tertiary)] border border-[var(--border-color)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/20 resize-none"
+              className="w-full px-3 py-2 text-sm font-mono bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/20 resize-none"
             />
             <p className="text-xs text-[var(--text-tertiary)]">
-              Используйте <code className="text-[var(--accent-primary)]">{'{{'}</code>имя_колонки<code className="text-[var(--accent-primary)]">{'}}'}</code> для ссылки на другие колонки, 
-              <code className="text-[var(--accent-primary)]"> $переменная</code> для переменных пространства.
+              {t('columnSettings.summaryTab.hintUse')} <code className="text-[var(--accent-primary)]">{'{{'}{t('columnSettings.summaryTab.hintColumn')}{'}}'}</code> {t('columnSettings.summaryTab.hintColumns')}{' '}
+              <code className="text-[var(--accent-primary)]">{t('columnSettings.summaryTab.hintVariable')}</code> {t('columnSettings.summaryTab.hintSpace')}
             </p>
           </div>
 
           {/* Quick formulas */}
           <div className="space-y-2">
-            <span className="text-xs text-[var(--text-tertiary)]">Быстрые формулы:</span>
+            <span className="text-xs text-[var(--text-tertiary)]">{t('columnSettings.summaryTab.quickFormulas')}</span>
             <div className="flex flex-wrap gap-2">
               {[
                 { label: 'SUM', formula: `SUM({{${draft.name || 'column'}}})` },
@@ -348,7 +351,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
                     ...prev,
                     formula: (prev.formula || '') + item.formula
                   }))}
-                  className="px-2 py-1 text-xs font-mono bg-[var(--bg-tertiary)] hover:bg-[var(--accent-primary)]/10 border border-[var(--border-color)] rounded text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors"
+                  className="px-2 py-1 text-xs font-mono bg-[var(--bg-tertiary)] hover:bg-[var(--accent-primary)]/10 border border-[var(--border-primary)] rounded text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors"
                 >
                   {item.label}
                 </button>
@@ -362,8 +365,7 @@ export const SummaryTab: React.FC<ColumnSettingsProps> = ({
       <div className="flex items-start gap-2 p-3 rounded-lg bg-[var(--color-primary-50)] border border-[var(--color-primary-200)]">
         <Info className="w-4 h-4 text-[var(--accent-primary)] mt-0.5 flex-shrink-0" />
         <p className="text-xs text-[var(--text-secondary)]">
-          Выбранные агрегации отображаются в суммарной строке таблицы (внизу).
-          Формулы пересчитываются автоматически при изменении данных.
+          {t('columnSettings.summaryTab.info')}
         </p>
       </div>
     </div>

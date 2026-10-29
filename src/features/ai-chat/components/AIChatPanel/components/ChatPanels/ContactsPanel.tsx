@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ContactsPanel Component
  * Extracted from AIChatPanel.tsx - lines 1367-1489
@@ -53,6 +54,7 @@ export function ContactsPanel({
   onAddToGroup,
   onCreateNewChat
 }: ContactsPanelProps) {
+  const { t } = useLanguage();
   // Filter users based on search and filters
   const filteredUsers = users.filter(user => {
     // Search filter
@@ -89,7 +91,7 @@ export function ContactsPanel({
                 ? "bg-yellow-500/20 text-yellow-400"
                 : "text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
             )}
-            title="Избранные"
+            title={t('aiChat.contacts.favoritesTitle')}
           >
             <Star className={cn("w-4 h-4", showFavorites && "fill-current")} />
           </button>
@@ -100,9 +102,9 @@ export function ContactsPanel({
             onChange={(e) => setUserTypeFilter(e.target.value as UserTypeFilter)}
             className="px-2 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
           >
-            <option value="all">Все</option>
-            <option value="humans">Люди</option>
-            <option value="agents">AI / Сервис</option>
+            <option value="all">{t('aiChat.contacts.scopeAll')}</option>
+            <option value="humans">{t('aiChat.contacts.filterHumans')}</option>
+            <option value="agents">{t('aiChat.ui.aIService')}</option>
           </select>
           
           {/* Show all users toggle */}
@@ -114,9 +116,9 @@ export function ContactsPanel({
                 ? "bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]"
                 : "bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
             )}
-            title={showAllContacts ? "Показать только участников спейса" : "Показать всех пользователей"}
+            title={showAllContacts ? t('aiChat.contacts.showSpaceOnly') : t('aiChat.contacts.showAll')}
           >
-            {showAllContacts ? "Все" : "Спейс"}
+            {showAllContacts ? t('aiChat.contacts.scopeAll') : t('aiChat.contacts.scopeSpace')}
           </button>
         </div>
         
@@ -124,7 +126,7 @@ export function ContactsPanel({
         <button
           onClick={() => setActivePanel('none')}
           className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors"
-          title="Закрыть"
+          title={t('aiChat.ui.close')}
         >
           <X className="w-4 h-4" />
         </button>
@@ -138,7 +140,7 @@ export function ContactsPanel({
             type="text"
             value={contactsSearch}
             onChange={(e) => setContactsSearch(e.target.value)}
-            placeholder="Поиск контактов..."
+            placeholder={t('aiChat.contacts.searchPlaceholder')}
             className="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] border-none focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
           />
         </div>
@@ -152,7 +154,7 @@ export function ContactsPanel({
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-            {contactsSearch ? 'Не найдено' : 'Нет контактов'}
+            {contactsSearch ? t('aiChat.contacts.notFound') : t('aiChat.contacts.empty')}
           </div>
         ) : (
           filteredUsers.map(user => {

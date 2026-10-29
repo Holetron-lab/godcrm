@@ -28,6 +28,37 @@
   overflow-x: auto;
 }
 
+/* Body surface theme — independent of the app theme, because mail HTML is
+ * authored for a white page. `light` is that page; `dark` is a fixed dark surface
+ * where the message's own colors/backgrounds are neutralised (inline styles are
+ * stripped by SafeHtml, but class-driven and default colors still need forcing)
+ * so text stays readable. Images/media are left untouched. */
+[data-mail-theme='light'] .mail-body {
+  color-scheme: light;
+  background: #ffffff;
+  color: #1f2937;
+}
+[data-mail-theme='light'] .mail-body a {
+  color: #1d4ed8;
+}
+[data-mail-theme='dark'] .mail-body {
+  color-scheme: dark;
+  background: #111418;
+  color: #e5e7eb;
+}
+[data-mail-theme='dark'] .mail-body *:not(img):not(video):not(svg) {
+  background-color: transparent !important;
+  color: inherit !important;
+  border-color: #374151 !important;
+}
+[data-mail-theme='dark'] .mail-body a {
+  color: #93c5fd !important;
+}
+[data-mail-theme='dark'] .mail-body pre,
+[data-mail-theme='dark'] .mail-body code {
+  background-color: #1f2937 !important;
+}
+
 @media print {
   body * {
     visibility: hidden;

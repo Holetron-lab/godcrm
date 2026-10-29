@@ -1,22 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { ChatHeader } from '../ChatHeader';
 import type { ChatPartner, Agent, User } from '../../../types';
 
 // Mock icons
-vi.mock('lucide-react', () => ({
-  Users: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="users-icon" {...props} />,
-  Bot: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="bot-icon" {...props} />,
-  Zap: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="zap-icon" {...props} />,
-  ListTodo: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="list-todo-icon" {...props} />,
-  Inbox: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="inbox-icon" {...props} />,
-  Settings: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="settings-icon" {...props} />,
-  Plus: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="plus-icon" {...props} />,
-  X: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="x-icon" {...props} />,
-  Search: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="search-icon" {...props} />,
-  User: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="user-icon" {...props} />,
-  MessageSquare: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="message-square-icon" {...props} />
-}));
+// lucide-react is auto-mocked: any icon a component adds resolves to a stub,
+// so a new <Icon/> can no longer fail every test in this file (see src/tests/lucideMock.tsx).
+vi.mock('lucide-react', async () => (await import('@/tests/lucideMock')).lucideMock());
 
 // Mock ToolbarButton component
 vi.mock('../../shared/ToolbarButton', () => ({
@@ -246,7 +237,7 @@ describe('ChatHeader', () => {
 
       expect(screen.getByText('John Doe')).toBeInTheDocument();
       expect(screen.getByText('john@example.com')).toBeInTheDocument();
-      expect(screen.getByTestId('user-icon')).toBeInTheDocument();
+      expect(screen.getByLabelText('John Doe')).toHaveTextContent('J');
     });
 
     it('should display user avatar when available', () => {
@@ -261,10 +252,9 @@ describe('ChatHeader', () => {
       render(<ChatHeader {...defaultProps} chatPartner={mockGroupPartner} />);
 
       expect(screen.getByText('Test Group')).toBeInTheDocument();
-      // Check for the users icon in the partner info area (with green color)
-      const usersIcons = screen.getAllByTestId('users-icon');
-      const groupIcon = usersIcons.find(icon => icon.classList.contains('text-green-400'));
-      expect(groupIcon).toBeInTheDocument();
+      const groupAvatar = screen.getByLabelText('Test Group');
+      expect(groupAvatar).toHaveTextContent('👥');
+      expect(groupAvatar).toHaveStyle({ color: '#22c55e' });
     });
 
     it('should display "Новый чат" when no partner', () => {
@@ -278,7 +268,7 @@ describe('ChatHeader', () => {
       render(<ChatHeader {...defaultProps} chatParticipants={mockParticipants} />);
 
       expect(screen.getByText('Participant 1, Participant 2')).toBeInTheDocument();
-      expect(screen.getByText('2 участника')).toBeInTheDocument();
+      expect(screen.getByText('Участников: 2')).toBeInTheDocument();
     });
 
     it('should display model name for agent', () => {

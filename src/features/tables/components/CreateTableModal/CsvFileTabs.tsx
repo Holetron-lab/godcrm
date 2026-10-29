@@ -1,4 +1,5 @@
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { IMPORT_FILE_ACCEPT } from './CsvUploadSection';
 import type { CSVFileData } from './types';
 
 interface CsvFileTabsProps {
@@ -82,7 +83,7 @@ export const CsvFileTabs = ({
                   data-csv-tab={idx}
                 >
                   <span className="max-w-[120px] truncate">{file.tableDisplayName}</span>
-                  <span className="text-xs opacity-70">({file.data.length - 1})</span>
+                  <span className="text-xs opacity-70">({Math.max(0, file.data.length - 1)})</span>
                 </button>
                 <button
                   type="button"
@@ -129,12 +130,12 @@ export const CsvFileTabs = ({
         <label
           htmlFor="csv-add-more-files"
           className="flex items-center justify-center h-10 w-10 rounded-md border border-[var(--border-primary)] text-[var(--text-tertiary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)] cursor-pointer transition-all"
-          title={t('tables.create.addCsvFiles')}
+          title={t('tables.create.addFiles')}
         >
           <Plus className="w-5 h-5" />
           <input
             type="file"
-            accept=".csv"
+            accept={IMPORT_FILE_ACCEPT}
             multiple
             onChange={handleCsvFileUpload}
             className="hidden"

@@ -6,7 +6,7 @@ import axios from 'axios';
 import {
   respondSuccess, respondError,
   REFRESH_COOKIE_NAME, ACCESS_COOKIE_NAME,
-  getRefreshCookieOptions, getAccessCookieOptions,
+  getRefreshCookieOptions, getAccessCookieOptions, clearForeignSessionCookies,
   createAccessToken, createRefreshToken,
   requireAuth, getDynamicRedirectUri,
   saveGoogleOAuthConfig,
@@ -98,6 +98,9 @@ export default function registerGoogleOAuthRoutes(router) {
       // Set refresh token cookie
       res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
       res.cookie(ACCESS_COOKIE_NAME, accessToken, getAccessCookieOptions());
+      // Evict Domain=.<apex> copies left by another *.godcrm.ai host — they
+      // would shadow the host-only cookies set above (same fix as /auth/login).
+      clearForeignSessionCookies(req, res);
 
       // Include refreshToken in body for mobile clients (they can't use httpOnly cookies)
       return respondSuccess(res, {
@@ -172,6 +175,9 @@ export default function registerGoogleOAuthRoutes(router) {
       // Set refresh token cookie
       res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
       res.cookie(ACCESS_COOKIE_NAME, accessToken, getAccessCookieOptions());
+      // Evict Domain=.<apex> copies left by another *.godcrm.ai host — they
+      // would shadow the host-only cookies set above (same fix as /auth/login).
+      clearForeignSessionCookies(req, res);
 
       // Include refreshToken in body for mobile clients
       return respondSuccess(res, {

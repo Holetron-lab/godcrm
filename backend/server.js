@@ -54,6 +54,7 @@ import terminalRoutesV3 from './routes/v3/terminal.js'; // ADR-024: OpenCode Ter
 import labsRoutesV3 from './routes/v3/labs.js'; // ADR-043: MindWorkflow Integration
 import columnMappingRoutesV3 from './routes/v3/column-mapping.js'; // ADR-069: Column Mapping
 import widgetLibraryRoutesV3 from './routes/v3/widget-library.js'; // ADR-073: Widget Picker System
+import moduleInstallRoutesV3 from './routes/v3/module-install.js'; // ADR-200 W2: no-deploy module installer
 import ticketsRoutesV3 from './routes/v3/tickets.js'; // ADR-098: Ticket Status API
 import agentVersionsRoutesV3 from './routes/v3/agent-versions.js'; // ADR-0007-S: G1-data agent_versions write path
 import telegramRoutesV3 from './routes/v3/telegram.js'; // ADR-098: Telegram Bot integration
@@ -75,10 +76,15 @@ import { publicAbuseGuard, publicRateLimit, publicSpaceAccess } from './middlewa
 import { mcpPublicHandler } from './services/mcp/publicMcp.js';
 import screenshotsRoutesV3 from './routes/v3/screenshots.js'; // Screenshot Service for Telegram posts
 import pesRoutesV3 from './routes/v3/pes.js'; // PES ↔ CRM Bridge
+import nowStateRoutesV3 from './routes/v3/now-state.js'; // ADR-171 T1: NowState read-model
 import pesAppRoutes from './routes/v3/pes/appRoutes.js'; // PES Mini App (public)
 import pluginRoutesV3 from './routes/v3/plugin.js'; // Plugin API (Photoshop, etc.)
 import bddRoutesV3 from './routes/v3/bdd.js'; // ADR-156 Phase 5A: BDD test runs
 import connectorsAuthedRouter, { connectorsCallbackRouter } from './routes/v3/connectors.js'; // ADR-0028 Phase 1: Space Connectors
+import opsAuthedRouter, { opsGateRouter } from './routes/v3/ops.js'; // Constitution v4.3 ops profiles: diagnostics / local-qa broker
+import { reapOpsWorkers } from './services/ops/opsBroker.js'; // ops broker crash recovery
+import stagingAuthedRouter, { stagingGateRouter } from './routes/v3/ops-staging.js'; // staging channel: sysadmin preflight via independent executor
+import { reapStagingChannel } from './services/ops/stagingExecutionBroker.js'; // staging channel crash recovery
 import mailRoutesV3 from './routes/v3/mail.js'; // ADR-160: Mail module (IMAP/SMTP bridge)
 import credentialVault from './services/connectors/CredentialVault.js'; // ADR-0028 Phase 1: vault lifecycle
 import adminChatNotificationsRoutesV3 from './routes/v3/admin/chatNotifications.js'; // ADR-0064 WP-A: global default chat notification prefs
@@ -88,6 +94,7 @@ import { startRegistrationPolicyListener } from './services/registrationPolicy.j
 import { startInflightBus } from './services/inflight/notifyBus.js'; // ADR-0057-A WP-B: chat_inflight LISTEN bus
 import { registerBlogSeoRoutes } from './services/blogSeo.js'; // ADR-190: crawler-readable SSR-lite for /blog/* + sitemap/robots
 import { registerPublicDocsSeoRoutes, collectDocsSitemapUrls } from './services/publicDocsSeo.js'; // ADR-190-A: same for opted-in public spaces' docs hub
+import { registerLandingSeoRoutes } from './services/landingSeo.js'; // GEO pack (chat 3772): same for the marketing landing `/` + `/welcome`
 import ownerRoutesV3 from './routes/v3/owner.js'; // ADR-0059 AMEND-3 §4.9: owner calls settings
 import permissionResolver from './services/agent-permissions/resolver.js'; // ADR-0053 Phase C2: command-policy resolver
 import agentPermissionsRoutesV3 from './routes/v3/agent-permissions.js'; // ADR-0053 Phase C2: PreToolUse hook endpoint
@@ -98,6 +105,7 @@ import { getAdapter as getDbAdapter } from './database/connection.js'; // ADR-00
 import agentRunDispatcherAdminRouter from './routes/v3/agentRunDispatcher.js'; // ADR-0030 Phase 2: dispatcher admin API
 import { authenticate } from './middleware/auth.js';
 import { requestContext } from './middleware/requestContext.js'; // ADR-0066 P0: req.requestId/spaceId/actingAs
+import uploadStatic from './middleware/uploadStatic.js';
 import { uploadsFileGuard, downloadsFileGuard } from './middleware/fileGuard.js'; // ADR-0016: Authenticated file delivery
 import { dbGet } from './database/connection.js'; // ADR-064: Health check DB ping
 
@@ -134,7 +142,8 @@ app.use(
         // embeds YouTube. Without https: in style/font-src the stylesheet is
         // refused and the landing falls back to system fonts.
         'style-src': ["'self'", 'https:', "'unsafe-inline'"],
-        'img-src': ["'self'", 'data:', 'blob:'],
+        // Mail HTML embeds sender-hosted images; keep in sync with nginx.
+        'img-src': ["'self'", 'https:', 'data:', 'blob:'],
         'font-src': ["'self'", 'https:', 'data:'],
         'connect-src': ["'self'", 'wss:', 'https:'],
         'frame-src': ['https://www.youtube-nocookie.com', 'https://www.youtube.com']
@@ -313,6 +322,11 @@ app.post('/api/v3/echo', (req, res) => {
 // the upstream OAuth provider redirect arrives without our auth header.
 app.use('/api/v3/connectors', connectorsCallbackRouter);
 
+// Ops profiles agent transport: authenticated by the spawn-time gate token,
+// not by a user JWT — so it too sits BEFORE the `authenticate` chain.
+app.use('/api/v3/ops', opsGateRouter);
+app.use('/api/v3/ops', stagingGateRouter); // same gate token, separate grants (staging channel)
+
 // ADR-0053 Phase C2: agent command-policy resolver. MUST be mounted BEFORE
 // the global `authenticate` chain — POST /check is gated by an internal
 // token (used by the PreToolUse hook subprocess, which has no JWT), while
@@ -331,6 +345,7 @@ app.use('/api/v3', authenticate, rowsRoutesV3);      // ADR-019: Separated rows 
 app.use('/api/v3', authenticate, widgetRoutesV3);
 // MODULE-CONTRACT v1: mount present autonomous modules' backend routes by manifest
 // (data, not static imports). Absent module → nothing mounted, core boots clean.
+// Formerly the static SC-SIM mount; now sc-sim rides backend/modules/sc-sim/.
 await mountModuleRoutes(app, authenticate, apiLogger);
 app.use('/api/v3', authenticate, filesRoutesV3);
 app.use('/api/v3', authenticate, webhooksRoutesV3);
@@ -351,17 +366,27 @@ app.use('/api/v3/terminal', authenticate, terminalRoutesV3); // ADR-024: OpenCod
 app.use('/api/v3/labs', authenticate, labsRoutesV3); // ADR-043: MindWorkflow Integration
 app.use('/api/v3/column-mapping', authenticate, columnMappingRoutesV3); // ADR-069: Column Mapping
 app.use('/api/v3', authenticate, widgetLibraryRoutesV3); // ADR-073: Widget Picker System
+app.use('/api/v3/modules', authenticate, moduleInstallRoutesV3); // ADR-200 W2: blueprint install/upgrade/uninstall
 app.use('/api/v3', authenticate, ticketsRoutesV3); // ADR-098: Ticket Status API
 app.use('/api/v3/wa', authenticate, waRoutesV3); // ADR-063: WorkAdventure Admin API
 app.use('/api/v3/calendar', authenticate, calendarRoutesV3); // Google Calendar Integration
 app.use('/api/v3/frame', authenticate, frameRoutesV3); // Brilliant Frame Smart Glasses
 app.use('/api/v3/screenshots', authenticate, screenshotsRoutesV3); // Screenshot Service for Telegram posts
 app.use('/api/v3/pes', authenticate, pesRoutesV3); // PES ↔ CRM Bridge
+// ADR-171 T1 / ADR-0196 P0.2a: router owns the leaf path (`GET /now-state`), so
+// it mounts on the bare `/api/v3` prefix like tables/rows/widgets above. Placed
+// deliberately BELOW the first `app.use('/api/v3', authenticate, …)` chain
+// (agentRunDispatcher, line ~329): every public v3 route — /auth, /public,
+// /pes app, /tools, /connectors callbacks — is mounted ABOVE that line, so this
+// adds no new surface to the authenticated fall-through.
+app.use('/api/v3', authenticate, nowStateRoutesV3); // ADR-171 T1: GET /api/v3/now-state
 app.use('/api/v3/plugin', authenticate, pluginRoutesV3); // Plugin API (Photoshop, etc.)
 app.use('/api/v3/bdd', authenticate, bddRoutesV3); // ADR-156 Phase 5A: BDD test runs
 
 // ADR-0028 Phase 1: Space Connectors authed routes (callback mounted earlier, ~line 249).
 app.use('/api/v3', authenticate, connectorsAuthedRouter);
+app.use('/api/v3', authenticate, opsAuthedRouter); // ops grants lifecycle (space owner/admin gate inside)
+app.use('/api/v3', authenticate, stagingAuthedRouter); // staging channel grants / receipts / leases (staging-space owner gate inside)
 app.use('/api/v3', authenticate, mailRoutesV3); // ADR-160: Mail module routes (/spaces/:id/mail/*)
 
 // ADR-0064 WP-A: global-default chat notification prefs (app-owner gate
@@ -519,17 +544,8 @@ app.use('/downloads', downloadsFileGuard, express.static(DOWNLOADS_PATH, {
   }
 }));
 
-// Static file serving for uploads (fix: file preview instead of download)
-const UPLOAD_BASE_PATH = process.env.UPLOAD_PATH || '/var/lib/business-crm-data/uploads';
-app.use('/uploads', uploadsFileGuard, express.static(UPLOAD_BASE_PATH, {
-  setHeaders: (res, filePath) => {
-    // Serve files inline (preview) instead of attachment (download)
-    const basename = path.basename(filePath);
-    res.setHeader('Content-Disposition', `inline; filename="${basename}"`);
-    // Allow embedding in iframes for preview modal
-    res.removeHeader('X-Frame-Options');
-  }
-}));
+// Authorization runs before the shared upload delivery policy.
+app.use('/uploads', uploadsFileGuard, uploadStatic);
 
 // NO-SIGNUP-MCP §B1: friendly-path alias `/s/:slug/mcp` → public MCP handler.
 // Registered BEFORE the static + SPA catch-all so POST/GET to the bare
@@ -550,6 +566,12 @@ registerBlogSeoRoutes(app, { clientDistPath, extraSitemapUrls: collectDocsSitema
 // opted in via settings.public_seo. Registered AFTER the /s/:slug/mcp alias
 // above (which it must not swallow) and BEFORE the static + catch-all mounts.
 registerPublicDocsSeoRoutes(app, { clientDistPath });
+
+// GEO pack (doc 254978 §6): crawler-readable landing. `/` is rendered only on
+// the marketing hosts (same list as the SPA's RootIndex), `/welcome` on every
+// host; app hosts fall through to the SPA. MUST precede the static mount —
+// express.static serves dist/index.html for `/` by itself.
+registerLandingSeoRoutes(app, { clientDistPath });
 
 // Static frontend (SPA)
 app.use(express.static(clientDistPath, {
@@ -713,6 +735,16 @@ const server = httpServer.listen(PORT, () => {
     apiLogger.info({ vault: h }, 'CredentialVault init complete');
   }).catch(err => {
     apiLogger.error({ err }, 'CredentialVault init failed');
+  });
+
+  // Ops broker crash recovery: a previous process may have died with a QA
+  // container running. No-op when no executor is installed on this box.
+  reapOpsWorkers().catch(err => {
+    apiLogger.warn({ err }, 'ops reaper failed at boot');
+  });
+  // Staging channel: receipts/leases a dead broker left `running`/live.
+  reapStagingChannel().catch(err => {
+    apiLogger.warn({ err }, 'staging channel reaper failed at boot');
   });
 
   // ADR-0064 WP-A: chat-prefs resolver invalidation listener. Best-effort —

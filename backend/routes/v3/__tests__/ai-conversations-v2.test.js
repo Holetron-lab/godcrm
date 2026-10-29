@@ -13,6 +13,7 @@ process.env.SKIP_DEV_USER = 'true';
 process.env.JWT_SECRET = JWT_SECRET;
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import express from 'express';
@@ -283,7 +284,7 @@ describe('ADR-024: AI Conversations API v2', () => {
     
     it('should return 404 for non-existent conversation', async () => {
       const response = await request(app)
-        .get('/api/v3/ai/conversations/999999')
+        .get(`/api/v3/ai/conversations/${NON_EXISTENT_ID}`)
         .set('Authorization', `Bearer ${authToken}`);
       
       expect(response.status).toBe(404);

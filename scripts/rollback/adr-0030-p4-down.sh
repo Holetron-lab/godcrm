@@ -20,7 +20,7 @@ PG_HOST="${POSTGRES_HOST:-localhost}"
 PG_PORT="${POSTGRES_PORT:-5432}"
 PG_USER="${POSTGRES_USER:-godcrm}"
 PG_DB="${POSTGRES_DB:-godcrm_prod}"
-PG_PASSWORD="${POSTGRES_PASSWORD:-godcrm_dev_2026}"
+PG_PASSWORD="${POSTGRES_PASSWORD:-CHANGE_ME_LOCAL_DB_PASSWORD}"
 
 echo "============================================================"
 echo "ADR-0030 Phase 4 rollback"

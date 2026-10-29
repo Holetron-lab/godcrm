@@ -8,6 +8,7 @@ import { apiLogger } from '../utils/logger.js';
 import { enrichSkill } from './SkillEnrichmentService.js';
 import { sendMessage, sendAdminAlert } from './TelegramService.js';
 import { executeTicketRouting } from './schedule-trigger/pipeline-executors.js';
+import { notifyRowChange } from './realtime/rowEvents.js';
 
 /**
  * Find automation tables (automations_list and automation_logs_list)
@@ -181,6 +182,143 @@ async function executeAiEnrich(tableId, rowId, rowData) {
   };
 }
 
+// Same resolution as files.js / chatAgentExecution.js — the public `/uploads/…`
+// URL stored in an image cell maps onto this directory on the box.
+const UPLOAD_BASE_PATH = process.env.UPLOAD_PATH || '/var/lib/business-crm-data/uploads';
+
+/**
+ * Turn a stored `/uploads/…` URL into the absolute path of the file on disk.
+ *
+ * CLI-backed agents have no vision channel for a URL — they open the file with
+ * Read. Anything that is not an upload URL is passed through untouched.
+ *
+ * @param {string} url - Cell value, e.g. `/uploads/spaces/3/file_….jpeg`
+ * @returns {string} Absolute filesystem path, or the input if it isn't an upload
+ */
+function uploadUrlToPath(url) {
+  const str = String(url);
+  const idx = str.indexOf('/uploads/');
+  if (idx === -1) return str;
+  return UPLOAD_BASE_PATH + str.substring(idx + '/uploads'.length);
+}
+
+/**
+ * Split a multi-value cell (image / file / multi-select columns store a
+ * comma-separated string, but older rows may hold a real array) into a
+ * trimmed list of items.
+ *
+ * @param {*} value - Raw cell value
+ * @returns {string[]} Individual items, empty entries dropped
+ */
+function splitMultiValue(value) {
+  if (value == null) return [];
+  const parts = Array.isArray(value) ? value : String(value).split(',');
+  return parts.map(p => String(p).trim()).filter(Boolean);
+}
+
+/**
+ * Execute an agent_invoke action — hands the row to an AI agent by posting an
+ * `<<@slug>>` invocation into a conversation through the ADR-117 dispatcher.
+ *
+ * This is the bridge from "a row changed" to "an agent looks at it". Unlike
+ * `ai_enrich` (a fixed enrichment call) the agent runs a full tool-using loop,
+ * so it can read the attached files, query other tables and write its verdict
+ * back with `update_table_row`.
+ *
+ * action_config:
+ *   - agent_slug       {string}  REQUIRED — agent to invoke, without `<<@>>`
+ *   - conversation_id  {number}  REQUIRED — where the agent runs and reports
+ *   - user_id          {number}  who the run is attributed to (default 4)
+ *   - require_added    {string}  skip the invoke unless this multi-value field
+ *                                gained at least one item on this change
+ *   - prompt           {string}  template. Tokens (field names may be Cyrillic
+ *                                and contain parens — anything but braces):
+ *                                  `{{field}}`             current cell value
+ *                                  `{{row_id}}`,`{{table_id}}`
+ *                                  `{{added:field}}`       items that appeared
+ *                                    in a multi-value field on THIS update
+ *                                  `{{added_files:field}}` the same items as
+ *                                    absolute paths on disk — what a CLI agent
+ *                                    needs to actually open an uploaded photo
+ *                                On row_create there is no previous value, so
+ *                                every item counts as added.
+ *
+ * Loop safety: the caller gates on `trigger_config.watch_field`, so the
+ * agent writing to a *different* column cannot re-fire this automation.
+ * Never point `watch_field` at a column the invoked agent writes to.
+ *
+ * @param {number} tableId - Table ID
+ * @param {number} rowId - Row ID
+ * @param {Object} rowData - Row data after the change
+ * @param {Object} config - Action config
+ * @param {Object} [oldData] - Row data before the change, for `{{added:…}}`
+ * @returns {Promise<Object>} Result
+ */
+export async function executeAgentInvoke(tableId, rowId, rowData, config, oldData) {
+  try {
+    const slug = config.agent_slug || config.slug;
+    const conversationId = config.conversation_id
+      ? parseInt(config.conversation_id, 10) : null;
+
+    if (!slug) return { success: false, error: 'agent_invoke: agent_slug is required' };
+    if (!conversationId || isNaN(conversationId)) {
+      return { success: false, error: `agent_invoke: invalid conversation_id (got ${config.conversation_id})` };
+    }
+
+    const template = config.prompt || config.prompt_template
+      || 'Новые данные в строке {{row_id}} таблицы {{table_id}}. Разбери и запиши результат.';
+
+    const safeOld = oldData || {};
+
+    // `watch_field` fires on ANY change to the field, including a deletion. For
+    // an "analyse what was just added" automation that is a wasted agent run on
+    // an empty list, so require_added lets the action bail before spending one.
+    if (config.require_added) {
+      const before = new Set(splitMultiValue(safeOld[config.require_added]));
+      const added = splitMultiValue(rowData?.[config.require_added]).filter(v => !before.has(v));
+      if (added.length === 0) {
+        return { success: true, skipped: true, reason: `no new items in ${config.require_added}` };
+      }
+    }
+    // `[^{}]+?` rather than `\w+`: column keys here are Cyrillic and may carry
+    // parens (`вид_(латынь)`), which \w never matches — the token would survive
+    // verbatim into the prompt and the agent would be told to analyse "{{фото}}".
+    const content = template.replace(/\{\{\s*(?:(added|added_files):)?([^{}]+?)\s*\}\}/gu, (match, mode, field) => {
+      if (!mode && field === 'row_id') return String(rowId);
+      if (!mode && field === 'table_id') return String(tableId);
+      if (mode) {
+        const before = new Set(splitMultiValue(safeOld[field]));
+        const added = splitMultiValue(rowData?.[field]).filter(v => !before.has(v));
+        if (added.length === 0) return '(нет новых)';
+        return (mode === 'added_files' ? added.map(uploadUrlToPath) : added).join('\n');
+      }
+      const value = rowData?.[field];
+      return value === undefined || value === null ? match : String(value);
+    });
+
+    const { dispatchInvocationsFromContent } = await import('./chat/invocation-dispatcher.js');
+
+    const dispatch = await dispatchInvocationsFromContent({
+      conversationId,
+      content: `<<@${slug}>> ${content}`,
+      userId: config.user_id ? parseInt(config.user_id, 10) : 4,
+      sourceLabel: `automation:${tableId}:${rowId}`,
+    });
+
+    if (!dispatch || dispatch.triggered === 0) {
+      return {
+        success: false,
+        error: `agent_invoke: nothing triggered for @${slug} (agent missing, self-invocation, or 30s dedup window)`,
+        dispatch
+      };
+    }
+
+    return { success: true, agent_slug: slug, conversation_id: conversationId, ...dispatch };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
 /**
  * Execute a webhook action (same pattern as automations.js)
  *
@@ -217,12 +355,27 @@ async function executeWebhook(config, rowData) {
  *
  * @param {number} tableId - Table ID
  * @param {number} rowId - Row ID
- * @param {Object} config - Action config with column_id and value
+ * @param {Object} config - Action config with column_id and value.
+ *   `value: "{{now}}"` resolves to the current ISO timestamp at execution
+ *   time; `value: "{{today}}"` resolves to the current YYYY-MM-DD date in
+ *   Europe/Moscow (the only shape `date` columns accept — see
+ *   ColumnService.validateDate). Any other value is written as-is.
  * @returns {Promise<Object>} Result
  */
-async function executeUpdateField(tableId, rowId, config) {
+// Server stamps are Europe/Moscow, same convention as schedule-trigger snapshots.
+const STAMP_TZ = 'Europe/Moscow';
+const todayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: STAMP_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+function resolveStampToken(value) {
+  if (value === '{{now}}') return new Date().toISOString();
+  if (value === '{{today}}') return todayFmt.format(new Date()); // en-CA → YYYY-MM-DD
+  return value;
+}
+
+export async function executeUpdateField(tableId, rowId, config) {
   try {
-    const { column_id, value } = config;
+    const { column_id } = config;
+    const value = resolveStampToken(config.value);
 
     const row = await dbGet('SELECT id, data FROM table_rows WHERE id = ?', [rowId]);
     if (!row) {
@@ -236,6 +389,8 @@ async function executeUpdateField(tableId, rowId, config) {
       'UPDATE table_rows SET data = ?, updated_at = ? WHERE id = ?',
       [JSON.stringify(data), new Date().toISOString(), rowId]
     );
+    // Live grid sync: the browser that triggered us only knows its own edit.
+    void notifyRowChange({ tableId, rowId, action: 'updated', source: 'automation' });
 
     return { success: true, updated: { [column_id]: value } };
   } catch (err) {
@@ -383,6 +538,7 @@ export async function executeCreateRow(config, sourceRowData, sourceRowId) {
           'UPDATE table_rows SET data = ?, updated_at = ? WHERE id = ?',
           [JSON.stringify(merged), now, existing.id]
         );
+        void notifyRowChange({ tableId: targetTableId, rowId: existing.id, action: 'updated', source: 'automation' });
         return { success: true, updated_row_id: existing.id, upserted: true, data: merged };
       }
     }
@@ -395,6 +551,7 @@ export async function executeCreateRow(config, sourceRowData, sourceRowId) {
     );
 
     const createdRowId = result.lastID || result.lastInsertRowid;
+    void notifyRowChange({ tableId: targetTableId, rowId: createdRowId, action: 'created', source: 'automation' });
 
     return { success: true, created_row_id: createdRowId, data: newData };
   } catch (err) {
@@ -457,7 +614,7 @@ async function executeNotification(config, rowData) {
  * Run a single automation: condition gate + action dispatch + log + run-stats.
  * Shared between row_create and row_update trigger fans-out.
  */
-async function executeAutomation(automation, tableId, rowId, rowData, tables) {
+async function executeAutomation(automation, tableId, rowId, rowData, tables, oldData) {
   const startTime = Date.now();
   let result;
 
@@ -481,6 +638,9 @@ async function executeAutomation(automation, tableId, rowId, rowData, tables) {
     switch (automation.action_type) {
       case 'ai_enrich':
         result = await executeAiEnrich(tableId, rowId, rowData);
+        break;
+      case 'agent_invoke':
+        result = await executeAgentInvoke(tableId, rowId, rowData, automation.action_config, oldData);
         break;
       case 'webhook':
       case 'n8n':
@@ -598,7 +758,7 @@ export async function fireRowUpdateTriggers(tableId, rowId, newData, oldData) {
     );
 
     for (const automation of matched) {
-      await executeAutomation(automation, tableId, rowId, newData, tables);
+      await executeAutomation(automation, tableId, rowId, newData, tables, safeOld);
     }
   } catch (err) {
     apiLogger.error({ err, tableId, rowId }, '[AutomationTrigger] Error firing row_update triggers');

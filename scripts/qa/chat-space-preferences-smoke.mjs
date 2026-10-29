@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { expect } from '@playwright/test';
+import { createFixtureServer, openFixture } from './browser-fixture.mjs';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const artifacts = await mkdtemp(join(tmpdir(), 'chat-space-preferences-'));
+const entry = 'src/tests/chat-space-preferences-fixture/index.html';
+const server = await createFixtureServer({ root, artifacts, entry });
+let browser;
+try {
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  for (const width of [1440, 390]) for (const theme of ['light', 'dark']) {
+    const page = await browser.newPage({ viewport: { width, height: 1100 } });
+    const mode = page.getByLabel('Message input', { exact: true });
+    const fixture = await openFixture({ server, page, entry: `${entry}?theme=${theme}`, ready: mode });
+    await expect(mode).toHaveValue('shared');
+    await page.getByRole('button', { name: 'Chat 101', exact: true }).click();
+    await page.getByLabel('Message', { exact: true }).fill('Shared message');
+    await page.getByRole('button', { name: 'Attach entity' }).click();
+    await page.getByRole('button', { name: 'Chat 102', exact: true }).click();
+    await expect(page.getByLabel('Message', { exact: true })).toHaveValue('Shared message');
+    await expect(page.getByLabel('Attached entities')).toHaveText('0');
+    await mode.selectOption('per-chat');
+    await page.getByLabel('Message', { exact: true }).fill('Private B');
+    await page.getByRole('button', { name: 'Chat 101', exact: true }).click();
+    await expect(page.getByLabel('Message', { exact: true })).toHaveValue('');
+    await expect(page.getByLabel('Attached entities')).toHaveText('1');
+    await page.getByRole('button', { name: 'Chat 102', exact: true }).click();
+    await expect(page.getByLabel('Message', { exact: true })).toHaveValue('Private B');
+    const visibility = page.getByLabel('Space visibility', { exact: true });
+    await visibility.focus();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await expect(visibility).toHaveValue('open');
+    const list = page.getByRole('region', { name: 'Available users' });
+    await expect(list.getByRole('button')).toHaveCount(50);
+    await list.focus();
+    await page.keyboard.press('Control+End');
+    await expect(list.getByRole('button')).toHaveCount(100);
+    await page.keyboard.press('Control+End');
+    await expect(list.getByRole('button')).toHaveCount(120);
+    await page.getByLabel('User type').selectOption('agents');
+    await expect(list.getByRole('button')).toHaveCount(50);
+    await expect(list.getByRole('button').first()).toContainText('Person 2');
+    await list.getByRole('button').first().click();
+    await page.getByLabel('User type').selectOption('humans');
+    await expect(page.getByRole('button', { name: 'Remove: Person 2' })).toBeVisible();
+    await expect(list.getByRole('button').first()).toContainText('Person 1');
+    await page.getByLabel('Search users to add').fill('p119@');
+    await expect(list.getByRole('button')).toHaveCount(1);
+    await expect(list.getByRole('button')).toContainText('Person 119');
+    await page.addScriptTag({ content: await readFile(join(root, 'node_modules/axe-core/axe.min.js'), 'utf8') });
+    const audit = await page.evaluate(async () => (await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations);
+    await writeFile(join(artifacts, `${width}-${theme}-axe.json`), JSON.stringify(audit, null, 2));
+    assert.deepEqual(audit.map(({ id, nodes }) => ({ id, targets: nodes.map(node => node.target) })), []);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.screenshot({ path: join(artifacts, `${width}-${theme}.png`), fullPage: true });
+    await fixture.assertStable();
+    process.stdout.write(`${width} ${theme}: input modes, entities, select, infinite scroll, filters, keyboard, axe PASS\n`);
+    await page.close();
+  }
+} finally { await browser?.close(); await server.close(); process.stdout.write(`Artifacts: ${artifacts}\n`); }

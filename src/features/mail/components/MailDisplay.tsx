@@ -1,7 +1,10 @@
-import { Paperclip, FileText, Image as ImageIcon, File as FileIcon } from 'lucide-react';
+import { Paperclip } from 'lucide-react';
 import { Avatar } from '@/shared/components/ui/Avatar';
 import { SafeHtml } from '@/shared/components/SafeHtml';
-import { isOutgoingFolder, type MailAttachmentMeta, type MailMessage } from '../types';
+import { isOutgoingFolder, type MailMessage } from '../types';
+import type { MailBodyTheme } from '../settings';
+import { MailAttachmentChip, useMailAttachmentDialogs } from './MailAttachmentChips';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 interface MailDisplayProps {
   message: MailMessage | null;
@@ -10,6 +13,19 @@ interface MailDisplayProps {
    * Owned by MailPage and driven from the toolbar's body view-type selector.
    */
   renderHtml: boolean;
+  /** Light (white page) or dark surface for the body — see mail.css. */
+  bodyTheme: MailBodyTheme;
+  /** Needed for attachment bytes (download / viewer URLs). */
+  spaceId?: number;
+}
+
+/** one / few / many — the Russian plural categories; English maps few+many to the same string. */
+function pluralForm(n: number): 'one' | 'few' | 'many' {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'one';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'few';
+  return 'many';
 }
 
 function formatFullDate(iso: string): string {
@@ -18,50 +34,14 @@ function formatFullDate(iso: string): string {
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function formatBytes(n: number): string {
-  if (!n || n < 1024) return `${n || 0} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function attachmentIcon(type: string) {
-  if (type.startsWith('image/')) return <ImageIcon className="h-4 w-4" />;
-  if (type.includes('pdf') || type.includes('document')) return <FileText className="h-4 w-4" />;
-  return <FileIcon className="h-4 w-4" />;
-}
-
-/**
- * Attachment strip — metadata chips (name · size) surfaced between header and
- * body so a message with attachments visibly shows them. Bytes aren't carried
- * yet (no download endpoint), so chips are non-interactive for now.
- */
-function AttachmentStrip({ attachments }: { attachments: MailAttachmentMeta[] }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border-primary)] px-4 py-2.5">
-      <span className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
-        <Paperclip className="h-3.5 w-3.5" />
-        {attachments.length} {attachments.length === 1 ? 'attachment' : 'attachments'}
-      </span>
-      {attachments.map((att, i) => (
-        <span
-          key={`${att.filename}-${i}`}
-          title={`${att.filename} — ${formatBytes(att.size)}`}
-          className="flex max-w-[220px] items-center gap-2 rounded-md border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-2 py-1 text-xs text-[var(--text-primary)]"
-        >
-          {attachmentIcon(att.contentType)}
-          <span className="min-w-0 flex-1 truncate">{att.filename}</span>
-          <span className="flex-shrink-0 text-[var(--text-tertiary)]">{formatBytes(att.size)}</span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-export function MailDisplay({ message, renderHtml }: MailDisplayProps) {
+export function MailDisplay({ message, renderHtml, bodyTheme, spaceId }: MailDisplayProps) {
+  // Attachment strip dialogs (all-files modal + image viewer) — same chips as the list row.
+  const { openImage, dialogs } = useMailAttachmentDialogs(spaceId);
+  const { t } = useLanguage();
   if (!message) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-sm text-[var(--text-tertiary)]">
-        Select a message to read
+        {t('mail.display.pickMessage')}
       </div>
     );
   }
@@ -72,16 +52,17 @@ export function MailDisplay({ message, renderHtml }: MailDisplayProps) {
   const recipients = message.to?.filter(Boolean) ?? [];
   const fullDate = message.date ? formatFullDate(message.date) : '';
   const attachments = message.attachments ?? [];
+  const attachmentsForm = pluralForm(attachments.length);
 
   return (
     // `id` scopes the print stylesheet (mail.css) so Print isolates this pane.
-    <article id="mail-print-root" className="flex h-full flex-col">
+    <article id="mail-print-root" className="flex flex-col md:h-full">
       <header className="flex items-start gap-3 border-b border-[var(--border-primary)] p-4">
         <Avatar name={outgoing ? recipients[0] ?? message.subject : message.fromName} size={40} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-3">
-            <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-[var(--text-primary)]">
-              {message.subject || '(no subject)'}
+          <div className="flex flex-col gap-1 md:flex-row md:items-baseline md:gap-3">
+            <h2 className="min-w-0 flex-1 break-words text-base font-semibold text-[var(--text-primary)] md:truncate">
+              {message.subject || t('mail.common.noSubject')}
             </h2>
             {fullDate && (
               <time className="flex-shrink-0 text-xs text-[var(--text-tertiary)]">{fullDate}</time>
@@ -91,10 +72,10 @@ export function MailDisplay({ message, renderHtml }: MailDisplayProps) {
             {outgoing ? (
               recipients.length > 0 ? (
                 <>
-                  <span className="text-[var(--text-tertiary)]">To:</span> {recipients.join(', ')}
+                  <span className="text-[var(--text-tertiary)]">{t('mail.common.to')}:</span> {recipients.join(', ')}
                 </>
               ) : (
-                <span className="text-[var(--text-tertiary)]">No recipient</span>
+                <span className="text-[var(--text-tertiary)]">{t('mail.common.noRecipient')}</span>
               )
             ) : (
               <>
@@ -106,27 +87,48 @@ export function MailDisplay({ message, renderHtml }: MailDisplayProps) {
           {/* Incoming mail: surface the recipient line too (Gmail's "to me"/list). */}
           {!outgoing && recipients.length > 0 && (
             <p className="truncate text-xs text-[var(--text-tertiary)]">
-              To: {recipients.join(', ')}
+              {t('mail.common.to')}: {recipients.join(', ')}
             </p>
           )}
         </div>
       </header>
-      {attachments.length > 0 && <AttachmentStrip attachments={attachments} />}
+      {/* Attachment strip — thumbnails open the viewer, files download (ADR-158 §P5). */}
+      {attachments.length > 0 && spaceId != null && (
+        <div className="flex flex-wrap items-start gap-2 border-b border-[var(--border-primary)] px-4 py-2.5">
+          <span className="flex w-full items-center gap-1.5 text-xs text-[var(--text-tertiary)]">
+            <Paperclip className="h-3.5 w-3.5" />
+            {t(`mail.display.attachments.${attachmentsForm}`, { count: attachments.length })}
+          </span>
+          {attachments.map((att, i) => (
+            <MailAttachmentChip
+              key={`${att.filename}-${i}`}
+              spaceId={spaceId}
+              message={message}
+              index={i}
+              att={att}
+              onOpenImage={openImage}
+            />
+          ))}
+        </div>
+      )}
+      {dialogs}
       {/* Bodies are HTML (backend `body_html || body_text`); render sanitized so
           formatting shows instead of literal tags. SafeHtml passes plain-text
           bodies through unchanged (no tags to strip). Toolbar toggle swaps to a
-          raw source view — escaped by React's text node, never interpreted. */}
-      {renderHtml ? (
-        <SafeHtml
-          html={message.body}
-          className="mail-body flex-1 overflow-auto p-6 text-sm leading-relaxed text-[var(--text-primary)]"
-        />
-      ) : (
-        <pre className="mail-body flex-1 overflow-auto whitespace-pre-wrap break-words p-6 font-mono text-xs leading-relaxed text-[var(--text-secondary)]">
-          {message.body}
-        </pre>
-      )}
+          raw source view — escaped by React's text node, never interpreted.
+          `data-mail-theme` picks the light/dark body surface (mail.css). */}
+      <div data-mail-theme={bodyTheme} className="flex min-h-0 flex-1 flex-col">
+        {renderHtml ? (
+          <SafeHtml
+            html={message.body}
+            className="mail-body flex-1 overflow-auto p-6 text-sm leading-relaxed"
+          />
+        ) : (
+          <pre className="mail-body flex-1 overflow-auto whitespace-pre-wrap break-words p-6 font-mono text-xs leading-relaxed">
+            {message.body}
+          </pre>
+        )}
+      </div>
     </article>
   );
 }
-

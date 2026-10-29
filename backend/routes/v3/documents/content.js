@@ -33,7 +33,7 @@ router.get('/documents/:documentId/content', async (req, res) => {
       const slugFull = title.toLowerCase()
         .replace(/[^a-z0-9\s-]/gi, '').replace(/\s+/g, '-')
         .replace(/-+/g, '-').replace(/^-|-$/g, '').substring(0, 60);
-      const slugShort = title.split(/[:\—–]/)[0].trim().toLowerCase()
+      const slugShort = title.split(/[:—–]/)[0].trim().toLowerCase()
         .replace(/[^a-z0-9\s-]/gi, '').replace(/\s+/g, '-')
         .replace(/-+/g, '-').replace(/^-|-$/g, '');
       const candidates = [...new Set([slugShort, slugFull].filter(Boolean))];

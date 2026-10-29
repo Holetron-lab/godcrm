@@ -1,7 +1,7 @@
 /**
  * ColumnCardSettings - Expanded settings accordions for a column card
  */
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Switch } from '@/shared/components/ui';
 import { ColorPicker } from './ColorPicker';
@@ -19,6 +19,7 @@ export const ColumnCardSettings = ({
   currentSampleIndex,
   onSampleNavigate,
 }: ColumnSettingsProps) => {
+  const id = useId();
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('layout');
 
   // Column config values
@@ -52,6 +53,7 @@ export const ColumnCardSettings = ({
             <div className="flex items-center gap-1">
               <button
                 type="button"
+                aria-label="Предыдущее значение"
                 onClick={() => onSampleNavigate(-1)}
                 disabled={currentSampleIndex === 0}
                 className="px-2 py-0.5 text-xs rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] disabled:opacity-30 hover:bg-[var(--bg-secondary)]"
@@ -63,6 +65,7 @@ export const ColumnCardSettings = ({
               </span>
               <button
                 type="button"
+                aria-label="Следующее значение"
                 onClick={() => onSampleNavigate(1)}
                 disabled={currentSampleIndex >= sampleValues.length - 1}
                 className="px-2 py-0.5 text-xs rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] disabled:opacity-30 hover:bg-[var(--bg-secondary)]"
@@ -83,6 +86,7 @@ export const ColumnCardSettings = ({
         <div className="rounded-lg border border-[var(--border-secondary)]">
           <button
             type="button"
+            aria-expanded={settingsSection === 'layout'}
             onClick={() => setSettingsSection(settingsSection === 'layout' ? null : 'layout')}
             className="w-full flex items-center gap-2 p-2 hover:bg-[var(--bg-tertiary)] rounded-t-lg"
           >
@@ -90,10 +94,11 @@ export const ColumnCardSettings = ({
             <span className="text-xs font-medium text-[var(--text-secondary)] uppercase">Размеры и положение</span>
           </button>
           {settingsSection === 'layout' && (
-            <div className="px-3 pb-3 grid grid-cols-5 gap-3">
+            <div className="px-3 pb-3 grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div>
-                <label className="block text-xs text-[var(--text-tertiary)] mb-1">Порядок</label>
+                <label htmlFor={`${id}-order`} className="block text-xs text-[var(--text-tertiary)] mb-1">Порядок</label>
                 <input
+                  id={`${id}-order`}
                   type="number"
                   value={order}
                   onChange={(e) => onUpdate('config.order', Number(e.target.value))}
@@ -101,8 +106,9 @@ export const ColumnCardSettings = ({
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-tertiary)] mb-1">Выравнивание</label>
+                <label htmlFor={`${id}-align`} className="block text-xs text-[var(--text-tertiary)] mb-1">Выравнивание</label>
                 <select
+                  id={`${id}-align`}
                   value={align}
                   onChange={(e) => onUpdate('config.align', e.target.value)}
                   className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -113,21 +119,23 @@ export const ColumnCardSettings = ({
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-tertiary)] mb-1">Ширина</label>
+                <label htmlFor={`${id}-width`} className="block text-xs text-[var(--text-tertiary)] mb-1">Ширина</label>
                 <input
+                  id={`${id}-width`}
                   type="number"
                   value={width}
                   onChange={(e) => onUpdate('config.width', Number(e.target.value))}
                   className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
                 />
               </div>
-              <div>
-                <label className="block text-xs text-[var(--text-tertiary)] mb-1">Фон колонки</label>
+              <fieldset className="min-w-0">
+                <legend className="block text-xs text-[var(--text-tertiary)] mb-1">Фон колонки</legend>
                 <ColorPicker value={bgColor} onChange={(c) => onUpdate('config.bgColor', c)} compact />
-              </div>
+              </fieldset>
               <div>
-                <label className="block text-xs text-[var(--text-tertiary)] mb-1">Перенос текста</label>
+                <label htmlFor={`${id}-textWrap`} className="block text-xs text-[var(--text-tertiary)] mb-1">Перенос текста</label>
                 <select
+                  id={`${id}-textWrap`}
                   value={textWrap}
                   onChange={(e) => onUpdate('config.textWrap', e.target.value)}
                   className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -145,6 +153,7 @@ export const ColumnCardSettings = ({
         <div className="rounded-lg border border-[var(--border-secondary)]">
           <button
             type="button"
+            aria-expanded={settingsSection === 'behavior'}
             onClick={() => setSettingsSection(settingsSection === 'behavior' ? null : 'behavior')}
             className="w-full flex items-center gap-2 p-2 hover:bg-[var(--bg-tertiary)] rounded-t-lg"
           >
@@ -153,20 +162,24 @@ export const ColumnCardSettings = ({
           </button>
           {settingsSection === 'behavior' && (
             <div className="px-3 pb-3 flex items-center gap-6">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <div className="flex items-center gap-2">
                 <Switch
+                  id={`${id}-required`}
+                  aria-label="Обязательное поле"
                   checked={required}
                   onCheckedChange={(v) => onUpdate('config.required', v)}
                 />
-                <span className="text-sm text-[var(--text-primary)]">Обязательное поле</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+                <label htmlFor={`${id}-required`} className="text-sm text-[var(--text-primary)] cursor-pointer">Обязательное поле</label>
+              </div>
+              <div className="flex items-center gap-2">
                 <Switch
+                  id={`${id}-readonly`}
+                  aria-label="Только чтение"
                   checked={readonly}
                   onCheckedChange={(v) => onUpdate('config.readonly', v)}
                 />
-                <span className="text-sm text-[var(--text-primary)]">Только чтение</span>
-              </label>
+                <label htmlFor={`${id}-readonly`} className="text-sm text-[var(--text-primary)] cursor-pointer">Только чтение</label>
+              </div>
             </div>
           )}
         </div>
@@ -175,6 +188,7 @@ export const ColumnCardSettings = ({
         <div className="rounded-lg border border-[var(--border-secondary)]">
           <button
             type="button"
+            aria-expanded={settingsSection === 'type'}
             onClick={() => setSettingsSection(settingsSection === 'type' ? null : 'type')}
             className="w-full flex items-center gap-2 p-2 hover:bg-[var(--bg-tertiary)] rounded-t-lg"
           >
@@ -185,8 +199,9 @@ export const ColumnCardSettings = ({
             <div className="px-3 pb-3 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-[var(--text-tertiary)] mb-1">Значение по умолчанию</label>
+                  <label htmlFor={`${id}-defaultValue`} className="block text-xs text-[var(--text-tertiary)] mb-1">Значение по умолчанию</label>
                   <select
+                    id={`${id}-defaultValue`}
                     value={defaultValue ? 'custom' : ''}
                     onChange={(e) => onUpdate('config.defaultValue', e.target.value === 'custom' ? '' : e.target.value)}
                     className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -202,14 +217,16 @@ export const ColumnCardSettings = ({
                       type="text"
                       value={defaultValue}
                       onChange={(e) => onUpdate('config.defaultValue', e.target.value)}
+                      aria-label="Своё значение по умолчанию"
                       placeholder="Введите значение"
                       className="w-full mt-2 px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
                     />
                   ) : null}
                 </div>
                 <div>
-                  <label className="block text-xs text-[var(--text-tertiary)] mb-1">Формула (RAW)</label>
+                  <label htmlFor={`${id}-formula`} className="block text-xs text-[var(--text-tertiary)] mb-1">Формула (RAW)</label>
                   <input
+                    id={`${id}-formula`}
                     type="text"
                     value={formula}
                     onChange={(e) => onUpdate('config.formula', e.target.value)}
@@ -229,6 +246,7 @@ export const ColumnCardSettings = ({
         <div className="rounded-lg border border-[var(--border-secondary)]">
           <button
             type="button"
+            aria-expanded={settingsSection === 'display'}
             onClick={() => setSettingsSection(settingsSection === 'display' ? null : 'display')}
             className="w-full flex items-center gap-2 p-2 hover:bg-[var(--bg-tertiary)] rounded-t-lg"
           >
@@ -237,10 +255,11 @@ export const ColumnCardSettings = ({
           </button>
           {settingsSection === 'display' && (
             <div className="px-3 pb-3 space-y-3">
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div className="col-span-2">
-                  <label className="block text-xs text-[var(--text-tertiary)] mb-1">Режим</label>
+                  <label htmlFor={`${id}-renderMode`} className="block text-xs text-[var(--text-tertiary)] mb-1">Режим</label>
                   <select
+                    id={`${id}-renderMode`}
                     value={renderMode}
                     onChange={(e) => onUpdate('config.renderMode', e.target.value)}
                     className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -253,8 +272,9 @@ export const ColumnCardSettings = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-[var(--text-tertiary)] mb-1">Размер</label>
+                  <label htmlFor={`${id}-fontSize`} className="block text-xs text-[var(--text-tertiary)] mb-1">Размер</label>
                   <input
+                    id={`${id}-fontSize`}
                     type="number"
                     value={fontSize}
                     onChange={(e) => onUpdate('config.fontSize', Number(e.target.value) || 14)}
@@ -263,14 +283,15 @@ export const ColumnCardSettings = ({
                     className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs text-[var(--text-tertiary)] mb-1">Цвет текста</label>
+                <fieldset className="min-w-0">
+                  <legend className="block text-xs text-[var(--text-tertiary)] mb-1">Цвет текста</legend>
                   <ColorPicker value={textColor} onChange={(c) => onUpdate('config.textColor', c)} compact />
-                </div>
+                </fieldset>
               </div>
               <div>
-                <label className="block text-xs text-[var(--text-tertiary)] mb-1">Шрифт</label>
+                <label htmlFor={`${id}-fontFamily`} className="block text-xs text-[var(--text-tertiary)] mb-1">Шрифт</label>
                 <select
+                  id={`${id}-fontFamily`}
                   value={fontFamily}
                   onChange={(e) => onUpdate('config.fontFamily', e.target.value)}
                   className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"

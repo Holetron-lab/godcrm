@@ -37,8 +37,11 @@ const ANSI_STYLES: Record<number, string> = {
   4: 'underline',
 };
 
-// Regex: matches \x1b[ followed by semicolon-separated numbers and a letter
-const ANSI_REGEX = /\x1b\[([0-9;]*)m/g;
+// ESC is intentional terminal protocol data, not a control character in text.
+const ESC = String.fromCharCode(27);
+const ANSI_REGEX = new RegExp(`${ESC}\\[([0-9;]*)m`, 'g');
+const TERMINAL_CONTROL_REGEX = new RegExp(`${ESC}\\[[0-9;]*[A-HJKSTfhilmnsu]`, 'g');
+const ALL_ANSI_REGEX = new RegExp(`${ESC}\\[[0-9;]*[A-Za-z]`, 'g');
 
 /**
  * Parse a string with ANSI escape codes into styled spans
@@ -51,7 +54,7 @@ export function parseAnsi(input: string): AnsiSpan[] {
   let lastIndex = 0;
 
   // Strip other escape sequences we don't handle (cursor, erase, etc.)
-  const cleaned = input.replace(/\x1b\[[0-9;]*[A-HJKSTfhilmnsu]/g, (match) => {
+  const cleaned = input.replace(TERMINAL_CONTROL_REGEX, (match) => {
     // Keep color sequences (ending with 'm'), strip everything else
     return match.endsWith('m') ? match : '';
   });
@@ -104,5 +107,5 @@ export function parseAnsi(input: string): AnsiSpan[] {
  * Strip all ANSI escape codes from a string
  */
 export function stripAnsi(input: string): string {
-  return input.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+  return input.replace(ALL_ANSI_REGEX, '');
 }

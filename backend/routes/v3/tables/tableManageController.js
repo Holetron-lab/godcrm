@@ -5,7 +5,8 @@
  *          DELETE /tables/:tableId
  */
 import express from 'express';
-import { dbAll, dbGet, dbRun, toBool, sqlNow } from '../../../database/connection.js';
+import { z } from 'zod';
+import { dbAll, dbGet, dbRun, toBool, sqlNow, withTransactionAsync } from '../../../database/connection.js';
 import { apiLogger } from '../../../utils/logger.js';
 import { success, notFound, badRequest, forbidden, error } from '../../../utils/response.js';
 import {
@@ -13,6 +14,7 @@ import {
   disableBookingConstraint,
   getBookingConstraint,
 } from '../../../lib/booking-constraint.js';
+import { requireTableWriteAccess } from './helpers.js';
 
 const router = express.Router();
 
@@ -211,7 +213,7 @@ router.post('/tables/:tableId/connect', async (req, res) => {
  * PATCH /api/v3/tables/:tableId
  * Update table display settings
  */
-router.patch('/tables/:tableId', async (req, res) => {
+router.patch('/tables/:tableId', requireTableWriteAccess, async (req, res) => {
   try {
     const { tableId } = req.params;
     const { name, displayName, icon, color, access_control, show_in_nav, privacy, min_row_height, max_row_height, fixed_row_height, project_id, is_public } = req.body;
@@ -328,40 +330,41 @@ router.patch('/tables/:tableId', async (req, res) => {
  */
 router.delete('/tables/:tableId', async (req, res) => {
   try {
-    const { tableId } = req.params;
+    const parsedId = z.coerce.number().int().positive().safe().safeParse(req.params.tableId);
+    if (!parsedId.success) return badRequest(res, 'Invalid table ID');
+    const tableId = parsedId.data;
     const userId = req.user?.id;
 
-    // Check if table exists and user has access
-    const table = await dbGet(`
-      SELECT t.*, p.owner_id
-      FROM universal_tables t
-      INNER JOIN projects p ON t.project_id = p.id
-      WHERE t.id = ?
-    `, [tableId]);
+    const result = await withTransactionAsync(async (trx) => {
+      const table = await trx.get(`
+        SELECT t.*, p.owner_id
+        FROM universal_tables t
+        INNER JOIN projects p ON t.project_id = p.id
+        WHERE t.id = $1
+        FOR UPDATE OF t, p
+      `, [tableId]);
+      if (!table) return { status: 404 };
 
-    if (!table) {
-      return notFound(res, 'Table');
-    }
+      const isOwner = table.owner_id === userId;
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'owner';
+      if (!isOwner && !isAdmin) {
+        return { status: 403, message: 'You do not have permission to delete this table' };
+      }
+      if (table.is_system) return { status: 403, message: 'Cannot delete system table' };
 
-    // Check ownership or admin role
-    const isOwner = table.owner_id === userId;
-    const isAdmin = req.user?.role === 'admin' || req.user?.role === 'owner';
-
-    if (!isOwner && !isAdmin) {
-      return forbidden(res, 'You do not have permission to delete this table');
-    }
-
-    // Prevent deletion of system tables
-    if (table.is_system) {
-      return forbidden(res, 'Cannot delete system table');
-    }
-
-    // Delete table (CASCADE will delete columns and rows)
-    await dbRun('DELETE FROM universal_tables WHERE id = ?', [tableId]);
+      // Deployed schemas may lack these foreign keys. Keep cleanup atomic.
+      await trx.run('DELETE FROM table_rows WHERE table_id = $1', [tableId]);
+      await trx.run('DELETE FROM table_columns WHERE table_id = $1', [tableId]);
+      await trx.run('DELETE FROM universal_tables WHERE id = $1', [tableId]);
+      return { table };
+    });
+    if (result.status === 404) return notFound(res, 'Table');
+    if (result.status === 403) return forbidden(res, result.message);
+    const { table } = result;
 
     apiLogger.info({ tableId, tableName: table.name, userId }, 'Table deleted');
 
-    success(res, { message: 'Table deleted successfully', tableId: parseInt(tableId) });
+    success(res, { message: 'Table deleted successfully', tableId });
   } catch (err) {
     apiLogger.error({ err }, 'DELETE /tables/:tableId error');
     error(res, 'DELETE_TABLE_FAILED', err.message, 500);

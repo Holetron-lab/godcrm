@@ -10,9 +10,9 @@
 // row is stolen on the next acquire), so there is deliberately no operational
 // unlock path and no cache-invalidation trigger to install.
 //
-// Numbering: 084 is the first free slot. 079 is taken by a module migration
-// merged into the same knex_migrations ledger via moduleMigrationDirs();
-// 080–083 are the applied
+// Numbering: 084 is the first free slot. 079 is taken by the sc-sim module
+// migration (079_adr_0165_sc_sim_crm_project_isolation.js, merged into the same
+// knex_migrations ledger via moduleMigrationDirs()); 080–083 are the applied
 // ADR-0158 mail migrations recorded in the ledger (…082_adr_0158_p4_mail_labels,
 // 083_adr_0158_p6_mail_scheduled) whose files live in a divergent tree. 084 sits
 // above every occupied number in both the file set and the live ledger.

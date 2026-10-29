@@ -45,6 +45,10 @@ function generateAtomKey(title: string): string {
 
 export function DocumentsImportPreview() {
   const ctx = useDocumentsContext();
+  // Editors mount after the user chooses a field, never on the initial preview.
+  const focusEditor = useCallback((field: HTMLInputElement | HTMLTextAreaElement | null) => {
+    field?.focus();
+  }, []);
   
   // Flatten tree for rendering
   const flatSections = useMemo(() => flattenSectionTreeV4(ctx.importTree), [ctx.importTree]);
@@ -70,7 +74,7 @@ export function DocumentsImportPreview() {
     ctx.setEditingImportData({});
   };
   
-  const toggleAtomFields = (order: number, idx: number, allSections: ImportSection[]) => {
+  const toggleAtomFields = (order: number, idx: number, allSections: ParsedSectionV4[]) => {
     const wasEnabled = ctx.atomSections[order]?.enabled;
     
     if (!wasEnabled) {
@@ -142,12 +146,18 @@ export function DocumentsImportPreview() {
             "group relative flex items-center py-4 hover:bg-[var(--bg-tertiary)] cursor-pointer",
             ctx.previewMode !== 'none' ? 'px-12' : 'px-8'
           )}
-          onClick={() => ctx.setActivePreviewOrder(section.order)}
         >
+          <button
+            type="button"
+            aria-label={`Выбрать разделитель ${section.order}`}
+            aria-pressed={isActive}
+            className="absolute inset-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-primary-500)]"
+            onClick={() => ctx.setActivePreviewOrder(section.order)}
+          />
           <div className="flex-1 border-t border-dashed border-[var(--border-secondary)]" />
           <span className="px-3 text-xs text-[var(--text-tertiary)]">• • •</span>
           <div className="flex-1 border-t border-dashed border-[var(--border-secondary)]" />
-          <button className="absolute right-4 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-500">
+          <button type="button" aria-label="Удалить разделитель" className="absolute right-4 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 p-1 rounded hover:bg-red-500/20 text-red-500">
             <Trash2 className="w-3 h-3" />
           </button>
         </div>
@@ -170,7 +180,7 @@ export function DocumentsImportPreview() {
       >
         <div className={indent}>
           {/* Floating controls */}
-          <div className="absolute top-2 right-4 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute top-2 right-4 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
             {/* Atom badge */}
             {section.level === 'text' && showAtomFields && (
               <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400 flex items-center gap-1">
@@ -192,6 +202,8 @@ export function DocumentsImportPreview() {
             {/* Edit button - also opens right panel */}
             {isEditing ? (
               <button 
+                type="button"
+                aria-label="Завершить редактирование раздела"
                 onClick={handleSaveEdit}
                 className="px-2 py-0.5 rounded text-[10px] bg-green-500 text-white"
               >
@@ -199,6 +211,8 @@ export function DocumentsImportPreview() {
               </button>
             ) : (
               <button 
+                type="button"
+                aria-label={`Редактировать раздел ${section.order}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleEditSection(section.order, section.content);
@@ -229,21 +243,23 @@ export function DocumentsImportPreview() {
               {(section.level === 'h1' || section.level === 'h2' || section.level === 'h3') ? (
                 <input
                   type="text"
+                  aria-label="Заголовок раздела"
                   value={ctx.editingImportData.content || ''}
                   onChange={(e) => ctx.setEditingImportData(prev => ({ ...prev, content: e.target.value }))}
                   placeholder="Заголовок..."
                   className={cn(textSize, "w-full bg-transparent border-b-2 border-[var(--color-primary-500)] focus:border-blue-500 outline-none text-[var(--text-primary)]")}
-                  autoFocus
+                  ref={focusEditor}
                 />
               ) : (
                 /* Text - multiline textarea */
                 <textarea
+                  aria-label="Содержимое раздела"
                   value={ctx.editingImportData.content || ''}
                   onChange={(e) => ctx.setEditingImportData(prev => ({ ...prev, content: e.target.value }))}
                   placeholder="Контент..."
                   className="w-full text-sm bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg p-3 focus:border-[var(--color-primary-500)] outline-none resize-none font-mono"
                   rows={Math.min(15, (ctx.editingImportData.content?.split('\n').length || 3) + 2)}
-                  autoFocus
+                  ref={focusEditor}
                 />
               )}
             </div>
@@ -253,28 +269,34 @@ export function DocumentsImportPreview() {
               {section.content ? (
                 (section.level === 'h1' || section.level === 'h2' || section.level === 'h3') ? (
                   /* Headers - display as heading */
-                  <div 
-                    className={cn(textSize, "text-[var(--text-primary)] cursor-text leading-relaxed")}
+                  <button
+                    type="button"
+                    className={cn(textSize, "block w-full text-left text-[var(--text-primary)] cursor-text leading-relaxed focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]")}
                     onClick={() => handleEditSection(section.order, section.content)}
                   >
                     {section.content}
-                  </div>
+                  </button>
                 ) : (
                   /* Text - render as markdown */
                   <div 
                     className="text-[var(--text-secondary)] prose prose-sm dark:prose-invert max-w-none cursor-text leading-relaxed"
-                    onClick={() => handleEditSection(section.order, section.content)}
+                    onClickCapture={(event) => {
+                      // Delegate text clicks; embedded controls keep their own action.
+                      if (event.target instanceof Element && event.target.closest('a,button,input,select,textarea,[role="button"]')) return;
+                      handleEditSection(section.order, section.content);
+                    }}
                   >
                     <MarkdownPreview content={section.content} />
                   </div>
                 )
               ) : (
-                <div 
-                  className="text-[var(--text-tertiary)] italic text-sm cursor-text"
+                <button
+                  type="button"
+                  className="block w-full text-left text-[var(--text-tertiary)] italic text-sm cursor-text focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
                   onClick={() => handleEditSection(section.order, '')}
                 >
                   Нажмите чтобы редактировать...
-                </div>
+                </button>
               )}
             </div>
           )}
@@ -309,10 +331,12 @@ export function DocumentsImportPreview() {
             )}
           >
             {/* Floating controls */}
-            <div className="absolute top-3 right-4 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-3 right-4 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
               <span className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-purple-500/20 text-purple-400">H1</span>
               {ctx.editingImportOrder === -1 ? (
                 <button 
+                  type="button"
+                  aria-label="Завершить редактирование названия"
                   onClick={() => ctx.setEditingImportOrder(null)}
                   className="px-2 py-0.5 rounded text-[10px] bg-green-500 text-white"
                 >
@@ -320,6 +344,8 @@ export function DocumentsImportPreview() {
                 </button>
               ) : (
                 <button 
+                  type="button"
+                  aria-label="Редактировать название"
                   onClick={() => { 
                     ctx.setEditingImportOrder(-1); 
                     ctx.setEditingImportData({ title: ctx.newDocName }); 
@@ -334,17 +360,22 @@ export function DocumentsImportPreview() {
             {ctx.editingImportOrder === -1 ? (
               <input
                 type="text"
+                aria-label="Название документа"
                 value={ctx.editingImportData.title || ''}
                 onChange={(e) => { 
                   ctx.setEditingImportData({ title: e.target.value }); 
                   ctx.setNewDocName(e.target.value); 
                 }}
                 className="w-full text-2xl font-bold bg-transparent border-b-2 border-[var(--color-primary-500)] focus:border-purple-500 outline-none"
-                autoFocus
+                ref={focusEditor}
               />
             ) : (
               <h1 
                 className="text-2xl font-bold text-[var(--text-primary)] cursor-text leading-relaxed"
+              >
+                <button
+                  type="button"
+                  className="w-full text-left focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
                 onClick={() => { 
                   ctx.setActivePreviewOrder(-1); 
                   ctx.setEditingImportOrder(-1); 
@@ -352,6 +383,7 @@ export function DocumentsImportPreview() {
                 }}
               >
                 {ctx.newDocName || 'Нажмите чтобы ввести название...'}
+                </button>
               </h1>
             )}
           </div>
@@ -366,10 +398,12 @@ export function DocumentsImportPreview() {
             )}
           >
             {/* Floating controls */}
-            <div className="absolute top-2 right-4 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-2 right-4 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
               <span className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-gray-500/20 text-gray-400">DESC</span>
               {ctx.editingImportOrder === -2 ? (
                 <button 
+                  type="button"
+                  aria-label="Завершить редактирование описания"
                   onClick={() => ctx.setEditingImportOrder(null)}
                   className="px-2 py-0.5 rounded text-[10px] bg-green-500 text-white"
                 >
@@ -377,6 +411,8 @@ export function DocumentsImportPreview() {
                 </button>
               ) : (
                 <button 
+                  type="button"
+                  aria-label="Редактировать описание"
                   onClick={() => { 
                     ctx.setEditingImportOrder(-2); 
                     ctx.setEditingImportData({ content: ctx.newDocDescription }); 
@@ -390,6 +426,7 @@ export function DocumentsImportPreview() {
             
             {ctx.editingImportOrder === -2 ? (
               <textarea
+                aria-label="Описание документа"
                 value={ctx.editingImportData.content || ''}
                 onChange={(e) => { 
                   ctx.setEditingImportData({ content: e.target.value }); 
@@ -397,11 +434,15 @@ export function DocumentsImportPreview() {
                 }}
                 className="w-full text-base bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg p-3 focus:border-gray-400 outline-none resize-none"
                 rows={3}
-                autoFocus
+                ref={focusEditor}
               />
             ) : (
               <p 
                 className="text-base text-[var(--text-secondary)] cursor-text leading-relaxed"
+              >
+                <button
+                  type="button"
+                  className="w-full text-left focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
                 onClick={() => { 
                   ctx.setActivePreviewOrder(-2); 
                   ctx.setEditingImportOrder(-2); 
@@ -409,6 +450,7 @@ export function DocumentsImportPreview() {
                 }}
               >
                 {ctx.newDocDescription || 'Нажмите чтобы добавить описание...'}
+                </button>
               </p>
             )}
           </div>

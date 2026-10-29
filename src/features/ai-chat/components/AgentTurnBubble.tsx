@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * AgentTurnBubble Component
  * ADR-092: Telegram-style agent message bubble with reasoning chains and tool steps
@@ -229,6 +230,7 @@ function groupStepsIntoSections(steps: Step[]): Section[] {
 
 /** Renders thinking/reasoning content as a visible block (NOT hidden in accordion) */
 const ThinkingBlock: React.FC<{ content: string }> = ({ content }) => {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(content.length <= 500);
   const trimmed = content.trim();
 
@@ -252,7 +254,7 @@ const ThinkingBlock: React.FC<{ content: string }> = ({ content }) => {
             onClick={() => setExpanded(!expanded)}
             className="mt-1 text-[10px] text-purple-400 hover:text-purple-300 cursor-pointer transition-colors"
           >
-            {expanded ? 'свернуть' : 'показать ещё'}
+            {expanded ? t('aiChat.ui.collapseLabel') : t('aiChat.ui.showMore')}
           </button>
         )}
       </div>
@@ -262,6 +264,7 @@ const ThinkingBlock: React.FC<{ content: string }> = ({ content }) => {
 
 /** Renders a group of consecutive tool calls as a collapsible accordion with result previews */
 const ToolGroupAccordion: React.FC<{ tools: ToolStep[] }> = ({ tools }) => {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   const [expandedResults, setExpandedResults] = useState<Record<number, boolean>>({});
 
@@ -280,7 +283,7 @@ const ToolGroupAccordion: React.FC<{ tools: ToolStep[] }> = ({ tools }) => {
       >
         <Wrench className="w-3 h-3" />
         <span className="font-medium">
-          Used {tools.length} tool{tools.length !== 1 ? 's' : ''}
+          {t('aiChat.ui.toolsUsedCount', { count: tools.length })}
         </span>
         {expanded ? (
           <ChevronDown className="w-3 h-3 ml-auto" />
@@ -390,6 +393,7 @@ export const AgentTurnBubble: React.FC<AgentTurnBubbleProps> = ({
   currentUser,
   className,
 }) => {
+  const { t } = useLanguage();
   // --- Parse messages into steps + final text ---
   const steps: Step[] = [];
   let finalText: ChatMessageItem | null = null;
@@ -506,6 +510,7 @@ export const AgentTurnBubble: React.FC<AgentTurnBubbleProps> = ({
           <div className="px-3 py-2">
             <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
               <MarkdownPreview
+                mediaLinks
                 content={finalText!.content}
                 onCheckboxClick={onCheckboxToggle
                   ? (info) => onCheckboxToggle(finalText!.id, finalText!.content, info.index)
@@ -520,8 +525,7 @@ export const AgentTurnBubble: React.FC<AgentTurnBubbleProps> = ({
         {/* --- Deleted message --- */}
         {finalText?.is_deleted && (
           <div className="px-3 py-2 text-sm italic text-[var(--text-tertiary)]">
-            Message deleted
-          </div>
+            {t('aiChat.ui.messageDeleted')}</div>
         )}
 
         {/* --- Processing indicator with tool name + count --- */}
@@ -536,7 +540,7 @@ export const AgentTurnBubble: React.FC<AgentTurnBubbleProps> = ({
                 </span>
               </span>
             ) : (
-              <span>Думает...</span>
+              <span>{t('aiChat.ui.thinking')}</span>
             )}
           </div>
         )}

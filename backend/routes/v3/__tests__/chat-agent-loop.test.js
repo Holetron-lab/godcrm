@@ -112,15 +112,12 @@ vi.mock('../../../database/connection.js', () => ({
   },
 }));
 
-vi.mock('../../../utils/logger.js', () => ({
-  apiLogger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    trace: vi.fn(),
-  },
-}));
+// The hand-listed pino levels went stale the moment a module under test grew
+// `apiLogger.child({...})` at import time: `.child` was absent, the import
+// threw, and the whole suite disappeared from the run instead of failing an
+// assertion. loggerMock() returns a self-similar recorder, so it cannot rot.
+vi.mock('../../../utils/logger.js', async () =>
+  (await import('../../../test/loggerMock.js')).loggerMock());
 
 vi.mock('../../../utils/response.js', () => ({
   success: (res, data, msg) => res.json({ success: true, data, message: msg }),

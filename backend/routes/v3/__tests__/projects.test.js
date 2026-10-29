@@ -92,6 +92,18 @@ describe('Projects API Routes (v3) - ADR-064', () => {
       );
       expect(projects.length).toBe(1);
       expect(projects[0].owner_id).toBe(userId);
+
+      // QA-20811-B1 / QA-20816: the response must carry the created project so
+      // the caller can chain POST /tables without a name lookup. PostgresAdapter
+      // reports the new id as `lastInsertRowid`; the route read `lastID` and
+      // answered 201 with no `data` at all.
+      expect(res.body.data).toMatchObject({
+        id: projects[0].id,
+        name: 'New Project',
+        space_id: spaceId,
+        owner_id: userId,
+        type: 'project',
+      });
     });
 
     test('should default to project type if invalid type given', async () => {
@@ -141,8 +153,9 @@ describe('Projects API Routes (v3) - ADR-064', () => {
     });
 
     test('should return 404 for non-existent project', async () => {
+      const { id } = await dbGet("SELECT nextval(pg_get_serial_sequence('projects', 'id')) AS id");
       const res = await request(app)
-        .put('/api/v3/projects/99999')
+        .put(`/api/v3/projects/${id}`)
         .send({ name: 'New Name' })
         .expect(404);
 
@@ -172,8 +185,9 @@ describe('Projects API Routes (v3) - ADR-064', () => {
     });
 
     test('should return 404 for non-existent project', async () => {
+      const { id } = await dbGet("SELECT nextval(pg_get_serial_sequence('projects', 'id')) AS id");
       const res = await request(app)
-        .delete('/api/v3/projects/99999')
+        .delete(`/api/v3/projects/${id}`)
         .expect(404);
 
       expect(res.body.success).toBe(false);

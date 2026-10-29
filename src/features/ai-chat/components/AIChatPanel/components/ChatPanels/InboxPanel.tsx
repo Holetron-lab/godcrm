@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * InboxPanel Component — Unified Conversation Browser
  * Ticket #81449: Replaces both old InboxPanel and HistoryPanel
@@ -53,6 +54,7 @@ export function InboxPanel({
   onDeleteConversation,
   setActivePanel
 }: InboxPanelProps) {
+  const { t, language } = useLanguage();
   // Filter state
   const [search, setSearch] = useState('');
   const [agentFilter, setAgentFilter] = useState<number | null>(null);
@@ -158,7 +160,7 @@ export function InboxPanel({
     // User/group conversation
     const currentUserId = useAuthStore.getState().user?.id;
     const otherParticipants = conv.participants?.filter(p => currentUserId && p.user_id !== Number(currentUserId)) || [];
-    const displayName = conv.title || otherParticipants.map(p => p.name).join(', ') || 'Беседа';
+    const displayName = conv.title || otherParticipants.map(p => p.name).join(', ') || t('aiChat.ui.conversation');
 
     let chatPartner: ChatPartner;
     let participants: Participant[];
@@ -212,10 +214,10 @@ export function InboxPanel({
   };
 
   const dateFilterLabels: Record<DateFilter, string> = {
-    all: 'Все',
-    today: 'Сегодня',
-    week: 'Неделя',
-    month: 'Месяц'
+    all: t('aiChat.contacts.scopeAll'),
+    today: t('dateSettings.picker.today'),
+    week: t('dateSettings.modes.week'),
+    month: t('dateSettings.modes.month')
   };
 
   const activeFiltersCount = (agentFilter !== null ? 1 : 0) + (dateFilter !== 'all' ? 1 : 0);
@@ -227,7 +229,7 @@ export function InboxPanel({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
             <Inbox className="w-3.5 h-3.5" />
-            <span>Все беседы</span>
+            <span>{t('aiChat.ui.allConversations')}</span>
             <span className="text-[var(--text-tertiary)]">({allConversations.length})</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -244,7 +246,7 @@ export function InboxPanel({
                   ? "bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]"
                   : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
               )}
-              title="Фильтры"
+              title={t('aiChat.ui.filters')}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
               {activeFiltersCount > 0 && (
@@ -256,7 +258,7 @@ export function InboxPanel({
             <button
               onClick={() => setActivePanel('none')}
               className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
-              title="Закрыть"
+              title={t('aiChat.ui.close')}
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -272,7 +274,7 @@ export function InboxPanel({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск бесед..."
+            placeholder={t('aiChat.ui.searchConversations')}
             className="w-full pl-8 pr-8 py-1.5 text-sm bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] rounded-lg text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)]"
           />
           {search && (
@@ -298,7 +300,7 @@ export function InboxPanel({
                 onChange={(e) => setAgentFilter(e.target.value ? Number(e.target.value) : null)}
                 className="flex-1 min-w-0 px-2 py-1 text-xs bg-[var(--bg-secondary)] border border-[var(--border-secondary)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)] truncate"
               >
-                <option value="">Все агенты</option>
+                <option value="">{t('aiChat.ui.allAgents')}</option>
                 {agents.map(a => (
                   <option key={a.id} value={a.id}>{a.icon ? `${a.icon} ` : ''}{a.name}</option>
                 ))}
@@ -335,9 +337,9 @@ export function InboxPanel({
               onChange={(e) => setSortBy(e.target.value as SortBy)}
               className="flex-1 min-w-0 px-2 py-1 text-xs bg-[var(--bg-secondary)] border border-[var(--border-secondary)] rounded-lg text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)]"
             >
-              <option value="date">По дате</option>
-              <option value="name">По имени</option>
-              <option value="unread">По непрочитанным</option>
+              <option value="date">{t('aiChat.ui.byDate')}</option>
+              <option value="name">{t('aiChat.ui.byName')}</option>
+              <option value="unread">{t('aiChat.ui.byUnreadMessages')}</option>
             </select>
           </div>
 
@@ -347,8 +349,7 @@ export function InboxPanel({
               onClick={() => { setAgentFilter(null); setDateFilter('all'); }}
               className="w-full text-center text-[10px] text-[var(--color-primary-500)] hover:underline py-0.5"
             >
-              Сбросить фильтры
-            </button>
+              {t('aiChat.ui.resetFilters')}</button>
           )}
         </div>
       )}
@@ -361,7 +362,7 @@ export function InboxPanel({
           </div>
         ) : filteredConversations.length === 0 ? (
           <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-            {search || activeFiltersCount > 0 ? 'Ничего не найдено' : 'Нет бесед'}
+            {search || activeFiltersCount > 0 ? t('columnSettings.nothingFound') : t('aiChat.ui.noConversations')}
           </div>
         ) : (
           filteredConversations.map(conv => {
@@ -370,7 +371,7 @@ export function InboxPanel({
             const otherParticipants = conv.participants?.filter(p => currentUserId && p.user_id !== Number(currentUserId)) || [];
             const displayName = isAi
               ? (conv.title || conv.agent_name || 'AI Chat')
-              : (conv.title || otherParticipants.map(p => p.name).join(', ') || 'Беседа');
+              : (conv.title || otherParticipants.map(p => p.name).join(', ') || t('aiChat.ui.conversation'));
 
             const isExpanded = expandedCardId === conv.id;
 
@@ -425,13 +426,13 @@ export function InboxPanel({
                       {isAi ? (
                         <>
                           {conv.agent_name && <span>{conv.agent_name}</span>}
-                          {conv.messages_count != null && <span> · {conv.messages_count} сообщ.</span>}
+                          {conv.messages_count != null && <span> · {t('aiChat.ui.messageCount', { count: conv.messages_count })}</span>}
                         </>
                       ) : (
-                        <span>{conv.type === 'direct' ? 'Личный чат' : `${conv.participants?.length || 0} участников`}</span>
+                        <span>{conv.type === 'direct' ? t('aiChat.ui.directChat') : t('aiChat.ui.participantCount', { count: conv.participants?.length || 0 })}</span>
                       )}
                       {' · '}
-                      {new Date(conv.updated_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                      {new Date(conv.updated_at).toLocaleDateString(language, { day: 'numeric', month: 'short' })}
                     </div>
                     {/* Last message preview */}
                     {conv.last_message && (
@@ -444,8 +445,8 @@ export function InboxPanel({
                   {/* Action buttons */}
                   <div className="flex items-center gap-0.5 flex-shrink-0">
                     {onDeleteConversation && (
-                      <button onClick={(e) => { e.stopPropagation(); if (confirm('Удалить чат?')) onDeleteConversation(conv.id); }}
-                        className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-[var(--text-tertiary)] hover:text-red-400 transition-all" title="Удалить чат">
+                      <button onClick={(e) => { e.stopPropagation(); if (confirm(t('aiChat.ui.deleteChat'))) onDeleteConversation(conv.id); }}
+                        className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-[var(--text-tertiary)] hover:text-red-400 transition-all" title={t('aiChat.ui.deleteChat')}>
                         <Trash2 className="w-3 h-3" />
                       </button>
                     )}
@@ -455,7 +456,7 @@ export function InboxPanel({
                         isExpanded
                           ? "text-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10"
                           : "opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
-                      )} title="Подробнее">
+                      )} title={t('home.enterprise.learnMore')}>
                       <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", isExpanded && "rotate-180")} />
                     </button>
                   </div>
@@ -468,7 +469,7 @@ export function InboxPanel({
                       {/* Participants list */}
                       {conv.participants && conv.participants.length > 0 && (
                         <div>
-                          <div className="text-[10px] text-[var(--text-tertiary)] mb-1">Участники</div>
+                          <div className="text-[10px] text-[var(--text-tertiary)] mb-1">{t('aiChat.ui.participants')}</div>
                           <div className="flex flex-wrap gap-1">
                             {conv.participants.map(p => (
                               <span key={p.user_id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[var(--bg-secondary)] text-[10px] text-[var(--text-secondary)]">
@@ -481,7 +482,7 @@ export function InboxPanel({
                       {/* Agent info */}
                       {isAi && conv.agent_name && (
                         <div>
-                          <div className="text-[10px] text-[var(--text-tertiary)] mb-1">Агент</div>
+                          <div className="text-[10px] text-[var(--text-tertiary)] mb-1">{t('aiChat.ui.agent')}</div>
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-500/10 text-[10px] text-purple-300">
                             {conv.agent_icon || '🤖'} {conv.agent_name}
                           </span>
@@ -490,7 +491,7 @@ export function InboxPanel({
                       {/* Bound row */}
                       {conv.bound_row_id && (
                         <div>
-                          <div className="text-[10px] text-[var(--text-tertiary)] mb-1">Привязанная строка</div>
+                          <div className="text-[10px] text-[var(--text-tertiary)] mb-1">{t('aiChat.ui.linkedRow')}</div>
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 text-[10px] text-blue-300">
                             🔗 #{conv.bound_row_id}
                           </span>
@@ -498,7 +499,7 @@ export function InboxPanel({
                       )}
                       {/* Chat ID */}
                       <div className="text-[10px] text-[var(--text-quaternary)]">
-                        Чат #{conv.id} · {conv.messages_count ?? 0} сообщ.
+                        {t('aiChat.ui.chatNumber', { id: conv.id })} · {t('aiChat.ui.messageCount', { count: conv.messages_count ?? 0 })}
                       </div>
                     </div>
                   </div>

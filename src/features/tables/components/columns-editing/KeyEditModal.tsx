@@ -1,7 +1,7 @@
 /**
  * KeyEditModal - Confirmation modal for column key editing
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { Modal, Button } from '@/shared/components/ui';
 import type { KeyEditModalProps } from './types';
 
@@ -10,6 +10,7 @@ export const KeyEditModal = ({
   onClose,
   onConfirm
 }: KeyEditModalProps) => {
+  const keyId = useId();
   const [keyDraft, setKeyDraft] = useState('');
 
   useEffect(() => {
@@ -34,8 +35,9 @@ export const KeyEditModal = ({
           Изменение ключа влияет на API и формулы. Введите новый ключ и подтвердите действие.
         </p>
         <div className="space-y-2">
-          <label className="text-xs text-[var(--text-tertiary)]">Новый ключ</label>
+          <label htmlFor={keyId} className="text-xs text-[var(--text-tertiary)]">Новый ключ</label>
           <input
+            id={keyId}
             type="text"
             value={keyDraft}
             onChange={(e) => setKeyDraft(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_'))}

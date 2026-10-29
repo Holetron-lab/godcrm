@@ -53,8 +53,43 @@ function _validateAttachment(att, idx) {
   return null;
 }
 
+/**
+ * Resolve who a tool call speaks for. The MCP transport always passes
+ * userId=1 (it is the channel, not the subject), so with a trusted agent
+ * identity in `ctx` the message must be attributed to that agent: its managed
+ * user as sender_id, sender_type='agent', and the same metadata shape the
+ * agent loop writes (agent_name/icon/color/row_id) so the chat renders the
+ * agent's avatar. Without an agent context the caller stays a human sender.
+ */
+async function _resolveAuthor(userId, ctx) {
+  const agentRowId = ctx?.agentId != null ? Number(ctx.agentId) : null;
+  if (!agentRowId) {
+    return { senderId: userId || 1, senderType: 'human', agentId: null, metadata: '{}', defaultRole: 'user' };
+  }
+  const row = await dbGet(
+    `SELECT r.data, u.id AS user_id
+       FROM table_rows r
+       LEFT JOIN users u ON u.managed_by_agent_row_id = r.id AND u.user_type = 'agent'
+      WHERE r.id = ${isPostgres() ? '$1' : '?'}`,
+    [agentRowId]
+  );
+  const data = parseRowData(row?.data);
+  return {
+    senderId: ctx.senderId ?? row?.user_id ?? userId ?? 1,
+    senderType: 'agent',
+    agentId: agentRowId,
+    metadata: JSON.stringify({
+      agent_name: data.name || ctx.agentName || 'AI Agent',
+      agent_icon: data.icon || data.emoji || null,
+      agent_color: data.color || null,
+      agent_row_id: agentRowId,
+    }),
+    defaultRole: 'assistant',
+  };
+}
+
 export const chatToolHandlers = {
-  async send_chat_message({ conversation_id, content, role = 'user', content_type = 'text', attachments = null }, userId, ctx = {}) {
+  async send_chat_message({ conversation_id, content, role = null, content_type = 'text', attachments = null }, userId, ctx = {}) {
     // ── ADR-0031 WP-20+21: validate content_type + attachments shape ──
     if (!ALLOWED_MCP_CONTENT_TYPES.has(content_type)) {
       return { error: `Invalid content_type "${content_type}". Allowed: ${[...ALLOWED_MCP_CONTENT_TYPES].join(', ')}` };
@@ -90,10 +125,12 @@ export const chatToolHandlers = {
       ? JSON.stringify(validatedAttachments)
       : '[]';
 
+    const author = await _resolveAuthor(userId, ctx);
+
     const result = await dbRun(`
-      INSERT INTO messages (conversation_id, role, content, content_type, sender_id, attachments, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ${sqlNow()})
-    `, [conversation_id, role, content, content_type, userId || 1, attachmentsJson]);
+      INSERT INTO messages (conversation_id, role, content, content_type, sender_id, sender_type, agent_id, attachments, metadata, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${sqlNow()})
+    `, [conversation_id, role || author.defaultRole, content, content_type, author.senderId, author.senderType, author.agentId, attachmentsJson, author.metadata]);
 
     await dbRun(`UPDATE conversations SET updated_at = ${sqlNow()} WHERE id = ?`, [conversation_id]);
 
@@ -105,7 +142,7 @@ export const chatToolHandlers = {
       dispatchInvocationsFromContent({
         conversationId: Number(conversation_id),
         content,
-        userId: userId || null,
+        userId: author.senderId,
         spaceId: conv.space_id || null,
         sourceLabel: 'mcp_tool',
         sourceMessageId: messageId,
@@ -268,7 +305,8 @@ export const chatToolHandlers = {
 
     const callerId = Number(userId || 1);
     const isChatOwner = Number(conv.created_by) === callerId;
-    const isSpaceAdmin = conv.space_id
+    // Owner first: the role service is only consulted for non-owners.
+    const isSpaceAdmin = !isChatOwner && conv.space_id
       ? await canAdminister(callerId, { spaceId: conv.space_id })
       : false;
     if (!isChatOwner && !isSpaceAdmin) {
@@ -328,7 +366,7 @@ export const chatToolHandlers = {
 
     const callerId = Number(userId || 1);
     const isChatOwner = Number(conv.created_by) === callerId;
-    const isSpaceAdmin = conv.space_id
+    const isSpaceAdmin = !isChatOwner && conv.space_id
       ? await canAdminister(callerId, { spaceId: conv.space_id })
       : false;
     if (!isChatOwner && !isSpaceAdmin) {

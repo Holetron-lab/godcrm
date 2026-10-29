@@ -85,7 +85,6 @@ export function PasswordPrompt({ slug, spaceName, onSuccess }: PasswordPromptPro
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter password"
-            autoFocus
             disabled={loading}
             className="mb-4 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60"
           />

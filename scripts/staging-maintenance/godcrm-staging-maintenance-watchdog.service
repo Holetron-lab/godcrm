@@ -1,0 +1,21 @@
+# REVIEW TEMPLATE ONLY. Not installed. Replace path with the reviewed sealed
+# bundle, never a mutable checkout; verify hook digest before enabling.
+[Unit]
+Description=Phase-aware staging maintenance recovery
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+Environment=STAGING_STATE_DIR=/var/lib/godcrm-staging
+Environment=STAGING_HEARTBEAT_STALE_SECONDS=180
+Environment=STAGING_LOCK_WAIT_SECONDS=30
+ExecStartPre=/bin/bash -c 'echo "REVIEWED_HOOK_SHA256  /opt/godcrm-staging-maintenance/REVIEWED-BUNDLE/hook" | /usr/bin/sha256sum --status -c -'
+ExecStart=/bin/bash /opt/godcrm-staging-maintenance/REVIEWED-BUNDLE/hook watchdog
+# Each adapter request is bounded. Do not kill an in-flight restoration here.
+TimeoutStartSec=0
+StandardOutput=journal
+StandardError=journal

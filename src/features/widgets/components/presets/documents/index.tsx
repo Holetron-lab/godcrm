@@ -14,8 +14,10 @@
  */
 
 import { cn } from '@/shared/utils/cn';
-import type { PresetWidgetProps, Widget } from '../../types/widget.types';
-import type { DocumentsWidgetConfig } from '../../types/documents.types';
+import { useQuery } from '@tanstack/react-query';
+import { getWidgetById } from '../../../api/widgetsApi';
+import type { Widget } from '../../../types/widget.types';
+import type { DocumentsWidgetConfig } from '../../../types/documents.types';
 
 // Import all subcomponents
 import { DocumentsProvider, useDocumentsContext } from './DocumentsContext';
@@ -50,7 +52,7 @@ function DocumentsInternal() {
       <div className="flex-1 flex overflow-hidden relative">
         {/* Mobile sidebar overlay backdrop */}
         {ctx.isMobile && ctx.mobileSidebarOpen && (
-          <div
+          <button type="button" aria-label="Закрыть список документов"
             className="absolute inset-0 bg-black/50 z-10 lg:hidden"
             onClick={() => ctx.setMobileSidebarOpen(false)}
           />
@@ -102,7 +104,7 @@ function MobileTocSheet() {
   return (
     <>
       {/* Backdrop */}
-      <div
+      <button type="button" aria-label="Закрыть оглавление"
         className="fixed inset-0 bg-black/50 z-50"
         onClick={() => ctx.setMobileTocOpen(false)}
       />
@@ -191,32 +193,37 @@ export interface DocumentsWidgetPublicProps {
  * - DocumentsWidgetPublicProps (ADR-0060 P6/F) — public read-only mode
  */
 export function DocumentsWidget(
-  props:
-    | PresetWidgetProps
-    | ({ widget?: Widget; data?: unknown[]; config?: DocumentsWidgetConfig; spaceId?: number | string; isEditMode?: boolean } & DocumentsWidgetPublicProps),
+  props: { widget?: Widget; data?: unknown[]; config?: DocumentsWidgetConfig; spaceId?: number | string; isEditMode?: boolean } & DocumentsWidgetPublicProps,
 ) {
   // Support both prop shapes: { widget } from dashboard, or { config, spaceId } from standalone
-  const widget = (props as any).widget as Widget | undefined;
+  const widget = props.widget;
   const wc = widget?.config || {};
 
-  const config: DocumentsWidgetConfig = (props as any).config || {
+  const config: DocumentsWidgetConfig = props.config || {
     project_id: (wc.project_id as number) || 0,
     folder_path: (wc.folder_path as string) || 'databases/documents/',
     registry_table_id: wc.registry_table_id as number | undefined,
     atoms_table_id: wc.atoms_table_id as number | undefined,
-    ...(wc as any),
+    ...wc,
   };
 
-  const spaceId = (props as any).spaceId || (wc.project_id || '').toString();
-  const isEditMode = (props as any).isEditMode ?? true;
+  const isEditMode = props.isEditMode ?? true;
 
   // Public-mode passthrough (ADR-0060 P6/F).
-  const dataSource = (props as any).dataSource as 'private' | 'public' | undefined;
-  const publicSlug = (props as any).publicSlug as string | undefined;
-  const widgetIdProp = (props as any).widgetId as number | undefined;
-  const initialDocSlug = (props as any).initialDocSlug as string | undefined;
-  const singleDocFocus = (props as any).singleDocFocus as boolean | undefined;
-  const compact = (props as any).compact as boolean | undefined;
+  const { dataSource, publicSlug, widgetId: widgetIdProp, initialDocSlug, singleDocFocus, compact } = props;
+
+  // Dashboard lists omit the residence join supplied by the single-widget API.
+  // Never infer a space from project_id or fetch private context in public mode.
+  const widgetId = widget?.id ?? config.id ?? widgetIdProp;
+  const knownSpaceId = props.spaceId ?? widget?.space_id;
+  const { data: residence } = useQuery({
+    queryKey: ['widget', widgetId],
+    queryFn: () => getWidgetById(widgetId!),
+    enabled: dataSource !== 'public' && knownSpaceId == null && !!widgetId,
+  });
+  const resolvedSpaceId = Number(knownSpaceId ?? residence?.space_id);
+  const spaceId = dataSource !== 'public' && Number.isInteger(resolvedSpaceId) && resolvedSpaceId > 0
+    ? resolvedSpaceId : 0;
 
   return (
     <DocumentsProvider

@@ -82,6 +82,10 @@ const colorPalette = [
   '#f43f5e', '#84cc16', '#06b6d4', '#8b5cf6', '#e11d48',
 ];
 
+// Arbitrary table columns can contain objects; React text children cannot.
+const displayText = (value: unknown): string =>
+  typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+
 export function TaskCard({
   item,
   isCompleted,
@@ -101,14 +105,27 @@ export function TaskCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
+  const colorTriggerRef = useRef<HTMLButtonElement>(null);
+
+  const handleColorKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'Escape' && showColorPicker) {
+      event.preventDefault();
+      event.stopPropagation();
+      setShowColorPicker(false);
+      colorTriggerRef.current?.focus();
+    }
+  };
 
   const rowData = item.data || item;
-  const title = rowData[cardTitleColumn] || 'Без названия';
-  const subtitle = rowData[cardSubtitleColumn];
-  const cardColor = colorColumn ? rowData[colorColumn] : undefined;
-  const scheduledDate = scheduledDateColumn ? formatShortDate(rowData[scheduledDateColumn]) : null;
-  const dueDate = dueDateColumn ? formatShortDate(rowData[dueDateColumn]) : null;
-  const isDueDateOverdue = dueDateColumn && !isCompleted ? isOverdue(rowData[dueDateColumn]) : false;
+  const title = displayText(rowData[cardTitleColumn]) || 'Без названия';
+  const subtitle = displayText(rowData[cardSubtitleColumn]);
+  const colorValue = colorColumn ? rowData[colorColumn] : undefined;
+  const cardColor = typeof colorValue === 'string' ? colorValue : undefined;
+  const scheduledValue = scheduledDateColumn ? rowData[scheduledDateColumn] : undefined;
+  const dueValue = dueDateColumn ? rowData[dueDateColumn] : undefined;
+  const scheduledDate = typeof scheduledValue === 'string' ? formatShortDate(scheduledValue) : null;
+  const dueDate = typeof dueValue === 'string' ? formatShortDate(dueValue) : null;
+  const isDueDateOverdue = typeof dueValue === 'string' && !isCompleted ? isOverdue(dueValue) : false;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -152,9 +169,9 @@ export function TaskCard({
         const option = config?.options?.find(opt => opt.value === value);
         return option ? (
           <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium" style={{ backgroundColor: option.color ? hexToRgba(option.color, 0.2) : 'var(--bg-tertiary)', color: option.color || 'var(--text-primary)' }}>
-            {option.label || value}
+            {option.label || displayText(value)}
           </span>
-        ) : <span>{value}</span>;
+        ) : <span>{displayText(value) || '—'}</span>;
       }
       case 'multiselect': {
         const values = Array.isArray(value) ? value : [value];
@@ -164,7 +181,7 @@ export function TaskCard({
               const opt = config?.options?.find(o => o.value === v);
               return (
                 <span key={i} className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium" style={{ backgroundColor: opt?.color ? hexToRgba(opt.color, 0.2) : 'var(--bg-tertiary)', color: opt?.color || 'var(--text-primary)' }}>
-                  {opt?.label || v}
+                  {opt?.label || displayText(v) || '—'}
                 </span>
               );
             })}
@@ -173,15 +190,16 @@ export function TaskCard({
       }
       case 'date':
       case 'datetime':
-        return <span className="text-[var(--text-secondary)]">{formatShortDate(value)}</span>;
+        return <span className="text-[var(--text-secondary)]">{typeof value === 'string' ? formatShortDate(value) : '—'}</span>;
       case 'number':
-        return <span className="text-[var(--text-primary)] font-medium">{value}</span>;
+        return <span className="text-[var(--text-primary)] font-medium">{displayText(value) || '—'}</span>;
       case 'boolean':
       case 'checkbox':
         return value
           ? <CheckSquare className="w-4 h-4 text-green-500" />
           : <Square className="w-4 h-4 text-[var(--text-tertiary)]" />;
       case 'url':
+        if (typeof value !== 'string') return <span>—</span>;
         return (
           <a href={value} target="_blank" rel="noopener noreferrer" className="text-primary-500 hover:underline truncate max-w-[150px] inline-block" onClick={(e) => e.stopPropagation()}>
             {value}
@@ -194,6 +212,7 @@ export function TaskCard({
 
   const handleColorChange = (color: string | null) => {
     setShowColorPicker(false);
+    colorTriggerRef.current?.focus();
     if (colorColumn && onUpdate) onUpdate(colorColumn, color);
   };
 
@@ -204,25 +223,37 @@ export function TaskCard({
 
   return (
     <div
-      className={`group relative rounded-lg border transition-all duration-200 cursor-pointer
+      className={`group relative rounded-lg border transition-all duration-200
         ${isCompleted
           ? 'bg-[var(--bg-secondary)] border-[var(--border-secondary)] opacity-70'
           : 'bg-[var(--bg-primary)] border-[var(--border-primary)] hover:shadow-md'
         }`}
       style={{ borderLeftWidth: '4px', borderLeftColor: cardColor || 'var(--border-primary)' }}
-      onClick={() => setIsExpanded(!isExpanded)}
-      onDoubleClick={() => onDoubleClick?.('details')}
     >
       <div className="p-3">
         <div className="flex items-start gap-3">
-          <button onClick={handleToggleClick} className="flex-shrink-0 mt-0.5 text-[var(--text-secondary)] hover:text-green-500 transition-colors">
+          <button type="button" aria-label={`Выполнено: ${title}`} aria-pressed={isCompleted} onClick={handleToggleClick} className="flex-shrink-0 mt-0.5 text-[var(--text-secondary)] hover:text-green-500 transition-colors">
             {isCompleted ? <CheckSquare className="w-5 h-5 text-green-500" /> : <Square className="w-5 h-5" />}
           </button>
           <div className="flex-1 min-w-0">
-            <div className={`font-medium text-sm ${isCompleted ? 'line-through text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]'}`}>{title}</div>
-            {subtitle && (
-              <div className={`text-xs mt-0.5 line-clamp-1 ${isCompleted ? 'line-through text-[var(--text-tertiary)]' : 'text-[var(--text-secondary)]'}`}>{subtitle}</div>
-            )}
+            <button
+              type="button"
+              aria-label={`Подробности: ${title}`}
+              aria-expanded={isExpanded}
+              onClick={() => setIsExpanded(!isExpanded)}
+              onDoubleClick={() => onDoubleClick?.('details')}
+              className="flex w-full items-start gap-3 rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]"
+            >
+              <span className="flex-1 min-w-0">
+                <span className={`block font-medium text-sm ${isCompleted ? 'line-through text-[var(--text-tertiary)]' : 'text-[var(--text-primary)]'}`}>{title}</span>
+                {subtitle && (
+                  <span className={`block text-xs mt-0.5 line-clamp-1 ${isCompleted ? 'line-through text-[var(--text-tertiary)]' : 'text-[var(--text-secondary)]'}`}>{subtitle}</span>
+                )}
+              </span>
+              <span className="flex-shrink-0 p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] transition-colors">
+                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              </span>
+            </button>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               {scheduledDate && (
                 <span className="inline-flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
@@ -237,6 +268,10 @@ export function TaskCard({
               {colorColumn && (
                 <div className="relative" ref={colorPickerRef}>
                   <button
+                    type="button"
+                    ref={colorTriggerRef}
+                    onKeyDown={handleColorKeyDown}
+                    aria-expanded={showColorPicker}
                     onClick={(e) => { e.stopPropagation(); setShowColorPicker(!showColorPicker); }}
                     className="p-1 rounded hover:bg-[var(--bg-tertiary)] transition-colors"
                     title="Изменить цвет"
@@ -244,11 +279,15 @@ export function TaskCard({
                     <Palette className="w-3.5 h-3.5" style={{ color: cardColor || 'var(--text-tertiary)' }} />
                   </button>
                   {showColorPicker && (
-                    <div className="absolute top-full left-0 mt-1 p-2 bg-[var(--bg-primary)] rounded-lg shadow-lg border border-[var(--border-primary)] z-50" onClick={(e) => e.stopPropagation()}>
+                    <div className="absolute top-full left-0 mt-1 w-max p-2 bg-[var(--bg-primary)] rounded-lg shadow-lg border border-[var(--border-primary)] z-50">
                       <div className="grid grid-cols-5 gap-1.5 mb-2">
                         {colorPalette.map((color) => (
                           <button
                             key={color}
+                            type="button"
+                            aria-label={`Цвет ${color}`}
+                            onKeyDown={handleColorKeyDown}
+                            aria-pressed={cardColor === color}
                             className={`w-6 h-6 rounded-md transition-transform hover:scale-110 ${cardColor === color ? 'ring-2 ring-offset-1 ring-primary-500' : ''}`}
                             style={{ backgroundColor: color }}
                             onClick={() => handleColorChange(color)}
@@ -256,7 +295,7 @@ export function TaskCard({
                         ))}
                       </div>
                       {cardColor && (
-                        <button onClick={() => handleColorChange(null)} className="w-full text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] py-1">
+                        <button type="button" onKeyDown={handleColorKeyDown} onClick={() => handleColorChange(null)} className="w-full text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] py-1">
                           Убрать цвет
                         </button>
                       )}
@@ -266,38 +305,34 @@ export function TaskCard({
               )}
             </div>
           </div>
-          <button
-            onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
-            className="flex-shrink-0 p-1 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] transition-colors"
-          >
-            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
         </div>
       </div>
-      {isExpanded && visibleFields.length > 0 && (
+      {isExpanded && (visibleFields.length > 0 || onDoubleClick) && (
         <div className="px-3 pb-3 pt-0 border-t border-[var(--border-secondary)] mt-1">
           <div className="grid grid-cols-2 gap-2 mt-2">
             {visibleFields.map((field) => (
               <div key={field.name} className="flex flex-col">
-                <span className="text-xs text-[var(--text-tertiary)] mb-0.5">{field.displayName}</span>
+                <span className="text-xs text-[var(--text-secondary)] mb-0.5">{field.displayName}</span>
                 <div className="text-sm">{renderFieldValue(field)}</div>
               </div>
             ))}
           </div>
-          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-[var(--border-secondary)]">
+          {onDoubleClick && <div className="flex items-center gap-2 mt-3 pt-2 border-t border-[var(--border-secondary)]">
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); onDoubleClick?.('details'); }}
-              className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] flex items-center gap-1 transition-colors"
+              className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1 transition-colors"
             >
               <MoreHorizontal className="w-3.5 h-3.5" /> {translations.openFull || 'Открыть'}
             </button>
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); onDoubleClick?.('comments'); }}
-              className="text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)] flex items-center gap-1 transition-colors"
+              className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] flex items-center gap-1 transition-colors"
             >
               <MessageSquare className="w-3.5 h-3.5" /> {translations.comments || 'Комментарии'}
             </button>
-          </div>
+          </div>}
         </div>
       )}
     </div>

@@ -3,6 +3,8 @@
  * TDD: These tests define expected behavior BEFORE implementation
  */
 
+import { describe, expect, it } from 'vitest';
+
 import {
   cmykToHex,
   hexToCmyk,

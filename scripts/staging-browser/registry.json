@@ -1,0 +1,25 @@
+{
+  "origin": "https://dev.godcrm.ai",
+  "table": "/tables/1708",
+  "schema": "/spaces/11/schema",
+  "access": "/spaces",
+  "column": "Phase",
+  "selectors": {
+    "column_menu": "role=button[name=\"Phase\"s]",
+    "column_settings": "[role=menuitem]:has-text(Настройки), [role=menuitem]:has-text(Settings)",
+    "drawer": "[role=dialog]",
+    "type_tab": "role=dialog >> role=button[name=/^(Type|Тип)$/]",
+    "schema_table": "text=Tickets",
+    "schema_column": "[data-id=\"table-1708\"] button[aria-label=\"Open column settings: Phase\"]",
+    "space_settings": "button[title=\"Space settings\"], button[title=\"Настройки пространства\"]",
+    "access_tab": "button:has-text(Access), button:has-text(Доступ)",
+    "access_expand": "button[aria-expanded=false]",
+    "space_menu": "[data-testid=\"space-item\"]:has([data-testid=\"space-toggle-11\"]) button[title=\"Space menu\"], [data-testid=\"space-item\"]:has([data-testid=\"space-toggle-11\"]) button[title=\"Меню пространства\"]"
+  },
+  "budgets": {
+    "lcp": 2500,
+    "inp": 200,
+    "cls": 0.1
+  },
+  "review_status": "PENDING_STAGING_SELECTOR_AND_BUDGET_ACCEPTANCE"
+}

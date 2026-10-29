@@ -26,14 +26,10 @@ vi.mock('../../../database/connection.js', () => ({
   }),
 }));
 
-vi.mock('../../../utils/logger.js', () => ({
-  apiLogger: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+// logger is auto-mocked: a self-similar recorder whose .child() is itself, so a
+// module that grows `apiLogger.child(...)` can no longer break this file's import
+// (see backend/test/loggerMock.js).
+vi.mock('../../../utils/logger.js', async () => (await import('../../../test/loggerMock.js')).loggerMock());
 
 import {
   loadConversationHistory,
@@ -134,7 +130,12 @@ describe('ADR-110: Hierarchical Smart Context', () => {
     it('should return base types only for Level 1 (defaults)', () => {
       const types = buildContentTypes(CONTEXT_LEVELS_DEFAULTS);
       expect(types).toEqual(BASE_CONTENT_TYPES);
-      expect(types).toEqual(['text', 'markdown', 'code', 'plan']);
+      // The literal that used to sit here duplicated BASE_CONTENT_TYPES and went
+      // stale the moment 'moved' joined it. Assert the property that matters at
+      // Level 1 instead: none of the higher-level types leak in.
+      expect(types).not.toContain('thinking');
+      expect(types).not.toContain('tool_call');
+      expect(types).not.toContain('tool_result');
     });
 
     it('should add thinking for Level 2', () => {
@@ -165,7 +166,8 @@ describe('ADR-110: Hierarchical Smart Context', () => {
         thinking_preview_chars: 200,
         tool_preview_chars: 100,
       });
-      expect(types).toEqual(['text', 'markdown', 'code', 'plan', 'thinking', 'tool_call', 'tool_result']);
+      // Derived from BASE_CONTENT_TYPES so adding a base type does not break this.
+      expect(types).toEqual([...BASE_CONTENT_TYPES, 'thinking', 'tool_call', 'tool_result']);
     });
 
     it('should not duplicate types when both tool_summaries and full_tool_results are true', () => {

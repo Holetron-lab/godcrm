@@ -4,6 +4,7 @@
  * Backend contract: backend/routes/v3/secrets.js (P1, ticket 140012).
  * Response envelope: { success, data, timestamp } (backend/utils/response.js).
  *
+ * All routes require ?space_id=<current space>.
  * Routes:
  *   GET    /api/v3/secrets              -> list (scrubbed, no plaintext)
  *   POST   /api/v3/secrets              -> create
@@ -32,6 +33,12 @@ export interface UpdateSecretBody {
   description?: string;
 }
 
+export interface SecretsList {
+  secrets: SecretSummary[];
+  /** The space's `Secrets` system table (ADR-0040 §space-secrets), created lazily by the backend. */
+  table_id: number | null;
+}
+
 interface SuccessEnvelope<T> {
   success: true;
   data: T;
@@ -39,39 +46,37 @@ interface SuccessEnvelope<T> {
 }
 
 export const secretsApi = {
-  async list(): Promise<SecretSummary[]> {
-    const r = await apiClient.get<SuccessEnvelope<{ secrets: SecretSummary[] }>>(
-      '/secrets'
-    );
-    return r.data.secrets;
+  async list(spaceId: number): Promise<SecretsList> {
+    const r = await apiClient.get<SuccessEnvelope<SecretsList>>(`/secrets?space_id=${spaceId}`);
+    return { secrets: r.data.secrets, table_id: r.data.table_id ?? null };
   },
 
-  async create(body: CreateSecretBody): Promise<SecretSummary> {
+  async create(spaceId: number, body: CreateSecretBody): Promise<SecretSummary> {
     const r = await apiClient.post<SuccessEnvelope<{ secret: SecretSummary }>>(
-      '/secrets',
+      `/secrets?space_id=${spaceId}`,
       body
     );
     return r.data.secret;
   },
 
-  async update(key: string, body: UpdateSecretBody): Promise<SecretSummary> {
+  async update(spaceId: number, key: string, body: UpdateSecretBody): Promise<SecretSummary> {
     const r = await apiClient.put<SuccessEnvelope<{ secret: SecretSummary }>>(
-      `/secrets/${encodeURIComponent(key)}`,
+      `/secrets/${encodeURIComponent(key)}?space_id=${spaceId}`,
       body
     );
     return r.data.secret;
   },
 
-  async reveal(key: string): Promise<{ plaintext: string }> {
+  async reveal(spaceId: number, key: string): Promise<{ plaintext: string }> {
     const r = await apiClient.post<SuccessEnvelope<{ plaintext: string }>>(
-      `/secrets/${encodeURIComponent(key)}/reveal`
+      `/secrets/${encodeURIComponent(key)}/reveal?space_id=${spaceId}`
     );
     return r.data;
   },
 
-  async remove(key: string): Promise<void> {
+  async remove(spaceId: number, key: string): Promise<void> {
     await apiClient.delete<SuccessEnvelope<unknown>>(
-      `/secrets/${encodeURIComponent(key)}`
+      `/secrets/${encodeURIComponent(key)}?space_id=${spaceId}`
     );
   },
 };

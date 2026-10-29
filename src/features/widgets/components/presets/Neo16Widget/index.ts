@@ -1,1 +1,1 @@
-export { Neo16Widget } from './Neo16Widget';
+export { Neo16ModuleWidget as Neo16Widget } from './town/TownWidget';

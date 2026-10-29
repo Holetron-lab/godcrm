@@ -1,10 +1,15 @@
+import { useConversationSettings } from './hooks/useConversationSettings';
+import { ConversationSpaceDialog } from './components/ConversationSpace';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /** AIChatPanel v2 — Modular Composition (ADR-119) */
 import React, { lazy, Suspense, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/shared/utils/cn';
+import { Button } from '@/shared/components/ui/Button';
 import type { AIChatPanelProps } from '../AIChatPanel.types';
 import type { ChatMessage } from '../../types';
 import type { ChatSummary } from '../../hooks/useChatSummary';
+import { useAIChat } from '../../context/AIChatContext';
 import { useAIChatPanelLogic } from './hooks/useAIChatPanelLogic';
 import { usePinMessage } from '../../hooks/usePinMessage';
 import { ChatPanelToolbar, ChatInfoBar } from './components/ChatHeader/ChatHeaderFull';
@@ -25,24 +30,20 @@ import { apiClient } from '@/shared/utils/apiClient';
 import { filesApi } from '@/features/files/api/filesApi';
 import { ValidSlugsProvider } from '../../context/ValidSlugsContext';
 import { MentionUsersProvider } from '../MentionUsersContext';
+import { HumanChatPresenceContext, useHumanChatPresence } from '../../hooks/useHumanChatPresence';
 
 const AgentEditModal = lazy(() => import('../AgentEditModal').then(m => ({ default: m.AgentEditModal })));
 const FilePreviewModal = lazy(() => import('@/features/files/components/FilePreviewModal').then(m => ({ default: m.FilePreviewModal })));
 const SummaryCarousel = lazy(() => import('./components/ChatMessages/SummaryCarousel').then(m => ({ default: m.SummaryCarousel })));
 const SpawnTicketModal = lazy(() => import('./components/SpawnTicketModal').then(m => ({ default: m.SpawnTicketModal })));
 const DeleteChatModal = lazy(() => import('./components/DeleteChatModal').then(m => ({ default: m.DeleteChatModal })));
-// ADR-0064 §Per-chat: tabbed inline settings panel mounted below BoundRowsStrip
-// (same slot as the row-binding picker). Holds notifications + participants tabs.
-const PerChatSettingsInline = lazy(() => import('@/features/ai-chat/components/ChatNotifications/PerChatSettingsInline').then(m => ({ default: m.PerChatSettingsInline })));
-import type { PerChatSettingsTab } from '@/features/ai-chat/components/ChatNotifications/PerChatSettingsInline';
-// ADR-0031 WP-24 FE follow-up (Variant 1): inline above-input picker for Move flow.
-// Replaces the popup MoveMessageModal — Move now stages messages as cyan chips
-// above the input (analogue of forwardMessages) and Send opens the picker.
+// Move stages chips above the input; Send opens the destination picker.
 
 export type { AIChatPanelProps };
-
 export function AIChatPanel({ className, fillContainer = false }: AIChatPanelProps) {
+  const { t } = useLanguage();
   const logic = useAIChatPanelLogic({ fillContainer });
+  const { mentionAgents } = useAIChat();
 
   const {
     isOpen, closeChat, currentAgent, agents, messages, isLoading, error,
@@ -101,7 +102,7 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
     aiFetchThinkingSteps, aiFetchToolStepsPreview, aiFetchFullMessage, aiFetchToolSteps,
     userFetchThinkingSteps, userFetchToolStepsPreview, userFetchFullMessage, userFetchToolSteps,
 
-    isRecording, isTranscribing, voiceError, recordingDuration,
+    isRecording, isTranscribing, voiceError, recordingDuration, recordingStream,
     startRecording, stopRecording, cancelRecording,
 
     forwardMessages, setForwardMessages,
@@ -128,27 +129,20 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
     scheduled,
   } = logic;
 
+  const { chatSettings, setChatSettings, selectedConversationId, openChatSettings, conversationSettings } = useConversationSettings(logic);
+
   // WP-17: Track schedule date when editing a scheduled message
   const [editScheduleDate, setEditScheduleDate] = React.useState<string | null>(null);
 
   // ADR-0031 P6: Spawn ticket modal
   const [showSpawnTicketModal, setShowSpawnTicketModal] = React.useState(false);
 
-  // ADR-0059 §4.2: Delete chat confirmation modal (replaces window.confirm).
-  // Captures the conv id at click-time so a mid-flight conversation switch
-  // can't delete the wrong chat.
+  // Capture the delete target so switching conversations cannot delete the wrong chat.
   const [deleteChatTarget, setDeleteChatTarget] = React.useState<{ convId: number; title?: string | null } | null>(null);
-  const [showPerChatSettings, setShowPerChatSettings] = React.useState(false);
-  const [perChatSettingsTab, setPerChatSettingsTab] = React.useState<PerChatSettingsTab>('notifications');
   // ADR-0059 §4.6: paint Call button as active while a call is running.
   const callActive = useCallStore((s) => s.state !== 'idle');
 
-  // ADR-0031 WP-24 FE follow-up (rev 2): Move queue mirrors forward queue —
-  // user accumulates cyan chips above input, navigates to a different chat
-  // via the inbox panel, then sends. Chips become quoted blocks (built in
-  // useEventHandlers, same as forward). Queue PERSISTS across conv switches.
-  // If the user tries to send while still in the source chat, InputArea
-  // shows an amber warning + opens the inbox panel.
+  // Move drafts persist across chats; InputArea prevents sending back to the source.
   const activeConversationData = React.useMemo(() => {
     if (chatPartner?.type === 'agent') return aiConversationData;
     if (chatPartner?.type === 'user' || chatPartner?.type === 'group') return userConversationData;
@@ -186,10 +180,10 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
   }, [pinMutation]);
   React.useEffect(() => {
     if (pinMutation.capReached) {
-      showToast('Достигнут лимит закреплённых (50). Открепите что-то и попробуйте снова.', 'error');
+      showToast(t('aiChat.ui.pinnedMessageLimitReached50UnpinAMessageAndTryAgain'), 'error');
       pinMutation.clearCapNotice();
     }
-  }, [pinMutation.capReached, pinMutation.clearCapNotice]);
+  }, [pinMutation.capReached, pinMutation.clearCapNotice, t]);
 
   // ADR-0068 WP-E follow-up — PinnedBanner is controlled by a toolbar button
   // (Pin icon next to Scheduled). State lifted into the panel so the badge
@@ -205,8 +199,8 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
   // on MessagesArea/ChatTurn, re-rendering every heavy agent bubble on each
   // keystroke (typing lag in long chats). Memoize on the underlying user.
   const messagesCurrentUser = React.useMemo(
-    () => (currentUser ? { name: currentUser.name || currentUser.email || 'User', id: Number(currentUser.id) } : undefined),
-    [currentUser],
+    () => (currentUser ? { name: currentUser.name || currentUser.email || t('aiChat.ui.user'), id: Number(currentUser.id) } : undefined),
+    [currentUser, t],
   );
 
   // Stable callbacks for MessagesArea — prevent re-render on every keystroke.
@@ -326,18 +320,20 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
     ],
   );
 
-  if (!isOpen) return null;
+  const humanPresence = useHumanChatPresence(activeConversationId, isOpen);
 
+  if (!isOpen) return null;
   return (
     <ValidSlugsProvider mentionUsers={availableMentionUsers} slashAgents={availableSlashAgents}>
-    <MentionUsersProvider agents={agents}>
+    <MentionUsersProvider agents={mentionAgents} mentionUsers={availableMentionUsers} spaceId={effectiveSpaceId}>
+    <HumanChatPresenceContext.Provider value={humanPresence}>
     <>
+      {logic.conversationSpace && <ConversationSpaceDialog binding={logic.conversationSpace} userId={currentUser?.id ? Number(currentUser.id) : undefined} />}
       {isMobile && (
-        <div role="button" tabIndex={0} className="fixed top-14 left-0 right-0 bottom-0 bg-black/50 z-30"
-          onClick={closeChat} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') closeChat(); }} />
+        <button type="button" aria-label={t('aiChat.ui.close')} className="fixed top-14 left-0 right-0 bottom-0 bg-black/50 z-30" onClick={closeChat} />
       )}
 
-      <div className={cn('bg-[var(--bg-primary)] shadow-lg flex',
+      <div data-chat-presence={activeConversationId} className={cn('bg-[var(--bg-primary)] shadow-lg flex',
         isMobile ? 'fixed top-14 left-0 right-0 z-40 flex-col overflow-hidden' : 'relative z-30 flex-shrink-0 h-full border-l border-[var(--border-primary)]', className)}
         style={isMobile ? { bottom: `${mobileKeyboardHeight > 0 ? mobileKeyboardHeight : 0}px` } : { width: fillContainer ? '100%' : panelWidth }}>
 
@@ -345,7 +341,9 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
             Hidden in fillContainer (embed split): the host shell's divider owns
             resizing; an in-panel handle would un-glue and re-open the gap. */}
         {!isMobile && !fillContainer && (
-          <div className="w-1 cursor-ew-resize hover:bg-purple-500/50 transition-colors flex-shrink-0 touch-none"
+          <div role="slider" tabIndex={0} aria-label="Ширина чата" aria-orientation="horizontal" aria-valuenow={panelWidth} aria-valuemin={320} aria-valuemax={resize.panelMaxWidth}
+            onKeyDown={resize.handleWidthResizeKeyDown}
+            className="focus-visible:outline focus-visible:outline-2 w-1 cursor-ew-resize hover:bg-purple-500/50 transition-colors flex-shrink-0 touch-none"
             onMouseDown={resize.handleWidthResizeStart}
             onTouchStart={resize.handleWidthTouchResizeStart}
             style={{ backgroundColor: isResizingWidth ? 'var(--color-purple-500)' : 'transparent' }} />
@@ -359,7 +357,11 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
               {/* 1. Panel Toolbar — tabs (inbox, contacts, agents, tasks, settings, new, close) */}
               <ChatPanelToolbar
                 chatMode={chatMode} setChatMode={setChatMode}
-                activePanel={activePanel} togglePanel={resize.togglePanel}
+                activePanel={activePanel} togglePanel={panel => {
+                  setChatSettings(null);
+                  if (chatSettings && panel === 'settings') setActivePanel('settings');
+                  else resize.togglePanel(panel);
+                }}
                 agents={agents} users={users}
                 totalUnreadCount={totalUnreadCount} refetchInbox={refetchInbox}
                 createNewConversation={createNewConversation} closeChat={closeChat}
@@ -383,16 +385,17 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                   (panelMode === 'collapsed' || (isMobile && panelMode === 'default')) ? { height: 'min(400px, 40vh)' } :
                   panelMode === 'default' && !isMobile ? { maxHeight: '50%' } : undefined
                 }>
-                  <div className="flex-1 overflow-y-auto">{renderPanelContent()}</div>
+                  <div className="flex-1 overflow-y-auto">{conversationSettings ?? renderPanelContent()}</div>
                   {/* Tasks/Documents/Contacts merge their statusbar + maximize toggle into
                    *  their own list footer to avoid a duplicate row. */}
                   {activePanel !== 'tasks' && activePanel !== 'documents' && activePanel !== 'contacts' && (
                     <div className="flex-shrink-0 h-6 px-2 flex items-center justify-between border-t border-[var(--border-secondary)] bg-[var(--bg-tertiary)]">
                       <div className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-3">
-                        {activePanel === 'ai-agents' && <span>{agents.length} агентов</span>}
-                        {activePanel === 'settings' && <span>Настройки чата</span>}
+                        {activePanel === 'ai-agents' && <span>{t('aiChat.ui.agentCount', { count: agents.length })}</span>}
+                        {activePanel === 'settings' && <span>{t('aiChat.ui.chatSettings')}</span>}
                       </div>
-                      <button onClick={resize.togglePanelMode}
+                      <button type="button" onClick={resize.togglePanelMode}
+                        aria-label={t(panelMode === 'fullscreen' || panelMode === 'expanded' ? 'aiChat.ui.collapse' : 'aiChat.ui.expand')}
                         className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded transition-colors">
                         {panelMode === 'fullscreen' ? <ChevronDown className="w-4 h-4" /> :
                          panelMode === 'collapsed' ? <ChevronUp className="w-4 h-4" /> :
@@ -414,6 +417,7 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                 conversationMode={conversationMode}
                 isAgentProcessing={isAgentProcessing}
                 processingAgentName={processingAgentName}
+                activeAgents={activeAgents}
               />
 
               {/* Bound rows strip + row binding picker */}
@@ -433,22 +437,6 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                   return [...prev, br];
                 })}
               />
-
-              {/* ADR-0064 §Per-chat: tabbed inline panel — same slot as the
-                * row-binding picker. Reacts to ⋮ menu entries (notifications /
-                * participants). In wide mode the chat-area is narrower
-                * (activePanel sits on the right), and the panel fits inside it. */}
-              {showPerChatSettings && (currentConversationId || userConversationId) && (
-                <Suspense fallback={<div className="text-xs text-[var(--text-tertiary)] p-2">Loading…</div>}>
-                  <PerChatSettingsInline
-                    conversationId={(currentConversationId ?? userConversationId) as number}
-                    conversationTitle={resolvedConvTitle}
-                    initialTab={perChatSettingsTab}
-                    currentUserId={currentUser?.id ? Number(currentUser.id) : null}
-                    onClose={() => setShowPerChatSettings(false)}
-                  />
-                </Suspense>
-              )}
 
               {/* ADR-0059 §4.6: CallBar mounts above the toolbar. Returns null while call state is idle. */}
               <CallBar />
@@ -476,7 +464,7 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                 showRowBinding={showRowBinding}
                 setShowRowBinding={setShowRowBinding as any}
                 boundRowsCount={(boundRows as any[]).length}
-                currentConversationId={currentConversationId ?? userConversationId}
+                currentConversationId={selectedConversationId}
                 onSearchToggle={() => { setChatSearchActive(prev => !prev); setChatSearchQuery(''); setChatSearchCurrentMatch(0); }}
                 searchActive={chatSearchActive}
                 searchQuery={chatSearchQuery}
@@ -505,26 +493,9 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                       : 'other'
                   );
                 }}
-                onNotificationsOpen={() => {
-                  const convId = userConversationId || currentConversationId;
-                  if (!convId) return;
-                  if (showPerChatSettings && perChatSettingsTab === 'notifications') {
-                    setShowPerChatSettings(false);
-                  } else {
-                    setPerChatSettingsTab('notifications');
-                    setShowPerChatSettings(true);
-                  }
-                }}
-                onParticipantsOpen={() => {
-                  const convId = userConversationId || currentConversationId;
-                  if (!convId) return;
-                  if (showPerChatSettings && perChatSettingsTab === 'participants') {
-                    setShowPerChatSettings(false);
-                  } else {
-                    setPerChatSettingsTab('participants');
-                    setShowPerChatSettings(true);
-                  }
-                }}
+                onSettingsOpen={() => openChatSettings('settings')}
+                onNotificationsOpen={() => openChatSettings('notifications')}
+                onParticipantsOpen={() => openChatSettings('participants')}
                 onDeleteChat={() => {
                   const convId = userConversationId || currentConversationId;
                   if (!convId) return;
@@ -543,14 +514,7 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                 callActive={callActive}
               />
 
-              {/* ADR-0068 WP-E follow-up — PinnedBanner sits between the
-                  ChatToolbar and the scrollable MessagesArea. Filtering +
-                  rev-chrono sort happen inside the banner; we just hand it
-                  the full `displayMessages` list and the existing unpin
-                  handler. `onJump` scrolls to the existing
-                  `data-message-id={id}` element rendered by TurnBody. The
-                  expanded flag is owned by the Pin button in ChatToolbar
-                  above (controlled `open` + `onOpenChange`). */}
+              {/* Pinned messages share the toolbar toggle and existing unpin handler. */}
               <PinnedBanner
                 messages={displayMessages as any}
                 open={pinnedListOpen}
@@ -564,6 +528,11 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                   if (el) {
                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
                   }
+                }}
+                activeAgents={activeAgents}
+                onForward={(messageId) => {
+                  const message = displayMessages.find(item => item.id === messageId);
+                  if (message) handleForwardMessage(message);
                 }}
                 onUnpin={(messageId) => handleUnpinMessage(Number(messageId))}
                 capReached={pinMutation.capReached}
@@ -607,8 +576,8 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                 fetchToolStepsPreview={chatMode === 'ai' ? aiFetchToolStepsPreview : userFetchToolStepsPreview}
                 fetchFullMessage={chatMode === 'ai' ? aiFetchFullMessage : userFetchFullMessage}
                 fetchToolSteps={chatMode === 'ai' ? aiFetchToolSteps : userFetchToolSteps}
-                forwardMessageIds={forwardMessages.length > 0 ? new Set(forwardMessages.map(m => m.id).filter(Boolean) as number[]) : undefined}
-                moveMessageIds={moveMessages.length > 0 ? new Set(moveMessages.map(m => m.id).filter(Boolean) as number[]) : undefined}
+                forwardMessageIds={forwardMessages.length > 0 ? new Set(forwardMessages.map(m => m.id).filter(Boolean)) : undefined}
+                moveMessageIds={moveMessages.length > 0 ? new Set(moveMessages.map(m => m.id).filter(Boolean)) : undefined}
                 setForwardMessages={setForwardMessages as any}
                 onNavigateToConversation={handleNavigateToConversation}
                 conversationId={activeConversationId}
@@ -631,11 +600,11 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                   } catch (err) {
                     const message = err instanceof Error ? err.message : String(err);
                     if (/already_processed/i.test(message) || message.includes('409')) {
-                      showToast('Сообщение уже обработано', 'info');
+                      showToast(t('aiChat.ui.messageAlreadyProcessed'), 'info');
                       return;
                     }
                     logger.error('send-now failed:', err);
-                    showToast(`Не удалось отправить: ${message}`, 'error');
+                    showToast(t('aiChat.ui.sendFailed', { message: message }), 'error');
                   }
                 }}
                 onEdit={(msg) => {
@@ -645,7 +614,7 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                       id: Date.now(),
                       content: inputValue,
                       role: 'user',
-                      sender_name: 'Черновик',
+                      sender_name: t('aiChat.ui.draft'),
                     } as any]);
                   }
                   // Load scheduled message content into input
@@ -656,6 +625,18 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                   scheduled.cancelScheduledMessage(msg.id);
                 }}
               />
+            )}
+
+            {logic.voiceNote.sendError && (
+              <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+                <p role="alert" className="w-full text-sm text-[var(--color-error)]">{logic.voiceNote.sendError}</p>
+                <Button type="button" size="sm" disabled={isTranscribing} onClick={() => void logic.voiceNote.retry()}>
+                  {t('aiChat.ui.retryVoiceNote')}
+                </Button>
+                <Button type="button" size="sm" variant="ghost" disabled={isTranscribing} onClick={logic.voiceNote.discard}>
+                  {t('aiChat.ui.discardVoiceNote')}
+                </Button>
+              </div>
             )}
 
             <InputArea
@@ -676,7 +657,8 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
               markdownEnabled={markdownEnabled} setMarkdownEnabled={setMarkdownEnabled as any}
               showTerminal={showTerminal} setShowTerminal={setShowTerminal as any}
               isRecording={isRecording} isTranscribing={isTranscribing}
-              voiceError={voiceError} recordingDuration={recordingDuration}
+              recordingDisabled={!!logic.voiceNote.pendingFile} isSendingVoiceNote={logic.voiceNote.isSending}
+              voiceError={voiceError} recordingDuration={recordingDuration} recordingStream={recordingStream}
               startRecording={startRecording} stopRecording={stopRecording} cancelRecording={cancelRecording}
               voiceMode={voiceMode}
               isLoading={isLoading} isAgentProcessing={isAgentProcessing} stopAgent={stopAgent}
@@ -732,18 +714,18 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
               </div>
             )}
           </div>
-
           {/* Sidebar for wide mode */}
           {isWideMode && activePanel !== 'none' && (
             <>
-              <div role="separator"
+              <div role="slider" tabIndex={0} aria-label="Ширина панели чата" aria-orientation="horizontal" aria-valuenow={sidebarWidth} aria-valuemin={300} aria-valuemax={500}
+                onKeyDown={resize.handleSidebarResizeKeyDown}
                 onMouseDown={resize.handleSidebarResizeStart}
                 onTouchStart={resize.handleSidebarTouchResizeStart}
                 className={cn("w-1 cursor-col-resize hover:bg-[var(--color-primary-500)]/30 transition-colors flex-shrink-0 touch-none",
                   isResizingSidebar && "bg-[var(--color-primary-500)]/50")} />
               <div className="border-l border-[var(--border-primary)] flex-shrink-0 overflow-hidden flex flex-col bg-[var(--bg-secondary)]"
                 style={{ width: sidebarWidth }}>
-                <div className="flex-1 overflow-y-auto">{renderPanelContent()}</div>
+                <div className="flex-1 overflow-y-auto">{conversationSettings ?? renderPanelContent()}</div>
               </div>
             </>
           )}
@@ -803,6 +785,7 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
 
       </div>
     </>
+    </HumanChatPresenceContext.Provider>
     </MentionUsersProvider>
     </ValidSlugsProvider>
   );

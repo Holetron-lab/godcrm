@@ -3,6 +3,24 @@
 
 import { log, matchesAIKeywords } from './helpers.js';
 import { aggregateContent } from './aggregator.js';
+import { getSecret } from '../secrets/getSecret.js';
+
+// Digest topic — everything lands in one place now ("IT News", thread 877).
+// Overridable per-automation via action_config.topic so retuning the feed is a
+// DB edit, not a deploy.
+const DEFAULT_DIGEST_TOPIC = 'ai_news';
+
+// Cheap summariser/translator. Not the agent loop: one stateless completion per
+// item, no tools, no file access.
+const SUMMARY_MODEL = process.env.NEWS_DIGEST_MODEL || 'gpt-4o-mini';
+
+const SUMMARY_SYSTEM_PROMPT =
+  'You are the editor of a private IT/AI news feed for a Russian-speaking founder. ' +
+  'For the item you are given, write a factual summary: what happened and why it matters. ' +
+  '2-3 sentences, no hype, no marketing, no filler like "this article discusses". ' +
+  'Then translate that summary into Russian — same meaning, natural Russian, keep product ' +
+  'and company names in Latin script. ' +
+  'Reply with JSON only: {"summary_en": "...", "summary_ru": "..."}';
 
 /**
  * Process a news item with AI: generate summary, clean text, reliability score
@@ -51,7 +69,7 @@ export async function processNewsWithAI(item) {
   // Determine source domain or platform
   let sourceDomain = item.source || '';
   if (item.url) {
-    try { sourceDomain = new URL(item.url).hostname.replace('www.', ''); } catch {}
+    try { sourceDomain = new URL(item.url).hostname.replace('www.', ''); } catch { /* Keep the supplied source when the URL cannot be parsed. */ }
   }
 
   let score = sourceScores[sourceDomain] || sourceScores[item.source] || 50;
@@ -82,74 +100,127 @@ export async function processNewsWithAI(item) {
   return enhanced;
 }
 
+/** Escape the three characters Telegram's HTML parse mode cares about. */
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** Strip ```json fences an LLM may wrap the payload in. */
+function stripCodeFence(text) {
+  return String(text || '').replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+}
+
 /**
- * Format a processed news item for Telegram group topic
+ * Write a real summary of the item and its Russian translation.
+ * One stateless OpenAI completion; on any failure the caller falls back to the
+ * heuristic `ai_summary` and simply publishes without the spoiler block.
  * @param {object} item - Processed item from processNewsWithAI
- * @returns {string} Formatted Telegram message (Markdown)
+ * @returns {Promise<{summary_en: string, summary_ru: string}|null>}
+ */
+export async function summariseAndTranslate(item) {
+  const apiKey = await getSecret('openai_api_key', 'OPENAI_API_KEY');
+  if (!apiKey) {
+    log.warn('news digest: no OpenAI key — publishing without summary/translation');
+    return null;
+  }
+
+  const body = [
+    `TITLE: ${item.title || ''}`,
+    `SOURCE: ${item.source_name || item.source || ''}`,
+    `URL: ${item.url || ''}`,
+    `TEXT: ${(item.clean_text || '').slice(0, 1500)}`,
+  ].join('\n');
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: SUMMARY_MODEL,
+        max_tokens: 600,
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
+          { role: 'user', content: body },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      log.warn({ status: response.status }, 'news digest: summariser HTTP error');
+      return null;
+    }
+
+    const data = await response.json();
+    const raw = stripCodeFence(data?.choices?.[0]?.message?.content);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    const en = String(parsed.summary_en || '').trim();
+    const ru = String(parsed.summary_ru || '').trim();
+    if (!en && !ru) return null;
+
+    return { summary_en: en, summary_ru: ru };
+  } catch (err) {
+    log.warn({ err: err.message, title: item.title }, 'news digest: summarise/translate failed');
+    return null;
+  }
+}
+
+/**
+ * Format a processed news item for the Telegram digest topic.
+ * Layout: title → summary → Russian translation hidden under a spoiler →
+ * one metadata line. Telegram HTML parse mode (`<tg-spoiler>` has no Markdown
+ * equivalent, which is why this is not Markdown).
+ * @param {object} item - Processed item, optionally carrying summary_en/summary_ru
+ * @returns {string} Formatted Telegram message (HTML)
  */
 export function formatNewsForTopic(item) {
   const lines = [];
+  const marker = item.is_ai ? '🤖' : '🖥';
 
-  // Title
-  const safeTitle = (item.title || 'Untitled').replace(/([_*`\[\]])/g, '\\$1');
-  lines.push(`*${safeTitle}*`);
+  lines.push(`${marker} <b>${escapeHtml(item.title || 'Untitled')}</b>`);
   lines.push('');
 
-  // AI Summary
-  if (item.ai_summary) {
-    const safeSummary = item.ai_summary.replace(/([_*`\[\]])/g, '\\$1');
-    lines.push(`${safeSummary}`);
+  const summary = item.summary_en || item.ai_summary;
+  if (summary) {
+    lines.push(escapeHtml(summary));
     lines.push('');
   }
 
-  // Clean original text (truncated)
-  if (item.clean_text && item.clean_text.length > 10) {
-    const truncated = item.clean_text.length > 500
-      ? item.clean_text.slice(0, 500) + '...'
-      : item.clean_text;
-    const safeText = truncated.replace(/([_*`\[\]])/g, '\\$1');
-    lines.push(`_Оригинал:_ ${safeText}`);
+  // Russian translation — collapsed, so the topic stays scannable in one language.
+  if (item.summary_ru) {
+    lines.push(`<tg-spoiler>🇷🇺 ${escapeHtml(item.summary_ru)}</tg-spoiler>`);
     lines.push('');
   }
 
-  // Source link (NOT forwarded — direct link)
-  if (item.url) {
-    lines.push(`[Источник](${item.url})`);
-  }
-
-  // Source metadata
-  const sourceParts = [];
-  if (item.source_name) sourceParts.push(item.source_name);
-  else if (item.source) sourceParts.push(item.source);
-  if (item.score) sourceParts.push(`Score: ${item.score}`);
-  if (sourceParts.length > 0) {
-    lines.push(`_${sourceParts.join(' | ')}_`);
-  }
-
-  // Reliability bar
   const reliabilityEmoji =
     item.reliability_score >= 85 ? '🟢' :
     item.reliability_score >= 65 ? '🟡' :
     item.reliability_score >= 40 ? '🟠' : '🔴';
 
-  lines.push('');
-  lines.push(`${reliabilityEmoji} *Надёжность:* ${item.reliability_score}/100 — ${item.reliability_label}`);
-
-  if (item.fact_check_notes) {
-    lines.push(`_${item.fact_check_notes}_`);
-  }
+  const meta = [`${reliabilityEmoji} ${item.reliability_score}/100`];
+  if (item.source_name || item.source) meta.push(escapeHtml(item.source_name || item.source));
+  if (item.score) meta.push(`${item.score} pts`);
+  if (item.url) meta.push(`<a href="${escapeHtml(item.url)}">источник</a>`);
+  lines.push(meta.join(' · '));
 
   return lines.join('\n');
 }
 
 /**
- * Aggregate, process with AI, and publish news to Telegram group topic
- * Sends general news to 'news' topic, AI-specific to 'ai_news' topic
- * @param {object} options - { sources, maxItems, publishToGroup }
+ * Aggregate, summarise, translate and publish news to a single Telegram topic.
+ * Both feeds were merged into "IT News" (2026-09-07) — the old split between the
+ * `news` and `ai_news` topics is gone; `news` is now free for a separate,
+ * non-IT feed.
+ * @param {object} options - { sources, maxItems, topic }
  * @returns {Promise<object>} Summary of processed and published items
  */
 export async function aggregateAndPublishNews(options = {}) {
-  const { sources = ['hackernews', 'rss', 'reddit'], maxItems = 5 } = options;
+  const { sources = ['hackernews', 'rss', 'reddit'], maxItems = 5, topic = DEFAULT_DIGEST_TOPIC } = options;
   const { sendToTopic } = await import('../TelegramService.js');
 
   log.info({ sources, maxItems }, 'Starting AI news aggregation pipeline...');
@@ -169,26 +240,37 @@ export async function aggregateAndPublishNews(options = {}) {
   for (const rawItem of topItems) {
     try {
       const enhanced = await processNewsWithAI(rawItem);
+      enhanced.is_ai = matchesAIKeywords(`${enhanced.title} ${enhanced.ai_summary || ''}`);
+
+      const written = await summariseAndTranslate(enhanced);
+      if (written) {
+        enhanced.summary_en = written.summary_en;
+        enhanced.summary_ru = written.summary_ru;
+      }
+
       processed.push(enhanced);
     } catch (err) {
       log.warn({ err: err.message, title: rawItem.title }, 'Failed to process item with AI');
     }
   }
 
-  // Step 3: Publish to group topics
-  let publishedNews = 0;
-  let publishedAI = 0;
+  // Step 3: Publish — one topic for the whole digest
+  let published = 0;
+  let translated = 0;
 
   for (const item of processed) {
     const message = formatNewsForTopic(item);
-    const isAI = matchesAIKeywords(item.title + ' ' + (item.ai_summary || ''));
-    const topic = isAI ? 'ai_news' : 'news';
 
     try {
-      const result = await sendToTopic(topic, message);
+      const result = await sendToTopic(topic, message, {
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      });
       if (result.success) {
-        if (isAI) publishedAI++;
-        else publishedNews++;
+        published++;
+        if (item.summary_ru) translated++;
+      } else {
+        log.warn({ err: result.error, title: item.title }, 'Failed to publish to topic');
       }
       // Small delay between messages to avoid Telegram rate limits
       await new Promise(r => setTimeout(r, 1500));
@@ -201,8 +283,9 @@ export async function aggregateAndPublishNews(options = {}) {
     total_aggregated: aggregationResult.total_fetched,
     total_new: aggregationResult.total_new,
     processed: processed.length,
-    published_news: publishedNews,
-    published_ai_news: publishedAI,
+    topic,
+    published,
+    translated,
     errors: aggregationResult.errors,
   };
 

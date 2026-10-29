@@ -2,6 +2,7 @@
  * Expandable row showing granular access overrides for a user.
  */
 
+import { useLanguage, type LanguageContextValue } from '@/shared/i18n/LanguageContext';
 import React from 'react';
 import { Layers } from 'lucide-react';
 import type { PermissionEntityType } from '@/shared/types/user-access.types';
@@ -10,6 +11,7 @@ import { LEVEL_COLORS, LEVEL_ICONS } from './constants';
 import { getGranularCounts } from './utils';
 
 const renderAccessGrid = (
+  t: LanguageContextValue['t'],
   label: string,
   entityType: PermissionEntityType,
   ownerArr: string[],
@@ -34,11 +36,11 @@ const renderAccessGrid = (
       </div>
       <div className="grid grid-cols-5 gap-1 text-[10px]">
         {[
-          { label: 'Owner', arr: ownerArr, color: 'bg-yellow-500/10 text-yellow-400' },
-          { label: 'Admin', arr: adminArr, color: 'bg-purple-500/10 text-purple-400' },
-          { label: 'Editor', arr: editorArr, color: 'bg-blue-500/10 text-blue-400' },
-          { label: 'Viewer', arr: viewerArr, color: 'bg-green-500/10 text-green-400' },
-          { label: 'Denied', arr: deniedArr, color: 'bg-red-500/10 text-red-400' },
+          { label: t('userAccess.roles.owner'), arr: ownerArr, color: 'bg-yellow-500/10 text-yellow-400' },
+          { label: t('userAccess.roles.admin'), arr: adminArr, color: 'bg-purple-500/10 text-purple-400' },
+          { label: t('userAccess.roles.editor'), arr: editorArr, color: 'bg-blue-500/10 text-blue-400' },
+          { label: t('userAccess.roles.viewer'), arr: viewerArr, color: 'bg-green-500/10 text-green-400' },
+          { label: t('userAccess.roles.denied'), arr: deniedArr, color: 'bg-red-500/10 text-red-400' },
         ].map(({ label: lbl, arr, color }) => (
           <div key={lbl} className={`p-1 rounded ${color}`}>
             <div className="font-medium">{lbl}</div>
@@ -51,6 +53,7 @@ const renderAccessGrid = (
 };
 
 export const GranularAccessDetails = ({ user }: { user: SpaceUserRow }) => {
+  const { t } = useLanguage();
   const counts = getGranularCounts(user);
 
   return (
@@ -58,12 +61,13 @@ export const GranularAccessDetails = ({ user }: { user: SpaceUserRow }) => {
       <div className="flex items-center gap-2">
         <Layers className="w-4 h-4 text-[var(--accent-primary)]" />
         <span className="text-xs font-medium text-[var(--text-secondary)]">
-          Гранулярные переопределения для {user.name}
+          {t('userAccess.panel.granularAccessFor', { name: user.name })}
         </span>
       </div>
 
       {renderAccessGrid(
-        'Проекты',
+        t,
+        t('userAccess.panel.levels.project'),
         'project',
         user.project_owner ?? [],
         user.project_admin ?? [],
@@ -73,7 +77,8 @@ export const GranularAccessDetails = ({ user }: { user: SpaceUserRow }) => {
       )}
 
       {renderAccessGrid(
-        'Таблицы',
+        t,
+        t('userAccess.panel.levels.table'),
         'table',
         user.table_owner ?? [],
         user.table_admin ?? [],
@@ -83,7 +88,8 @@ export const GranularAccessDetails = ({ user }: { user: SpaceUserRow }) => {
       )}
 
       {renderAccessGrid(
-        'Колонки',
+        t,
+        t('userAccess.panel.levels.column'),
         'column',
         user.column_owner ?? [],
         user.column_admin ?? [],
@@ -94,7 +100,7 @@ export const GranularAccessDetails = ({ user }: { user: SpaceUserRow }) => {
 
       {counts.total === 0 && (
         <p className="text-xs text-[var(--text-tertiary)] italic">
-          Нет гранулярных переопределений. Используется только базовая роль на уровне Space.
+          {t('userAccess.panel.noOverrides')}
         </p>
       )}
     </div>

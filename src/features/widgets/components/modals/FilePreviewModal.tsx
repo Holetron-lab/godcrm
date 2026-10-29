@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { useState, useEffect, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { X, Image, File, ExternalLink, Download } from 'lucide-react';
 import type { AttachedFile } from './card-detail-types';
@@ -9,6 +10,7 @@ interface FilePreviewModalProps {
 }
 
 export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -51,17 +53,29 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="relative bg-[var(--bg-secondary)] rounded-xl shadow-2xl max-w-5xl max-h-[90vh] w-full flex flex-col overflow-hidden">
+    <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/70" />
+        <Dialog.Content
+          aria-modal="true"
+          aria-describedby={undefined}
+          onOpenAutoFocus={() => {
+            returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[80] bg-[var(--bg-secondary)] rounded-xl shadow-2xl max-w-5xl max-h-[90vh] w-[calc(100vw-2rem)] flex flex-col overflow-hidden"
+        >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             {isImage ? <Image className="w-5 h-5 text-primary-500" /> : <File className="w-5 h-5 text-[var(--text-tertiary)]" />}
-            <span className="font-medium text-[var(--text-primary)] truncate">{file.name}</span>
-            {isText && <span className="text-xs px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-tertiary)]">{getLanguageClass(file.name)}</span>}
+            <Dialog.Title className="font-medium text-[var(--text-primary)] truncate">{file.name}</Dialog.Title>
+            {isText && <span className="text-xs px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)]">{getLanguageClass(file.name)}</span>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <a
               href={file.url}
               target="_blank"
@@ -80,6 +94,8 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
               <Download className="w-4 h-4" />
             </a>
             <button
+              aria-label="Закрыть"
+              type="button"
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
             >
@@ -135,8 +151,9 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

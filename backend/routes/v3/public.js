@@ -26,6 +26,7 @@ import { getEffectiveRegistrationPolicy } from '../../services/registrationPolic
 // bottom — the cycle is safe (they are hoisted function declarations called
 // only at request time).
 import { mcpPublicHandler } from '../../services/mcp/publicMcp.js';
+import publicFormsRouter from './public-forms.js';
 
 const router = express.Router();
 
@@ -34,6 +35,10 @@ router.use(publicAbuseGuard);
 
 // Apply public rate limiter to all routes in this router
 router.use(publicRateLimit);
+
+// Published 'custom' forms (/forms/:tableId link from the FormBuilder, chat 3660).
+// Optional auth inside; inherits the abuse guard + rate limit above.
+router.use('/forms', publicFormsRouter);
 
 /**
  * ALL /api/v3/public/s/:slug/mcp — anonymous, no-signup MCP endpoint scoped to

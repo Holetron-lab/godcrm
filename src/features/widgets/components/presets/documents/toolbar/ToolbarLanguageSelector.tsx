@@ -1,11 +1,14 @@
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useDocumentsContext } from '../DocumentsContext';
 
 export function ToolbarLanguageSelector() {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
 
   return (
     <select
+      aria-label={t('documents.contentLanguage')}
       value={ctx.currentLanguage}
       onChange={(e) => ctx.setCurrentLanguage(e.target.value)}
       className={cn(

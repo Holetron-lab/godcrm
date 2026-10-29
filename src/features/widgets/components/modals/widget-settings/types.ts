@@ -8,7 +8,7 @@ export interface WidgetSettingsColumnProps {
   allDisplayableColumns: ColumnModel[];
   loadingColumns: boolean;
   creatingColumn: boolean;
-  handleCreatePresetColumn: (preset: 'color' | 'priority' | 'status' | 'dependency' | 'flow') => Promise<void>;
+  handleCreatePresetColumn: (preset: 'color' | 'priority' | 'status' | 'dependency' | 'flow' | 'assignee') => Promise<void>;
 }
 
 export interface KanbanSettingsProps extends WidgetSettingsColumnProps {

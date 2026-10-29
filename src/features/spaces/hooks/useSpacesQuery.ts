@@ -37,6 +37,10 @@ export const useSpacesQuery = () => {
       }
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
+    // Another member can change our role while this session stays open.
+    refetchOnWindowFocus: 'always',
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     retry: 1
   });
 };

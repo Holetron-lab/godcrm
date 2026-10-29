@@ -70,7 +70,7 @@ export const TableGridFooter = ({
         {/* Actions column spacer */}
         {hasActionsColumn && (
           <td
-            className="sticky right-0 z-20 backdrop-blur-xl bg-white/80 dark:bg-gray-900/60 w-[50px] rounded-br-2xl border-l border-[var(--border-primary)]"
+            className="sticky right-0 z-20 bg-[var(--bg-primary)] w-[50px] rounded-br-2xl border-l border-[var(--border-primary)]"
             style={{ boxShadow: 'inset 1px 0 0 0 rgba(255, 255, 255, 0.3)' }}
           />
         )}

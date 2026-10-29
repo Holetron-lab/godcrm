@@ -74,8 +74,10 @@ export function AtomsListPanel() {
           </span>
         </div>
         <button
+          type="button"
+          aria-label="Закрыть панель атомов"
           onClick={() => ctx.setRightPanelOpen(false)}
-          className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)]"
+          className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
         >
           <X className="w-4 h-4" />
         </button>
@@ -85,10 +87,12 @@ export function AtomsListPanel() {
       <div className="flex border-b border-[var(--border-primary)]">
         {(['all-atoms', 'doc-atoms', 'text-blocks'] as const).map(tab => (
           <button
+            type="button"
+            aria-pressed={ctx.atomsPanelTab === tab}
             key={tab}
             onClick={() => ctx.setAtomsPanelTab(tab)}
             className={cn(
-              "flex-1 px-2 py-2 text-[10px] font-medium transition-colors",
+              "flex-1 px-2 py-2 text-[10px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-primary-500)]",
               ctx.atomsPanelTab === tab
                 ? "text-purple-400 border-b-2 border-purple-500 bg-purple-500/5"
                 : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
@@ -105,6 +109,7 @@ export function AtomsListPanel() {
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-tertiary)]" />
           <input
             type="text"
+            aria-label="Поиск атомов и текстовых блоков"
             placeholder="Поиск..."
             value={ctx.atomsPanelSearchQuery}
             onChange={(e) => ctx.setAtomsPanelSearchQuery(e.target.value)}
@@ -180,7 +185,7 @@ export function AtomsListPanel() {
 
               const displayTitle = (isAtom || hasAtomRef)
                 ? (item.atom_title || item.atom_ref || 'Без названия')
-                : (item.content?.replace(/[#*_`\[\]()>-]/g, '').trim().slice(0, 60) || 'Без содержимого');
+                : (item.content?.replace(/[#*_`[\]()>-]/g, '').trim().slice(0, 60) || 'Без содержимого');
 
               return (
                 <div
@@ -192,18 +197,20 @@ export function AtomsListPanel() {
                       : "border-transparent hover:bg-[var(--bg-tertiary)]"
                   )}
                 >
-                  <div
+                  <button
+                    type="button"
+                    aria-label={`Настройки элемента ${displayTitle}`}
                     onClick={() => {
                       ctx.setSelectedItemId(item.id);
                       ctx.setRightPanelMode('settings');
                       ctx.setRightPanelOpen(true);
                     }}
-                    className="cursor-pointer"
+                    className="block w-full text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
                   >
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1 text-xs text-[var(--text-primary)] truncate">
+                    <span className="flex items-start gap-2">
+                      <span className="flex-1 min-w-0 text-xs text-[var(--text-primary)] truncate">
                         {displayTitle}
-                      </div>
+                      </span>
                       <span className={cn(
                         "px-1.5 py-0.5 rounded text-[9px] font-mono flex-shrink-0",
                         isAtom ? "bg-purple-500/20 text-purple-400" :
@@ -212,23 +219,24 @@ export function AtomsListPanel() {
                       )}>
                         {isAtom ? '⚛ ATOM' : hasAtomRef ? '📌 REF' : 'TXT'}
                       </span>
-                    </div>
+                    </span>
 
                     {(item.atom_ref || hasAtomRef) && (
-                      <div className="mt-1 text-[10px] text-[var(--text-tertiary)] font-mono truncate">
+                      <span className="block mt-1 text-[10px] text-[var(--text-tertiary)] font-mono truncate">
                         #{item.atom_ref}
-                      </div>
+                      </span>
                     )}
+                  </button>
 
-                    {item.content && (
-                      <div className="mt-1.5 p-1.5 rounded bg-[var(--bg-tertiary)] text-[11px] leading-relaxed">
-                        <MarkdownPreview content={item.content} />
-                      </div>
-                    )}
-                  </div>
+                  {item.content && (
+                    <div className="mt-1.5 p-1.5 rounded bg-[var(--bg-tertiary)] text-[11px] leading-relaxed">
+                      <MarkdownPreview content={item.content} />
+                    </div>
+                  )}
 
                   {!ctx.isReadOnly && isTextBlock && ctx.atomsPanelTab === 'text-blocks' && (
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         ctx.setConvertToAtomItem(item);
@@ -250,6 +258,7 @@ export function AtomsListPanel() {
       {!ctx.isReadOnly && (
         <div className="px-4 py-3 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
           <button
+            type="button"
             onClick={() => {
               ctx.setConvertToAtomItem({
                 id: 0,

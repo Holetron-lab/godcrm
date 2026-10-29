@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /** TasksPanelContent — chip-style tickets panel.
  *
  * Header layout (unified with DocumentsPanelContent):
@@ -32,6 +33,7 @@ function readField(data: Record<string, unknown>, col: string): unknown {
 }
 
 export function TasksPanelContent(d: PanelContentDeps) {
+  const { t } = useLanguage();
   const qc = useQueryClient();
   const [filters, setFilters] = useState<FilterMap>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -76,8 +78,8 @@ export function TasksPanelContent(d: PanelContentDeps) {
       <div className="flex flex-col h-full px-4 py-4">
         <div className="flex flex-col items-center text-center mb-4">
           <ListTodo className="w-10 h-10 text-[var(--text-tertiary)] mb-3" />
-          <p className="text-sm text-[var(--text-secondary)] mb-1">Источник не настроен</p>
-          <p className="text-xs text-[var(--text-tertiary)]">Выберите таблицу для задач</p>
+          <p className="text-sm text-[var(--text-secondary)] mb-1">{t('aiChat.ui.sourceIsNotConfigured')}</p>
+          <p className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.selectATaskTable')}</p>
         </div>
         <TasksSourceInlineSelector
           defaultSpaceId={d.effectiveSpaceId}
@@ -110,7 +112,7 @@ export function TasksPanelContent(d: PanelContentDeps) {
               type="text"
               value={d.tasksSearch}
               onChange={(e) => d.setTasksSearch(e.target.value)}
-              placeholder="Поиск задач..."
+              placeholder={t('aiChat.ui.searchTasks')}
               className="w-full pl-7 pr-7 py-1 text-xs rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
             />
             {d.tasksSearch && (
@@ -132,7 +134,7 @@ export function TasksPanelContent(d: PanelContentDeps) {
           <button
             type="button"
             onClick={() => setAddModalOpen(true)}
-            title="Создать задачу"
+            title={t('aiChat.ui.createTask')}
             className="p-1 rounded transition-colors text-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/10"
           >
             <Plus className="w-3.5 h-3.5" />

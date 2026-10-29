@@ -9,6 +9,10 @@ vi.mock('../../../database/connection.js', () => ({
   dbGet: vi.fn(),
   dbAll: vi.fn(),
   dbRun: vi.fn(),
+  withTransactionAsync: async fn => {
+    const { dbGet, dbRun } = await import('../../../database/connection.js');
+    return fn({ get: dbGet, run: dbRun });
+  },
   isPostgres: vi.fn(() => false),
   safeJsonParse: vi.fn((str, def) => {
     if (typeof str === 'object') return str;
@@ -88,7 +92,7 @@ import {
   buildHandoffProtocol,
   buildDelegationInstructions,
 } from '../agent-execution-shared.js';
-import { dbGet, dbAll, dbRun } from '../../../database/connection.js';
+import { dbGet, dbAll, dbRun, isPostgres } from '../../../database/connection.js';
 
 describe('ADR-093: Shared Agent Execution Services', () => {
 
@@ -325,7 +329,11 @@ describe('ADR-093: Shared Agent Execution Services', () => {
         expect(result).toContain('table_id: 100');
       });
 
-      it('should include bound row context in agent mode (reference only)', async () => {
+      // Reference-only in agent mode was dropped on 2026-05-04: agent/read mode
+      // showed a bare reference and forced an extra get_table_row round-trip, so
+      // the block now carries full data in every mode (system-prompt.js:245).
+      // Asserting the data must be ABSENT contradicted the shipped decision.
+      it('should include full bound row data in agent mode too', async () => {
         const result = await buildAgentSystemPrompt(
           { main_instructions: 'Test' },
           {
@@ -337,9 +345,9 @@ describe('ADR-093: Shared Agent Execution Services', () => {
           'account'
         );
 
-        expect(result).toContain('Linked row');
+        expect(result).toContain('Linked Row');
         expect(result).toContain('table_id: 100');
-        expect(result).not.toContain('"Test Task"');
+        expect(result).toContain('"Test Task"');
       });
 
       it('should include tool introspection hints', async () => {
@@ -519,6 +527,29 @@ describe('ADR-093: Shared Agent Execution Services', () => {
   // ─── loadConversationHistory ────────────────────────────────
 
   describe('loadConversationHistory()', () => {
+    it('includes persisted date and UTC time for human, agent and step messages', async () => {
+      dbAll.mockResolvedValueOnce([
+        { id: 3, content: 'Checking', role: 'assistant', content_type: 'thinking', created_at: '2026-09-14T11:39:02+03:00' },
+        { id: 2, content: 'Reply', role: 'assistant', content_type: 'text', created_at: new Date('2026-09-14T08:39:01Z') },
+        { id: 1, content: 'Hello', role: 'user', sender_name: 'Alice', content_type: 'text', created_at: '2026-09-14T08:39:00Z' },
+      ]);
+      const result = await loadConversationHistory(42, {});
+      expect(dbAll.mock.calls[0][0].split('FROM messages')[0]).toContain('m.created_at');
+      expect(result[0]).toEqual({ role: 'user', content: '[2026-09-14T08:39:00.000Z] [Alice]: Hello' });
+      expect(result[1]).toEqual({ role: 'assistant', content: '[2026-09-14T08:39:01.000Z] Reply' });
+      expect(result[2].content).toMatch(/^\[2026-09-14T08:39:02.000Z\]/);
+    });
+
+    it('does not invent a timestamp for missing or invalid dates', async () => {
+      dbAll.mockResolvedValueOnce([
+        { id: 2, content: 'Invalid', role: 'user', content_type: 'text', created_at: 'invalid' },
+        { id: 1, content: 'Missing', role: 'user', content_type: 'text', created_at: null },
+      ]);
+      expect(await loadConversationHistory(42)).toEqual([
+        { role: 'user', content: 'Missing' }, { role: 'user', content: 'Invalid' },
+      ]);
+    });
+
 
     it('should load messages from DB and format for AI API', async () => {
       // DB returns in DESC order (newest first), function reverses to chronological
@@ -1041,6 +1072,19 @@ describe('ADR-093: Shared Agent Execution Services', () => {
     // ── fetchLatestPlan() ─────────────────────────────────────
 
     describe('fetchLatestPlan()', () => {
+      it('does not read a conversation-wide plan without a runtime scope', async () => {
+        expect(await fetchLatestPlan(42)).toBeNull();
+        expect(dbGet).not.toHaveBeenCalled();
+      });
+      it.each([true, false])('filters plan context by both agent and run (postgres=%s)', async pg => {
+        isPostgres.mockReturnValue(pg);
+        dbGet.mockResolvedValueOnce(null);
+        await fetchLatestPlan(42, {agentId:21,runId:'job:101'});
+        expect(dbGet.mock.lastCall[0]).toContain('agent_id =');
+        expect(dbGet.mock.lastCall[0]).toContain('run_id');
+        expect(dbGet.mock.lastCall[1]).toEqual([42,21,'job:101']);
+        isPostgres.mockReturnValue(false);
+      });
 
       beforeEach(() => {
         dbGet.mockReset();
@@ -1056,7 +1100,7 @@ describe('ADR-093: Shared Agent Execution Services', () => {
 
         dbGet.mockResolvedValueOnce({ content: planContent, updated_at: '2026-03-05' });
 
-        const result = await fetchLatestPlan(42);
+        const result = await fetchLatestPlan(42, { agentId: 21, runId: 'job:101' });
 
         expect(result).not.toBeNull();
         expect(result.tasks).toHaveLength(2);
@@ -1066,21 +1110,21 @@ describe('ADR-093: Shared Agent Execution Services', () => {
       it('should return null when no plan message exists', async () => {
         dbGet.mockResolvedValueOnce(null);
 
-        const result = await fetchLatestPlan(42);
+        const result = await fetchLatestPlan(42, { agentId: 21, runId: 'job:101' });
         expect(result).toBeNull();
       });
 
       it('should return null when plan content is invalid JSON', async () => {
         dbGet.mockResolvedValueOnce({ content: 'not-json', updated_at: '2026-03-05' });
 
-        const result = await fetchLatestPlan(42);
+        const result = await fetchLatestPlan(42, { agentId: 21, runId: 'job:101' });
         expect(result).toBeNull();
       });
 
       it('should return null gracefully on DB error', async () => {
         dbGet.mockRejectedValueOnce(new Error('DB connection failed'));
 
-        const result = await fetchLatestPlan(42);
+        const result = await fetchLatestPlan(42, { agentId: 21, runId: 'job:101' });
         expect(result).toBeNull();
       });
     });
@@ -1199,7 +1243,7 @@ describe('ADR-093: Shared Agent Execution Services', () => {
 
         const result = await buildAgentSystemPrompt(
           { main_instructions: 'Test', planning: { enabled: true, inject_in_context: true } },
-          { conversationId: 42 },
+          { conversationId: 42, planAgentId: 21, planRunId: 'job:101' },
           'account'
         );
 
@@ -1251,6 +1295,8 @@ describe('ADR-093: Shared Agent Execution Services', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      dbGet.mockReset();
+      dbRun.mockReset();
     });
 
     // ── Validation ──────────────────────────────────────────────
@@ -1258,17 +1304,17 @@ describe('ADR-093: Shared Agent Execution Services', () => {
     describe('validation', () => {
 
       it('should reject when tasks is not an array', async () => {
-        const result = await handleManagePlan({ tasks: 'not-array' }, 42, 'TestAgent');
+        const result = await handleManagePlan({ tasks: 'not-array' }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
         expect(result).toEqual({ error: 'tasks must be a non-empty array' });
       });
 
       it('should reject when tasks is an empty array', async () => {
-        const result = await handleManagePlan({ tasks: [] }, 42, 'TestAgent');
+        const result = await handleManagePlan({ tasks: [] }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
         expect(result).toEqual({ error: 'tasks must be a non-empty array' });
       });
 
       it('should reject when tasks is missing', async () => {
-        const result = await handleManagePlan({}, 42, 'TestAgent');
+        const result = await handleManagePlan({}, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
         expect(result).toEqual({ error: 'tasks must be a non-empty array' });
       });
 
@@ -1276,28 +1322,28 @@ describe('ADR-093: Shared Agent Execution Services', () => {
         const tasks = Array.from({ length: 21 }, (_, i) => ({
           id: i + 1, title: `Task ${i + 1}`, status: 'pending',
         }));
-        const result = await handleManagePlan({ tasks }, 42, 'TestAgent');
+        const result = await handleManagePlan({ tasks }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
         expect(result).toEqual({ error: 'Maximum 20 tasks allowed in a plan' });
       });
 
       it('should reject when task id is not a number', async () => {
         const result = await handleManagePlan({
           tasks: [{ id: 'abc', title: 'Test', status: 'pending' }],
-        }, 42, 'TestAgent');
+        }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
         expect(result.error).toContain('Task id must be a number');
       });
 
       it('should reject when task title is missing', async () => {
         const result = await handleManagePlan({
           tasks: [{ id: 1, title: '', status: 'pending' }],
-        }, 42, 'TestAgent');
+        }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
         expect(result.error).toContain('Task title must be a non-empty string');
       });
 
       it('should reject when task status is invalid', async () => {
         const result = await handleManagePlan({
           tasks: [{ id: 1, title: 'Test', status: 'invalid_status' }],
-        }, 42, 'TestAgent');
+        }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
         expect(result.error).toContain('Invalid status "invalid_status"');
         expect(result.error).toContain('pending');
         expect(result.error).toContain('in_progress');
@@ -1321,7 +1367,7 @@ describe('ADR-093: Shared Agent Execution Services', () => {
             { id: 2, title: 'Step 2', status: 'in_progress' },
             { id: 3, title: 'Step 3', status: 'pending' },
           ],
-        }, 42, 'TestAgent');
+        }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
 
         // Verify plan was inserted
         expect(dbRun).toHaveBeenCalled();
@@ -1353,7 +1399,7 @@ describe('ADR-093: Shared Agent Execution Services', () => {
             { id: 1, title: 'Step 1', status: 'completed' },
             { id: 2, title: 'Step 2', status: 'completed' },
           ],
-        }, 42, 'TestAgent');
+        }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
 
         // Verify existing plan was updated in-place
         expect(dbRun).toHaveBeenCalledTimes(1);
@@ -1374,7 +1420,7 @@ describe('ADR-093: Shared Agent Execution Services', () => {
           tasks: [
             { id: 1, title: '  Spaced Title  ', status: 'blocked', note: 'waiting for review' },
           ],
-        }, 42, 'TestAgent');
+        }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
 
         const insertCall = dbRun.mock.calls[0];
         const contentArg = insertCall[1].find(arg =>
@@ -1392,7 +1438,7 @@ describe('ADR-093: Shared Agent Execution Services', () => {
 
         await handleManagePlan({
           tasks: [{ id: 1, title: 'Test', status: 'pending' }],
-        }, 42, 'MyAgent');
+        }, 42, 'MyAgent', { agentId: 21, runId: 'job:101' });
 
         const insertCall = dbRun.mock.calls[0];
         const metadataArg = insertCall[1].find(arg =>
@@ -1444,7 +1490,7 @@ describe('ADR-093: Shared Agent Execution Services', () => {
             { id: 4, title: 'T4', status: 'pending' },
             { id: 5, title: 'T5', status: 'blocked' },
           ],
-        }, 42, 'TestAgent');
+        }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
 
         expect(result).toContain('Plan updated:');
         expect(result).toContain('2/5 completed');
@@ -1463,7 +1509,7 @@ describe('ADR-093: Shared Agent Execution Services', () => {
             { id: 1, title: 'T1', status: 'completed' },
             { id: 2, title: 'T2', status: 'completed' },
           ],
-        }, 42, 'TestAgent');
+        }, 42, 'TestAgent', { agentId: 21, runId: 'job:101' });
 
         expect(result).toContain('2/2 completed');
       });
@@ -1700,6 +1746,22 @@ describe('ADR-093: Shared Agent Execution Services', () => {
       const result = buildDelegationInstructions();
       expect(result).toContain('Rule');
     });
+
+    // ADR-0181-A: chat invocation is the ONLY delegation channel. A local
+    // `claude -p` subagent carries no conversation_id / designation / write
+    // reservation, so it races the real executor over the same worktree.
+    it('should ban local subagent and workflow fan-out tools', () => {
+      const result = buildDelegationInstructions();
+      expect(result).toContain('## NO LOCAL SUBAGENTS');
+      expect(result).toContain('`Task` / `Agent`');
+      expect(result).toContain('Workflow');
+    });
+
+    it('should require one dispatch per handoff (thinking OR answer, never both)', () => {
+      const result = buildDelegationInstructions();
+      expect(result).toContain('exactly ONCE');
+      expect(result).toContain('dispatches the SAME task twice');
+    });
   });
 
   describe('ADR-077 Task 5: buildAgentSystemPrompt() with ticket context', () => {
@@ -1790,8 +1852,11 @@ describe('ADR-093: Shared Agent Execution Services', () => {
       expect(result).not.toContain('## Linked Ticket');
       expect(result).not.toContain('## Handoff Protocol');
 
-      // Should have generic bound row reference
-      expect(result).toContain('Linked row: table "Documents" (table_id: 9999, row_id: 100)');
+      // Should have the generic bound-row block. The one-line
+      // `Linked row: table "X" (…)` form was replaced by the `--- Linked Row ---`
+      // header + Table line when data was made unconditional (see above).
+      expect(result).toContain('--- Linked Row ---');
+      expect(result).toContain('Table: "Documents" (table_id: 9999, row_id: 100)');
     });
 
     it('should fall back to JSON bound row context for non-ticket tables in ask mode', async () => {

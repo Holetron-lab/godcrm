@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * TelegramChatLayout Component
  * ADR-024: Telegram-like Chat Architecture
@@ -44,11 +45,13 @@ export interface TelegramChatLayoutProps {
 }
 
 export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
+  const { t } = useLanguage();
   const {
     isOpen,
     closeChat,
     currentAgent,
     agents,
+    mentionAgents: mentionMetadata,
     messages,
     isLoading,
     isStreaming,
@@ -190,7 +193,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
   const chatPreviews: ChatPreview[] = useMemo(() => {
     return (conversations || []).map(conv => ({
       id: conv.id,
-      title: conv.title || 'Новый чат',
+      title: conv.title || t('aiChat.ui.newChat'),
       type: 'agent' as const,
       icon: agents.find(a => a.id === conv.agent_id)?.icon,
       lastMessage: conv.lastMessage ? {
@@ -205,7 +208,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
       isMuted: false,
       participantsCount: 2
     }));
-  }, [conversations, agents]);
+  }, [conversations, agents, t]);
 
   // Current chat info
   // ADR-103: status reflects both SSE streaming AND backend polling processing state
@@ -218,13 +221,13 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
     const agent = agents.find(a => a.id === conv.agent_id);
     return {
       id: conv.id,
-      title: conv.title || agent?.name || 'Чат',
+      title: conv.title || agent?.name || t('columnTypes.chat.label'),
       type: 'agent',
       icon: agent?.icon,
       status: isAgentTyping ? 'typing' : 'online',
       agentModel: agent?.model
     };
-  }, [currentConversationId, conversations, agents, isAgentTyping]);
+  }, [currentConversationId, conversations, agents, isAgentTyping, t]);
 
   // Convert messages to ChatMessageItem format (preserving contentType for agent step grouping)
   // ADR-103: Uses effectiveMessages (from useConversationMessages polling) instead of stale context messages
@@ -256,7 +259,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
         // User message with sender_id but no name (shouldn't happen after backend fix)
         sender = {
           id: msg.sender_id,
-          name: msg.sender_name || 'User',
+          name: msg.sender_name || t('aiChat.ui.user'),
           avatar: msg.sender_avatar || undefined,
           type: 'user' as const,
         };
@@ -289,7 +292,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
         pinned_at: msg.pinned_at ?? null,
       };
     });
-  }, [effectiveMessages, currentAgent]);
+  }, [effectiveMessages, currentAgent, t]);
 
   // ADR-0068 WP-E — pin/unpin mutator scoped to the current conversation. The
   // BE enforces visibility (group/agent: any participant; DM: owner) and
@@ -314,10 +317,10 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
   // attempt produces its own notice.
   useEffect(() => {
     if (pinMutation.capReached) {
-      showToast('Достигнут лимит 50 закреплённых сообщений', 'error');
+      showToast(t('aiChat.ui.limitOf50PinnedMessagesReached'), 'error');
       pinMutation.clearCapNotice();
     }
-  }, [pinMutation.capReached, pinMutation.clearCapNotice]);
+  }, [pinMutation.capReached, pinMutation.clearCapNotice, t]);
 
   // Build mention users
   // ADR-069: @ shows humans + bots, / shows agents
@@ -469,7 +472,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
       )}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
-          <h2 className="font-semibold text-[var(--text-primary)]">Чаты</h2>
+          <h2 className="font-semibold text-[var(--text-primary)]">{t('aiChat.ui.chats')}</h2>
           <button
             onClick={closeChat}
             className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
@@ -493,7 +496,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
         'flex-1 min-w-0',
         mobileView === 'list' && 'hidden sm:block'
       )}>
-        <MentionUsersProvider agents={agents}>
+        <MentionUsersProvider agents={mentionMetadata}>
         <ChatConversationView
           chat={currentChatInfo}
           messages={chatMessages}
@@ -532,7 +535,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-[var(--bg-primary)] rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] flex-shrink-0">
-              <h3 className="font-semibold text-[var(--text-primary)]">Настройки чата</h3>
+              <h3 className="font-semibold text-[var(--text-primary)]">{t('aiChat.ui.chatSettings')}</h3>
               <button
                 onClick={() => setShowSettingsModal(false)}
                 className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
@@ -552,7 +555,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
                   value={chatTitle || currentChatInfo.title}
                   onChange={(e) => setChatTitle(e.target.value)}
                   className="text-center text-lg font-semibold bg-transparent border-b border-transparent hover:border-[var(--border-primary)] focus:border-[var(--color-primary-500)] focus:outline-none px-2 py-1 text-[var(--text-primary)]"
-                  placeholder="Название чата"
+                  placeholder={t('aiChat.ui.chatName')}
                 />
                 <span className="text-xs text-[var(--text-tertiary)] mt-1">
                   {currentChatInfo.agentModel || currentChatInfo.type}
@@ -564,20 +567,17 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2">
                     <Link2 className="w-4 h-4" />
-                    Привязки к записям
-                  </label>
+                    {t('aiChat.ui.recordLinks')}</label>
                   <button
                     onClick={() => setShowBindingModal(true)}
                     className="text-xs text-[var(--color-primary-500)] hover:underline"
                   >
-                    Добавить
-                  </button>
+                    {t('aiChat.ui.add')}</button>
                 </div>
                 
                 {boundRows.length === 0 ? (
                   <p className="text-xs text-[var(--text-tertiary)] italic py-2">
-                    Нет привязок. Привяжите чат к задаче, проекту или любой записи.
-                  </p>
+                    {t('aiChat.ui.noLinksYetLinkThisChatToATaskProjectOrAnyRecord')}</p>
                 ) : (
                   <div className="space-y-2">
                     {boundRows.map((row, idx) => (
@@ -614,8 +614,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
               <div>
                 <label className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 mb-2">
                   <Users className="w-4 h-4" />
-                  Участники
-                </label>
+                  {t('aiChat.ui.participants')}</label>
                 <ParticipantSelector
                   participants={participants}
                   onSelect={(p) => {
@@ -625,7 +624,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
                   }}
                   onMultiSelect={setParticipants}
                   multiSelect={true}
-                  placeholder="Добавить участника..."
+                  placeholder={t('aiChat.ui.addParticipant')}
                 />
               </div>
 
@@ -641,8 +640,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
                   className="w-full flex items-center justify-center gap-2 px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
-                  Удалить чат
-                </button>
+                  {t('aiChat.ui.deleteChat')}</button>
               </div>
             </div>
           </div>
@@ -654,7 +652,7 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-[var(--bg-primary)] rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] flex-shrink-0">
-              <h3 className="font-semibold text-[var(--text-primary)]">Привязать к записи</h3>
+              <h3 className="font-semibold text-[var(--text-primary)]">{t('aiChat.ui.linkToRecordLabel')}</h3>
               <button
                 onClick={() => setShowBindingModal(false)}
                 className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
@@ -690,14 +688,12 @@ export function TelegramChatLayout({ className }: TelegramChatLayoutProps) {
                 onClick={() => setShowBindingModal(false)}
                 className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded-lg"
               >
-                Отмена
-              </button>
+                {t('aiChat.ui.cancel')}</button>
               <button
                 onClick={() => setShowBindingModal(false)}
                 className="px-4 py-2 text-sm bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)]"
               >
-                Готово
-              </button>
+                {t('common.done')}</button>
             </div>
           </div>
         </div>

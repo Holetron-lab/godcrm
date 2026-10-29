@@ -55,7 +55,7 @@ describe('POST/PUT /api/v3/tables/:tableId/rows — booking 23P01→409 (ADR-003
 
   afterEach(async () => {
     if (!ctx) return;
-    try { await disableBookingConstraint(ctx.tableId); } catch {}
+    try { await disableBookingConstraint(ctx.tableId); } catch { /* Still drop the fixture if constraint cleanup fails. */ }
     await dropTable(ctx);
     ctx = null;
   });

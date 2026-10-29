@@ -1,0 +1,77 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { expect } from '@playwright/test';
+import { createFixtureServer, openFixture } from './browser-fixture.mjs';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const artifacts = await mkdtemp(join(tmpdir(), 'kanban-card-popovers-'));
+const entry = 'src/tests/kanban-card-popovers-fixture/index.html';
+const server = await createFixtureServer({ root, artifacts, entry });
+let browser;
+try {
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  for (const width of [1440, 390]) for (const theme of ['light', 'dark']) {
+    const page = await browser.newPage({ viewport: { width, height: 800 } });
+    const trigger = page.getByRole('button', { name: /^Тип:/ });
+    const fixture = await openFixture({ server, page, entry: `${entry}?theme=${theme}`, ready: trigger });
+    await page.addScriptTag({ content: await readFile(join(root, 'node_modules/axe-core/axe.min.js'), 'utf8') });
+    const state = async () => JSON.parse(await page.getByLabel('Состояние').textContent());
+    const audit = async label => {
+      const dialog = page.getByRole('dialog');
+      const bounds = await dialog.boundingBox();
+      assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width && bounds.y >= 0 && bounds.y + bounds.height <= 800);
+      const violations = await page.evaluate(async () => (await window.axe.run('[role="dialog"]', { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations);
+      await writeFile(join(artifacts, `${width}-${theme}-${label}-axe.json`), JSON.stringify(violations, null, 2));
+      assert.deepEqual(violations.map(({ id }) => id), []);
+      await page.screenshot({ path: join(artifacts, `${width}-${theme}-${label}.png`) });
+    };
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog', { name: 'Тип тикета' })).toBeVisible();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('button', { name: 'Задача', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    assert.equal(await page.getByRole('dialog').evaluate(el => el.contains(document.activeElement)), true);
+    await audit('type');
+    await page.getByRole('button', { name: 'Ошибка', exact: true }).focus();
+    await page.keyboard.press('Space');
+    await expect(trigger).toBeFocused();
+    assert.equal((await state()).type, 'bug');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: '— нет —', exact: true }).click();
+    assert.equal((await state()).type, null);
+    await page.getByRole('button', { name: 'Редактировать', exact: true }).click();
+    const add = page.getByRole('button', { name: 'Добавить', exact: true });
+    await add.focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByRole('dialog', { name: 'Добавить ответственного' })).toBeVisible();
+    await audit('assignee');
+    await page.keyboard.press('Enter');
+    await expect(add).toBeFocused();
+    assert.deepEqual((await state()).assigned, ['alice', 'bob']);
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('dialog')).toHaveText('Все добавлены');
+    await audit('all-added');
+    await page.keyboard.press('Escape');
+    await expect(add).toBeFocused();
+    await page.getByRole('button', { name: 'Убрать Алиса', exact: true }).click();
+    assert.deepEqual((await state()).assigned, ['bob']);
+    await page.getByRole('button', { name: 'Завершить редактирование ответственных' }).click();
+    assert.equal((await state()).submits, 0);
+    assert.equal((await state()).bubbled, 0);
+    assert.equal((await state()).edits, 4);
+    await page.getByRole('button', { name: 'Тип тикета', exact: true }).click();
+    await page.getByRole('button', { name: 'Фоновое действие' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await fixture.assertStable();
+    await page.close();
+    process.stdout.write(`${width} ${theme}: keyboard, Escape, focus, edits, empty state, outside click, form safety, bounds, axe PASS\n`);
+  }
+} finally { await browser?.close(); await server.close(); process.stdout.write(`Artifacts: ${artifacts}\n`); }

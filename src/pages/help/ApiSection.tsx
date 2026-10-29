@@ -344,15 +344,15 @@ export function ApiSection() {
             <div className="space-y-2 text-xs">
               <div className="p-2 bg-[var(--bg-secondary)] rounded">
                 <span className="text-violet-400">1. Формула колонки:</span>
-                <code className="ml-2 text-[var(--text-secondary)]">Префикс: "Товар: " + Formula: {'{{title}} {{category}}'} + Суффикс: " в наличии"</code>
+                <code className="ml-2 text-[var(--text-secondary)]">Префикс: &quot;Товар: &quot; + Formula: {'{{title}} {{category}}'} + Суффикс: &quot; в наличии&quot;</code>
               </div>
               <div className="p-2 bg-[var(--bg-secondary)] rounded">
                 <span className="text-violet-400">2. Данные строки:</span>
-                <code className="ml-2 text-[var(--text-secondary)]">title: "iPhone 15", category: "Смартфоны"</code>
+                <code className="ml-2 text-[var(--text-secondary)]">title: &quot;iPhone 15&quot;, category: &quot;Смартфоны&quot;</code>
               </div>
               <div className="p-2 bg-[var(--bg-secondary)] rounded">
                 <span className="text-violet-400">3. Итоговый текст:</span>
-                <code className="ml-2 text-emerald-400">"Товар: iPhone 15 Смартфоны в наличии"</code>
+                <code className="ml-2 text-emerald-400">&quot;Товар: iPhone 15 Смартфоны в наличии&quot;</code>
               </div>
               <div className="p-2 bg-[var(--bg-secondary)] rounded">
                 <span className="text-violet-400">4. Создание эмбеддинга через OpenAI API</span>

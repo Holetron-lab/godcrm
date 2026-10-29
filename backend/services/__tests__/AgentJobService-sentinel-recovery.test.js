@@ -118,10 +118,20 @@ describe('T-146479: Phase 0 sentinel consumption', () => {
   it('consumes the sentinel after a successful redispatch', async () => {
     const job = makeSentinelJob({ id: 101, conversation_id: 5001 });
     stubPhases([job]);
-    // No bound ticket; convo lookup for restart-count guard returns a clean row
-    mockDbGet
-      .mockResolvedValueOnce(null) // resetBoundTicketToBacklog → conv lookup
-      .mockResolvedValueOnce({ id: 5001, settings: '{}' }); // _tryRedispatchJob → conv lookup
+    // Route by SQL, not by call order. The positional chain this used to be
+    // broke the moment ADR-0057 WP-A put a pg_try_advisory_lock ahead of the
+    // conversation lookup: the second mockResolvedValueOnce landed on the lock
+    // probe, `lockRow.locked` came back undefined, and _tryRedispatchJob bailed
+    // as "peer is redispatching" instead of redispatching.
+    mockDbGet.mockImplementation((sql) => {
+      if (typeof sql === 'string' && sql.includes('pg_try_advisory_lock')) {
+        return Promise.resolve({ locked: true });
+      }
+      if (typeof sql === 'string' && sql.includes('SELECT id, settings FROM conversations')) {
+        return Promise.resolve({ id: 5001, settings: '{}' });
+      }
+      return Promise.resolve(null); // resetBoundTicketToBacklog conv lookup, advisory unlock
+    });
 
     const result = await recoverStuckJobs();
 
@@ -171,16 +181,17 @@ describe('T-146479: Phase 0 sentinel consumption', () => {
     ];
     stubPhases(jobs);
     // Each redispatch attempt does: resetBoundTicketToBacklog conv-lookup (null)
-    // + (if attempted) _tryRedispatchJob conv-lookup (settings '{}')
-    mockDbGet.mockImplementation(() => Promise.resolve(null));
-    // Override for the 2 redispatch attempts: return conv settings
+    // + pg_try_advisory_lock (ADR-0057 WP-A) + _tryRedispatchJob conv-lookup.
+    // Without the lock stub every attempt aborts as "peer is redispatching" and
+    // gracefulRecovered stays 0.
     let convCall = 0;
     mockDbGet.mockImplementation((sql) => {
+      if (sql.includes('pg_try_advisory_lock')) return Promise.resolve({ locked: true });
       if (typeof sql === 'string' && sql.includes('SELECT id, settings FROM conversations')) {
         convCall++;
         return Promise.resolve({ id: 6000 + convCall, settings: '{}' });
       }
-      return Promise.resolve(null); // resetBoundTicketToBacklog conv lookup
+      return Promise.resolve(null); // resetBoundTicketToBacklog conv lookup, advisory unlock
     });
 
     const result = await recoverStuckJobs();

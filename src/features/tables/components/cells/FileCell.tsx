@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { Upload, X, Loader2, ExternalLink, Eye } from 'lucide-react';
+import { useIsPublicReadOnly } from '@/features/public/PublicViewContext';
 import { filesApi } from '@/features/files/api/filesApi';
 import { FilePreviewModal, detectFileType, isPreviewable } from '@/features/files/components/FilePreviewModal';
 
@@ -140,6 +141,8 @@ const reconstructFullUrl = (storedValue: string, saveFormat?: 'url' | 'filename'
 };
 
 export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, editable = false, readOnly = false, config, rowData }: FileCellProps) => {
+  const publicReadOnly = useIsPublicReadOnly();
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -147,6 +150,9 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fileConfig = config?.file;
+  const hasUploadPath = Boolean(fileConfig?.prefix);
+  const hasScope = Number.isSafeInteger(tableId) && Number(tableId) > 0 && Boolean(rowId && columnId);
+  const isInteractive = !readOnly && !publicReadOnly && hasUploadPath && hasScope && Boolean(onUpdate);
   
   // If formula is set, compute the value from it
   const computedValue = fileConfig?.formula 
@@ -157,7 +163,8 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
 
   // Handle file upload
   const handleUpload = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0 || !isInteractive || isUploading) return;
+    setUploadError(null);
     
     setIsUploading(true);
     setUploadProgress(0);
@@ -167,6 +174,7 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
         tableId,
         rowId,
         columnId,
+        visibility: 'private',
         onProgress: setUploadProgress
       });
       
@@ -185,14 +193,15 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
       }
     } catch (error) {
       logger.error('Upload failed:', error);
+      setUploadError(error instanceof Error ? error.message : 'Upload failed. Please try again.');
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
     }
-  }, [fileUrls, tableId, rowId, columnId, onUpdate, config, rowData, fileConfig]);
+  }, [fileUrls, tableId, rowId, columnId, onUpdate, rowData, fileConfig, isInteractive, isUploading]);
 
   // Handle file removal
-  const handleRemove = useCallback((index: number, e: React.MouseEvent) => {
+  const handleRemove = useCallback((index: number, e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!onUpdate) return;
@@ -236,13 +245,6 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
     );
   }
 
-  // Check if upload path is configured (prefix must be set)
-  const hasUploadPath = Boolean(fileConfig?.prefix);
-
-  // Check if cell is interactive (can upload/edit)
-  // Cell is interactive only if not readOnly AND upload path is configured
-  const isInteractive = !readOnly && hasUploadPath;
-
   // If no upload path configured and no files - show dash
   if (!hasUploadPath && fileUrls.length === 0) {
     return <span className="text-sm text-[var(--text-tertiary)]">—</span>;
@@ -253,7 +255,7 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
     <div
       className={`
         relative min-h-[32px] rounded-lg border-2 border-dashed transition-all
-        ${isInteractive ? 'cursor-pointer' : 'cursor-default'}
+        cursor-default
         ${isDragOver && isInteractive
           ? 'border-primary-500 bg-primary-500/10' 
           : 'border-transparent'
@@ -264,7 +266,6 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
       onDragOver={isInteractive ? handleDragOver : undefined}
       onDragLeave={isInteractive ? handleDragLeave : undefined}
       onDrop={isInteractive ? handleDrop : undefined}
-      onClick={isInteractive ? handleClick : undefined}
     >
       {/* Hidden file input - only render if interactive */}
       {isInteractive && (
@@ -272,7 +273,7 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
           ref={fileInputRef}
           type="file"
           multiple
-          className="hidden"
+          hidden
           onChange={(e) => {
             handleUpload(e.target.files);
             e.target.value = '';
@@ -304,10 +305,15 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
       <div className="p-1.5">
         {fileUrls.length === 0 ? (
           isInteractive ? (
-            <div className="flex items-center gap-2 text-[var(--text-tertiary)] py-0.5">
+            <button
+              type="button"
+              onClick={handleClick}
+              disabled={isUploading}
+              className="flex w-full items-center gap-2 text-left text-[var(--text-tertiary)] py-0.5 rounded focus-visible:[outline:auto]"
+            >
               <Upload className="w-4 h-4 flex-shrink-0" />
               <span className="text-sm">Click or drop files</span>
-            </div>
+            </button>
           ) : (
             <span className="text-sm text-[var(--text-tertiary)]">—</span>
           )
@@ -328,7 +334,7 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
                 fullUrl = reconstructFullUrl(url, fileConfig?.saveFormat, fileConfig?.prefix, fileConfig?.suffix);
                 // If still not a valid URL after reconstruction, try applying prefix/suffix
                 if (!fullUrl.startsWith('http://') && !fullUrl.startsWith('https://')) {
-                  fullUrl = applyPrefixSuffix(url, fileConfig?.prefix, fileConfig?.suffix, rowData);
+                  fullUrl = applyPrefixSuffix(fullUrl, fileConfig?.prefix, fileConfig?.suffix, rowData);
                 }
               }
               
@@ -340,12 +346,13 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
                 <div
                   key={`${url}-${index}`}
                   className="group flex items-center gap-2 py-0.5 px-1 rounded hover:bg-[var(--bg-tertiary)] transition-colors"
-                  onClick={(e) => e.stopPropagation()}
                 >
                   {isImage ? (
                     <img 
                       src={fullUrl} 
                       alt={fileName} 
+                      loading="lazy"
+                      decoding="async"
                       className="w-5 h-5 object-cover rounded flex-shrink-0"
                       onError={(e) => {
                         (e.target as HTMLImageElement).className = 'hidden';
@@ -357,25 +364,23 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
                   
                   {/* File name: click opens preview for previewable files, otherwise opens in new tab */}
                   {isPreviewable(fullUrl) ? (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      className="flex-1 truncate text-sm text-[var(--text-secondary)] hover:text-primary-500 hover:underline cursor-pointer"
+                    <button
+                      type="button"
+                      className="flex-1 min-w-0 text-left rounded focus-visible:[outline:auto] truncate text-sm text-[var(--text-secondary)] hover:text-primary-500 hover:underline cursor-pointer"
                       title={fileName}
                       onClick={(e) => {
                         e.stopPropagation();
                         setPreviewFile({ url: fullUrl, name: fileName });
                       }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPreviewFile({ url: fullUrl, name: fileName }); } }}
                     >
                       {fileName}
-                    </span>
+                    </button>
                   ) : (
                     <a
                       href={fullUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 truncate text-sm text-[var(--text-secondary)] hover:text-primary-500 hover:underline"
+                      className="flex-1 min-w-0 text-left rounded focus-visible:[outline:auto] truncate text-sm text-[var(--text-secondary)] hover:text-primary-500 hover:underline"
                       title={fileName}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -385,58 +390,65 @@ export const FileCell = ({ value, rawMode, tableId, rowId, columnId, onUpdate, e
 
                   {/* Preview button (eye icon) - only for previewable files */}
                   {isPreviewable(fullUrl) && (
-                    <span
-                      role="button"
-                      tabIndex={0}
+                    <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setPreviewFile({ url: fullUrl, name: fileName });
                       }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setPreviewFile({ url: fullUrl, name: fileName }); } }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 text-[var(--text-tertiary)] hover:text-green-500 transition-opacity cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 rounded focus-visible:[outline:auto] p-0.5 text-[var(--text-tertiary)] hover:text-green-500 transition-opacity cursor-pointer"
                       title="Preview"
+                      aria-label="Preview"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                    </span>
+                    </button>
                   )}
                   
                   <a
                     href={fullUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="opacity-0 group-hover:opacity-100 p-0.5 text-[var(--text-tertiary)] hover:text-primary-500 transition-opacity"
+                    className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 rounded focus-visible:[outline:auto] p-0.5 text-[var(--text-tertiary)] hover:text-primary-500 transition-opacity"
                     onClick={(e) => e.stopPropagation()}
                     title="Open in new tab"
+                    aria-label="Open in new tab"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                   
                   {isInteractive && (
-                    <span
-                      role="button"
-                      tabIndex={0}
+                    <button
+                      type="button"
                       onClick={(e) => handleRemove(index, e)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleRemove(index, e); }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 text-[var(--text-tertiary)] hover:text-red-500 transition-opacity cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 rounded focus-visible:[outline:auto] p-0.5 text-[var(--text-tertiary)] hover:text-red-500 transition-opacity cursor-pointer"
                       title="Remove file"
+                      aria-label="Remove file"
+                      disabled={isUploading}
                     >
                       <X className="w-3.5 h-3.5" />
-                    </span>
+                    </button>
                   )}
                 </div>
               );
             })}
             
             {isInteractive && (
-              <div className="flex items-center gap-2 text-[var(--text-tertiary)] py-0.5 px-1 opacity-50 hover:opacity-100">
+              <button
+                type="button"
+                onClick={handleClick}
+                disabled={isUploading}
+                className="flex w-full items-center gap-2 text-left text-[var(--text-tertiary)] py-0.5 px-1 opacity-50 hover:opacity-100 focus-visible:opacity-100 rounded focus-visible:[outline:auto]"
+              >
                 <Upload className="w-3.5 h-3.5" />
                 <span className="text-xs">+ Add more</span>
-              </div>
+              </button>
             )}
           </div>
         )}
       </div>
       
+      {uploadError && <p role="alert" className="px-1.5 text-xs text-red-500">{uploadError}</p>}
+
       {/* File Preview Modal */}
       {previewFile && (
         <FilePreviewModal

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * useChatMutations — API mutation handlers extracted from AIChatPanel.tsx
  * ADR-119: Saves agent settings, context settings, default agent, emojis, reactions.
@@ -34,6 +35,7 @@ interface UseChatMutationsParams {
 }
 
 export function useChatMutations(params: UseChatMutationsParams) {
+  const { t } = useLanguage();
   const {
     effectiveSpaceId,
     currentAgent,
@@ -153,7 +155,7 @@ export function useChatMutations(params: UseChatMutationsParams) {
       );
       if (response.success) {
         const currentUserIdRaw = useAuthStore.getState().user?.id;
-        const userName = useAuthStore.getState().user?.name || 'Вы';
+        const userName = useAuthStore.getState().user?.name || t('aiChat.ui.you');
         const currentUserId = currentUserIdRaw ? Number(currentUserIdRaw) : null;
         setMessageReactions(prev => {
           const msgReactions = { ...(prev[messageId] || {}) };
@@ -174,7 +176,7 @@ export function useChatMutations(params: UseChatMutationsParams) {
     } catch (error) {
       logger.error('Failed to toggle reaction:', error);
     }
-  }, [setMessageReactions]);
+  }, [setMessageReactions, t]);
 
   // Handle copy message to clipboard
   const handleCopyMessage = useCallback((message: ChatMessage) => {
@@ -186,7 +188,7 @@ export function useChatMutations(params: UseChatMutationsParams) {
   // Handle forward message
   const handleForwardMessage = useCallback((message: ChatMessage) => {
     if (!message.content) {
-      showToast('Сообщение пустое — нечего пересылать', 'error');
+      showToast(t('aiChat.ui.emptyForward'), 'error');
       return;
     }
     const senderLabel = message.sender_name || message.agentName || message.role;
@@ -197,11 +199,11 @@ export function useChatMutations(params: UseChatMutationsParams) {
       '--- конец пересланного сообщения ---',
     ].join('\n');
     navigator.clipboard.writeText(forwardedText).then(() => {
-      showToast('Сообщение скопировано в буфер. Вставьте в нужный чат.', 'success');
+      showToast(t('aiChat.ui.forwardCopied'), 'success');
     }).catch(() => {
-      showToast('Пересылка сообщений скоро будет доступна', 'info');
+      showToast(t('aiChat.ui.forwardUnavailable'), 'info');
     });
-  }, []);
+  }, [t]);
 
   // Handle soft delete message
   const handleDeleteMessage = useCallback(async (messageId: number) => {

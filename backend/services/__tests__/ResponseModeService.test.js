@@ -26,6 +26,14 @@ vi.mock('../../database/connection', () => ({
   },
 }));
 
+// ADR-164 Phase 3a moved the global-config lookup off a `name = 'AI Agents'`
+// query and onto getAgentTableIds() + a table_rows read. Unmocked, the resolver
+// returns [] and Priority 3 is skipped entirely, so every case that expected a
+// globally-configured mode silently fell through to DEFAULT_RESPONSE_MODE.
+vi.mock('../agentTableResolver', () => ({
+  getAgentTableIds: async () => [1784],
+}));
+
 // Mock logger to avoid noise in tests
 vi.mock('../../utils/logger', () => ({
   apiLogger: {
@@ -116,7 +124,7 @@ describe('ResponseModeService', () => {
         if (query.includes('sub_agents')) {
           return Promise.resolve({ sub_agents: '[]' });
         }
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve({ data: JSON.stringify({ response_mode: 'always', name: 'Test Agent' }) });
         }
         return Promise.resolve(null);
@@ -137,7 +145,7 @@ describe('ResponseModeService', () => {
         if (query.includes('sub_agents')) {
           return Promise.resolve({ sub_agents: '[]' });
         }
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve({ data: JSON.stringify({ response_mode: 'always', name: 'Test Agent' }) });
         }
         return Promise.resolve(null);
@@ -188,7 +196,7 @@ describe('ResponseModeService', () => {
             ])
           });
         }
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve({ data: JSON.stringify({ response_mode: 'topic_only', name: 'Test' }) });
         }
         return Promise.resolve(null);
@@ -210,7 +218,7 @@ describe('ResponseModeService', () => {
         if (query.includes('sub_agents')) {
           return Promise.resolve({ sub_agents: JSON.stringify([999, 888]) });
         }
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve({ data: JSON.stringify({ response_mode: 'always', name: 'Test' }) });
         }
         return Promise.resolve(null);
@@ -234,7 +242,7 @@ describe('ResponseModeService', () => {
         if (query.includes('sub_agents')) {
           return Promise.resolve({ sub_agents: '[]' });
         }
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve({ data: JSON.stringify({ response_mode: 'always', name: 'Test Agent' }) });
         }
         return Promise.resolve(null);
@@ -255,7 +263,7 @@ describe('ResponseModeService', () => {
         if (query.includes('sub_agents')) {
           return Promise.resolve({ sub_agents: [] });
         }
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           // PostgreSQL returns JSONB as object, not string
           return Promise.resolve({ data: { response_mode: 'topic_only', name: 'Test Agent' } });
         }
@@ -279,7 +287,7 @@ describe('ResponseModeService', () => {
         if (query.includes('sub_agents')) {
           return Promise.resolve({ sub_agents: '[]' });
         }
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve({ data: JSON.stringify({ name: 'Test Agent' }) }); // no response_mode
         }
         return Promise.resolve(null);
@@ -300,7 +308,7 @@ describe('ResponseModeService', () => {
         if (query.includes('sub_agents')) {
           return Promise.resolve({ sub_agents: '[]' });
         }
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve(null); // Agent row not found
         }
         return Promise.resolve(null);
@@ -342,7 +350,7 @@ describe('ResponseModeService', () => {
           return Promise.resolve({ agent_response_mode: 'topic_only' });
         }
         // If it ever reaches here, global config is 'always'
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve({ data: JSON.stringify({ response_mode: 'always' }) });
         }
         return Promise.resolve(null);
@@ -366,7 +374,7 @@ describe('ResponseModeService', () => {
           });
         }
         // Global config has 'mention_only'
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve({ data: JSON.stringify({ response_mode: 'mention_only' }) });
         }
         return Promise.resolve(null);
@@ -431,7 +439,7 @@ describe('ResponseModeService', () => {
         if (query.includes('sub_agents')) {
           return Promise.resolve({ sub_agents: '[]' });
         }
-        if (query.includes('AI Agents')) {
+        if (query.includes('table_rows')) {
           return Promise.resolve({ data: JSON.stringify({ response_mode: 'always' }) });
         }
         return Promise.resolve(null);

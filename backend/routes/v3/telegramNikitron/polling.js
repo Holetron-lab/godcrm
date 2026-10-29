@@ -148,6 +148,6 @@ export async function scheduleDelayedForward(chatId, conversationId, afterMessag
         [conversationId]
       );
       if (!conv?.is_processing && i > 5) return;
-    } catch (_) {}
+    } catch (_) { /* Retry the processing-state check on the next polling interval. */ }
   }
 }

@@ -74,3 +74,27 @@ export function stripInvocationTokens(content: string): string {
     .replace(/<<@([a-z0-9_-]+)>>/gi, '@$1')
     .replace(/<<\/([a-z0-9_-]+)>>/gi, '/$1');
 }
+
+// ---------------------------------------------------------------------------
+// Agent invocation detection in thinking blocks
+// ---------------------------------------------------------------------------
+const INVOCATION_PATTERN = /<<@([a-z0-9_-]+)>>/gi;
+
+/** Check if a thinking message contains agent invocation tokens.
+ *  Ignores matches inside backtick-delimited code spans/blocks to avoid
+ *  false positives when reasoning merely discusses the <<@slug>> syntax.
+ */
+export function detectInvocations(content: string | undefined | null): string[] {
+  if (!content) return [];
+  // Strip inline code (`...`) and fenced code blocks (```...```) before matching
+  const stripped = content
+    .replace(/```[\s\S]*?```/g, '')   // fenced code blocks
+    .replace(/`[^`]+`/g, '');          // inline code spans
+  const matches: string[] = [];
+  let m: RegExpExecArray | null;
+  INVOCATION_PATTERN.lastIndex = 0;
+  while ((m = INVOCATION_PATTERN.exec(stripped)) !== null) {
+    matches.push(m[1].toLowerCase());
+  }
+  return matches;
+}

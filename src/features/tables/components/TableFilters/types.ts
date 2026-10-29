@@ -23,7 +23,7 @@ export interface TableFiltersProps {
   paginationInfo?: PaginationInfo | null;
   rowsLimit?: number;
   onRowsLimitChange?: (limit: number) => void;
-  onPageChange?: (page: number) => void;
+  onGoToRow?: (rowNumber: number) => void;
   onAddRow?: () => void;
   addRowText?: string; // Custom text for add row button
   onRefresh?: () => void;

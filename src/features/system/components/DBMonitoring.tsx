@@ -23,13 +23,14 @@ const formatDate = (dateString: string | null) => {
 
 export const DBMonitoring = () => {
   const user = useAuthStore((state) => state.user);
+  if (user?.role !== 'owner' && user?.role !== 'admin') return null;
+  return <DBMonitoringContent />;
+};
+
+const DBMonitoringContent = () => {
   const queryClient = useQueryClient();
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Only owner/admin can see this
-  if (user?.role !== 'owner' && user?.role !== 'admin') {
-    return null;
-  }
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['system', 'db-stats'],

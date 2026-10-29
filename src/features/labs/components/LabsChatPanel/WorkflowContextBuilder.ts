@@ -3,7 +3,10 @@
  * ADR-043: Labs MindWorkflow Integration
  */
 
-import type { FlowNode, FlowEdge } from '../../mindworkflow/state/api';
+import type { LabNode } from '../../api/labsApi';
+
+type FlowNode = Pick<LabNode, 'node_id' | 'title' | 'type' | 'content'>;
+interface FlowEdge { from: string; to: string }
 
 export interface WorkflowContextOptions {
   selectedNodeId?: string;

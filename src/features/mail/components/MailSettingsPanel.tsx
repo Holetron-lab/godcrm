@@ -2,19 +2,20 @@ import { useState } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
 import { Switch } from '@/shared/components/ui';
 import { cn } from '@/shared/utils/cn';
-import {
-  MAIL_TYPE_LABELS,
-  type MailMessageType,
-  type MailSettings,
-} from '../settings';
+import type { MailMessageType, MailSettings } from '../settings';
 import { MailLibrarySettings } from './MailLibrarySettings';
 import { MailLabelsManager } from './MailLabelsManager';
+import { MailAccountsSettings } from './MailAccountsSettings';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 interface MailSettingsPanelProps {
   settings: MailSettings;
   onChange: (next: MailSettings) => void;
-  /** Scope for the label manager rendered inside the "Ярлыки" tab. */
+  /** Scope for the label manager and the accounts list. */
   spaceId: number | undefined;
+  /** «Аккаунты и импорт»: the mailbox in use + the connect modal opener. */
+  activeAccountId: number | null;
+  onConnect: () => void;
   /** Which tab to open on. Defaults to "Общие". */
   initialTab?: TabId;
   /** Open the "Ярлыки" tab straight into a fresh label draft (rail "+"). */
@@ -26,16 +27,17 @@ interface MailSettingsPanelProps {
 // Gmail's settings tabs. Only "Общие" is wired to real behaviour today; the rest
 // are surfaced (for parity + discoverability) but honestly marked as pending
 // their backend, rather than shipped as toggles that silently do nothing.
+// Labels come from `mail.settings.tabs.<id>`.
 const TABS = [
-  { id: 'general', label: 'Общие', ready: true },
-  { id: 'templates', label: 'Шаблоны', ready: true },
-  { id: 'signatures', label: 'Подписи', ready: true },
-  { id: 'labels', label: 'Ярлыки', ready: true },
-  { id: 'inbox', label: 'Папка "Входящие"', ready: false },
-  { id: 'accounts', label: 'Аккаунты и импорт', ready: false },
-  { id: 'filters', label: 'Фильтры', ready: false },
-  { id: 'forwarding', label: 'Пересылка и POP/IMAP', ready: false },
-  { id: 'advanced', label: 'Расширенные', ready: false },
+  { id: 'general', ready: true },
+  { id: 'templates', ready: true },
+  { id: 'signatures', ready: true },
+  { id: 'labels', ready: true },
+  { id: 'inbox', ready: false },
+  { id: 'accounts', ready: true },
+  { id: 'filters', ready: false },
+  { id: 'forwarding', ready: false },
+  { id: 'advanced', ready: false },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -53,10 +55,13 @@ export function MailSettingsPanel({
   settings,
   onChange,
   spaceId,
+  activeAccountId,
+  onConnect,
   initialTab = 'general',
   autoNewLabel = false,
   onClose,
 }: MailSettingsPanelProps) {
+  const { t } = useLanguage();
   const [tab, setTab] = useState<TabId>(initialTab);
 
   // Patch helpers — always emit a fresh object so MailPage's effect persists it.
@@ -71,18 +76,18 @@ export function MailSettingsPanel({
       <div className="flex items-center gap-2 border-b border-[var(--border-primary)] px-3 py-2">
         <button
           type="button"
-          aria-label="Назад к письмам"
-          title="Назад"
+          aria-label={t('mail.settings.backToMail')}
+          title={t('mail.settings.back')}
           onClick={onClose}
           className="rounded-md p-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
         >
           <ArrowLeft size={16} />
         </button>
-        <h2 className="text-sm font-semibold text-[var(--text-primary)]">Настройки почты</h2>
+        <h2 className="text-sm font-semibold text-[var(--text-primary)]">{t('mail.settings.title')}</h2>
         <button
           type="button"
-          aria-label="Закрыть настройки"
-          title="Закрыть"
+          aria-label={t('mail.settings.closeSettings')}
+          title={t('mail.common.close')}
           onClick={onClose}
           className="ml-auto rounded-md p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
         >
@@ -95,25 +100,25 @@ export function MailSettingsPanel({
         {/* Left tab strip (top strip on mobile). */}
         <nav
           className="flex w-52 flex-shrink-0 flex-col gap-0.5 max-md:w-full max-md:flex-row max-md:overflow-x-auto"
-          aria-label="Разделы настроек"
+          aria-label={t('mail.settings.sections')}
         >
-          {TABS.map((t) => (
+          {TABS.map((item) => (
             <button
-              key={t.id}
+              key={item.id}
               type="button"
-              aria-current={tab === t.id ? 'page' : undefined}
-              onClick={() => setTab(t.id)}
+              aria-current={tab === item.id ? 'page' : undefined}
+              onClick={() => setTab(item.id)}
               className={cn(
                 'flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors max-md:flex-shrink-0',
-                tab === t.id
+                tab === item.id
                   ? 'bg-[var(--bg-tertiary)] font-medium text-[var(--text-primary)]'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]'
               )}
             >
-              <span className="whitespace-nowrap">{t.label}</span>
-              {!t.ready && (
+              <span className="whitespace-nowrap">{t(`mail.settings.tabs.${item.id}`)}</span>
+              {!item.ready && (
                 <span className="rounded bg-[var(--bg-secondary)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">
-                  скоро
+                  {t('mail.settings.soon')}
                 </span>
               )}
             </button>
@@ -125,28 +130,28 @@ export function MailSettingsPanel({
           {tab === 'general' ? (
             <div className="flex max-w-2xl flex-col gap-5">
               <Switch
-                label="Действия при наведении"
-                description="Быстрые кнопки (ответить, архив, удалить, звезда) на письме при наведении курсора."
+                label={t('mail.settings.hoverActions')}
+                description={t('mail.settings.hoverActionsHint')}
                 checked={settings.hoverActions}
                 onCheckedChange={(v) => set('hoverActions', v)}
               />
               <Switch
-                label="Начало писем в списке"
-                description="Показывать первые строки письма под темой. Выключите, чтобы видеть только тему."
+                label={t('mail.settings.snippets')}
+                description={t('mail.settings.snippetsHint')}
                 checked={settings.showSnippets}
                 onCheckedChange={(v) => set('showSnippets', v)}
               />
               <Switch
-                label="Быстрые клавиши"
-                description="Gmail-подобные горячие клавиши: c — написать, r — ответить, f — переслать, j/k — навигация."
+                label={t('mail.settings.hotkeys')}
+                description={t('mail.settings.hotkeysHint')}
                 checked={settings.hotkeys}
                 onCheckedChange={(v) => set('hotkeys', v)}
               />
 
               <div className="border-t border-[var(--border-primary)] pt-4">
                 <Switch
-                  label="Индикаторы типа сообщения"
-                  description="Цветная полоса слева от письма: входящее, исходящее или архив."
+                  label={t('mail.settings.typeIndicators')}
+                  description={t('mail.settings.typeIndicatorsHint')}
                   checked={settings.typeIndicators}
                   onCheckedChange={(v) => set('typeIndicators', v)}
                 />
@@ -164,11 +169,11 @@ export function MailSettingsPanel({
                             className="h-4 w-1 rounded-full"
                             style={{ backgroundColor: settings.typeColors[type] }}
                           />
-                          {MAIL_TYPE_LABELS[type]}
+                          {t(`mail.types.${type}`)}
                         </span>
                         <input
                           type="color"
-                          aria-label={`Цвет: ${MAIL_TYPE_LABELS[type]}`}
+                          aria-label={t('mail.settings.typeColor', { label: t(`mail.types.${type}`) })}
                           value={settings.typeColors[type]}
                           onChange={(e) => setColor(type, e.target.value)}
                           className="h-7 w-12 cursor-pointer rounded border border-[var(--border-primary)] bg-transparent p-0.5"
@@ -185,14 +190,15 @@ export function MailSettingsPanel({
             <MailLibrarySettings section="signatures" />
           ) : tab === 'labels' ? (
             <MailLabelsManager spaceId={spaceId} autoNew={autoNewLabel} />
+          ) : tab === 'accounts' ? (
+            <MailAccountsSettings spaceId={spaceId} activeAccountId={activeAccountId} onConnect={onConnect} />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-2 py-10 text-center">
               <p className="text-sm font-medium text-[var(--text-secondary)]">
-                Раздел в разработке
+                {t('mail.settings.pendingTitle')}
               </p>
               <p className="max-w-xs text-xs text-[var(--text-tertiary)]">
-                Эти настройки появятся, когда за ними будет реальная логика на бэкенде.
-                Пока настраивается только вкладка «Общие».
+                {t('mail.settings.pendingHint')}
               </p>
             </div>
           )}

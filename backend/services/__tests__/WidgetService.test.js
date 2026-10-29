@@ -6,6 +6,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from '../../tests/helpers/sentinel-ids.js';
 import {
   createWidget,
   getWidgetById,
@@ -17,9 +18,11 @@ import {
 } from '../WidgetService.js';
 import { createModule } from '../ModuleService.js';
 import { dbAll, dbGet, dbRun, destroyAdapter, resetAdapter, toBool } from '../../database/connection.js';
-// Helper function to create test user
+import { cleanupWorkspace, fixtureToken } from '../../tests/helpers/workspace-fixture.js';
+// Helper function to create test user. Emails live in the `@test.godcrm.local`
+// namespace so `make test-clean` can sweep what a killed run leaves.
 async function createTestUser() {
-  const uniqueEmail = `test-widgetservice-${Date.now()}@hltrn.cc`;
+  const uniqueEmail = `test-widgetservice-${fixtureToken()}@test.godcrm.local`;
   const result = await dbRun(
     'INSERT INTO users (email, password_hash, name, encryption_key_encrypted, email_verified) VALUES (?, ?, ?, ?, ?)',
     [uniqueEmail, 'hash', 'Test User', 'encrypted_key', 1]
@@ -82,6 +85,7 @@ describe('WidgetService - TDD', () => {
   });
 
   afterEach(async () => {
+    await cleanupWorkspace({ userId, spaceId, projectId, dashboardId });
     await destroyAdapter();
   });
 
@@ -140,7 +144,7 @@ describe('WidgetService - TDD', () => {
 
     test('should reject widget with non-existent dashboard', async () => {
       const widgetData = {
-        dashboard_id: 99999,
+        dashboard_id: NON_EXISTENT_ID,
         widget_type: 'preset',
         preset_name: 'table_view',
         title: 'Test Widget',
@@ -231,7 +235,7 @@ describe('WidgetService - TDD', () => {
     });
 
     test('should return null for non-existent widget', async () => {
-      const widget = await getWidgetById(99999);
+      const widget = await getWidgetById(NON_EXISTENT_ID);
       expect(widget).toBeNull();
     });
 
@@ -373,7 +377,7 @@ describe('WidgetService - TDD', () => {
     });
 
     test('should reject update for non-existent widget', async () => {
-      await expect(updateWidget(99999, { title: 'New' })).rejects.toThrow('Widget not found');
+      await expect(updateWidget(NON_EXISTENT_ID, { title: 'New' })).rejects.toThrow('Widget not found');
     });
 
     // ADR-0067 Q2 — audit-log detector for documents-widget canonical drift.
@@ -654,7 +658,7 @@ describe('WidgetService - TDD', () => {
     });
 
     test('should not throw error when deleting non-existent widget', async () => {
-      await expect(deleteWidget(99999)).resolves.not.toThrow();
+      await expect(deleteWidget(NON_EXISTENT_ID)).resolves.not.toThrow();
     });
   });
 

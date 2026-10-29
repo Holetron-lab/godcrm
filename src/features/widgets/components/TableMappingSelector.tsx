@@ -3,7 +3,7 @@
  * Similar to relation column mapping in ColumnSettingsDrawer
  */
 
-import { useMemo, useEffect } from 'react';
+import { useId, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Database, Plus } from 'lucide-react';
 import { apiClient } from '@/shared/utils/apiClient';
@@ -152,6 +152,7 @@ function TableMappingCard({
   index,
   onUpdate,
 }: TableMappingCardProps) {
+  const fieldId = useId();
   // Get tables for selected project (search through spaces → projects → tables)
   const projectTables = useMemo(() => {
     if (!mapping.projectId || !allTablesData?.spaces) return [];
@@ -173,7 +174,7 @@ function TableMappingCard({
   }, [mapping.projectId, allTablesData]);
   
   // Fetch columns when table is selected
-  const { data: tableColumns = [] } = useQuery({
+  const { data: tableColumns = [], isLoading: loadingColumns, isError: columnsError } = useQuery({
     queryKey: ['table-columns-mapping', mapping.tableId],
     queryFn: async () => {
       if (!mapping.tableId) return [];
@@ -210,7 +211,7 @@ function TableMappingCard({
               {requirement.name}
               {requirement.required && <span className="text-red-500">*</span>}
             </h4>
-            <p className="text-xs text-[var(--text-tertiary)]">
+            <p className="text-xs text-[var(--text-secondary)]">
               {requirement.description}
             </p>
           </div>
@@ -223,7 +224,7 @@ function TableMappingCard({
               onClick={() => onUpdate({ createNew: false, tableId: null, columnMapping: {} })}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 !mapping.createNew 
-                  ? 'bg-[var(--color-primary-500)] text-white shadow-sm' 
+                  ? 'bg-blue-700 text-white shadow-sm'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
@@ -233,7 +234,7 @@ function TableMappingCard({
               onClick={() => onUpdate({ createNew: true, tableId: null, columnMapping: {} })}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 mapping.createNew 
-                  ? 'bg-green-500 text-white shadow-sm' 
+                  ? 'bg-green-700 text-white shadow-sm'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
@@ -250,10 +251,10 @@ function TableMappingCard({
           <div className="grid grid-cols-2 gap-3">
             {/* Project selector */}
             <div>
-              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+              <label htmlFor={`${fieldId}-0`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
                 Проект
               </label>
-              <select
+              <select id={`${fieldId}-0`}
                 value={mapping.projectId ? String(mapping.projectId) : ''}
                 onChange={(e) => onUpdate({
                   projectId: e.target.value ? Number(e.target.value) : null,
@@ -275,9 +276,9 @@ function TableMappingCard({
             
             {/* New table name display */}
             <div>
-              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+              <span className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
                 Новая таблица
-              </label>
+              </span>
               <div className="px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/30 text-sm text-green-400 flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 {requirement.defaultTableName || requirement.name}
@@ -290,10 +291,10 @@ function TableMappingCard({
             <div className="grid grid-cols-2 gap-3">
               {/* Project selector */}
               <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+                <label htmlFor={`${fieldId}-1`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
                   Проект
                 </label>
-                <select
+                <select id={`${fieldId}-1`}
                   value={mapping.projectId ? String(mapping.projectId) : ''}
                   onChange={(e) => onUpdate({
                     projectId: e.target.value ? Number(e.target.value) : null,
@@ -317,10 +318,10 @@ function TableMappingCard({
               
               {/* Table selector */}
               <div>
-                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+                <label htmlFor={`${fieldId}-2`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
                   Таблица
                 </label>
-                <select
+                <select id={`${fieldId}-2`}
                   value={mapping.tableId || ''}
                   onChange={(e) => {
                     // Guard against invalid values like 'undefined' or empty string
@@ -364,11 +365,13 @@ function TableMappingCard({
                         <div className="text-sm text-[var(--text-primary)]">
                           {reqCol.name}
                           {reqCol.required && <span className="text-red-500 ml-1">*</span>}
-                          <p className="text-xs text-[var(--text-tertiary)]">
+                          <p className="text-xs text-[var(--text-secondary)]">
                             {reqCol.description}
                           </p>
                         </div>
                         <select
+                          aria-label={reqCol.name}
+                          disabled={loadingColumns || columnsError}
                           value={mapping.columnMapping[reqCol.key] || ''}
                           onChange={(e) => onUpdate({
                             columnMapping: {
@@ -376,14 +379,17 @@ function TableMappingCard({
                               [reqCol.key]: e.target.value,
                             },
                           })}
-                          className="px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
+                          className="min-w-0 w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
                         >
-                          <option value="">— Выберите колонку —</option>
+                          <option value="">{loadingColumns ? 'Загрузка колонок…' : columnsError ? 'Не удалось загрузить колонки' : '— Выберите колонку —'}</option>
                           {compatibleColumns.map((col: ColumnInfo) => (
                             <option key={col.id} value={col.name}>
                               {col.display_name || col.name} ({col.type || col.column_type})
                             </option>
                           ))}
+                          {reqCol.key === 'assigneeColumn' && (
+                            <option value="__create_assignee__">+ Создать колонку «Assignee», если её нет</option>
+                          )}
                         </select>
                       </div>
                     );

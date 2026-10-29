@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useState } from 'react';
 import {
   Copy,
@@ -50,6 +51,7 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
   agentRowId,
   jobDbId,
 }) => {
+  const { t } = useLanguage();
   const [showReactionPicker, setShowReactionPicker] = useState(false);
 
   const handleReact = (emoji: string) => {
@@ -73,10 +75,10 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
         value: lang.code,
         active: lang.code === activeLangCode,
         icon: lang.code === activeLangCode ? <Check className="w-3.5 h-3.5" /> : undefined,
-        shortcut: lang.code === originalLangCode ? 'оригинал' : undefined,
+        shortcut: lang.code === originalLangCode ? t('aiChat.ui.original') : undefined,
         onSelect: () => onTranslate?.(lang.code),
       }));
-  }, [activeLangCode, originalLangCode, onTranslate]);
+  }, [activeLangCode, originalLangCode, onTranslate, t]);
 
   const isFromMe =
     primaryMessage?.sender_id !== undefined &&
@@ -97,7 +99,7 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
           <button
             onClick={() => setShowReactionPicker(!showReactionPicker)}
             className="md:hidden w-5 h-5 rounded-full flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-            title="Добавить реакцию"
+            title={t('aiChat.ui.addReaction')}
           >
             <Plus className="w-3 h-3" />
           </button>
@@ -117,7 +119,7 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
               reactionList
                 .find((r) => r.emoji === '\u2764\uFE0F')
                 ?.users.map((u) => u.user_name)
-                .join(', ') || 'Нравится'
+                .join(', ') || t('aiChat.ui.like')
             }
           >
             {reactionList.some((r) => r.emoji === '\u2764\uFE0F') ? '\u2764\uFE0F' : '\uD83E\uDD0D'}
@@ -188,9 +190,9 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
               onClick={onStopAgent}
               className="w-5 h-5 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
               title={[
-                'Остановить агента',
-                agentRowId ? `Agent #${agentRowId}` : '',
-                jobDbId ? `Job #${jobDbId}` : '',
+                t('aiChat.ui.stopAgent'),
+                agentRowId ? t('aiChat.ui.agentNumber', { id: agentRowId }) : '',
+                jobDbId ? t('aiChat.ui.jobNumber', { id: jobDbId }) : '',
               ].filter(Boolean).join(' • ')}
             >
               <Square className="w-2.5 h-2.5 fill-current" />
@@ -209,13 +211,13 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
               : "text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/10 opacity-0 group-hover:opacity-100"
           )}
           title={[
-            'Продолжить агента',
-            agentRowId ? `Agent #${agentRowId}` : '',
-            jobDbId ? `Job #${jobDbId}` : '',
+            t('aiChat.ui.resumeAgent'),
+            agentRowId ? t('aiChat.ui.agentNumber', { id: agentRowId }) : '',
+            jobDbId ? t('aiChat.ui.jobNumber', { id: jobDbId }) : '',
           ].filter(Boolean).join(' • ')}
         >
           <Play className="w-3 h-3 fill-current" />
-          <span>Продолжить</span>
+          <span>{t('aiChat.ui.resume')}</span>
         </button>
       )}
 
@@ -232,7 +234,7 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
           <button
             onClick={() => onCopy(primaryMessage)}
             className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-            title="Копировать"
+            title={t('settings.profile.referralCopy')}
           >
             <Copy className="w-3.5 h-3.5" />
           </button>
@@ -254,11 +256,11 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
               )}
               title={
                 showingTranslation
-                  ? `Показан перевод (${activeLangLabel}) — вернуть оригинал`
-                  : `Перевести на ${activeLangLabel}`
+                  ? t('aiChat.ui.restoreOriginal', { language: activeLangLabel })
+                  : t('aiChat.ui.translateTo', { language: activeLangLabel })
               }
               aria-label={
-                showingTranslation ? 'Показать оригинал' : `Перевести на ${activeLangLabel}`
+                showingTranslation ? t('aiChat.ui.showOriginal') : t('aiChat.ui.translateTo', { language: activeLangLabel })
               }
             >
               {isTranslating ? (
@@ -276,8 +278,8 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
                       ? 'text-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10 hover:bg-[var(--color-primary-500)]/15'
                       : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]'
                   )}
-                  title="Выбрать язык перевода"
-                  aria-label="Выбрать другой язык перевода"
+                  title={t('aiChat.ui.chooseTranslationLanguage')}
+                  aria-label={t('aiChat.ui.chooseAnotherTranslationLanguage')}
                 >
                   <ChevronDown className="w-3 h-3" />
                 </button>
@@ -295,14 +297,38 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
           <button
             onClick={() => onMove(primaryMessage)}
             className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-            title="Перенести"
+            title={t('aiChat.ui.move')}
           >
             <ArrowRightLeft className="w-3.5 h-3.5" />
           </button>
         )}
         {onForward && primaryMessage && (
           <button
-            onClick={() => {
+            type="button"
+            aria-label={t('aiChat.ui.forward')}
+            onMouseDown={(event) => {
+              // Keep the browser selection until onClick reads it.
+              if (event.button === 0) event.preventDefault();
+            }}
+            onClick={(event) => {
+              const selection = window.getSelection();
+              const fragment = selection?.toString().trim();
+              const turn = event.currentTarget.closest('[data-chat-turn]');
+              if (fragment && selection?.rangeCount && turn) {
+                const range = selection.getRangeAt(0);
+                const startElement = range.startContainer.nodeType === Node.ELEMENT_NODE
+                  ? range.startContainer as Element : range.startContainer.parentElement;
+                const body = startElement?.closest('[data-message-id]');
+                const source = (allMessages ?? [primaryMessage]).find(
+                  message => String(message.id) === body?.getAttribute('data-message-id'),
+                );
+                // Only accept a range fully inside one message of this bubble.
+                if (source && body && turn.contains(body) && body.contains(range.endContainer)) {
+                  onForward({ ...source, content: fragment, attachments: undefined });
+                  selection.removeAllRanges();
+                  return;
+                }
+              }
               // Forward only final text or last reasoning by default (not all agent steps)
               if (allMessages?.length && turnType === 'agent') {
                 const finalText = allMessages.find(m => (m.contentType === 'text' || !m.contentType) && m.content);
@@ -313,7 +339,7 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
               onForward(primaryMessage);
             }}
             className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-            title="Переслать"
+            title={t('aiChat.ui.forward')}
           >
             <Forward className="w-3.5 h-3.5" />
           </button>
@@ -327,7 +353,7 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
               <button
                 onClick={() => onUnpin(Number(primaryMessage.id))}
                 className="w-6 h-6 rounded flex items-center justify-center text-[var(--color-primary-500)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-                title="Открепить"
+                title={t('aiChat.ui.unpin')}
               >
                 <PinOff className="w-3.5 h-3.5" />
               </button>
@@ -336,7 +362,7 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
               <button
                 onClick={() => onPin(Number(primaryMessage.id))}
                 className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-                title="Закрепить"
+                title={t('aiChat.ui.pin')}
               >
                 <Pin className="w-3.5 h-3.5" />
               </button>
@@ -346,7 +372,7 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
           <button
             onClick={() => onDelete(Number(primaryMessage.id))}
             className="w-6 h-6 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-            title="Удалить"
+            title={t('aiChat.ui.delete')}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -355,3 +381,5 @@ export const TurnFooter: React.FC<TurnFooterProps> = React.memo(({
     </div>
   );
 });
+
+TurnFooter.displayName = "TurnFooter";

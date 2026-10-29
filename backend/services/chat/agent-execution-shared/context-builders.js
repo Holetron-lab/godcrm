@@ -107,10 +107,28 @@ Use the correct token syntax when working with agents and slash commands:
 
 **Rule**: Only use \`<<@slug>>\` or \`<</slug>>\` when you actually want to hand off control to another agent. Use plain \`@slug\` / \`/slug\` when merely mentioning an agent in your response.
 
-**IMPORTANT — Invocation in Reasoning/Thinking:**
-You can invoke agents from your reasoning (thinking) blocks too! If you write \`<<@slug>>\` inside your reasoning/thinking, the system will detect it and trigger delegation automatically. This is the preferred way to delegate mid-task — just write \`<<@developer-ralph>>\` or \`<<@frontend>>\` in your thinking when you realize another agent should handle part of the work. The current bubble will split at that point: your work continues in a new bubble after the invoked agent's bubble.
+**IMPORTANT — the token also fires from Reasoning/Thinking:**
+\`<<@slug>>\` is detected EVERYWHERE it appears — inside your reasoning/thinking exactly as in your final answer. Thinking-invocation splits the current bubble: your work continues in a new bubble after the invoked agent's bubble.
+
+Because it fires in both places, **write \`<<@slug>>\` for a given handoff exactly ONCE.** Pick one place:
+- in your **final answer text** (default — the handoff stays visible to the owner), or
+- in **thinking**, when you must delegate mid-turn and keep working afterwards.
+
+The same \`<<@slug>>\` in thinking AND in the answer dispatches the SAME task twice: two executors, no shared lock, racing over one branch/worktree/index. To merely name an agent in prose, use plain \`@slug\` — a reference, not a trigger.
 
 Why \`<<@slug>>\` and not just \`@slug\`? Plain \`@slug\` is a **reference** (mention only, no action). The double angle brackets \`<< >>\` are the **invocation trigger** — they tell the system to actually start the agent. Without them, nothing happens.
+
+## NO LOCAL SUBAGENTS (hard rule — ADR-0181-A)
+
+You run as a headless \`claude -p\` process, so your host also exposes LOCAL fan-out tools: \`Task\` / \`Agent\` (spawn subagent — incl. \`general-purpose\`, \`Explore\`, \`Plan\`, \`claude\`) and \`Workflow\`. **Never call them.** Not to save context, not to "just search in parallel", not for a second opinion.
+
+Delegation in this CRM has exactly ONE channel: the chat invocation \`<<@slug>>\` (plus \`dispatch_task\` where your own role defines it). A local subagent is invisible to the chat — no conversation_id, no designation, no ADR-0181 write reservation, no participant row — so it races the real executor over the same tree, index and HEAD.
+
+- Parallel work → ask the owner, or hand to @orchestrator. Never fan out yourself.
+- Lots to read or search → do it with your own tools (Grep/Read/\`query_table_data\`). A big context is not a reason to spawn an executor nobody in the chat can see.
+- Naming a worktree/branch in a handoff → carry the executor's designation (\`/root/wt-<task>-<agent>\`). One fixed path in shared text invites a race.
+
+About to call \`Task\` / \`Agent\` / \`Workflow\`? Stop. Do the work in this turn, or hand it off with a single \`<<@slug>>\`.
 
 ## Multi-Agent Coordination
 
@@ -292,17 +310,18 @@ ${ownerLine}${selfBlock}${othersBlock}
  * @param {number} conversationId
  * @returns {Promise<object|null>} Parsed plan data or null
  */
-export async function fetchLatestPlan(conversationId) {
+export async function fetchLatestPlan(conversationId, { agentId, runId } = {}) {
+  if (!agentId || !runId) return null;
   try {
     const planMessage = await dbGet(
       isPostgres()
         ? `SELECT content, updated_at FROM messages
-           WHERE conversation_id = $1 AND content_type = 'plan'
+           WHERE conversation_id = $1 AND content_type = 'plan' AND agent_id = $2 AND metadata->>'run_id' = $3
            ORDER BY updated_at DESC LIMIT 1`
         : `SELECT content, updated_at FROM messages
-           WHERE conversation_id = ? AND content_type = 'plan'
+           WHERE conversation_id = ? AND content_type = 'plan' AND agent_id = ? AND json_extract(metadata, '$.run_id') = ?
            ORDER BY updated_at DESC LIMIT 1`,
-      [conversationId]
+      [conversationId, agentId, runId]
     );
 
     if (!planMessage) return null;

@@ -3,7 +3,10 @@
  * ADR-031: Missing Column Resolution Dialog
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+// The dialog (and its children) call useLanguage, which throws without a provider.
+// Aliased so the 19 existing `render(...)` call sites stay as they are.
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import userEvent from '@testing-library/user-event';
 import { MissingColumnDialog } from '../MissingColumnDialog';
 import { useMissingColumnStore } from '@/shared/stores/missingColumnStore';

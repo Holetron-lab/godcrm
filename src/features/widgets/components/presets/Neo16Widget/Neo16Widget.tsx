@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 /**
  * 16Neo Widget — 16-bit Pixel Art Virtual Office
  * User IS their animal avatar — moves through the office as their pixel pet
@@ -8,7 +9,13 @@ import type { PresetWidgetProps } from '../../../types/widget.types';
 import { Neo16Renderer } from './renderer';
 import { useGameLoop } from './useGameLoop';
 import { useMultiplayer } from './useMultiplayer';
+import type { ChatMessage } from './types';
 import { PALETTE, SPECIES_CONFIG } from './types';
+import { LearningPanel } from './learning/LearningPanel';
+import { readQuestConfig } from './learning/questConfig';
+
+/** Set by the core ModuleInstaller on widgets it creates (ModuleInstaller.WIDGET_TAG_KEY). */
+const MODULE_TAG_KEY = '__module';
 
 // ── Chat Panel ───────────────────────────────────────
 function ChatPanel({
@@ -16,11 +23,12 @@ function ChatPanel({
   onSend,
   onClose,
 }: {
-  messages: { id: string; authorName: string; text: string; timestamp: number }[];
+  messages: ChatMessage[];
   onSend: (text: string) => void;
   onClose: () => void;
 }) {
   const [input, setInput] = useState('');
+  const chatInputRef = useRequestedFocus<HTMLInputElement>(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -84,7 +92,7 @@ function ChatPanel({
           value={input}
           onChange={e => setInput(e.target.value)}
           placeholder="Type message..."
-          autoFocus
+          ref={chatInputRef}
           className="w-full px-2 py-1 text-xs rounded outline-none"
           style={{
             backgroundColor: PALETTE.darkWall,
@@ -149,11 +157,21 @@ function Controls() {
 }
 
 // ── Main Widget ──────────────────────────────────────
-export function Neo16Widget({ widget: _widget }: PresetWidgetProps) {
+export function Neo16Widget({ widget }: PresetWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<Neo16Renderer | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
+
+  // The quest panel talks to /api/v3/neo16, which answers 404 for any widget the
+  // ModuleInstaller did not create. Legacy `16neo` rows (config `{}`) keep the old
+  // office; the panel opens by default only on an installed module widget.
+  const config = (widget.config ?? {}) as Record<string, unknown>;
+  const isModuleWidget = typeof config[MODULE_TAG_KEY] === 'object' && config[MODULE_TAG_KEY] !== null;
+  const [showLearning, setShowLearning] = useState(isModuleWidget);
+  // W2-S6: the quest comes from the widget's own `config` (`quest_key`,
+  // `content_version`); absent fields fall back to DEFAULT_QUEST inside the hook.
+  const { questKey, contentVersion } = readQuestConfig(config);
 
   const mp = useMultiplayer('You');
   const { state, sendMessage } = useGameLoop(size.w, size.h, {
@@ -208,11 +226,11 @@ export function Neo16Widget({ widget: _widget }: PresetWidgetProps) {
   }, []);
 
   return (
-    <div
+    <div role="application" aria-label="Виртуальный офис: стрелки — движение, Enter — чат"
       ref={containerRef}
       className="relative w-full h-full overflow-hidden"
       style={{ backgroundColor: PALETTE.deepNight, imageRendering: 'pixelated' }}
-      tabIndex={0}
+      tabIndex={-1}
     >
       <canvas
         ref={canvasRef}
@@ -225,6 +243,11 @@ export function Neo16Widget({ widget: _widget }: PresetWidgetProps) {
         }}
       />
 
+      <button type="button" onClick={() => containerRef.current?.focus()}
+        className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-1 text-xs text-white focus-visible:ring-2">
+        Управлять персонажем
+      </button>
+
       {/* HUD */}
       <HUD
         animalName={state.localAnimal.name}
@@ -233,7 +256,7 @@ export function Neo16Widget({ widget: _widget }: PresetWidgetProps) {
         tilePos={state.localAnimal.tilePos}
       />
 
-      {/* Connection status */}
+      {/* Connection status + quest toggle */}
       <div
         className="absolute top-2 right-2 flex items-center gap-2 px-2 py-1 rounded"
         style={{
@@ -245,7 +268,25 @@ export function Neo16Widget({ widget: _widget }: PresetWidgetProps) {
         }}
       >
         <span>{mp.connected ? '●' : '○'} {mp.playerCount} online</span>
+        {!showLearning && (
+          <button type="button" onClick={() => setShowLearning(true)}
+            className="px-2 py-0.5 rounded hover:opacity-80"
+            style={{ backgroundColor: PALETTE.darkWall, color: PALETTE.cyan }}
+            aria-label="Open quest panel">
+            📚 Quest
+          </button>
+        )}
       </div>
+
+      {/* Learning panel (W2-S5): conversation + feedback against /api/v3/neo16 */}
+      {showLearning && (
+        <LearningPanel
+          widgetId={widget.id}
+          questKey={questKey}
+          contentVersion={contentVersion}
+          onClose={() => setShowLearning(false)}
+        />
+      )}
 
       {/* Controls hint */}
       <Controls />

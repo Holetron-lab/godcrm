@@ -33,7 +33,7 @@ export const MappingSection = ({
     <div className="space-y-2 pt-3 border-t border-[var(--border-primary)]">
       {/* Заголовок с навигацией */}
       <div className="flex items-center justify-between">
-        <div className="text-xs font-semibold text-[var(--text-tertiary)] uppercase tracking-wider flex items-center gap-2">
+        <div className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-2">
           🗺️ {t('columnSettings.mapping.title')}
         </div>
         <div className="flex items-center gap-1 text-xs">
@@ -78,7 +78,7 @@ export const MappingSection = ({
           >
             <span className="text-primary-600 dark:text-primary-400 w-28 flex-shrink-0">🆔 {t('columnSettings.mapping.rowId')}</span>
             <code className="text-primary-600 dark:text-primary-400 font-mono font-semibold flex-shrink-0">{'{{row_id}}'}</code>
-            <span className="text-[var(--text-tertiary)] flex-shrink-0">=</span>
+            <span className="text-[var(--text-secondary)] flex-shrink-0">=</span>
             <span className="text-[var(--text-secondary)] truncate flex-1 text-right">
               {String(currentMappingRow.id ?? '')}
             </span>
@@ -99,8 +99,8 @@ export const MappingSection = ({
                 title={`{{${key}}} = ${String(value)}`}
               >
                 <span className="text-[var(--text-secondary)] w-28 flex-shrink-0 truncate" title={displayName}>{displayName}</span>
-                <code className="text-orange-600 dark:text-orange-400 font-mono font-semibold flex-shrink-0">{`{{${key}}}`}</code>
-                <span className="text-[var(--text-tertiary)] flex-shrink-0">=</span>
+                <code className="text-orange-700 dark:text-orange-400 font-mono font-semibold flex-shrink-0">{`{{${key}}}`}</code>
+                <span className="text-[var(--text-secondary)] flex-shrink-0">=</span>
                 <span className="text-[var(--text-secondary)] truncate flex-1 text-right">
                   {String(value)}
                 </span>

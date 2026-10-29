@@ -8,6 +8,8 @@ import {
   requireAuth, getAttachmentBaseUrl, conversationLock,
   parseInvocationMentions, parseInvocationCommands,
 } from './chatShared.js';
+import { parseAttachments } from './parseAttachments.js';
+import { canReadConversation } from '../../../services/chat/conversation-read-access.js';
 // ADR-0031 P5 / ADR-133 WP-20 — move-with-stub
 import { moveMessages, MoveValidationError, MoveAuthError } from '../../../services/messageMoveService.js';
 // ADR-0031 P6 — spawn ticket from criterion chat
@@ -20,6 +22,7 @@ import {
 // ADR-0068 WP-B — comment-thread child lookup (single source of truth).
 import { getCommentThreadChildId } from '../../../services/chat/rowAttachment.js';
 import { executeAgentResponse } from './chatAgentExecution.js';
+import { resolveCommandContent } from '../../../services/chat/invocation-dispatcher.js';
 import { getAutoRespondAgents, shouldAutoRespondWithAI, getDefaultAgentForConversation } from './chatAgentAutoRespond.js';
 // ADR-0057-A WP-B — UNION _inflight_runs ∪ agent_jobs for the presence array.
 // Adds reason/resume_at/paused_at; older agent_jobs-only fields stay populated.
@@ -27,6 +30,8 @@ import { queryActiveInflight } from '../../../services/inflight/queryActive.js';
 // ADR-185 — backend-authoritative language detection + per-message translation.
 import { detectLanguage } from '../../../utils/detectLanguage.js';
 import { translateMessageText, isSupportedTargetLang } from '../../../services/translate/translateMessage.js';
+import { buildStepGroups } from './stepGroups.js';
+import { z } from 'zod';
 
 // ADR-0031 WP-20+21 (T-141237): content_type whitelist for POST /messages.
 // Adds 'widget_embed' so agents/users can embed live mini-widgets in chat.
@@ -40,43 +45,41 @@ const ALLOWED_POST_CONTENT_TYPES = new Set([
 // ADR-0068 WP-C — partial-text quote payload. Persisted in messages.metadata.reply_to.
 // fragment + range describe a substring of `content`; missing means full-message reply.
 // Returns { ok, value, error } so the caller can 400 with a precise message.
+const replyToSchema = z.object({
+  message_id: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  fragment: z.string().optional(),
+  range: z.tuple([z.number().int().safe(), z.number().int().safe()]).optional(),
+});
+
 function validateReplyTo(rt) {
   if (rt == null) return { ok: true, value: null };
-  if (typeof rt !== 'object' || Array.isArray(rt)) {
-    return { ok: false, error: 'reply_to must be an object' };
+  const parsed = replyToSchema.safeParse(rt);
+  if (parsed.success) return { ok: true, value: parsed.data };
+  const issue = parsed.error.issues[0];
+  return { ok: false, error: `reply_to${issue.path.length ? '.' + issue.path.join('.') : ''}: ${issue.message}` };
+}
+
+// POST and GET share the live, conversation-scoped quote preview contract.
+async function enrichReplies(messages, conversationId) {
+  const ids = [...new Set(messages.map(m => m.metadata?.reply_to?.message_id).filter(id => Number.isSafeInteger(id) && id > 0))];
+  if (!ids.length) return;
+  const sources = await dbAll(
+    `SELECT m.id, m.content, m.sender_id, m.sender_kind, m.is_deleted, u.name AS sender_name
+       FROM messages m LEFT JOIN users u ON m.sender_id = u.id
+      WHERE m.id = ANY($1::int[]) AND m.conversation_id = $2 AND (m.is_deleted IS NULL OR m.is_deleted = 0)`,
+    [ids, conversationId]
+  );
+  const byId = new Map(sources.map(source => [source.id, source]));
+  for (const message of messages) {
+    const quote = message.metadata?.reply_to;
+    if (!quote || !ids.includes(quote.message_id)) continue;
+    const source = byId.get(quote.message_id);
+    message.replyTo = { id: quote.message_id, deleted: !source || !!source.is_deleted, fragment: quote.fragment ?? null, range: quote.range ?? null };
+    if (source && !source.is_deleted) Object.assign(message.replyTo, {
+      content: (source.content || '').slice(0, 200), truncated: (source.content || '').length > 200,
+      sender_id: source.sender_id, sender_name: source.sender_name, sender_kind: source.sender_kind || 'user',
+    });
   }
-  const { message_id, sender, content, fragment, range } = rt;
-  if (typeof message_id !== 'number' || !Number.isFinite(message_id) || message_id <= 0) {
-    return { ok: false, error: 'reply_to.message_id must be a positive number' };
-  }
-  if (typeof sender !== 'string' || sender.length === 0) {
-    return { ok: false, error: 'reply_to.sender must be a non-empty string' };
-  }
-  if (typeof content !== 'string') {
-    return { ok: false, error: 'reply_to.content must be a string' };
-  }
-  const out = { message_id, sender, content };
-  if (fragment !== undefined) {
-    if (typeof fragment !== 'string') {
-      return { ok: false, error: 'reply_to.fragment must be a string' };
-    }
-    if (fragment.length > content.length) {
-      return { ok: false, error: 'reply_to.fragment.length must be <= reply_to.content.length' };
-    }
-    out.fragment = fragment;
-  }
-  if (range !== undefined) {
-    if (!Array.isArray(range) || range.length !== 2
-      || typeof range[0] !== 'number' || typeof range[1] !== 'number'
-      || !Number.isFinite(range[0]) || !Number.isFinite(range[1])) {
-      return { ok: false, error: 'reply_to.range must be [number, number]' };
-    }
-    if (range[0] < 0 || range[1] > content.length || range[0] > range[1]) {
-      return { ok: false, error: 'reply_to.range is out of bounds' };
-    }
-    out.range = [range[0], range[1]];
-  }
-  return { ok: true, value: out };
 }
 
 export default function registerMessageRoutes(router) {
@@ -143,7 +146,7 @@ export default function registerMessageRoutes(router) {
         // Owner gate — caller must be the chat owner OR a space admin (same
         // policy as messages/move and spawn-ticket, reusing EffectiveRoleService).
         const isChatOwner = Number(conversation.created_by) === Number(userId);
-        const isSpaceAdmin = conversation.space_id
+        const isSpaceAdmin = !isChatOwner && conversation.space_id
           ? await canAdminister(userId, { spaceId: conversation.space_id })
           : false;
         if (!isChatOwner && !isSpaceAdmin) {
@@ -169,6 +172,18 @@ export default function registerMessageRoutes(router) {
         }));
       }
 
+      if (replyToCheck.value) {
+        const { message_id, fragment, range } = replyToCheck.value;
+        const source = await dbGet('SELECT id, conversation_id, content, is_deleted FROM messages WHERE id = $1', [message_id]);
+        if (!source) return notFound(res, 'reply_to source message not found');
+        if (Number(source.conversation_id) !== Number(id)) return badRequest(res, 'reply_to source belongs to a different conversation');
+        if (source.is_deleted) return badRequest(res, 'reply_to source message is deleted');
+        const sourceContent = source.content || '';
+        if (range && (range[0] < 0 || range[1] > sourceContent.length || range[0] > range[1])) return badRequest(res, 'reply_to.range is out of bounds');
+        if (fragment !== undefined && !sourceContent.includes(fragment)) return badRequest(res, 'reply_to.fragment is not a substring of source content');
+        if (range && fragment !== undefined && sourceContent.slice(...range) !== fragment) return badRequest(res, 'reply_to.range does not align with fragment');
+      }
+
       let participant = await dbGet(
         isPostgres() ? `SELECT * FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2` : `SELECT * FROM conversation_participants WHERE conversation_id = ? AND user_id = ?`,
         [id, userId]
@@ -186,7 +201,7 @@ export default function registerMessageRoutes(router) {
       }
 
       const mentionsJson = JSON.stringify(mentions);
-      const attachmentsJson = attachments ? JSON.stringify(attachments) : '[]';
+      const attachmentsJson = JSON.stringify(parseAttachments(attachments));
       const role = 'user';
       const metadata = {};
       if (agent_mode) metadata.agent_mode = agent_mode;
@@ -216,6 +231,13 @@ export default function registerMessageRoutes(router) {
       else await dbRun(`UPDATE conversations SET updated_at = datetime('now') WHERE id = ?`, [id]);
 
       const message = await dbGet(isPostgres() ? `SELECT * FROM messages WHERE id = $1` : `SELECT * FROM messages WHERE id = ?`, [messageId]);
+
+      message.sender_kind ||= 'user';
+      message.sender_space = null;
+      if (message.sender_kind === 'space' && message.sender_space_id) {
+        const space = await dbGet('SELECT id, name, icon, theme_primary FROM spaces WHERE id = $1', [message.sender_space_id]);
+        if (space) message.sender_space = { id: space.id, name: space.name, icon: space.icon, color: space.theme_primary };
+      }
 
       const agentMentions = [...new Set(parseInvocationMentions(content))];
       const rawCommands = parseInvocationCommands(content);
@@ -258,34 +280,10 @@ export default function registerMessageRoutes(router) {
               anyAgentResolved = true;
               if (agent.id) await autoJoinAgentToConversation(Number(id), agent.id, { source: 'command' });
 
-              // Resolve message content: use main_instruction from agent config
-              let commandContent = content;
-              const agentConfig = agent._agentConfig || {};
-              const mainInstruction = agentConfig.main_instruction || agentConfig.main_instructions || null;
-              if (mainInstruction) {
-                if (commandIndex != null) {
-                  // <</slug/N>> — pick Nth quick command from JSON array
-                  try {
-                    const commands = typeof mainInstruction === 'string' ? JSON.parse(mainInstruction) : mainInstruction;
-                    if (Array.isArray(commands) && commands[commandIndex] != null) {
-                      const picked = commands[commandIndex];
-                      commandContent = typeof picked === 'string' ? picked : (picked.content || picked.text || picked.instruction || JSON.stringify(picked));
-                      apiLogger.info({ slug, commandIndex, picked: commandContent?.substring(0, 100) }, '/command: Using quick command from main_instruction array');
-                    } else {
-                      apiLogger.warn({ slug, commandIndex, isArray: Array.isArray(commands), length: Array.isArray(commands) ? commands.length : 0 }, '/command: Invalid commandIndex — falling back to full main_instruction');
-                      commandContent = typeof mainInstruction === 'string' ? mainInstruction : JSON.stringify(mainInstruction);
-                    }
-                  } catch (parseErr) {
-                    // Not JSON — use as plain string
-                    commandContent = typeof mainInstruction === 'string' ? mainInstruction : String(mainInstruction);
-                    apiLogger.info({ slug, commandIndex }, '/command: main_instruction is not JSON array — using as plain text');
-                  }
-                } else {
-                  // <</slug>> — use entire main_instruction as message
-                  commandContent = typeof mainInstruction === 'string' ? mainInstruction : JSON.stringify(mainInstruction);
-                  apiLogger.info({ slug, contentPreview: commandContent?.substring(0, 100) }, '/command: Using main_instruction as message content');
-                }
-              }
+              // Bug 1552/228714: main_instruction is a prefix, the task text stays.
+              // One implementation for this path and the ADR-117 dispatcher.
+              const commandContent = resolveCommandContent(content, agent, commandIndex);
+              const mainInstruction = agent._agentConfig?.main_instruction || agent._agentConfig?.main_instructions || null;
 
               apiLogger.info({ conversationId: id, slug, agentName: agent.name, agentUserId: agent.id, hasMainInstruction: !!mainInstruction, commandIndex }, 'Ticket #41834: Triggering /command agent response');
               await conversationLock.withLock(Number(id), () => executeAgentResponse(Number(id), agent, userId, {
@@ -366,7 +364,9 @@ export default function registerMessageRoutes(router) {
         })().catch(err => { apiLogger.error({ err, conversationId: id }, 'Ticket #41349: Error in auto-respond check'); });
       }
 
-      return created(res, { ...message, mentions: safeJsonParse(message.mentions) || [], attachments: safeJsonParse(message.attachments) || [], metadata: safeJsonParse(message.metadata) || {} });
+      const responseMessage = { ...message, mentions: safeJsonParse(message.mentions) || [], attachments: parseAttachments(message.attachments), metadata: typeof message.metadata === 'string' ? safeJsonParse(message.metadata, {}) : (message.metadata || {}) };
+      await enrichReplies([responseMessage], id);
+      return created(res, responseMessage);
     } catch (err) {
       apiLogger.error('Error sending message:', err);
       return error(res, 'SEND_MESSAGE_ERROR', err.message, 500);
@@ -378,6 +378,7 @@ export default function registerMessageRoutes(router) {
   router.get('/conversations/:id/messages', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
+      if (!await canReadConversation(req.user, id)) return forbidden(res, 'No access to this conversation');
       const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 2000);
       const before = req.query.before ? parseInt(req.query.before) : null;
 
@@ -410,9 +411,9 @@ export default function registerMessageRoutes(router) {
 
       let messagesQuery, messagesParams;
       const selectFields = isPostgres()
-        ? `m.*, u.name as sender_name, CASE WHEN length(u.avatar) > 2048 THEN NULL ELSE u.avatar END as sender_avatar, u.user_type as sender_user_type`
-        : `m.*, u.name as sender_name, CASE WHEN length(u.avatar) > 2048 THEN NULL ELSE u.avatar END as sender_avatar, u.user_type as sender_user_type`;
-      const fromJoin = `FROM messages m LEFT JOIN users u ON m.sender_id = u.id`;
+        ? `m.*, u.name as sender_name, CASE WHEN length(u.avatar) > 2048 THEN NULL ELSE u.avatar END as sender_avatar, u.user_type as sender_user_type, s.name as _sender_space_name, s.icon as _sender_space_icon, s.theme_primary as _sender_space_color`
+        : `m.*, u.name as sender_name, CASE WHEN length(u.avatar) > 2048 THEN NULL ELSE u.avatar END as sender_avatar, u.user_type as sender_user_type, s.name as _sender_space_name, s.icon as _sender_space_icon, s.theme_primary as _sender_space_color`;
+      const fromJoin = `FROM messages m LEFT JOIN users u ON m.sender_id = u.id LEFT JOIN spaces s ON m.sender_space_id = s.id`;
       const deletedFilter = ` AND (m.is_deleted IS NULL OR m.is_deleted = 0)`;
 
       if (afterId && before) {
@@ -497,8 +498,14 @@ export default function registerMessageRoutes(router) {
         nextCursor = hasMore && messages.length > 0 ? messages[0].id : null;
       }
 
-      const parsed = messages.map(m => ({
-        ...m, mentions: safeJsonParse(m.mentions) || [], attachments: safeJsonParse(m.attachments) || [],
+      const parsed = messages.map(({ _sender_space_name, _sender_space_icon, _sender_space_color, ...m }) => ({
+        ...m,
+        sender_kind: m.sender_kind || 'user',
+        sender_space_id: m.sender_space_id ?? null,
+        sender_space: m.sender_kind === 'space' && _sender_space_name != null
+          ? { id: m.sender_space_id, name: _sender_space_name, icon: _sender_space_icon, color: _sender_space_color }
+          : null,
+        mentions: safeJsonParse(m.mentions) || [], attachments: parseAttachments(m.attachments),
         contentType: m.content_type || 'text', senderType: m.sender_type || 'human',
         toolResults: m.tool_results ? safeJsonParse(m.tool_results) : null,
         metadata: typeof m.metadata === 'string' ? safeJsonParse(m.metadata, {}) : (m.metadata || {}),
@@ -540,48 +547,12 @@ export default function registerMessageRoutes(router) {
         const expandedMax = rangeEnd > 0 ? rangeEnd : 2147483647;
         // ADR-129 WP-B6: Extend preview to ALL content types (was thinking-only, hiding tool_call/tool_result previews)
         const hiddenStepsSql = isPostgres()
-          ? `SELECT id, content_type, agent_id, LEFT(content, 150) AS preview, metadata->>'agent_name' AS agent_name, metadata->>'agent_icon' AS agent_icon, metadata->>'agent_color' AS agent_color FROM messages WHERE conversation_id = $1 AND content_type IN ('thinking', 'tool_call', 'tool_result') AND id > $2 AND id < $3 AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY id`
-          : `SELECT id, content_type, agent_id, SUBSTR(content, 1, 150) AS preview, json_extract(metadata, '$.agent_name') AS agent_name, json_extract(metadata, '$.agent_icon') AS agent_icon, json_extract(metadata, '$.agent_color') AS agent_color FROM messages WHERE conversation_id = ? AND content_type IN ('thinking', 'tool_call', 'tool_result') AND id > ? AND id < ? AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY id`;
+          ? `SELECT id, content_type, agent_id, created_at, LEFT(content, 150) AS preview, metadata->>'agent_name' AS agent_name, metadata->>'agent_icon' AS agent_icon, metadata->>'agent_color' AS agent_color FROM messages WHERE conversation_id = $1 AND content_type IN ('thinking', 'tool_call', 'tool_result') AND id > $2 AND id < $3 AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY id`
+          : `SELECT id, content_type, agent_id, created_at, SUBSTR(content, 1, 150) AS preview, json_extract(metadata, '$.agent_name') AS agent_name, json_extract(metadata, '$.agent_icon') AS agent_icon, json_extract(metadata, '$.agent_color') AS agent_color FROM messages WHERE conversation_id = ? AND content_type IN ('thinking', 'tool_call', 'tool_result') AND id > ? AND id < ? AND (is_deleted = 0 OR is_deleted IS NULL) ORDER BY id`;
         const hiddenSteps = await dbAll(hiddenStepsSql, [id, expandedMin, expandedMax]);
 
-        // Build chronological step groups between visible messages
-        // Each group: { type: 'thinking'|'tools', count, first_id, last_id, preview?, agent_name?, agent_icon?, agent_color? }
-        const buildStepGroups = (steps) => {
-          if (steps.length === 0) return [];
-          const groups = [];
-          let currentType = null; // 'thinking' or 'tools'
-          let currentGroup = null;
-          for (const step of steps) {
-            const stepType = step.content_type === 'thinking' ? 'thinking' : 'tools';
-            if (stepType !== currentType) {
-              if (currentGroup) groups.push(currentGroup);
-              currentGroup = {
-                type: stepType,
-                count: 1,
-                first_id: step.id,
-                last_id: step.id,
-              };
-              if (stepType === 'thinking' && step.preview) {
-                currentGroup.preview = step.preview;
-              }
-              // Carry agent info from first step of the group
-              if (step.agent_name) currentGroup.agent_name = step.agent_name;
-              if (step.agent_icon) currentGroup.agent_icon = step.agent_icon;
-              if (step.agent_color) currentGroup.agent_color = step.agent_color;
-              currentType = stepType;
-            } else {
-              currentGroup.count++;
-              currentGroup.last_id = step.id;
-              // For thinking, concatenate previews (up to first few)
-              if (stepType === 'thinking' && step.preview && currentGroup.count <= 3) {
-                currentGroup.preview = (currentGroup.preview || '') + '\n' + step.preview;
-              }
-            }
-          }
-          if (currentGroup) groups.push(currentGroup);
-          return groups;
-        };
-
+        // Chronological step groups between visible messages: see ./stepGroups.js.
+        // Groups split on thinking/tools flip AND on agent change (Bugs 1552/228710).
         if (hiddenSteps.length > 0) {
           // For each visible message, build step groups between previous visible and this one.
           // FIX: If the current message is a user message but the previous is an agent message,
@@ -639,11 +610,12 @@ export default function registerMessageRoutes(router) {
         }
       }
 
+      await enrichReplies(parsed, id);
       const resolvedMessages = await resolveAgentInfoForMessages(parsed);
 
-      // Context stats
+      // Keep PostgreSQL's wide aggregates; int32 casts break long-running chats.
       const contextStatsSql = isPostgres()
-        ? `SELECT COALESCE(SUM(tokens_in),0)::int as total_tokens_in, COALESCE(SUM(tokens_out),0)::int as total_tokens_out, COUNT(*)::int as total_messages, COUNT(CASE WHEN content_type='text' OR content_type IS NULL THEN 1 END)::int as text_messages, COUNT(CASE WHEN content_type='tool_call' THEN 1 END)::int as tool_calls, COUNT(CASE WHEN content_type='thinking' THEN 1 END)::int as thinking_steps FROM messages WHERE conversation_id=$1`
+        ? `SELECT COALESCE(SUM(tokens_in),0) as total_tokens_in, COALESCE(SUM(tokens_out),0) as total_tokens_out, COUNT(*) as total_messages, COUNT(CASE WHEN content_type='text' OR content_type IS NULL THEN 1 END) as text_messages, COUNT(CASE WHEN content_type='tool_call' THEN 1 END) as tool_calls, COUNT(CASE WHEN content_type='thinking' THEN 1 END) as thinking_steps FROM messages WHERE conversation_id=$1`
         : `SELECT COALESCE(SUM(tokens_in),0) as total_tokens_in, COALESCE(SUM(tokens_out),0) as total_tokens_out, COUNT(*) as total_messages, COUNT(CASE WHEN content_type='text' OR content_type IS NULL THEN 1 END) as text_messages, COUNT(CASE WHEN content_type='tool_call' THEN 1 END) as tool_calls, COUNT(CASE WHEN content_type='thinking' THEN 1 END) as thinking_steps FROM messages WHERE conversation_id=?`;
 
       const lastAgentMsgSql = isPostgres()
@@ -700,7 +672,7 @@ export default function registerMessageRoutes(router) {
               ...statusRow,
               contentType: 'agent_status', senderType: statusRow.sender_type || 'agent',
               metadata: meta, timestamp: statusRow.created_at,
-              mentions: safeJsonParse(statusRow.mentions) || [], attachments: safeJsonParse(statusRow.attachments) || [],
+              mentions: safeJsonParse(statusRow.mentions) || [], attachments: parseAttachments(statusRow.attachments),
             };
           }
         }
@@ -716,7 +688,7 @@ export default function registerMessageRoutes(router) {
               ...planRow,
               contentType: 'plan', senderType: planRow.sender_type || 'agent',
               metadata: planMeta, timestamp: planRow.created_at,
-              mentions: safeJsonParse(planRow.mentions) || [], attachments: safeJsonParse(planRow.attachments) || [],
+              mentions: safeJsonParse(planRow.mentions) || [], attachments: parseAttachments(planRow.attachments),
             };
           }
         }
@@ -762,8 +734,7 @@ export default function registerMessageRoutes(router) {
   // clicks the chevron we fetch ONLY those ids — much cheaper than loading
   // the entire target conversation.
   //
-  // Auth: caller must be a participant of the conversation. Mirrors the
-  // summary endpoint policy.
+  // Auth: same participant-or-linked-row-editor policy as all chat reads.
   router.get('/conversations/:id/messages/by-ids', requireAuth, async (req, res) => {
     try {
       const conversationId = Number(req.params.id);
@@ -778,14 +749,7 @@ export default function registerMessageRoutes(router) {
         .slice(0, 50);
       if (ids.length === 0) return badRequest(res, '`ids` must contain at least one positive integer');
 
-      const userId = req.user.userId;
-      const participant = await dbGet(
-        isPostgres()
-          ? `SELECT user_id FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`
-          : `SELECT user_id FROM conversation_participants WHERE conversation_id = ? AND user_id = ?`,
-        [conversationId, userId]
-      );
-      if (!participant) return forbidden(res, 'No access to this conversation');
+      if (!await canReadConversation(req.user, conversationId)) return forbidden(res, 'No access to this conversation');
 
       const rows = await dbAll(
         isPostgres()
@@ -818,7 +782,7 @@ export default function registerMessageRoutes(router) {
         role: r.role || null,
         content: r.content,
         content_type: r.content_type || null,
-        attachments: safeJsonParse(r.attachments) || [],
+        attachments: parseAttachments(r.attachments),
         metadata: safeJsonParse(r.metadata) || {},
         created_at: r.created_at,
         sender_name: r.sender_name || null,
@@ -842,11 +806,12 @@ export default function registerMessageRoutes(router) {
       const { messageId } = req.params;
       const message = await dbGet(
         isPostgres()
-          ? `SELECT id, content, content_type FROM messages WHERE id = $1`
-          : `SELECT id, content, content_type FROM messages WHERE id = ?`,
+          ? `SELECT id, conversation_id, content, content_type FROM messages WHERE id = $1`
+          : `SELECT id, conversation_id, content, content_type FROM messages WHERE id = ?`,
         [messageId]
       );
       if (!message) return notFound(res, 'Message not found');
+      if (!await canReadConversation(req.user, message.conversation_id)) return forbidden(res, 'No access to this conversation');
       return success(res, { id: message.id, content: message.content, content_type: message.content_type });
     } catch (err) {
       apiLogger.error({ err }, 'Error getting full message');
@@ -1005,7 +970,8 @@ export default function registerMessageRoutes(router) {
 
       const callerId = Number(req.user.userId);
       const isChatOwner = Number(conv.created_by) === callerId;
-      const isSpaceAdmin = conv.space_id
+      // Owner first: the role service is only consulted for non-owners.
+      const isSpaceAdmin = !isChatOwner && conv.space_id
         ? await canAdminister(callerId, { spaceId: conv.space_id })
         : false;
       if (!isChatOwner && !isSpaceAdmin) {
@@ -1057,7 +1023,7 @@ export default function registerMessageRoutes(router) {
 
       const callerId = Number(req.user.userId);
       const isChatOwner = Number(conv.created_by) === callerId;
-      const isSpaceAdmin = conv.space_id
+      const isSpaceAdmin = !isChatOwner && conv.space_id
         ? await canAdminister(callerId, { spaceId: conv.space_id })
         : false;
       if (!isChatOwner && !isSpaceAdmin) {

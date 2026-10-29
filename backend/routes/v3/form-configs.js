@@ -29,12 +29,20 @@ router.get('/:tableId', authenticate, async (req, res) => {
       });
     }
 
+    // Every form type stored for the table — the builder restores its
+    // checkboxes from this, so re-saving does not silently unpublish `custom`.
+    const storedTypes = await dbAll(
+      `SELECT DISTINCT form_type FROM system_form_configs WHERE table_id = ?`,
+      [tableId]
+    );
+
     res.json({
       success: true,
       data: {
         id: config.id,
         tableId: config.table_id,
         formType: config.form_type,
+        formTypes: storedTypes.map((r) => r.form_type),
         name: config.name,
         config: JSON.parse(config.config || '{}'),
         isDefault: Boolean(config.is_default),
@@ -103,7 +111,7 @@ router.get('/:tableId/all', authenticate, async (req, res) => {
 router.post('/:tableId', authenticate, async (req, res) => {
   try {
     const { tableId } = req.params;
-    const { formType = 'edit', name, config, isDefault = true } = req.body;
+    const { formType = 'edit', formTypes, name, config, isDefault = true } = req.body;
 
     // Validate config is object
     if (config && typeof config !== 'object') {
@@ -117,64 +125,68 @@ router.post('/:tableId', authenticate, async (req, res) => {
       });
     }
 
-    // Check if config already exists
-    const existing = await dbGet(
-      `SELECT id FROM system_form_configs 
-       WHERE table_id = ? AND form_type = ? AND is_default = ?`,
-      [tableId, formType, isDefault ? 1 : 0]
-    );
+    // The builder saves one config for several form types at once
+    // (add_row / edit_row / custom). `custom` is the published link
+    // (/forms/:tableId): listed → upserted, unlisted → unpublished.
+    const types = Array.isArray(formTypes) && formTypes.length > 0
+      ? [...new Set([formType, ...formTypes].filter((t) => typeof t === 'string' && t))]
+      : [formType];
 
     const configJson = JSON.stringify(config || {});
     const now = new Date().toISOString();
+    let primary = null;
 
-    if (existing) {
-      // Update existing
-      await dbRun(
-        `UPDATE system_form_configs 
-         SET name = ?, config = ?, updated_at = ?
-         WHERE id = ?`,
-        [name || null, configJson, now, existing.id]
+    for (const type of types) {
+      const existing = await dbGet(
+        `SELECT id FROM system_form_configs
+         WHERE table_id = ? AND form_type = ? AND is_default = ?`,
+        [tableId, type, isDefault ? 1 : 0]
       );
-
-      res.json({
-        success: true,
-        data: {
-          id: existing.id,
-          tableId: parseInt(tableId),
-          formType,
-          name,
-          config,
-          isDefault,
-          updatedAt: now
-        },
-        message: 'Form configuration updated',
-        timestamp: now
-      });
-    } else {
-      // Create new
-      const result = await dbRun(
-        `INSERT INTO system_form_configs 
-         (table_id, form_type, name, config, is_default, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [tableId, formType, name || null, configJson, isDefault ? 1 : 0, now, now]
-      );
-
-      res.status(201).json({
-        success: true,
-        data: {
-          id: result.lastInsertRowid || result.lastID,
-          tableId: parseInt(tableId),
-          formType,
-          name,
-          config,
-          isDefault,
-          createdAt: now,
-          updatedAt: now
-        },
-        message: 'Form configuration created',
-        timestamp: now
-      });
+      let id;
+      let createdNow = false;
+      if (existing) {
+        await dbRun(
+          `UPDATE system_form_configs
+           SET name = ?, config = ?, updated_at = ?
+           WHERE id = ?`,
+          [name || null, configJson, now, existing.id]
+        );
+        id = existing.id;
+      } else {
+        const result = await dbRun(
+          `INSERT INTO system_form_configs
+           (table_id, form_type, name, config, is_default, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [tableId, type, name || null, configJson, isDefault ? 1 : 0, now, now]
+        );
+        id = result.lastInsertRowid || result.lastID;
+        createdNow = true;
+      }
+      if (type === formType) primary = { id, createdNow };
     }
+
+    if (Array.isArray(formTypes) && !types.includes('custom')) {
+      await dbRun(
+        `DELETE FROM system_form_configs WHERE table_id = ? AND form_type = 'custom'`,
+        [tableId]
+      );
+    }
+
+    res.status(primary.createdNow ? 201 : 200).json({
+      success: true,
+      data: {
+        id: primary.id,
+        tableId: parseInt(tableId),
+        formType,
+        formTypes: types,
+        name,
+        config,
+        isDefault,
+        updatedAt: now
+      },
+      message: primary.createdNow ? 'Form configuration created' : 'Form configuration updated',
+      timestamp: now
+    });
   } catch (error) {
     logger.error('Error saving form config:', error);
     res.status(500).json({

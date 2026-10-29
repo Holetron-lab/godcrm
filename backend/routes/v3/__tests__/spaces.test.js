@@ -172,8 +172,9 @@ describe('Spaces API Routes (v3) - ADR-064', () => {
     });
 
     test('should return 404 for non-existent space', async () => {
+      const { id } = await dbGet("SELECT nextval(pg_get_serial_sequence('spaces', 'id')) AS id");
       const res = await request(app)
-        .get('/api/v3/spaces/99999')
+        .get(`/api/v3/spaces/${id}`)
         .expect(404);
 
       expect(res.body.success).toBe(false);
@@ -223,8 +224,9 @@ describe('Spaces API Routes (v3) - ADR-064', () => {
     });
 
     test('should return 404 for non-existent space', async () => {
+      const { id } = await dbGet("SELECT nextval(pg_get_serial_sequence('spaces', 'id')) AS id");
       const res = await request(app)
-        .delete('/api/v3/spaces/99999')
+        .delete(`/api/v3/spaces/${id}`)
         .expect(404);
 
       expect(res.body.success).toBe(false);

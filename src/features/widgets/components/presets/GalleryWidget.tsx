@@ -349,9 +349,9 @@ export function GalleryWidget({ widget, data, columnsInfo, onCardClick }: Galler
                 </div>
               </div>
             )}
-          <div
+          <button type="button" disabled={!onCardClick}
             onClick={() => onCardClick?.(card.raw)}
-            className="group flex flex-col bg-[var(--bg-primary)] rounded-xl border border-[var(--border-primary)] overflow-hidden hover:shadow-lg hover:border-[var(--color-primary-500)] transition-all cursor-pointer"
+            className="group w-full text-left flex flex-col bg-[var(--bg-primary)] rounded-xl border border-[var(--border-primary)] overflow-hidden hover:shadow-lg hover:border-[var(--color-primary-500)] transition-all cursor-pointer"
           >
             {/* Cover — latest photo from the gallery column, uncropped by default.
                 Archived cards show it desaturated, so the board reads at a glance. */}
@@ -431,7 +431,7 @@ export function GalleryWidget({ widget, data, columnsInfo, onCardClick }: Galler
                 </div>
               )}
             </div>
-          </div>
+          </button>
           </Fragment>
         ))}
       </div>

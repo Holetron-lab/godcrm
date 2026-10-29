@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useContext, useRef, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
   Settings, HelpCircle, Mail, Cloud, Wifi, WifiOff, Database, Bug,
   Link as LinkIcon, Plus, X, ChevronLeft, ChevronRight, Pencil,
@@ -45,7 +46,7 @@ const loadQuickLinksConfig = (): QuickLinksConfig => {
   try {
     const stored = localStorage.getItem('statusbar_quick_links');
     if (stored) return { ...DEFAULT_QUICK_LINKS_CONFIG, ...JSON.parse(stored) };
-  } catch {}
+  } catch { /* Use the default quick links when storage is unavailable or contains invalid JSON. */ }
   return DEFAULT_QUICK_LINKS_CONFIG;
 };
 
@@ -66,6 +67,7 @@ const QuickLinksSettingsModal = ({
   onSave: (config: QuickLinksConfig) => void;
 }) => {
   const { t } = useLanguage();
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const [local, setLocal] = useState(config);
   const [editingLink, setEditingLink] = useState<QuickLink | null>(null);
 
@@ -94,14 +96,23 @@ const QuickLinksSettingsModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div
-        className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl w-[420px] max-h-[80vh] overflow-auto"
-        onClick={e => e.stopPropagation()}
+    <Dialog.Root open={isOpen} onOpenChange={open => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+      <Dialog.Overlay className="fixed inset-0 z-[9999] bg-black/50" />
+      <Dialog.Content
+        aria-describedby={undefined}
+        onOpenAutoFocus={() => {
+          returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={event => {
+          event.preventDefault();
+          returnFocusRef.current?.focus();
+        }}
+        className="fixed left-1/2 top-1/2 z-[10000] -translate-x-1/2 -translate-y-1/2 bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl w-[420px] max-w-[calc(100vw-2rem)] max-h-[80dvh] overflow-auto"
       >
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-primary)]">
-          <h3 className="text-sm font-semibold text-[var(--text-primary)]">{t('statusBar.quickLinks')}</h3>
-          <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+          <Dialog.Title className="text-sm font-semibold text-[var(--text-primary)]">{t('statusBar.quickLinks')}</Dialog.Title>
+          <button type="button" aria-label={t('common.close')} onClick={onClose} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -153,12 +164,16 @@ const QuickLinksSettingsModal = ({
                   {link.label || link.url}
                 </span>
                 <button
+                  type="button"
+                  aria-label={`${t('common.edit')} ${link.label || link.url}`}
                   onClick={() => setEditingLink(link)}
                   className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                 >
                   <Pencil className="w-3 h-3" />
                 </button>
                 <button
+                  type="button"
+                  aria-label={`${t('common.delete')} ${link.label || link.url}`}
                   onClick={() => removeLink(link.id)}
                   className="text-[var(--text-tertiary)] hover:text-red-400"
                 >
@@ -172,18 +187,21 @@ const QuickLinksSettingsModal = ({
           {editingLink && (
             <div className="space-y-2 p-2 rounded bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
               <input
+                aria-label={t('statusBar.name')}
                 placeholder={t('statusBar.name')}
                 value={editingLink.label}
                 onChange={e => setEditingLink({ ...editingLink, label: e.target.value })}
                 className="w-full px-2 py-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] text-xs"
               />
               <input
+                aria-label={t('statusBar.urlPlaceholder')}
                 placeholder={t('statusBar.urlPlaceholder')}
                 value={editingLink.url}
                 onChange={e => setEditingLink({ ...editingLink, url: e.target.value })}
                 className="w-full px-2 py-1 rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] text-xs"
               />
               <input
+                aria-label={t('statusBar.iconOptional')}
                 placeholder={t('statusBar.iconOptional')}
                 value={editingLink.icon || ''}
                 onChange={e => setEditingLink({ ...editingLink, icon: e.target.value })}
@@ -231,8 +249,9 @@ const QuickLinksSettingsModal = ({
             {t('statusBar.save')}
           </button>
         </div>
-      </div>
-    </div>
+      </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 };
 
@@ -270,6 +289,7 @@ const QuickLinksBar = () => {
     return (
       <div className="flex items-center gap-1">
         <button
+          key="settings"
           onClick={() => setShowSettings(true)}
           className="flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors hover:bg-white/10 opacity-40 hover:opacity-80"
           title={t('statusBar.configureQuickLinks')}
@@ -278,6 +298,7 @@ const QuickLinksBar = () => {
           <Plus className="w-2.5 h-2.5" />
         </button>
         <QuickLinksSettingsModal
+          key="settings-modal"
           isOpen={showSettings}
           onClose={() => setShowSettings(false)}
           config={config}
@@ -315,6 +336,7 @@ const QuickLinksBar = () => {
       )}
 
       <button
+        key="settings"
         onClick={() => setShowSettings(true)}
         className="px-1 py-0.5 rounded transition-colors hover:bg-white/10 opacity-60 hover:opacity-100"
         title={t('statusBar.configureQuickLinks')}
@@ -323,6 +345,7 @@ const QuickLinksBar = () => {
       </button>
 
       <QuickLinksSettingsModal
+        key="settings-modal"
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         config={config}
@@ -463,7 +486,7 @@ export const StatusBar = () => {
       try {
         const stored = localStorage.getItem('api_url');
         if (stored) return new URL(stored).hostname;
-      } catch {}
+      } catch { /* Use the default desktop host below when storage is unavailable or the URL is invalid. */ }
       return 'crm.hltrn.cc';
     }
     return window.location.hostname;

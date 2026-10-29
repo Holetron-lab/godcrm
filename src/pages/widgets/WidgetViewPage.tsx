@@ -19,7 +19,6 @@ import { FitnessWidget } from '@/features/widgets/components/presets/FitnessWidg
 import { LabsWidget } from '@/features/widgets/components/presets/LabsWidget';
 import { VirtualOfficeWidget } from '@/features/widgets/components/presets/virtual-office';
 import { TerminalWidget } from '@/features/widgets/components/presets/TerminalWidget';
-import { Neo16Widget } from '@/features/widgets/components/presets/Neo16Widget';
 import { getWidgetPreset } from '@/features/widgets/registry/modulePresetRegistry';
 import { AddRowModal } from '@/features/tables/components/modals/AddRowModal';
 import { AddColumnOptionModal } from '@/features/widgets/components/modals/AddColumnOptionModal';
@@ -29,9 +28,12 @@ import { TableFilters } from '@/features/tables/components/TableFilters/TableFil
 import { PrintModal } from '@/features/tables/components/PrintModal';
 import { tablesApi } from '@/features/tables/api/tablesApi';
 import { useTicketData, type TicketRowData } from '@/features/widgets/hooks/useTicketData';
-import type { Widget } from '@/features/widgets/types/widget.types';
+import type { FitnessWidgetConfig } from '@/features/widgets/types/fitness.types';
+import type { CardData } from '@/features/widgets/components/modals/card-detail-types';
 import type { ColumnModel } from '@/features/tables/types/table.types';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
+
+type WidgetRowData = Pick<TicketRowData, 'id' | 'data'>;
 
 interface DateRange {
   from?: string;
@@ -49,7 +51,7 @@ export function WidgetViewPage() {
   const [showAddColumnOptionModal, setShowAddColumnOptionModal] = useState(false);
   const [showAddStatusRowModal, setShowAddStatusRowModal] = useState(false);
   const [showCardDetailModal, setShowCardDetailModal] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<KanbanRowData | null>(null);
+  const [selectedCard, setSelectedCard] = useState<CardData | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   // TableFilters state
   const [searchColumns, setSearchColumns] = useState<string[]>([]);
@@ -122,7 +124,7 @@ export function WidgetViewPage() {
         ? cols.filter((col: ColumnModel) => searchColumns.includes(col.id))
         : cols.filter((col: ColumnModel) => ['text', 'number', 'email', 'url', 'phone'].includes(col.type));
       
-      data = data.filter((row: KanbanRowData) => {
+      data = data.filter((row: TicketRowData) => {
         const rowData = row.data || row;
         return columnsToSearch.some((col: ColumnModel) => {
           const value = rowData[col.name];
@@ -136,7 +138,7 @@ export function WidgetViewPage() {
       if (Array.isArray(values) && values.length > 0) {
         const column = cols.find((c: ColumnModel) => c.id === columnId);
         if (column) {
-          data = data.filter((row: KanbanRowData) => {
+          data = data.filter((row: TicketRowData) => {
             const rowData = row.data || row;
             const cellValue = rowData[column.name];
             if (Array.isArray(cellValue)) {
@@ -153,7 +155,7 @@ export function WidgetViewPage() {
       if (range && (range.from || range.to)) {
         const column = cols.find((c: ColumnModel) => c.id === columnId);
         if (column) {
-          data = data.filter((row: KanbanRowData) => {
+          data = data.filter((row: TicketRowData) => {
             const rowData = row.data || row;
             const cellValue = rowData[column.name];
             if (!cellValue) return false;
@@ -240,7 +242,9 @@ export function WidgetViewPage() {
   const handleOpenCardChat = async (card: WidgetRowData) => {
     if (!widget?.config?.table_id) return;
     
-    const cardId = String(card.id);
+    const id = card.id ?? card.data?.id;
+    if ((typeof id !== 'string' && typeof id !== 'number') || String(id).trim() === '') return;
+    const cardId = String(id);
     const cardTitle = card.data?.name || card.data?.title || `#${cardId}`;
     
     try {
@@ -283,7 +287,7 @@ export function WidgetViewPage() {
     attachRowToChat({
       table_id: widget.config.table_id,
       row_id: Number(rowId),
-      table_name: widget?.name || '',
+      table_name: widget?.title || '',
       row_title: card ? resolveRowName(card) : `#${rowId}`,
     });
   };
@@ -295,7 +299,7 @@ export function WidgetViewPage() {
     attachRowToMessage({
       table_id: widget.config.table_id,
       row_id: Number(rowId),
-      table_name: widget?.name || '',
+      table_name: widget?.title || '',
       row_title: card ? resolveRowName(card) : `#${rowId}`,
     });
   };
@@ -307,7 +311,9 @@ export function WidgetViewPage() {
       handleOpenCardChat(card);
       return;
     }
-    setSelectedCard(card);
+    const id = card.id ?? card.data?.id;
+    if ((typeof id !== 'string' && typeof id !== 'number') || String(id).trim() === '') return;
+    setSelectedCard({ ...card, id: String(id), data: card.data ?? { ...card } });
     setCardDetailInitialTab(initialTab);
     setShowCardDetailModal(true);
   };
@@ -369,7 +375,7 @@ export function WidgetViewPage() {
         name: col.name,
         displayName: col.displayName || col.name,
         type: col.type,
-        config: col.config,
+        config: { ...col.config },
         isVisible: col.isVisible !== false,
         orderIndex: col.orderIndex ?? 999,
         width: col.width
@@ -377,59 +383,59 @@ export function WidgetViewPage() {
       .sort((a, b) => a.orderIndex - b.orderIndex);
 
     switch (widget.preset_name) {
-      case 'kanban_board':
-        // Get active status filters for the kanban group column
-        const kanbanGroupColumnId = kanbanGroupColumn?.id;
-        const activeKanbanStatusFilters = kanbanGroupColumnId ? selectFilters[kanbanGroupColumnId] : undefined;
+      case 'kanban_board': {
+          // Get active status filters for the kanban group column
+          const kanbanGroupColumnId = kanbanGroupColumn?.id;
+          const activeKanbanStatusFilters = kanbanGroupColumnId ? selectFilters[kanbanGroupColumnId] : undefined;
         
-        // Debug log for relation support
-        logger.debug('[WidgetViewPage] Passing to KanbanWidget:');
-        logger.debug('  - columnsInfo:', columnsInfo.length, 'columns');
-        logger.debug('  - columnsInfo with relations:', columnsInfo.filter(c => c.config?.relation?.enabled || c.config?.relatedTableId).map(c => c.name));
-        logger.debug('  - allRelationData:', allRelationData?.size ?? 0, 'tables');
+          // Debug log for relation support
+          logger.debug('[WidgetViewPage] Passing to KanbanWidget:');
+          logger.debug('  - columnsInfo:', columnsInfo.length, 'columns');
+          logger.debug('  - columnsInfo with relations:', columnsInfo.filter(c => c.config?.relation?.enabled).map(c => c.name));
+          logger.debug('  - allRelationData:', allRelationData?.size ?? 0, 'tables');
         
-        return (
-          <KanbanWidget 
-            {...props} 
-            columnOptions={kanbanColumnOptions}
-            columnsInfo={columnsInfo}
-            relationData={allRelationData}
-            activeStatusFilters={activeKanbanStatusFilters}
-            cardColumns={widget.config?.card_columns || []}
-            visibleColumns={widget.config?.visible_columns || []}
-            scheduledDateColumn={widget.config?.kanban?.scheduledDateColumn}
-            dueDateColumn={widget.config?.kanban?.dueDateColumn}
-            colorColumn={widget.config?.kanban?.colorColumn}
-            onAddColumn={() => {
-              logger.debug('[KanbanWidget] onAddColumn clicked');
-              logger.debug('[KanbanWidget] kanbanGroupColumn:', kanbanGroupColumn);
-              logger.debug('[KanbanWidget] widget.config:', widget.config);
-              logger.debug('[KanbanWidget] tableColumns:', tableColumns);
-              setShowAddColumnOptionModal(true);
-            }}
-            onAddStatusRow={() => {
-              setShowAddStatusRowModal(true);
-            }}
-            groupRelationTableId={relationTableId}
-            onAddCard={(columnValue) => {
-              if (kanbanGroupColumn?.name) {
-                setKanbanPrefill({ [kanbanGroupColumn.name]: columnValue });
-              }
-              setShowAddModal(true);
-            }}
-            onMoveCard={handleMoveCard}
-            onCardDoubleClick={handleCardDoubleClick}
-            onCardUpdate={handleCardFieldUpdate}
-            onDeleteCard={handleDeleteCard}
-            onOpenRowChat={handleOpenRowChat}
-            onAttachRowToMessage={handleAttachRowToMessage}
-          />
-        );
+          return (
+            <KanbanWidget
+              {...props}
+              columnOptions={kanbanColumnOptions}
+              columnsInfo={columnsInfo}
+              relationData={allRelationData}
+              activeStatusFilters={activeKanbanStatusFilters}
+              cardColumns={widget.config?.card_columns || []}
+              visibleColumns={widget.config?.visible_columns || []}
+              scheduledDateColumn={widget.config?.kanban?.scheduledDateColumn}
+              dueDateColumn={widget.config?.kanban?.dueDateColumn}
+              colorColumn={widget.config?.kanban?.colorColumn}
+              onAddColumn={() => {
+                logger.debug('[KanbanWidget] onAddColumn clicked');
+                logger.debug('[KanbanWidget] kanbanGroupColumn:', kanbanGroupColumn);
+                logger.debug('[KanbanWidget] widget.config:', widget.config);
+                logger.debug('[KanbanWidget] tableColumns:', tableColumns);
+                setShowAddColumnOptionModal(true);
+              }}
+              onAddStatusRow={() => {
+                setShowAddStatusRowModal(true);
+              }}
+              groupRelationTableId={relationTableId}
+              onAddCard={(columnValue) => {
+                if (kanbanGroupColumn?.name) {
+                  setKanbanPrefill({ [kanbanGroupColumn.name]: columnValue });
+                }
+                setShowAddModal(true);
+              }}
+              onMoveCard={handleMoveCard}
+              onCardDoubleClick={handleCardDoubleClick}
+              onCardUpdate={handleCardFieldUpdate}
+              onDeleteCard={handleDeleteCard}
+              onOpenRowChat={handleOpenRowChat}
+              onAttachRowToMessage={handleAttachRowToMessage}
+            />
+          );
+      }
       case 'table_view':
-      case 'table_widget':
         return (
           <TableViewWidget 
-            {...props} 
+            {...props}
             columnsInfo={columnsInfo}
             onRowDoubleClick={handleCardDoubleClick}
           />
@@ -437,7 +443,7 @@ export function WidgetViewPage() {
       case 'calendar_widget':
         return (
           <CalendarWidget 
-            {...props} 
+            {...props}
             columnsInfo={columnsInfo}
             onEventClick={handleCardDoubleClick}
             onEventUpdate={handleCardFieldUpdate}
@@ -450,10 +456,11 @@ export function WidgetViewPage() {
       case 'timeline_widget':
         return (
           <TimelineWidget 
-            {...props} 
+            {...props}
             columnsInfo={columnsInfo}
             onEventClick={handleCardDoubleClick}
             onEventUpdate={handleCardFieldUpdate}
+            onEventSave={handleCardSave}
             onAddEvent={(date) => {
               setShowAddModal(true);
             }}
@@ -489,18 +496,16 @@ export function WidgetViewPage() {
         return <AIAgentsWidget widget={widget} data={widgetData} />;
       case 'documents':
       case 'documents_v4':  // Legacy alias
-        return <DocumentsWidget config={widget.config} spaceId={widget.space_id} />;
+        return <DocumentsWidget widget={widget} />;
       case 'wellness':
       case 'fitness':  // Legacy alias for wellness
-        return <FitnessWidget config={widget.config as any} spaceId={widget.space_id} />;
+        return <FitnessWidget config={widget.config as FitnessWidgetConfig} spaceId={widget.project_id ?? 0} />;
       case 'labs':
         return <LabsWidget widget={widget} data={widgetData} />;
       case 'virtual_office':
         return <VirtualOfficeWidget widget={widget} data={widgetData} />;
       case 'terminal':
         return <TerminalWidget widget={widget} data={widgetData} />;
-      case '16neo':
-        return <Neo16Widget widget={widget} data={widgetData} />;
       default: {
         // Autonomous-module presets (MODULE-CONTRACT v1, seam #2) — same fallback
         // the dashboard renderer already has (WidgetRenderer.tsx `default:`). If a
@@ -517,7 +522,7 @@ export function WidgetViewPage() {
     }
   };
 
-  const showTableFilters = widget?.preset_name === 'table';
+  const showTableFilters = widget?.preset_name === 'table_view';
   const isKanban = widget?.preset_name === 'kanban_board';
 
   return (
@@ -584,7 +589,7 @@ export function WidgetViewPage() {
         prefilledData={kanbanPrefill ?? undefined}
         tableId={widget?.config?.table_id ?? undefined}
         tableName={widget?.title}
-        existingIds={widgetData.map((row: WidgetRowData) => String(row.id || row.data?.id || ''))}
+        existingIds={widgetData.map((row: TicketRowData) => String(row.id || row.data?.id || ''))}
       />
 
       {/* Add Column Option Modal - for Kanban columns */}
@@ -641,7 +646,7 @@ export function WidgetViewPage() {
           config={widget?.config}
           titleField={widget?.config?.card_title_column || widget?.config?.titleColumn || 'title'}
           onSave={handleCardSave}
-          tableId={widget?.config?.table_id}
+          tableId={widget?.config?.table_id ?? undefined}
         />
       ) : (
         <CardDetailModal
@@ -656,7 +661,7 @@ export function WidgetViewPage() {
           groupByField={kanbanGroupColumn?.name}
           onSave={handleCardSave}
           initialTab={cardDetailInitialTab}
-          tableId={widget?.config?.table_id}
+          tableId={widget?.config?.table_id ?? undefined}
           relationData={allRelationData}
           descriptionField="why"
           onOpenChat={handleOpenRowChat}
@@ -670,16 +675,16 @@ export function WidgetViewPage() {
         isOpen={printOpen}
         onClose={() => setPrintOpen(false)}
         columns={tableColumns}
-        rows={filteredData.map((row: WidgetRowData) => ({
+        rows={filteredData.map((row: TicketRowData) => ({
           id: String(row.id || row.data?.id || ''),
           data: row.data || row
         }))}
         selectedRowIds={new Set()}
-        filteredRowIds={new Set(filteredData.map((row: WidgetRowData) => String(row.id || row.data?.id || '')))}
-        tableName={widget?.name || t('Модуль', 'Module')}
+        filteredRowIds={new Set(filteredData.map((row: TicketRowData) => String(row.id || row.data?.id || '')))}
+        tableName={widget?.title || t('Модуль', 'Module')}
         viewType={widget?.preset_name === 'kanban_board' ? 'kanban' : 
-                  widget?.preset_name === 'timeline' ? 'timeline' :
-                  widget?.preset_name === 'calendar' ? 'calendar' : 'table'}
+                  widget?.preset_name === 'timeline_widget' ? 'timeline' :
+                  widget?.preset_name === 'calendar_widget' ? 'calendar' : 'table'}
       />
     </section>
   );

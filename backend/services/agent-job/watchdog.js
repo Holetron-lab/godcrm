@@ -78,7 +78,7 @@ export async function _watchdogTick() {
         // Notify user in chat
         await saveStepMessage(job.conversation_id, {
           content: `⏱️ Агент "${job.agent_name || 'AI Agent'}" превысил лимит времени и был остановлен. Отправьте сообщение чтобы продолжить.`,
-          contentType: 'text', role: 'assistant',
+          contentType: 'text', role: 'system',
           senderType: 'system',
         });
 
@@ -134,7 +134,7 @@ export async function _watchdogTick() {
 
         await saveStepMessage(conv.id, {
           content: `⚠️ Агент "${conv.processing_agent_name || 'AI Agent'}" перестал отвечать. Чат разблокирован — можно продолжить.`,
-          contentType: 'text', role: 'assistant',
+          contentType: 'text', role: 'system',
           senderType: 'system',
         });
 

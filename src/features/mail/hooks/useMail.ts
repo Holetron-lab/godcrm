@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { mailApi, type MailPatch, type MailSendInput } from '../api/mailApi';
 import type { MailFolder, MailFolderId, MailMessage, MailScheduled } from '../types';
 
@@ -47,44 +47,50 @@ export function useMailMessages(
   });
 }
 
-/**
- * Multi-folder read path (toolbar folder multiselect). Fans one list query out per
- * selected folder and merges the pages into a single newest-first list. Each query
- * reuses the same cache key as `useMailMessages`, so a single-folder view and this
- * merged view share cache entries (no double-fetch). De-dupes by id in case a
- * message surfaces in two selected folders.
- */
+interface MailMessagesPage {
+  messages: MailMessage[];
+  next: { folder: MailFolderId; offset: number }[];
+}
+
+/** Multi-folder pages, with an independent offset and end-of-list per folder. */
 export function useMailMessagesMulti(
   spaceId: number | undefined,
   folders: MailFolderId[],
   connectorId: number | null
 ) {
-  const results = useQueries({
-    queries: folders.map((folder) => ({
-      queryKey: keys.messages(spaceId, folder, connectorId),
-      queryFn: () => mailApi.messages(spaceId!, folder, connectorId),
-      enabled: Number.isFinite(spaceId),
-      staleTime: 15_000,
-    })),
+  const selectedFolders = [...new Set(folders)].sort();
+  const query = useInfiniteQuery({
+    queryKey: ['mail', 'messages', spaceId, 'pages', selectedFolders, connectorId],
+    initialPageParam: selectedFolders.map(folder => ({ folder, offset: 0 })),
+    queryFn: async ({ pageParam }): Promise<MailMessagesPage> => {
+      const pages = await Promise.all(pageParam.map(({ folder, offset }) =>
+        mailApi.messages(spaceId!, folder, connectorId, offset)
+      ));
+      return {
+        messages: pages.flat(),
+        next: pageParam.flatMap(({ folder, offset }, i) =>
+          pages[i].length === 50 ? [{ folder, offset: offset + 50 }] : []
+        ),
+      };
+    },
+    getNextPageParam: (lastPage) => lastPage.next.length ? lastPage.next : undefined,
+    enabled: Number.isFinite(spaceId) && selectedFolders.length > 0,
+    staleTime: 15_000,
   });
 
-  // dataUpdatedAt changes only when a page actually refetches, so the merge is
-  // stable across unrelated re-renders.
-  const signature = results.map((r) => r.dataUpdatedAt).join('|');
   const data = useMemo(() => {
     const byId = new Map<string, MailMessage>();
-    for (const r of results) for (const m of r.data ?? []) byId.set(m.id, m);
+    for (const page of query.data?.pages ?? []) {
+      for (const message of page.messages) byId.set(message.id, message);
+    }
     return [...byId.values()].sort((a, b) =>
       a.date < b.date ? 1 : a.date > b.date ? -1 : 0
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signature]);
+  }, [query.data]);
 
   return {
+    ...query,
     data,
-    isLoading: results.some((r) => r.isLoading),
-    isError: results.some((r) => r.isError),
-    refetch: () => results.forEach((r) => void r.refetch()),
   };
 }
 
@@ -287,15 +293,19 @@ export function useUpdateMessage(spaceId: number | undefined) {
       mailApi.update(spaceId!, id, patch),
     onMutate: async ({ id, patch }) => {
       await qc.cancelQueries({ queryKey: ['mail', 'messages', spaceId] });
-      const snapshots = qc.getQueriesData<MailMessage[]>({
+      const snapshots = qc.getQueriesData<MailMessage[] | InfiniteData<MailMessagesPage>>({
         queryKey: ['mail', 'messages', spaceId],
       });
       for (const [key, list] of snapshots) {
         if (!list) continue;
-        const next = list
+        const patchList = (messages: MailMessage[]) => messages
           .map((m) => (m.id === id ? applyPatch(m, patch) : m))
           // A folder move drops the row out of the folder it's currently listed in.
           .filter((m) => !(m.id === id && 'folder' in patch));
+        const next = Array.isArray(list) ? patchList(list) : {
+          ...list,
+          pages: list.pages.map(page => ({ ...page, messages: patchList(page.messages) })),
+        };
         qc.setQueryData(key, next);
       }
       return { snapshots };

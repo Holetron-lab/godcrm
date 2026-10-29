@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * TaskSelector Component
  * ADR-023: Agent-as-User & Infinite Chat Architecture
@@ -51,6 +52,7 @@ export function TaskSelector({
   onUnbind,
   className
 }: TaskSelectorProps) {
+  const { t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTableId, setSelectedTableId] = useState<number | null>(boundTableId || null);
@@ -106,52 +108,54 @@ export function TaskSelector({
       };
     }
     return {
-      tableName: table?.name || 'Unknown Table',
+      tableName: table?.name || t('aiChat.ui.unknownTable'),
       taskName: `Task #${boundTaskId}`
     };
-  }, [boundTaskId, boundTableId, taskTables, tableRows]);
+  }, [boundTaskId, boundTableId, taskTables, tableRows, t]);
 
   return (
     <div className={cn('border-t border-[var(--border-secondary)]', className)}>
       {/* Header - Bound Task or Toggle */}
       <div
-        onClick={() => !boundTaskId && setIsExpanded(!isExpanded)}
         className={cn(
-          'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors cursor-pointer',
-          boundTaskId 
-            ? 'bg-[var(--color-primary-500)]/10 hover:bg-[var(--color-primary-500)]/15' 
+          'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
+          boundTaskId
+            ? 'bg-[var(--color-primary-500)]/10 hover:bg-[var(--color-primary-500)]/15'
             : 'hover:bg-[var(--bg-tertiary)]'
         )}
       >
-        <Link2 className={cn(
-          'w-4 h-4',
-          boundTaskId ? 'text-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)]'
-        )} />
-        
-        <div 
-          className="flex-1 min-w-0"
-          onClick={(e) => {
-            if (boundTaskId) {
-              e.stopPropagation();
-              setIsExpanded(!isExpanded);
-            }
-          }}
+        <button
+          type="button"
+          aria-expanded={isExpanded}
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex flex-1 min-w-0 items-center gap-2 text-left rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary-500)]"
         >
-          {boundTaskId && boundTaskDisplay ? (
-            <div>
-              <div className="text-xs text-[var(--text-tertiary)]">{boundTaskDisplay.tableName}</div>
-              <div className="text-sm font-medium text-[var(--text-primary)] truncate">
-                {boundTaskDisplay.taskName}
-              </div>
-            </div>
-          ) : (
-            <span className="text-sm text-[var(--text-tertiary)]">
-              Привязать к задаче...
-            </span>
+          <Link2 className={cn(
+            'w-4 h-4 shrink-0',
+            boundTaskId ? 'text-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)]'
+          )} />
+          <span className="flex-1 min-w-0">
+            {boundTaskId && boundTaskDisplay ? (
+              <>
+                <span className="block text-xs text-[var(--text-tertiary)]">{boundTaskDisplay.tableName}</span>
+                <span className="block text-sm font-medium text-[var(--text-primary)] truncate">
+                  {boundTaskDisplay.taskName}
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-[var(--text-tertiary)]">
+                {t('aiChat.ui.linkToTask')}
+              </span>
+            )}
+          </span>
+          {!boundTaskId && (
+            <ChevronDown className={cn(
+              'w-4 h-4 shrink-0 text-[var(--text-tertiary)] transition-transform',
+              isExpanded && 'rotate-180'
+            )} />
           )}
-        </div>
-        
-        {boundTaskId ? (
+        </button>
+        {boundTaskId && (
           <button
             type="button"
             onClick={(e) => {
@@ -159,15 +163,10 @@ export function TaskSelector({
               onUnbind();
             }}
             className="p-1 rounded hover:bg-[var(--bg-secondary)] text-[var(--text-tertiary)] hover:text-[var(--color-error)]"
-            title="Отвязать"
+            title={t('aiChat.ui.unlink')}
           >
             <X className="w-3.5 h-3.5" />
           </button>
-        ) : (
-          <ChevronDown className={cn(
-            'w-4 h-4 text-[var(--text-tertiary)] transition-transform',
-            isExpanded && 'rotate-180'
-          )} />
         )}
       </div>
 
@@ -177,8 +176,7 @@ export function TaskSelector({
           {/* Table Selector */}
           <div className="p-2 border-b border-[var(--border-secondary)]">
             <div className="text-xs font-medium text-[var(--text-tertiary)] mb-1 px-1">
-              Таблица
-            </div>
+              {t('columnSettings.relation.table')}</div>
             {isLoadingTables ? (
               <div className="flex items-center justify-center py-2">
                 <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" />
@@ -213,7 +211,7 @@ export function TaskSelector({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Поиск..."
+                  placeholder={t('aiChat.ui.search')}
                   className="w-full pl-7 pr-2 py-1.5 text-xs bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-md text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]"
                 />
               </div>
@@ -229,8 +227,7 @@ export function TaskSelector({
                 </div>
               ) : tableRows.length === 0 ? (
                 <div className="text-xs text-[var(--text-tertiary)] text-center py-4">
-                  Нет записей
-                </div>
+                  {t('kanban.noRecords')}</div>
               ) : (
                 <div className="p-1">
                   {tableRows.map((row) => {

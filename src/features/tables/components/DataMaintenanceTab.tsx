@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/shared/components/ui';
 import { apiClient } from '@/shared/utils/apiClient';
 import { logger } from '@/shared/utils/logger';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { Database, RefreshCw, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 
 interface DataMaintenanceTabProps {
@@ -30,6 +31,7 @@ interface Column {
 
 export const DataMaintenanceTab = ({ tableId }: DataMaintenanceTabProps) => {
   const queryClient = useQueryClient();
+  const { t } = useLanguage();
   const [normalizationResult, setNormalizationResult] = useState<{
     success: boolean;
     message: string;
@@ -134,7 +136,7 @@ export const DataMaintenanceTab = ({ tableId }: DataMaintenanceTabProps) => {
     onSuccess: (result) => {
       setNormalizationResult({
         success: true,
-        message: `Успешно нормализовано ${result.normalized} строк`,
+        message: t('tables.edit.data.success', { count: result.normalized }),
         normalized: result.normalized
       });
       refetchAnalysis();
@@ -144,7 +146,7 @@ export const DataMaintenanceTab = ({ tableId }: DataMaintenanceTabProps) => {
       logger.error('Normalization failed:', error);
       setNormalizationResult({
         success: false,
-        message: `Ошибка нормализации: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: t('tables.edit.data.failure', { error: error instanceof Error ? error.message : 'Unknown error' }),
         normalized: 0
       });
     }
@@ -155,13 +157,13 @@ export const DataMaintenanceTab = ({ tableId }: DataMaintenanceTabProps) => {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Database className="w-5 h-5 text-[var(--color-primary-500)]" />
-        <h3 className="text-lg font-medium text-[var(--text-primary)]">Обслуживание данных</h3>
+        <h3 className="text-lg font-medium text-[var(--text-primary)]">{t('tables.edit.data.title')}</h3>
       </div>
 
       {/* Analysis Section */}
       <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-primary)] p-4">
         <div className="flex items-center justify-between mb-4">
-          <h4 className="font-medium text-[var(--text-primary)]">Анализ формата данных</h4>
+          <h4 className="font-medium text-[var(--text-primary)]">{t('tables.edit.data.analysisTitle')}</h4>
           <Button 
             variant="ghost" 
             size="sm"
@@ -169,34 +171,34 @@ export const DataMaintenanceTab = ({ tableId }: DataMaintenanceTabProps) => {
             disabled={isAnalyzing}
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${isAnalyzing ? 'animate-spin' : ''}`} />
-            Обновить
+            {t('tables.edit.data.refresh')}
           </Button>
         </div>
 
         {isAnalyzing ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-[var(--color-primary-500)]" />
-            <span className="ml-2 text-[var(--text-secondary)]">Анализ данных...</span>
+            <span className="ml-2 text-[var(--text-secondary)]">{t('tables.edit.data.analyzing')}</span>
           </div>
         ) : analysis ? (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="flex justify-between">
-                <span className="text-[var(--text-secondary)]">Всего строк:</span>
+                <span className="text-[var(--text-secondary)]">{t('tables.edit.data.totalRows')}</span>
                 <span className="font-medium text-[var(--text-primary)]">{analysis.totalRows}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[var(--text-secondary)]">Формат column_name:</span>
+                <span className="text-[var(--text-secondary)]">{t('tables.edit.data.columnNameFormat')}</span>
                 <span className="font-medium text-green-400">{analysis.columnNameFormat}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[var(--text-secondary)]">Формат column_id:</span>
+                <span className="text-[var(--text-secondary)]">{t('tables.edit.data.columnIdFormat')}</span>
                 <span className={`font-medium ${analysis.columnIdFormat > 0 ? 'text-yellow-400' : 'text-[var(--text-primary)]'}`}>
                   {analysis.columnIdFormat}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[var(--text-secondary)]">Смешанный формат:</span>
+                <span className="text-[var(--text-secondary)]">{t('tables.edit.data.mixedFormat')}</span>
                 <span className={`font-medium ${analysis.mixedFormat > 0 ? 'text-orange-400' : 'text-[var(--text-primary)]'}`}>
                   {analysis.mixedFormat}
                 </span>
@@ -212,35 +214,27 @@ export const DataMaintenanceTab = ({ tableId }: DataMaintenanceTabProps) => {
               {analysis.needsNormalization ? (
                 <>
                   <AlertTriangle className="w-5 h-5 text-yellow-400" />
-                  <span className="text-sm text-yellow-400">
-                    Обнаружены данные с column_id форматом. Рекомендуется нормализация.
-                  </span>
+                  <span className="text-sm text-yellow-400">{t('tables.edit.data.needsNormalization')}</span>
                 </>
               ) : (
                 <>
                   <CheckCircle className="w-5 h-5 text-green-400" />
-                  <span className="text-sm text-green-400">
-                    Все данные в нормализованном формате (column_name).
-                  </span>
+                  <span className="text-sm text-green-400">{t('tables.edit.data.normalized')}</span>
                 </>
               )}
             </div>
           </div>
         ) : (
           <div className="text-center py-4 text-[var(--text-tertiary)]">
-            Нет данных для анализа
+            {t('tables.edit.data.noData')}
           </div>
         )}
       </div>
 
       {/* Normalization Section */}
       <div className="bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-primary)] p-4">
-        <h4 className="font-medium text-[var(--text-primary)] mb-3">Нормализация данных</h4>
-        <p className="text-sm text-[var(--text-secondary)] mb-4">
-          Преобразует данные из формата column_id (например, {`{"13254": 21}`}) 
-          в формат column_name (например, {`{"system_user_id": 21}`}).
-          Это улучшает читаемость и совместимость с Relations.
-        </p>
+        <h4 className="font-medium text-[var(--text-primary)] mb-3">{t('tables.edit.data.normalizationTitle')}</h4>
+        <p className="text-sm text-[var(--text-secondary)] mb-4">{t('tables.edit.data.normalizationDesc')}</p>
 
         <div className="flex items-center gap-4">
           <Button
@@ -251,19 +245,19 @@ export const DataMaintenanceTab = ({ tableId }: DataMaintenanceTabProps) => {
             {normalizeMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Нормализация...
+                {t('tables.edit.data.normalizing')}
               </>
             ) : (
               <>
                 <RefreshCw className="w-4 h-4 mr-2" />
-                Нормализовать данные
+                {t('tables.edit.data.normalize')}
               </>
             )}
           </Button>
 
           {!analysis?.needsNormalization && (
             <span className="text-sm text-[var(--text-tertiary)]">
-              Нормализация не требуется
+              {t('tables.edit.data.notRequired')}
             </span>
           )}
         </div>
@@ -284,9 +278,7 @@ export const DataMaintenanceTab = ({ tableId }: DataMaintenanceTabProps) => {
 
       {/* Info */}
       <div className="text-xs text-[var(--text-tertiary)] bg-[var(--bg-tertiary)] rounded-lg p-3">
-        <strong>Примечание:</strong> Данные могут храниться в двух форматах — по имени колонки 
-        (column_name) или по ID колонки (column_id). Нормализация приводит все данные к единому 
-        формату column_name, что обеспечивает корректную работу Relations и улучшает читаемость.
+        <strong>{t('tables.edit.data.noteLabel')}</strong> {t('tables.edit.data.note')}
       </div>
     </div>
   );

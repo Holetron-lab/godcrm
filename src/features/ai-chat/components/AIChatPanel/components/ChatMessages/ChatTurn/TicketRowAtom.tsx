@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * TicketRowAtom — T-141688 / ADR-0031 §Y / WP-22.
  *
@@ -73,6 +74,7 @@ export function TicketRowAtom({
   onOpenTaskChat,
   onAttachToMessage,
 }: TicketRowAtomProps) {
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
   const { ref: ioRef, isInView } = useInView<HTMLDivElement>({ rootMargin: '200px 0px', enabled: true });
   const enabled = isInView && tableId > 0 && rowId > 0;
@@ -184,7 +186,7 @@ export function TicketRowAtom({
     },
     onError: (err) => {
       logger.error('TicketRowAtom updateRow failed', { err });
-      showToast('Ошибка обновления', 'error');
+      showToast(t('aiChat.ui.couldNotUpdate'), 'error');
     },
   });
 
@@ -214,7 +216,7 @@ export function TicketRowAtom({
       <div ref={ioRef} className="w-full rounded-lg bg-[rgba(239,68,68,0.06)] border border-[rgba(239,68,68,0.2)] px-3 py-2">
         <div className="flex items-center gap-2 text-xs text-red-300">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="truncate">Не удалось загрузить строку #{rowId}</span>
+          <span className="truncate">{t('aiChat.ui.rowLoadFailed', { id: rowId })}</span>
         </div>
       </div>
     );
@@ -240,7 +242,7 @@ export function TicketRowAtom({
     >
       <TicketRowHeader
         ticket={ticket}
-        ticketConfig={{ columns: ticketConfig.columns as Record<string, string>, table_id: ticketConfig.table_id }}
+        ticketConfig={ticketConfig}
         tableColumns={tableColumns}
         types={types}
         states={states}

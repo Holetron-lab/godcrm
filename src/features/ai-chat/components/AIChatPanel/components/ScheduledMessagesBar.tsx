@@ -1,7 +1,7 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
- * ScheduledMessagesBar — Scheduled messages displayed like regular chat turns.
- * Divider with count + sender info, then each message as a mini-turn with
- * yellow time badge, Send Now, and Cancel actions in footer.
+ * ScheduledMessagesBar — Compact scheduled-message list opened from the toolbar.
+ * Flat notification-style rows preserve reschedule, edit, send and cancel actions.
  * WP-17: Scheduled messages feature.
  */
 
@@ -19,39 +19,40 @@ interface ScheduledMessagesBarProps {
   onEdit?: (msg: ScheduledMessage) => void;
 }
 
-function formatScheduledTime(iso: string): string {
+function formatScheduledTime(iso: string, language: string, t: (key: string, params?: Record<string, unknown>) => string): string {
   const d = new Date(iso);
   const now = new Date();
   const diff = d.getTime() - now.getTime();
 
-  if (diff < 60_000) return 'через <1 мин';
-  if (diff < 3600_000) return `через ${Math.round(diff / 60_000)} мин`;
+  if (diff < 60_000) return t('aiChat.ui.lessThanMinute');
+  if (diff < 3600_000) return t('aiChat.ui.inMinutes', { count: Math.round(diff / 60_000) });
   if (diff < 86400_000) {
     const hours = Math.floor(diff / 3600_000);
     const mins = Math.round((diff % 3600_000) / 60_000);
-    return `через ${hours}ч ${mins > 0 ? `${mins}м` : ''}`;
+    return t('aiChat.ui.inHoursMinutes', { hours, minutes: mins });
   }
 
-  return d.toLocaleString('ru', {
+  return d.toLocaleString(language, {
     day: 'numeric', month: 'short',
     hour: '2-digit', minute: '2-digit',
   });
 }
 
-function formatAbsoluteTime(iso: string): string {
-  return new Date(iso).toLocaleString('ru', {
+function formatAbsoluteTime(iso: string, language: string): string {
+  return new Date(iso).toLocaleString(language, {
     day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
   });
 }
 
-const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const MONTHS_RU = ["dateSettings.months.jan", "dateSettings.months.feb", "dateSettings.months.mar", "dateSettings.months.apr", "dateSettings.months.may", "dateSettings.months.jun", "dateSettings.months.jul", "dateSettings.months.aug", "dateSettings.months.sep", "dateSettings.months.oct", "dateSettings.months.nov", "dateSettings.months.dec"];
+const WEEKDAYS = ["dateSettings.weekdays.mon", "dateSettings.weekdays.tue", "dateSettings.weekdays.wed", "dateSettings.weekdays.thu", "dateSettings.weekdays.fri", "dateSettings.weekdays.sat", "dateSettings.weekdays.sun"];
 
 function InlineDatePicker({ currentDate, onSave, onClose }: {
   currentDate: string;
   onSave: (isoDate: string) => void;
   onClose: () => void;
 }) {
+  const { t, language } = useLanguage();
   const d = new Date(currentDate);
   const [viewYear, setViewYear] = useState(d.getFullYear());
   const [viewMonth, setViewMonth] = useState(d.getMonth());
@@ -123,14 +124,14 @@ function InlineDatePicker({ currentDate, onSave, onClose }: {
   })();
 
   return (
-    <div ref={ref} className="absolute left-4 right-4 bottom-full mb-1 bg-[var(--bg-secondary)] border border-[var(--border-secondary)] rounded-xl shadow-xl z-50 overflow-hidden">
+    <div ref={ref} className="relative mx-3 mb-3 bg-[var(--bg-secondary)] border border-[var(--border-secondary)] rounded-xl shadow-xl z-50 overflow-hidden">
       <div className="p-2">
         <div className="flex items-center justify-between mb-1.5">
           <button onClick={() => goMonth(-1)} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <span className="text-[11px] font-medium text-[var(--text-primary)]">
-            {MONTHS_RU[viewMonth]} {viewYear}
+            {t(MONTHS_RU[viewMonth])} {viewYear}
           </span>
           <button onClick={() => goMonth(1)} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
             <ChevronRight className="w-3.5 h-3.5" />
@@ -138,7 +139,7 @@ function InlineDatePicker({ currentDate, onSave, onClose }: {
         </div>
         <div className="grid grid-cols-7 gap-0">
           {WEEKDAYS.map(w => (
-            <div key={w} className="text-center text-[9px] text-[var(--text-tertiary)] py-0.5">{w}</div>
+            <div key={w} className="text-center text-[9px] text-[var(--text-tertiary)] py-0.5">{t(w)}</div>
           ))}
         </div>
         <div className="grid grid-cols-7 gap-0">
@@ -178,8 +179,7 @@ function InlineDatePicker({ currentDate, onSave, onClose }: {
                 : "bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] cursor-not-allowed"
             )}>
             <Send className="w-2.5 h-2.5" />
-            Сохранить
-          </button>
+            {t('aiChat.ui.save')}</button>
         </div>
       </div>
     </div>
@@ -187,6 +187,7 @@ function InlineDatePicker({ currentDate, onSave, onClose }: {
 }
 
 export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendNow, onEdit }: ScheduledMessagesBarProps) {
+  const { t, language } = useLanguage();
   const [editingId, setEditingId] = useState<number | null>(null);
   // Live countdown — re-render every 30s so the timer ticks
   const [, setTick] = useState(0);
@@ -198,47 +199,21 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
 
   if (messages.length === 0) return null;
 
-  // Collect unique sender names
-  const senderNames = [...new Set(messages.map(m => m.sender_name).filter(Boolean))];
-  const senderLabel = senderNames.length > 0
-    ? senderNames.length <= 2
-      ? senderNames.join(', ')
-      : `${senderNames.slice(0, 2).join(', ')} +${senderNames.length - 2}`
-    : null;
-
   return (
-    <div className="flex-shrink-0">
-      {/* Divider with count and senders */}
-      <div className="flex items-center gap-2 px-3 py-1.5">
-        <div className="flex-1 h-px bg-amber-500/30" />
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <Clock className="w-3 h-3 text-amber-400" />
-          <span className="text-[11px] font-medium text-amber-400">
-            {messages.length} отложенн{messages.length === 1 ? 'ое' : 'ых'}
-          </span>
-          {senderLabel && (
-            <span className="text-[10px] text-[var(--text-tertiary)]">
-              от {senderLabel}
-            </span>
-          )}
-        </div>
-        <div className="flex-1 h-px bg-amber-500/30" />
-      </div>
-
-      {/* Messages — unified with regular chat turns */}
-      <div className="max-h-64 overflow-y-auto px-4 pb-3 space-y-1.5">
+    <div className="flex-shrink-0 border-t border-[var(--border-secondary)] bg-[var(--bg-tertiary)]">
+      <ul aria-label={t('aiChat.ui.scheduledMessages')} className="max-h-64 overflow-y-auto p-1.5 space-y-1.5">
         {messages.map((msg) => {
           // Determine sender type for badge
-          const senderType: 'human' | 'agent' = (msg.metadata as any)?.sender_type === 'agent' ? 'agent' : 'human';
+          const senderType: 'human' | 'agent' = msg.metadata?.sender_type === 'agent' ? 'agent' : 'human';
 
           return (
-          <div
+          <li
             key={msg.id}
-            className="relative group/scheduled rounded-xl bg-[var(--bg-secondary)] border-b border-[var(--border-secondary)]"
+            className="relative group/scheduled bg-[var(--bg-secondary)] border border-[var(--border-primary)] shadow-lg"
             style={{ boxShadow: 'inset 4px 0 0 0 rgb(245, 158, 11)' }}
           >
-            <div className="px-4 pt-3 pb-3">
-              {/* Header: avatar + name + badge + time (same as TurnHeader) */}
+            <div className="px-3 py-2.5">
+              {/* Sender and creation time */}
               <div className="flex items-center gap-2 mb-2">
                 {msg.sender_avatar ? (
                   <img src={msg.sender_avatar} alt="" className="w-7 h-7 rounded-full flex-shrink-0" />
@@ -252,29 +227,18 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
                       : <Bot className="w-3.5 h-3.5" />}
                   </div>
                 )}
-                <span className="text-sm font-medium text-[var(--text-primary)] truncate">
-                  {msg.sender_name || 'Вы'}
-                </span>
-
-                {/* Type badge — same as TurnHeader */}
-                <span className={cn(
-                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium',
-                  senderType === 'human' ? 'bg-blue-500/15 text-blue-400' : 'bg-purple-500/15 text-purple-400'
-                )}>
-                  {senderType === 'human' ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
+                <span className="text-xs font-medium text-[var(--text-primary)] truncate">
+                  {msg.sender_name || t('aiChat.ui.you')}
                 </span>
 
                 <span className="flex-1" />
-                <span className="text-[10px] text-[var(--text-tertiary)] flex-shrink-0">
-                  создано {formatAbsoluteTime(msg.created_at)}
+                <span className="text-[10px] text-[var(--text-secondary)] flex-shrink-0">
+                  {t('aiChat.ui.created')}{' '}{formatAbsoluteTime(msg.created_at, language)}
                 </span>
               </div>
 
-              {/* Separator — same as ChatTurn */}
-              <div className="border-b border-[var(--border-secondary)] mb-3" />
-
               {/* Message content */}
-              <div className="text-sm text-[var(--text-primary)] break-words prose-sm">
+              <div className="text-xs text-[var(--text-primary)] break-words prose-sm">
                 <MarkdownPreview content={msg.content} />
               </div>
 
@@ -295,19 +259,19 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
               )}
 
               {/* Footer: time badge + actions (same 10px style as TurnFooter) */}
-              <div className="flex items-center gap-2 mt-1 text-[10px] text-[var(--text-tertiary)]">
+              <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] text-[var(--text-secondary)]">
                 {/* Yellow time badge — clickable to reschedule */}
                 <button
                   onClick={(e) => { e.stopPropagation(); setEditingId(editingId === msg.id ? null : msg.id); }}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors cursor-pointer"
-                  title="Изменить время"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-[var(--text-primary)] hover:bg-amber-500/25 transition-colors cursor-pointer"
+                  title={t('aiChat.ui.changeTime')}
                 >
                   <Clock className="w-3 h-3" />
                   <span className="text-[10px] font-medium">
-                    {formatScheduledTime(msg.scheduled_at)}
+                    {formatScheduledTime(msg.scheduled_at, language, t)}
                   </span>
-                  <span className="text-[10px] opacity-60">
-                    — {formatAbsoluteTime(msg.scheduled_at)}
+                  <span className="text-[10px]">
+                    — {formatAbsoluteTime(msg.scheduled_at, language)}
                   </span>
                 </button>
 
@@ -317,8 +281,8 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
                 {onEdit && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onEdit(msg); }}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-tertiary)] hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                    title="Редактировать"
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-secondary)] hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                    title={t('dashboardPage.edit')}
                   >
                     <Pencil className="w-3 h-3" />
                   </button>
@@ -328,8 +292,8 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
                 {onSendNow && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onSendNow(msg); }}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-tertiary)] hover:text-green-400 hover:bg-green-500/10 transition-colors"
-                    title="Отправить сейчас"
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-secondary)] hover:text-green-400 hover:bg-green-500/10 transition-colors"
+                    title={t('aiChat.ui.sendNow')}
                   >
                     <Play className="w-3 h-3 fill-current" />
                   </button>
@@ -338,8 +302,8 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
                 {/* Cancel */}
                 <button
                   onClick={(e) => { e.stopPropagation(); onCancel(msg.id); }}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  title="Отменить"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-secondary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  title={t('schemaEditor.undo')}
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -357,10 +321,10 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
                 onClose={() => setEditingId(null)}
               />
             )}
-          </div>
+          </li>
           );
         })}
-      </div>
+      </ul>
     </div>
   );
 }

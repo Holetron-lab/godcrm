@@ -1,0 +1,16 @@
+{
+  "16neo": {
+    "id": "16neo",
+    "name": "16Neo",
+    "description": "16-bit pixel art virtual office — WASD movement, proximity chat, multiplayer, pet companion",
+    "emoji": "🎮",
+    "color": "#6366f1",
+    "category": "productivity",
+    "defaultSize": {
+      "w": 12,
+      "h": 8
+    },
+    "deprecated": false,
+    "tables": []
+  }
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -20,6 +20,8 @@ export const DeleteSpaceModal = ({ open, onOpenChange, space }: DeleteSpaceModal
   const navigate = useNavigate();
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [error, setError] = useState('');
+  const confirmationId = useId();
+  const confirmationRef = useRef<HTMLInputElement>(null);
 
   const deleteSpace = useDeleteSpaceMutation();
   
@@ -34,7 +36,10 @@ export const DeleteSpaceModal = ({ open, onOpenChange, space }: DeleteSpaceModal
   }, [open]);
 
   const handleDelete = () => {
-    if (!canDelete) return;
+    if (!canDelete || deleteSpace.isPending) return;
+    setError('');
+    // Keep focus inside the dialog before the submit button becomes disabled.
+    confirmationRef.current?.focus();
     
     deleteSpace.mutate(space.id, {
       onSuccess: () => {
@@ -44,35 +49,38 @@ export const DeleteSpaceModal = ({ open, onOpenChange, space }: DeleteSpaceModal
       },
       onError: (err) => {
         logger.error('Failed to delete space:', err);
-        setError(t('spaces.delete.confirm'));
+        setError(err instanceof Error && err.message.trim() ? err.message : t('spaces.delete.failed'));
       },
     });
   };
 
   return (
     <Modal 
+      restoreFocus
       open={open} 
       onOpenChange={onOpenChange} 
       title={`⚠️ ${t('spaces.delete.modalTitle')}`}
     >
       <div className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400">
+          <div role="alert" className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-700 dark:text-red-300">
             {error}
           </div>
         )}
 
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
           <p className="mb-2 text-sm text-[var(--text-secondary)]">
-            {t('spaces.delete.warningText')} <strong className="text-red-400">"{space.name}"</strong> {t('spaces.delete.warningTextSuffix')}
+            {t('spaces.delete.warningText')} <strong className="text-red-700 dark:text-red-300">&quot;{space.name}&quot;</strong>{t('spaces.delete.warningTextSuffix')}
           </p>
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm text-[var(--text-secondary)]">
-            {t('spaces.delete.typeToConfirm')} <strong className="font-mono text-red-400">delete</strong> {t('spaces.delete.typeToConfirmSuffix')}
-          </p>
+          <label htmlFor={confirmationId} className="block text-sm text-[var(--text-secondary)]">
+            {t('spaces.delete.typeToConfirm')} <strong className="font-mono text-red-700 dark:text-red-300">delete</strong> {t('spaces.delete.typeToConfirmSuffix')}
+          </label>
           <input
+            id={confirmationId}
+            ref={confirmationRef}
             type="text"
             value={deleteConfirmText}
             onChange={(e) => setDeleteConfirmText(e.target.value)}
@@ -82,7 +90,6 @@ export const DeleteSpaceModal = ({ open, onOpenChange, space }: DeleteSpaceModal
               text-[var(--text-primary)]
               focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20
               placeholder:text-[var(--text-tertiary)]"
-            autoFocus
           />
         </div>
 

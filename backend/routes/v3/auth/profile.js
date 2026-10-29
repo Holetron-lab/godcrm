@@ -84,6 +84,30 @@ function deleteOldAvatarFile(avatarValue) {
   }
 }
 
+// Accent colour picked next to the avatar. Agent users keep it on the agent
+// row (data->>'color') so the space's Agents table stays the source of truth;
+// humans keep it on users.color. Readers COALESCE(row colour, users.color).
+const HEX_COLOR = /^#[0-9a-f]{6}$/;
+const PROFILE_SELECT = `SELECT u.id, u.email, u.name, u.avatar, u.role, u.totp_enabled, u.created_at, u.referral_code,
+         u.user_type, COALESCE(ar.data->>'color', u.color) AS color
+  FROM users u
+  LEFT JOIN table_rows ar ON ar.id = u.managed_by_agent_row_id AND ar.table_id = u.managed_by_agent_table_id
+  WHERE u.id = ?`;
+
+async function saveAgentRowColor(userId, color) {
+  const link = await dbGet(
+    "SELECT managed_by_agent_table_id AS table_id, managed_by_agent_row_id AS row_id FROM users WHERE id = ? AND user_type = 'agent'",
+    [userId]
+  );
+  if (!link?.row_id) return false;
+  const r = await dbRun(
+    `UPDATE table_rows SET data = data || jsonb_build_object('color', ?::text), updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND table_id = ?`,
+    [color, link.row_id, link.table_id]
+  );
+  return r.changes > 0;
+}
+
 /**
  * @param {import('express').Router} router
  */
@@ -92,10 +116,7 @@ export default function registerProfileRoutes(router) {
   // GET /api/v2/auth/profile - Get current user profile
   router.get('/profile', requireAuth, async (req, res) => {
     try {
-      const user = await dbGet(
-        'SELECT id, email, name, avatar, role, totp_enabled, created_at, referral_code FROM users WHERE id = ?',
-        [req.user.id]
-      );
+      const user = await dbGet(PROFILE_SELECT, [req.user.id]);
 
       if (!user) {
         return respondError(res, 404, 'USER_NOT_FOUND', 'User not found');
@@ -112,6 +133,7 @@ export default function registerProfileRoutes(router) {
   router.patch('/profile', requireAuth, async (req, res) => {
     try {
       const { name, avatar } = req.body;
+      let { color } = req.body;
       const userId = req.user.id;
 
       const updates = [];
@@ -127,22 +149,35 @@ export default function registerProfileRoutes(router) {
         params.push(avatar);
       }
 
-      if (updates.length === 0) {
+      if (color !== undefined) {
+        if (color !== null) {
+          color = typeof color === 'string' ? color.trim().toLowerCase() : color;
+          if (!HEX_COLOR.test(color)) {
+            return respondError(res, 400, 'INVALID_COLOR', 'Color must be #rrggbb or null');
+          }
+        }
+        // Agent users own their colour on the agent row; only humans (or
+        // unlinked agents) fall through to users.color.
+        if (!(color !== null && await saveAgentRowColor(userId, color))) {
+          updates.push('color = ?');
+          params.push(color);
+        }
+      }
+
+      if (updates.length === 0 && color === undefined) {
         return respondError(res, 400, 'NO_UPDATES', 'No fields to update');
       }
 
-      updates.push('updated_at = CURRENT_TIMESTAMP');
-      params.push(userId);
+      if (updates.length > 0) {
+        updates.push('updated_at = CURRENT_TIMESTAMP');
+        params.push(userId);
+        await dbRun(
+          `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+          params
+        );
+      }
 
-      await dbRun(
-        `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
-        params
-      );
-
-      const user = await dbGet(
-        'SELECT id, email, name, avatar, role, totp_enabled FROM users WHERE id = ?',
-        [userId]
-      );
+      const user = await dbGet(PROFILE_SELECT, [userId]);
 
       return respondSuccess(res, user);
     } catch (error) {

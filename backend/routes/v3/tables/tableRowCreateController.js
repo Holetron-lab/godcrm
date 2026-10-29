@@ -8,13 +8,17 @@ import { dbAll, dbGet, dbRun, toBool, sqlNow } from '../../../database/connectio
 import { generateBaseId } from '../../../utils/baseId.js';
 import { generatePersonalKey, encryptPersonalKey } from '../../../services/AuthService.js';
 import { apiLogger } from '../../../utils/logger.js';
-import { success, created, notFound, badRequest, forbidden, error } from '../../../utils/response.js';
+import { isMysqlSource, openMysqlConnection } from '../../../services/data-source/mysql.js';
+import { success, created, notFound, badRequest, forbidden, conflict, error } from '../../../utils/response.js';
 import { fireRowCreateTriggers } from '../../../services/AutomationTriggerService.js';
+import { notifyRowChange } from '../../../services/realtime/rowEvents.js';
 import { onDocumentTableMutation } from '../../../services/documents/SnapshotWriter.js';
 import { onCriterionChange as onBddCriterionChange } from '../../../services/bdd/completionGate.js';
 import { resolveSelectValues } from '../../../services/SelectValueResolver.js';
+import { guardRowKeys, unknownKeysMessage } from '../../../services/row-schema-guard.js';
+import { normalizeTypedCells, NORMALIZED_CELL_TYPES } from '../../../services/cellNormalizers.js';
 import { coerceDataObject } from '../../../services/agent-tools/coerceDataInput.js';
-import { checkTableAccess } from './helpers.js';
+import { checkTableAccess, requireTableWriteAccess } from './helpers.js';
 import { validateVerificationSettingsAtom } from '../../../services/verification/applyOverrideValidator.js';
 import { validateTicketRefAtom } from '../../../services/atoms/ticket-ref-serializer.js';
 import { validateWidgetAtomRecursion } from '../../../services/atoms/widget-atom-recursion-guard.js';
@@ -22,6 +26,10 @@ import { ATOMS_V2_TABLE_ID } from '../../../services/atoms-archive.js';
 import { getWidgetById } from '../../../services/WidgetService.js';
 import { isBookingConflictError, findConflictingRowId } from '../../../lib/booking-constraint.js';
 import { writeAudit } from '../../../services/audit/writeAudit.js';
+import secretsVault from '../../../services/secrets/SecretsVault.js';
+import {
+  SECRETS_SYNC_TARGET, validateKey, requireSecretsTableOwner, normalizeSecretRowData,
+} from '../../../services/secrets/secretsSystemTable.js';
 
 const router = express.Router();
 
@@ -29,7 +37,7 @@ const router = express.Router();
  * POST /api/v3/tables/:tableId/rows
  * Create a new row in a table (supports external data sources)
  */
-router.post('/tables/:tableId/rows', async (req, res) => {
+router.post('/tables/:tableId/rows', requireTableWriteAccess, async (req, res) => {
   try {
     const { tableId } = req.params;
     let { data } = req.body;
@@ -47,7 +55,7 @@ router.post('/tables/:tableId/rows', async (req, res) => {
     apiLogger.debug({ tableId, data }, 'POST row request');
 
     const table = await dbGet(`
-      SELECT data_source_id, source_table_name, source_id_column, is_system, sync_target
+      SELECT data_source_id, source_table_name, source_id_column, is_system, sync_target, project_id
       FROM universal_tables
       WHERE id = ?
     `, [tableId]);
@@ -62,6 +70,37 @@ router.post('/tables/:tableId/rows', async (req, res) => {
       // Creation goes through POST /api/v3/widgets which sets owner correctly.
       if (table.sync_target === 'widgets') {
         return forbidden(res, 'Creating widgets via system table is not supported. Use POST /api/v3/widgets.');
+      }
+
+      // ADR-0040 §space-secrets — a grid row becomes an encrypted vault entry
+      // scoped to the table's space. Owner-only; plaintext never echoes back.
+      if (table.sync_target === SECRETS_SYNC_TARGET) {
+        const scope = await requireSecretsTableOwner(table, req.user);
+        if (scope.error) return forbidden(res, scope.error);
+
+        const { key, value, description } = normalizeSecretRowData(tableId, data);
+        const keyCheck = validateKey(key);
+        if (!keyCheck.ok) return badRequest(res, keyCheck.error);
+        if (typeof value !== 'string' || value.length === 0) {
+          return badRequest(res, 'value must be a non-empty string');
+        }
+        const existing = await dbGet('SELECT id FROM _secrets WHERE space_id = ? AND key = ?', [scope.spaceId, keyCheck.value]);
+        if (existing) return conflict(res, `Secret "${keyCheck.value}" already exists — edit it instead`);
+
+        try {
+          await secretsVault.putSecret(keyCheck.value, value, {
+            actor: req.user.id, spaceId: scope.spaceId, description: description ?? null,
+          });
+        } catch (err) {
+          if (err?.code === 'VAULT_NOT_CONFIGURED') return error(res, 'VAULT_NOT_CONFIGURED', err.message, 503);
+          throw err;
+        }
+        const row = await dbGet('SELECT id FROM _secrets WHERE space_id = ? AND key = ?', [scope.spaceId, keyCheck.value]);
+        void writeAudit(req, {
+          action: 'secret.create', entity_type: 'secret', entity_id: keyCheck.value,
+          details: { space_id: scope.spaceId, table_id: Number(tableId), description: description ?? null },
+        });
+        return created(res, { id: `secret-${row.id}` }, 'Secret created');
       }
 
       if (table.sync_target === 'users') {
@@ -129,15 +168,8 @@ router.post('/tables/:tableId/rows', async (req, res) => {
       const dataSourceService = new DataSourceService();
       const dataSource = await dataSourceService.get(table.data_source_id);
 
-      if (dataSource.type === 'local_mysql') {
-        const mysql = await import('mysql2/promise');
-        const connection = await mysql.createConnection({
-          host: dataSource.db_host,
-          port: dataSource.db_port,
-          database: dataSource.db_name,
-          user: dataSource.db_username,
-          password: ''
-        });
+      if (isMysqlSource(dataSource)) {
+        const connection = await openMysqlConnection(dataSource);
 
         try {
           const fields = Object.keys(data);
@@ -171,12 +203,30 @@ router.post('/tables/:tableId/rows', async (req, res) => {
       }
     }
 
+    // QA-20816-01 — keys the schema does not declare are rejected, not stored.
+    const keyGuard = await guardRowKeys(tableId, data);
+    if (keyGuard.unknown.length > 0) {
+      return error(res, 'UNKNOWN_COLUMN', unknownKeysMessage(keyGuard.unknown), 400, { unknown_fields: keyGuard.unknown });
+    }
+    data = keyGuard.data;
+
     // Local table - insert into table_rows
     let { resolvedData: validatedData, errors: selectErrors } = await resolveSelectValues(tableId, data);
     if (selectErrors.length > 0) {
       apiLogger.warn({ selectErrors }, 'Select column validation errors on create');
       return badRequest(res, `Invalid select values: ${selectErrors.join('; ')}`);
     }
+
+    // ADR-0035 S1.4 / ADR-0035-A: geo_point + address cells are normalized before the INSERT.
+    const typedColumns = await dbAll(
+      `SELECT id, column_name, type FROM table_columns WHERE table_id = ? AND type IN (${NORMALIZED_CELL_TYPES.map(() => '?').join(', ')})`,
+      [tableId, ...NORMALIZED_CELL_TYPES]
+    );
+    const geoCheck = normalizeTypedCells(typedColumns, validatedData);
+    if (!geoCheck.ok) {
+      return error(res, geoCheck.code, geoCheck.message, geoCheck.status, geoCheck.meta);
+    }
+    validatedData = geoCheck.data;
 
     // ADR-0011 Phase E2: tighten-only validation for verification_settings
     // override atoms (atoms_v2 only). No-op for unrelated tables/atoms.
@@ -255,6 +305,7 @@ router.post('/tables/:tableId/rows', async (req, res) => {
     `, [tableId, base_id, JSON.stringify(validatedData), userId]);
 
     const newRowId = result.lastInsertRowid;
+    void notifyRowChange({ tableId, rowId: newRowId, action: 'created', source: 'api' });
     fireRowCreateTriggers(parseInt(tableId), newRowId, validatedData).catch(err => {
       apiLogger.warn({ err, tableId, rowId: newRowId }, 'Row create trigger failed (non-blocking)');
     });

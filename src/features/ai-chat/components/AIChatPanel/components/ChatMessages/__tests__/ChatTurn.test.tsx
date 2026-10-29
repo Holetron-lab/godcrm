@@ -9,36 +9,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
+// ChatTurn's subtree calls useLanguage, which throws without a provider — that
+// error aborted module load, so this file reported 0 tests, not 24 failures.
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import type { ChatMessage } from '../../../../../types';
+import { groupMessagesIntoTurns } from '../../../../../utils/groupMessagesIntoTurns';
 
 // ─── Icon mocks — inline functions to avoid hoisting issues ─────────────────
-vi.mock('lucide-react', () => ({
-  Bot: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="bot-icon" {...p} />,
-  User: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="user-icon" {...p} />,
-  MoreVertical: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="more-vertical-icon" {...p} />,
-  Copy: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="copy-icon" {...p} />,
-  Forward: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="forward-icon" {...p} />,
-  Trash2: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="trash-icon" {...p} />,
-  Ban: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="ban-icon" {...p} />,
-  Key: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="key-icon" {...p} />,
-  ExternalLink: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="external-link-icon" {...p} />,
-  Wrench: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="wrench-icon" {...p} />,
-  Zap: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="zap-icon" {...p} />,
-  Plus: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="plus-icon" {...p} />,
-  ChevronDown: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="chevron-down-icon" {...p} />,
-  ChevronRight: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="chevron-right-icon" {...p} />,
-  Brain: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="brain-icon" {...p} />,
-  MessageSquare: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="message-square-icon" {...p} />,
-  Loader2: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="loader-icon" {...p} />,
-  CheckCircle2: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="check-circle-icon" {...p} />,
-  XCircle: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="x-circle-icon" {...p} />,
-  Terminal: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="terminal-icon" {...p} />,
-  Link2: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="link2-icon" {...p} />,
-  ClipboardList: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="clipboard-list-icon" {...p} />,
-  Circle: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="circle-icon" {...p} />,
-  AlertTriangle: ({ className, ...p }: { className?: string; [k: string]: unknown }) => <div className={className} data-testid="alert-triangle-icon" {...p} />,
-}));
+// lucide-react is auto-mocked: any icon a component adds resolves to a stub,
+// so a new <Icon/> can no longer fail every test in this file (see src/tests/lucideMock.tsx).
+vi.mock('lucide-react', async () => (await import('@/tests/lucideMock')).lucideMock({ XCircle: 'x-circle-icon' }));
 
 vi.mock('@/shared/utils/cn', () => ({
   cn: (...classes: (string | boolean | undefined | null)[]) =>
@@ -77,6 +58,7 @@ vi.mock('../../../../../utils/parseToolName', () => ({
 
 // ─── Import after mocks ─────────────────────────────────────────────────────
 import { ChatTurn } from '../ChatTurn';
+import { turnTimeSpan } from '../ChatTurn/helpers';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -323,4 +305,111 @@ describe('ChatTurn — ADR-082 Consecutive Bubble Merging', () => {
       expect(screen.getByText('Architect')).toBeInTheDocument();
     });
   });
+
+  // ─── Header time span — history-loaded bubbles ────────────────────────────
+  // History loads lazily: the steps are collapsed into `_step_groups_before`
+  // on the final message, so the turn holds ONE message. The span must still
+  // run from the first hidden step to the final message, exactly as it does
+  // for a live-streamed bubble whose steps are real messages.
+
+  describe('Header time span', () => {
+    const withGroups = (groups: Array<{ first_at?: string; last_at?: string }>) =>
+      Object.assign(makeAgentMessage({ timestamp: new Date('2024-01-20T10:05:00Z') }), {
+        _step_groups_before: groups.map((g, i) => ({ type: 'tools', count: 1, first_id: i, last_id: i, ...g })),
+      });
+
+    it('turnTimeSpan: single message, no groups → no end', () => {
+      expect(turnTimeSpan([makeAgentMessage()])).toEqual({
+        start: new Date('2024-01-20T10:01:00Z'),
+        end: undefined,
+      });
+    });
+
+    it('turnTimeSpan: start comes from the earliest hidden step group', () => {
+      const msg = withGroups([
+        { first_at: '2024-01-20T10:01:00Z', last_at: '2024-01-20T10:02:00Z' },
+        { first_at: '2024-01-20T10:03:00Z', last_at: '2024-01-20T10:04:00Z' },
+      ]);
+      expect(turnTimeSpan([msg])).toEqual({
+        start: '2024-01-20T10:01:00Z',
+        end: new Date('2024-01-20T10:05:00Z'),
+      });
+    });
+
+    it('turnTimeSpan: groups after the last message extend the end', () => {
+      const msg = Object.assign(makeAgentMessage(), {
+        _step_groups_after: [{ type: 'tools', count: 1, first_id: 9, last_id: 9, first_at: '2024-01-20T10:09:00Z', last_at: '2024-01-20T10:09:00Z' }],
+      });
+      expect(turnTimeSpan([msg]).end).toBe('2024-01-20T10:09:00Z');
+    });
+
+    it('turnTimeSpan: ignores groups without timestamps and unparsable values', () => {
+      const msg = withGroups([{}, { first_at: 'not-a-date' }]);
+      expect(turnTimeSpan([msg])).toEqual({
+        start: new Date('2024-01-20T10:05:00Z'),
+        end: undefined,
+      });
+    });
+
+    it('renders "start - end" for a history-loaded single-message agent turn', () => {
+      const msg = withGroups([{ first_at: '2024-01-20T10:01:00Z', last_at: '2024-01-20T10:04:00Z' }]);
+      const { container } = render(<ChatTurn {...defaultAgentProps} messages={[msg]} />);
+      expect(container.textContent).toMatch(/\d{2}:\d{2} - \d{2}:\d{2}/);
+    });
+
+    it('renders a single time when the whole turn falls in one minute', () => {
+      const msg = withGroups([{ first_at: '2024-01-20T10:05:10Z', last_at: '2024-01-20T10:05:20Z' }]);
+      const { container } = render(<ChatTurn {...defaultAgentProps} messages={[msg]} />);
+      expect(container.textContent).not.toMatch(/–/);
+    });
+  });
+});
+
+
+describe('ChatTurn plan placement', () => {
+  it('keeps one latest plan after the answer when steps are expanded or collapsed', () => {
+    render(<ChatTurn
+      turnType="agent"
+      senderName="Agent"
+      messages={[
+        makeAgentMessage({ id: 'thinking', contentType: 'thinking', content: 'Working' }),
+        makeAgentMessage({ id: 'plan', contentType: 'plan', content: JSON.stringify({ tasks: [{ id: 1, title: 'First', status: 'pending' }] }) }),
+        makeAgentMessage({ id: 'latest-plan', contentType: 'plan', content: JSON.stringify({ tasks: [{ id: 1, title: 'First', status: 'completed' }, { id: 2, title: 'Second', status: 'pending' }] }) }),
+        makeAgentMessage({ id: 'answer', content: 'Final answer' }),
+      ]}
+    />);
+    const toggle = screen.getByRole('button', { name: /Шагов:/ });
+    for (let i = 0; i < 3; i++) {
+      const plans = screen.getAllByTestId('plan-widget');
+      expect(plans).toHaveLength(1);
+      expect(plans[0]).toHaveAttribute('data-task-count', '2');
+      expect(screen.getByText('Final answer').compareDocumentPosition(plans[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      fireEvent.click(toggle);
+    }
+  });
+});
+
+
+it('renders the carried plan only in the new bubble as soon as it starts', () => {
+  const messages = [
+    makeAgentMessage({ id: '201', agentId: 42, agentName: 'Dev', contentType: 'plan', content: JSON.stringify({ tasks: [{ id: 1, title: 'Check', status: 'in_progress' }] }) }),
+    makeAgentMessage({ id: '202', agentId: 42, agentName: 'Dev', content: 'First answer' }),
+  ];
+  const view = (input: ChatMessage[]) => <>{groupMessagesIntoTurns(input, {}, true).map(turn => (
+    <section key={turn.id} data-testid={turn.id}><ChatTurn {...turn} /></section>
+  ))}</>;
+  const { rerender } = render(view(messages));
+  const oldBubble = screen.getByTestId('plan-widget').closest('section');
+  rerender(view([...messages, makeAgentMessage({ id: '203', agentId: 42, agentName: 'Dev', contentType: 'thinking', content: 'Continuing' })]));
+  expect(screen.getAllByTestId('plan-widget')).toHaveLength(1);
+  expect(oldBubble).not.toContainElement(screen.getByTestId('plan-widget'));
+  expect(screen.getByTestId('plan-widget').closest('section')).not.toBe(oldBubble);
+  expect(oldBubble).toContainElement(screen.getByText('First answer'));
+});
+
+it('places the human voice attachment above the transcript in grouped chat', () => {
+  const message = makeHumanMessage({ content: 'Voice transcript', attachments: [{ id: 'voice', name: 'voice.webm', type: 'audio/webm', size: 5, url: '/uploads/voice.webm' }] });
+  render(<ChatTurn {...defaultHumanProps} messages={[message]} />);
+  const attachment = screen.getByTestId('attachment-renderer');
+  expect(attachment.compareDocumentPosition(screen.getByText('Voice transcript')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });

@@ -11,6 +11,8 @@
  */
 
 import express from 'express';
+import { z } from 'zod';
+import remoteConnectorsRouter from './remote-connectors.js';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import crypto from 'crypto';
@@ -26,6 +28,7 @@ import {
   validateConnectorTypeBody,
 } from '../../services/connectors/catalogue/index.js';
 import { ensureMailSystemTableForSpace } from '../../services/SystemTablesCreator.js';
+import { evaluateMcpAccess, buildMcpGateEnv, verifyMcpGateToken } from '../../services/connectors/mcpGate.js';
 import { apiLogger } from '../../utils/logger.js';
 import { success, created, error, badRequest, notFound, forbidden } from '../../utils/response.js';
 
@@ -99,7 +102,26 @@ async function audit({ userId, action, connectorId, spaceId, typeSlug, extra, re
 function scrubRow(row) {
   if (!row) return row;
   const { encrypted_payload, ...rest } = row;
-  return { ...rest, has_payload: !!encrypted_payload && Object.keys(encrypted_payload).length > 0 };
+  const out = {
+    ...rest,
+    has_payload: !!encrypted_payload && Object.keys(encrypted_payload).length > 0,
+    enabled: row.status === 'active',
+  };
+  // mcp kinds carry no secret; what the UI needs is the server-side pin.
+  const type = row.kind === 'mcp' ? getConnectorType(row.type_slug) : null;
+  if (type && typeof type.describe === 'function') out.mcp = type.describe();
+  return out;
+}
+
+// Column list every row-returning endpoint projects (never encrypted_payload
+// itself — scrubRow() folds it into has_payload).
+const ROW_COLUMNS = `id, space_id, type_slug, kind, display_name, status, scopes_requested,
+            scopes_granted, account_label, account_sub, email, account_name, avatar_url, profile,
+            custom_definition, expires_at, last_refresh_at, last_checked_at,
+            last_error, created_by, created_at, updated_at, encrypted_payload`;
+
+async function loadRow(id) {
+  return dbGet(`SELECT ${ROW_COLUMNS} FROM space_connectors WHERE id = ?`, [id]);
 }
 
 // ─── ADR-159 §Schema: connected-account identity ────────────────────
@@ -128,39 +150,6 @@ function deriveIdentity(info) {
 const MODULE_CONNECTOR_TYPES = {
   mail: ['google', 'microsoft', 'imap'],
 };
-
-// Project a connector row to the UserInfo-shaped switcher payload (ADR-159
-// §"Our switcher API returns the same shape"). Credentials never leave the
-// server — only the public identity block + status envelope. Extra claims
-// (email_verified, locale, hd) are read from `profile` so they need no columns.
-function toSwitcherShape(row) {
-  const profile =
-    row.profile && typeof row.profile === 'string'
-      ? safeJsonParse(row.profile)
-      : row.profile || null;
-  return {
-    id: row.id,
-    provider: row.type_slug,
-    sub: row.account_sub || null,
-    email: row.email || null,
-    email_verified: profile?.email_verified ?? null,
-    name: row.account_name || null,
-    picture: row.avatar_url || null,
-    locale: profile?.locale ?? null,
-    hosted_domain: profile?.hd ?? null,
-    status: row.status,
-    expires_at: row.expires_at || null,
-    scopes: row.scopes_granted || [],
-  };
-}
-
-function safeJsonParse(s) {
-  try {
-    return JSON.parse(s);
-  } catch {
-    return null;
-  }
-}
 
 // Resolve client_id/client_secret for a given type+row context.
 //
@@ -200,6 +189,7 @@ function resolveOAuthEnv(type, customDefinition, decryptedPayload) {
 // ─── Authed router ──────────────────────────────────────────────────
 
 const authedRouter = express.Router();
+authedRouter.use(remoteConnectorsRouter);
 
 // Catalogue list (handy for UI).
 authedRouter.get('/connectors/catalogue', (_req, res) => {
@@ -389,6 +379,7 @@ authedRouter.post('/spaces/:spaceId/connectors', async (req, res) => {
   }
   const type = getConnectorType(type_slug);
   if (!type) return badRequest(res, `Unknown connector type: ${type_slug}`);
+  if (type.auth_kind === 'mcp') return createMcpConnector(req, res, { space, spaceId, type, display_name });
   if (type.auth_kind !== 'api_key') {
     return badRequest(res, 'POST /connectors is for api_key types; oauth2 → POST /connectors/start');
   }
@@ -485,15 +476,138 @@ authedRouter.post('/spaces/:spaceId/connectors', async (req, res) => {
     }
   }
 
-  const row = await dbGet(
-    `SELECT id, space_id, type_slug, kind, display_name, status, scopes_requested,
-            scopes_granted, account_label, account_sub, email, account_name, avatar_url, profile,
-            custom_definition, expires_at, last_refresh_at,
-            last_error, created_by, created_at, updated_at, encrypted_payload
-       FROM space_connectors WHERE id = ?`,
-    [newId]
+  return created(res, { connector: scrubRow(await loadRow(newId)) });
+});
+
+// mcp kind (blender_mcp): no credentials, one live row per type per space, and
+// only in the space the server pins — the request body never chooses scope.
+async function createMcpConnector(req, res, { spaceId, type, display_name }) {
+  const cfg = type.config();
+  if (!cfg.configured) {
+    return error(res, 'CONNECTOR_NOT_CONFIGURED', `${type.slug} is not configured on this server`, 503);
+  }
+  if (cfg.allowed_space_id !== spaceId) {
+    return error(res, 'MCP_SPACE_NOT_ALLOWED', `${type.slug} is pinned to another space`, 403);
+  }
+  const live = await dbGet(
+    `SELECT id FROM space_connectors WHERE space_id = ? AND type_slug = ? AND status <> 'revoked'`,
+    [spaceId, type.slug]
   );
-  return created(res, { connector: scrubRow(row) });
+  if (live) return error(res, 'CONNECTOR_EXISTS', `${type.slug} already exists in this space (#${live.id})`, 409);
+
+  const result = await dbRun(
+    `INSERT INTO space_connectors (space_id, type_slug, kind, display_name, status, created_by)
+     VALUES (?, ?, 'mcp', ?, 'active', ?) RETURNING id`,
+    [spaceId, type.slug, display_name, req.user.id]
+  );
+  const newId = result.lastInsertRowid;
+  await audit({
+    userId: req.user.id,
+    action: 'connector.create_mcp',
+    connectorId: newId,
+    spaceId,
+    typeSlug: type.slug,
+    extra: { display_name, allowed_agent_id: cfg.allowed_agent_id },
+    req,
+  });
+  return created(res, { connector: scrubRow(await loadRow(newId)) });
+}
+
+// PATCH /spaces/:spaceId/connectors/:id  { enabled?, display_name? }
+// The owner's switch. 'disabled' is a status of its own so every
+// `status = 'active'` reader (refresh scheduler, mail, mcp gate) honours it.
+authedRouter.patch('/spaces/:spaceId/connectors/:id', async (req, res) => {
+  const spaceId = Number(req.params.spaceId);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(spaceId) || !Number.isFinite(id)) return badRequest(res, 'Invalid id');
+  const parsed = z.object({ enabled: z.boolean().optional(), display_name: z.string().trim().min(1).max(120).optional() })
+    .strict().refine((v) => v.enabled !== undefined || v.display_name !== undefined).safeParse(req.body);
+  if (!parsed.success) return badRequest(res, 'Provide enabled and/or display_name (1–120 characters)');
+  const { enabled, display_name } = parsed.data;
+
+  const space = await ensureSpaceAccess(req, res, spaceId);
+  if (!space) return;
+
+  const row = await dbGet(`SELECT id, status, type_slug FROM space_connectors WHERE id = ? AND space_id = ?`, [id, spaceId]);
+  if (!row) return notFound(res, 'Connector');
+  if (row.status === 'revoked') return error(res, 'CONNECTOR_REVOKED', 'A revoked connector cannot be switched', 409);
+
+  const sets = [];
+  const values = [];
+  if (enabled !== undefined) { sets.push('status = ?'); values.push(enabled ? 'active' : 'disabled'); }
+  if (display_name !== undefined) { sets.push('display_name = ?'); values.push(display_name); }
+  await dbRun(`UPDATE space_connectors SET ${sets.join(', ')}, updated_at = now()
+    WHERE id = ? AND space_id = ? AND status <> 'revoked'`, [...values, id, spaceId]);
+  await audit({
+    userId: req.user.id,
+    action: enabled === undefined ? 'connector.rename' : enabled ? 'connector.enable' : 'connector.disable',
+    connectorId: id,
+    spaceId,
+    typeSlug: row.type_slug,
+    extra: { from: row.status },
+    req,
+  });
+  return success(res, { connector: scrubRow(await loadRow(id)) });
+});
+
+// POST /spaces/:spaceId/connectors/:id/test — real connection check.
+// mcp: launches the MCP exactly as an agent turn would and runs the handshake;
+// a disabled connector is never launched. Other kinds: the type's test() with
+// the decrypted payload. Outcome is persisted (last_checked_at + last_error)
+// and never changes `status` — the switch belongs to the owner.
+authedRouter.post('/spaces/:spaceId/connectors/:id/test', async (req, res) => {
+  const spaceId = Number(req.params.spaceId);
+  const id = Number(req.params.id);
+  if (!Number.isFinite(spaceId) || !Number.isFinite(id)) return badRequest(res, 'Invalid id');
+
+  const space = await ensureSpaceAccess(req, res, spaceId);
+  if (!space) return;
+
+  const row = await dbGet(`SELECT * FROM space_connectors WHERE id = ? AND space_id = ?`, [id, spaceId]);
+  if (!row) return notFound(res, 'Connector');
+  const type = getConnectorType(row.type_slug);
+  if (!type || typeof type.test !== 'function') {
+    return badRequest(res, `Connector type ${row.type_slug} does not support a connection check`, 'TEST_NOT_SUPPORTED');
+  }
+
+  let check;
+  if (row.status !== 'active') {
+    check = { ok: false, error_code: 'disabled', error: `Connector is ${row.status}; not launched` };
+  } else if (type.auth_kind === 'mcp') {
+    // Launch under the same gate env an agent turn gets: the wrapper opens the
+    // upstream only with a token minted for this row. Without one it answers
+    // as an empty MCP server, which type.test() reports as a 'gate' failure.
+    const agentId = type.config().allowed_agent_id;
+    const verdict = evaluateMcpAccess({ row, agentId, spaceId });
+    check = verdict.allowed
+      ? await type.test({ env: await buildMcpGateEnv({ agentId, spaceId, jobId: `connector-test:${id}` }) })
+      : { ok: false, error_code: 'gate', error: `Gate denies this connector: ${verdict.reason}` };
+  } else {
+    try {
+      const blob = typeof row.encrypted_payload === 'string' ? JSON.parse(row.encrypted_payload) : row.encrypted_payload;
+      check = await type.test(blob && blob.v ? credentialVault.decrypt(blob) : {});
+    } catch (err) {
+      check = { ok: false, error_code: 'exception', error: err?.message || 'test threw' };
+    }
+  }
+  check.checked_at = new Date().toISOString();
+
+  if (check.error_code !== 'disabled') {
+    await dbRun(`UPDATE space_connectors SET last_checked_at = now(), last_error = ?, updated_at = now() WHERE id = ?`, [
+      check.ok ? null : `${check.error_code || 'failed'}: ${check.error || ''}`.slice(0, 500),
+      id,
+    ]);
+  }
+  await audit({
+    userId: req.user.id,
+    action: check.ok ? 'connector.test' : 'connector.test_failed',
+    connectorId: id,
+    spaceId,
+    typeSlug: row.type_slug,
+    extra: { ok: check.ok, error_code: check.error_code || null, tool_count: check.tool_count ?? null },
+    req,
+  });
+  return success(res, { connector: scrubRow(await loadRow(id)), check });
 });
 
 // GET /spaces/:spaceId/connectors
@@ -504,10 +618,12 @@ authedRouter.get('/spaces/:spaceId/connectors', async (req, res) => {
   const space = await ensureSpaceAccess(req, res, spaceId);
   if (!space) return;
 
-  // Switcher mode (ADR-159): `?compatible_with=<module>` returns the
-  // UserInfo-shaped identity payload for accounts usable by that module,
-  // filtered to the module's compatible provider types and excluding revoked
-  // rows. Without the param, return the full settings-view rows.
+  // Switcher mode (ADR-159): `?compatible_with=<module>` returns the accounts
+  // usable by that module, filtered to the module's compatible provider types
+  // and excluding revoked rows. Same scrubbed row shape as the settings view:
+  // the identity columns (account_name / email / avatar_url) are UserInfo
+  // claims promoted 1:1, and the switcher + mail account settings also read
+  // `display_name` / `account_label` off the row.
   const compatibleWith =
     typeof req.query.compatible_with === 'string' ? req.query.compatible_with.trim() : null;
   if (compatibleWith) {
@@ -519,21 +635,17 @@ authedRouter.get('/spaces/:spaceId/connectors', async (req, res) => {
       );
     }
     const switcherRows = await dbAll(
-      `SELECT id, type_slug, status, scopes_granted, account_sub, email,
-              account_name, avatar_url, profile, expires_at
+      `SELECT ${ROW_COLUMNS}
          FROM space_connectors
         WHERE space_id = ? AND type_slug = ANY(?) AND status <> 'revoked'
         ORDER BY id DESC`,
       [spaceId, types]
     );
-    return success(res, { connectors: switcherRows.map(toSwitcherShape) });
+    return success(res, { connectors: switcherRows.map(scrubRow) });
   }
 
   const rows = await dbAll(
-    `SELECT id, space_id, type_slug, kind, display_name, status, scopes_requested,
-            scopes_granted, account_label, account_sub, email, account_name, avatar_url, profile,
-            custom_definition, expires_at, last_refresh_at,
-            last_error, created_by, created_at, updated_at, encrypted_payload
+    `SELECT ${ROW_COLUMNS}
        FROM space_connectors
       WHERE space_id = ?
       ORDER BY id DESC`,
@@ -552,10 +664,7 @@ authedRouter.get('/spaces/:spaceId/connectors/:id', async (req, res) => {
   if (!space) return;
 
   const row = await dbGet(
-    `SELECT id, space_id, type_slug, kind, display_name, status, scopes_requested,
-            scopes_granted, account_label, account_sub, email, account_name, avatar_url, profile,
-            custom_definition, expires_at, last_refresh_at,
-            last_error, created_by, created_at, updated_at, encrypted_payload
+    `SELECT ${ROW_COLUMNS}
        FROM space_connectors
       WHERE id = ? AND space_id = ?`,
     [id, spaceId]
@@ -656,14 +765,7 @@ authedRouter.post('/spaces/:spaceId/connectors/:id/refresh', async (req, res) =>
       req,
     });
 
-    const updated = await dbGet(
-      `SELECT id, space_id, type_slug, kind, display_name, status, scopes_requested,
-              scopes_granted, account_label, custom_definition, expires_at, last_refresh_at,
-              last_error, created_by, created_at, updated_at, encrypted_payload
-         FROM space_connectors WHERE id = ?`,
-      [id]
-    );
-    return success(res, { connector: scrubRow(updated) });
+    return success(res, { connector: scrubRow(await loadRow(id)) });
   } catch (err) {
     const status = err?.response?.status;
     const errStr = `refresh_failed${status ? `:${status}` : ''}`;
@@ -751,6 +853,31 @@ authedRouter.delete('/spaces/:spaceId/connectors/:id', async (req, res) => {
 // ─── Callback router (UNAUTHENTICATED) ──────────────────────────────
 
 const callbackRouter = express.Router();
+
+// GET /connectors/mcp-gate — asked by the MCP launcher wrapper on every tool
+// call, authenticated by the gate token the CLI provider minted at spawn.
+// Re-reads the row each time: the owner's switch cuts open sessions. Always
+// 200 with a verdict for a valid token; 401 for anything else.
+callbackRouter.get('/mcp-gate', async (req, res) => {
+  const auth = req.get('authorization') || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  let claims;
+  try {
+    claims = verifyMcpGateToken(token);
+  } catch {
+    return res.status(401).json({ success: false, error: { code: 'MCP_GATE_UNAUTHORIZED', message: 'invalid gate token' } });
+  }
+  const row = await dbGet(`SELECT id, space_id, type_slug, kind, status FROM space_connectors WHERE id = ?`, [
+    claims.connector_id,
+  ]);
+  const verdict = evaluateMcpAccess({ row, agentId: claims.agent_id, spaceId: claims.space_id });
+  return success(res, {
+    ...verdict,
+    connector_id: claims.connector_id,
+    agent_id: claims.agent_id,
+    space_id: claims.space_id,
+  });
+});
 
 callbackRouter.get('/oauth/callback', async (req, res) => {
   const { state, code, error: oauthError } = req.query || {};
@@ -983,5 +1110,5 @@ callbackRouter.get('/oauth/callback', async (req, res) => {
 
 export { callbackRouter as connectorsCallbackRouter };
 // Exported for unit tests (ADR-159 §Schema identity mapping).
-export { deriveIdentity, toSwitcherShape, MODULE_CONNECTOR_TYPES };
+export { deriveIdentity, MODULE_CONNECTOR_TYPES };
 export default authedRouter;

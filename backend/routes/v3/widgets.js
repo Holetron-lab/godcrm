@@ -44,6 +44,8 @@
  */
 
 import express from 'express';
+import { z } from 'zod';
+import { deleteEmptyDashboard } from '../../services/DashboardService.js';
 import {
   createWidget,
   getWidgetById,
@@ -66,6 +68,50 @@ import resolveTicketsController from './widgets/resolveTicketsController.js';
 import resolveTicketRefController from './widgets/resolveTicketRefController.js';
 
 const router = express.Router();
+
+/**
+ * @swagger
+ * /api/v3/dashboards/{dashboardId}:
+ *   delete:
+ *     summary: Delete an empty dashboard (parent owner or system administrator)
+ *     description: Checks both widget ownership links atomically. Default dashboards may be recreated by parent GET/UI; use GET dashboard by ID for absence readback.
+ *     tags: [Widgets]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: dashboardId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 2147483647
+ *     responses:
+ *       200:
+ *         description: Deleted dashboard ID in data.id
+ *       400:
+ *         description: Invalid dashboard ID
+ *       401:
+ *         description: Authentication required
+ *       403:
+ *         description: Parent owner or administrator required
+ *       404:
+ *         description: Dashboard or parent not found
+ *       409:
+ *         description: DASHBOARD_NOT_EMPTY or DASHBOARD_PARENT_INVALID; no data deleted
+ */
+router.delete('/dashboards/:dashboardId', async (req, res) => {
+  if (!req.user) return error(res, 'UNAUTHORIZED', 'Authentication required', 401);
+  const id = z.coerce.number().int().positive().max(2147483647).safeParse(req.params.dashboardId);
+  if (!id.success) return badRequest(res, 'Invalid dashboard ID');
+  try {
+    success(res, await deleteEmptyDashboard(id.data, req.user));
+  } catch (err) {
+    if (err.status) return error(res, err.code, err.message, err.status);
+    apiLogger.error({ err }, 'Error deleting dashboard');
+    error(res, 'DELETE_ERROR', 'Failed to delete dashboard', 500);
+  }
+});
 
 // Mount sub-routers BEFORE the `/widgets/:widgetId` catch-all so specific
 // routes like `/widgets/:id/resolve-tickets` and

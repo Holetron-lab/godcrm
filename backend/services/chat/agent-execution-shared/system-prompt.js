@@ -96,6 +96,7 @@ When you receive a task that requires ${threshold} or more steps, you MUST use t
 
 Keep exactly ONE task as in_progress at a time.
 Update the plan after completing each step.
+${context.isClaudeCode ? '' : 'Use the CRM manage_plan tool (the godcrm MCP server for CLI agents); its runtime context selects this run automatically. Do not substitute prose for a successful tool call.'}
 
 IMPORTANT: For tasks with fewer than ${threshold} steps, proceed directly without creating a plan.`;
   }
@@ -180,7 +181,7 @@ Use \`[[row:T/R]]\` for inline pointers to single rows; use \`widget_embed\` whe
   // When planning config exists and inject_in_context is not explicitly false,
   // fetch the latest plan from the conversation and inject it as context.
   if (agentConfig.planning && planningConfig.inject_in_context !== false && context.conversationId) {
-    const planData = await fetchLatestPlan(context.conversationId);
+    const planData = await fetchLatestPlan(context.conversationId, { agentId: context.planAgentId, runId: context.planRunId });
     if (planData) {
       const planContext = formatPlanAsContext(planData);
       if (planContext) {

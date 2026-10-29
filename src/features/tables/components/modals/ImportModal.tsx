@@ -4,7 +4,7 @@
  */
 
 import { logger } from '@/shared/utils/logger';
-import { useState, useCallback, useMemo } from 'react';
+import { useId, useState, useCallback, useMemo } from 'react';
 import { Modal, Button } from '@/shared/components/ui';
 import { Upload, FileJson2, FileSpreadsheet, AlertTriangle, Package, Table, Layers, Check } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
@@ -64,6 +64,7 @@ export const ImportModal = ({
   onImportCSV,
   initialFormat = 'json',
 }: ImportModalProps) => {
+  const fieldId = useId();
   const queryClient = useQueryClient();
   const [format, setFormat] = useState<ImportFormat>(initialFormat);
   
@@ -316,7 +317,7 @@ export const ImportModal = ({
               "flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors",
               format === 'json'
                 ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm"
-                : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             )}
           >
             <FileJson2 className="w-4 h-4" />
@@ -330,7 +331,7 @@ export const ImportModal = ({
               "flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors",
               format === 'csv'
                 ? "bg-[var(--bg-primary)] text-[var(--text-primary)] shadow-sm"
-                : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             )}
           >
             <FileSpreadsheet className="w-4 h-4" />
@@ -353,18 +354,17 @@ export const ImportModal = ({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             className={cn(
-              "border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer",
+              "relative border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer focus-within:ring-2 focus-within:ring-[var(--color-primary-500)]",
               isDragOver 
                 ? "border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10"
                 : "border-[var(--border-primary)] hover:border-[var(--color-primary-500)]/50"
             )}
-            onClick={() => document.getElementById('import-file-input')?.click()}
           >
             <input
-              id="import-file-input"
+              aria-label={`Выбрать ${format === 'json' ? 'JSON' : 'CSV'} файл`}
               type="file"
               accept={acceptTypes}
-              className="hidden"
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
               onChange={handleFileInput}
             />
             <FormatIcon className={cn(
@@ -374,16 +374,16 @@ export const ImportModal = ({
             <div className="text-[var(--text-primary)] font-medium mb-1">
               Перетащите {format === 'json' ? 'JSON' : 'CSV'} файл сюда
             </div>
-            <div className="text-sm text-[var(--text-tertiary)]">
+            <div className="text-sm text-[var(--text-secondary)]">
               или нажмите для выбора файла
             </div>
             {format === 'json' && (
-              <div className="text-xs text-[var(--text-tertiary)] mt-2">
+              <div className="text-xs text-[var(--text-secondary)] mt-2">
                 Поддерживаются файлы экспорта GOD CRM
               </div>
             )}
             {format === 'csv' && (
-              <div className="text-xs text-[var(--text-tertiary)] mt-2">
+              <div className="text-xs text-[var(--text-secondary)] mt-2">
                 Поддерживаются CSV с разделителем запятая (,) или точка с запятой (;)
               </div>
             )}
@@ -423,10 +423,10 @@ export const ImportModal = ({
             </div>
 
             {/* Import mode */}
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+            <div role="group" aria-labelledby={`${fieldId}-label-0`}>
+              <span id={`${fieldId}-label-0`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                 Режим импорта:
-              </label>
+              </span>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { value: 'merge' as const, label: 'Объединить', description: 'Добавить и обновить' },

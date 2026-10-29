@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { TimelineSettingsProps } from './types';
 
 export function TimelineWidgetSettings({
@@ -42,15 +43,18 @@ export function TimelineWidgetSettings({
   calendarProjectTables,
   systemDataProject,
 }: TimelineSettingsProps) {
+  const fieldId = useId();
+
   return (
     <>
       {/* Start and End date columns in one row */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <label htmlFor={`${fieldId}-start-date-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
             Колонка начала
           </label>
           <select
+            id={`${fieldId}-start-date-column`}
             value={startDateColumn}
             onChange={(e) => setStartDateColumn(e.target.value)}
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -66,10 +70,11 @@ export function TimelineWidgetSettings({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <label htmlFor={`${fieldId}-end-date-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
             Колонка окончания
           </label>
           <select
+            id={`${fieldId}-end-date-column`}
             value={endDateColumn}
             onChange={(e) => setEndDateColumn(e.target.value)}
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -86,10 +91,11 @@ export function TimelineWidgetSettings({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-timeline-title-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Колонка заголовка
         </label>
         <select
+          id={`${fieldId}-timeline-title-column`}
           value={timelineTitleColumn}
           onChange={(e) => setTimelineTitleColumn(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -105,10 +111,11 @@ export function TimelineWidgetSettings({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-timeline-description-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Колонка описания
         </label>
         <select
+          id={`${fieldId}-timeline-description-column`}
           value={timelineDescriptionColumn}
           onChange={(e) => setTimelineDescriptionColumn(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -135,10 +142,11 @@ export function TimelineWidgetSettings({
 
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-timeline-depends-on-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Колонка зависимостей
             </label>
             <select
+              id={`${fieldId}-timeline-depends-on-column`}
               value={timelineDependsOnColumn}
               onChange={(e) => {
                 if (e.target.value === '__create_dependency__') {
@@ -157,7 +165,7 @@ export function TimelineWidgetSettings({
                 </option>
               ))}
               <option value="__create_dependency__">
-                Создать колонку "Зависимости"
+                Создать колонку &quot;Зависимости&quot;
               </option>
             </select>
             <p className="text-xs text-[var(--text-tertiary)] mt-1">
@@ -166,10 +174,11 @@ export function TimelineWidgetSettings({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-timeline-group-by-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Колонка группировки (поток)
             </label>
             <select
+              id={`${fieldId}-timeline-group-by-column`}
               value={timelineGroupByColumn}
               onChange={(e) => {
                 if (e.target.value === '__create_flow__') {
@@ -188,7 +197,7 @@ export function TimelineWidgetSettings({
                 </option>
               ))}
               <option value="__create_flow__">
-                Создать колонку "Поток"
+                Создать колонку &quot;Поток&quot;
               </option>
             </select>
             <p className="text-xs text-[var(--text-tertiary)] mt-1">
@@ -208,10 +217,11 @@ export function TimelineWidgetSettings({
         <div className="space-y-3">
           {/* Project selection - auto-select System Data */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-timeline-calendar-project-id`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Проект
             </label>
             <select
+              id={`${fieldId}-timeline-calendar-project-id`}
               value={timelineCalendarProjectId || (systemDataProject ? String(systemDataProject.id) : '')}
               onChange={(e) => {
                 setTimelineCalendarProjectId(e.target.value);
@@ -231,10 +241,11 @@ export function TimelineWidgetSettings({
           {/* Table selection with create option */}
           {(timelineCalendarProjectId || systemDataProject) && (
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-timeline-calendar-table-id`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Таблица календаря
               </label>
               <select
+                id={`${fieldId}-timeline-calendar-table-id`}
                 value={timelineCalendarTableId}
                 onChange={(e) => {
                   if (e.target.value === '__create_calendar__') {
@@ -266,10 +277,11 @@ export function TimelineWidgetSettings({
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  <label htmlFor={`${fieldId}-timeline-calendar-date-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                     Колонка даты
                   </label>
                   <input
+                    id={`${fieldId}-timeline-calendar-date-column`}
                     type="text"
                     value={timelineCalendarDateColumn}
                     onChange={(e) => setTimelineCalendarDateColumn(e.target.value)}
@@ -279,10 +291,11 @@ export function TimelineWidgetSettings({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  <label htmlFor={`${fieldId}-timeline-calendar-type-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                     Колонка типа дня
                   </label>
                   <input
+                    id={`${fieldId}-timeline-calendar-type-column`}
                     type="text"
                     value={timelineCalendarTypeColumn}
                     onChange={(e) => setTimelineCalendarTypeColumn(e.target.value)}
@@ -294,10 +307,11 @@ export function TimelineWidgetSettings({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  <label htmlFor={`${fieldId}-timeline-calendar-tags-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                     Колонка тегов
                   </label>
                   <input
+                    id={`${fieldId}-timeline-calendar-tags-column`}
                     type="text"
                     value={timelineCalendarTagsColumn}
                     onChange={(e) => setTimelineCalendarTagsColumn(e.target.value)}
@@ -307,10 +321,11 @@ export function TimelineWidgetSettings({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  <label htmlFor={`${fieldId}-timeline-calendar-note-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                     Колонка примечания
                   </label>
                   <input
+                    id={`${fieldId}-timeline-calendar-note-column`}
                     type="text"
                     value={timelineCalendarNoteColumn}
                     onChange={(e) => setTimelineCalendarNoteColumn(e.target.value)}
@@ -322,10 +337,11 @@ export function TimelineWidgetSettings({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  <label htmlFor={`${fieldId}-timeline-calendar-bg-color-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                     Цвет столбца
                   </label>
                   <input
+                    id={`${fieldId}-timeline-calendar-bg-color-column`}
                     type="text"
                     value={timelineCalendarBgColorColumn}
                     onChange={(e) => setTimelineCalendarBgColorColumn(e.target.value)}
@@ -335,10 +351,11 @@ export function TimelineWidgetSettings({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  <label htmlFor={`${fieldId}-timeline-calendar-font-color-column`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                     Цвет шрифта
                   </label>
                   <input
+                    id={`${fieldId}-timeline-calendar-font-color-column`}
                     type="text"
                     value={timelineCalendarFontColorColumn}
                     onChange={(e) => setTimelineCalendarFontColorColumn(e.target.value)}

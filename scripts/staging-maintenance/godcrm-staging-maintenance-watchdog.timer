@@ -1,0 +1,12 @@
+# REVIEW TEMPLATE ONLY. Separate from broker-lease watchdog.
+[Unit]
+Description=Check maintenance holder liveness
+
+[Timer]
+OnBootSec=60s
+OnUnitInactiveSec=60s
+AccuracySec=1s
+Unit=godcrm-staging-maintenance-watchdog.service
+
+[Install]
+WantedBy=timers.target

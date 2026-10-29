@@ -11,6 +11,7 @@
  * Each iteration: AI call -> detect tool_use -> execute tools -> feed results back.
  */
 
+import { randomUUID } from 'node:crypto';
 import { apiLogger } from '../../utils/logger.js';
 import { detectProvider, handleManagePlan, loadNewMessagesSince } from '../chat/agent-execution-shared.js';
 import aiExecutionService from '../labs/ai-execution-service.js';
@@ -27,6 +28,7 @@ import {
   startRunRow, finalizeRunRow, postTerminationChip,
 } from './budgets.js';
 import { getModelPriceUsd, deriveCostUsd } from './pricing.js';
+import { resolveRunTimeoutMs } from './run-timeout.js';
 
 // ADR-117: dynamic import of invocation-dispatcher to avoid circular load
 // (loop.js -> dispatcher -> chatAgentExecution -> chatShared -> AgentLoopService -> loop.js).
@@ -74,8 +76,9 @@ export async function agentLoop(params) {
     budget: budgetOverride,
   } = params;
 
+  const planRunId = `loop:${randomUUID()}`;
   const { apiKey, model, provider: providerName, isLocal } = resolved;
-  const { isClaudeCode, isCopilot, isAnthropic } = detectProvider(providerName, model);
+  const { isClaudeCode, isCopilot, isCodex, isKimi, isAnthropic } = detectProvider(providerName, model);
 
   // ── ADR-0061 P0 — runtime budgets + termination_reason ──────────────
   // Merge order: harness defaults ← agent.default_budget_json ← dispatch override.
@@ -324,8 +327,9 @@ export async function agentLoop(params) {
       _maybeDispatchFromThinking(responseText, { ..._dispatchCtx, sourceLabel: 'final_text', sourceMessageId: _finalMsgIdCopilot });
     }
 
-  } else if (isClaudeCode) {
-    // ── Claude Code CLI with stream-json ──
+  } else if (isClaudeCode || isCodex || isKimi) {
+    // ── Agentic CLI with stream-json (claude-code, codex or kimi, the latter
+    // two translated to the claude event shape by their adapters) ──
     // ADR-165 WP-2b DOCUMENTED GAP (warn-only): the loop drops the CLI's native
     // total_cost_usd and does not feed counters.cost_usd, so cost_limit_usd is NOT
     // enforced here — the same pre-existing boundary token_limit already has.
@@ -379,10 +383,17 @@ export async function agentLoop(params) {
       }
     };
 
-    const cliResult = await aiExecutionService.executeClaudeCode({
+    const runCli = isCodex
+      ? aiExecutionService.executeCodexCli
+      : isKimi
+        ? aiExecutionService.executeKimiCli
+        : aiExecutionService.executeClaudeCode;
+    const cliResult = await runCli({
       model, messages, systemPrompt, maxTokens: resolvedMaxTokens, onEvent,
       // ADR-0053 Phase C3: hook context for _command_policies resolver.
       agentId: agentRowId, spaceId,
+      // Bug 1552/228714: per-agent `run_timeout_min`; this path never carries a /command.
+      runTimeoutMs: resolveRunTimeoutMs(agentConfig, null),
     });
     responseText = cliResult.content;
     usage = {
@@ -595,7 +606,7 @@ export async function agentLoop(params) {
 
         // ── ADR-113: manage_plan handler — delegates to shared handleManagePlan() ──
         if (toolName === 'manage_plan') {
-          const planResult = await handleManagePlan(args, conversationId, agentDisplayName || 'unknown', { agentId: agentRowId });
+          const planResult = await handleManagePlan(args, conversationId, agentDisplayName || 'unknown', { agentId: agentRowId, senderId, runId: planRunId });
           toolResultBlocks.push({
             type: 'tool_result',
             tool_use_id: toolUse.id,
@@ -909,7 +920,7 @@ export async function agentLoop(params) {
 
         // ── ADR-113: manage_plan handler (OpenAI format) — delegates to shared handleManagePlan() ──
         if (toolName === 'manage_plan') {
-          const planResult = await handleManagePlan(args, conversationId, agentDisplayName || 'unknown', { agentId: agentRowId });
+          const planResult = await handleManagePlan(args, conversationId, agentDisplayName || 'unknown', { agentId: agentRowId, senderId, runId: planRunId });
           loopMessages.push({
             role: 'tool', tool_call_id: toolCall.id,
             content: typeof planResult === 'string' ? planResult : JSON.stringify(planResult)

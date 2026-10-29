@@ -46,7 +46,7 @@ async function main() {
   let failed = 0;
   for (const e of ENTRIES) {
     const existing = await adapter.query(
-      `SELECT id FROM _secrets WHERE key = $1 LIMIT 1`,
+      `SELECT id FROM _secrets WHERE key = $1 AND space_id = 11 LIMIT 1`,
       [e.key]
     );
     if (existing.rowCount > 0) {

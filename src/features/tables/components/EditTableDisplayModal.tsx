@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/shared/components/ui/Modal';
@@ -21,6 +21,7 @@ const TABLE_ICONS = [
 ];
 
 export const EditTableDisplayModal = ({ open, onOpenChange, tableId, projectId }: EditTableDisplayModalProps) => {
+  const fieldId = useId();
   const queryClient = useQueryClient();
   
   // Fetch fresh table data when modal opens
@@ -163,20 +164,21 @@ export const EditTableDisplayModal = ({ open, onOpenChange, tableId, projectId }
               )}
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
+            <div role="group" aria-labelledby={`${fieldId}-group-168`}>
+              <span id={`${fieldId}-group-168`} className="mb-2 block text-sm font-medium text-[var(--text-primary)]">
                 Иконка
-              </label>
+              </span>
               <div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] p-3">
                 <div className="mb-3 flex items-center gap-3">
                   <div className="flex-1 flex items-center justify-center rounded-lg bg-[var(--bg-secondary)] py-4">
                     <span className="text-5xl">{icon}</span>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs text-[var(--text-tertiary)]">
+                    <label htmlFor={`${fieldId}-0`} className="text-xs text-[var(--text-tertiary)]">
                       Своя иконка
                     </label>
                     <input
+                      id={`${fieldId}-0`}
                       type="text"
                       value={icon}
                       onChange={(e) => {

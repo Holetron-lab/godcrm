@@ -1,5 +1,5 @@
-import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import { Plus, X, Check, Calendar, Search, Filter, RefreshCw, Printer, Settings, Table2, ArrowUpDown, Columns as ColumnsIcon, Layers, Tag, ListPlus } from 'lucide-react';
 import type { KanbanToolbarProps, ColumnOption } from './kanban-types';
 import { FilterPill } from './KanbanFilterPill';
@@ -21,18 +21,11 @@ export function KanbanToolbar({
   const [localSearchInput, setLocalSearchInput] = useState(filterState?.searchQuery || '');
   const [showAddFilter, setShowAddFilter] = useState(false);
   const [openFilterDropdown, setOpenFilterDropdown] = useState<string | null>(null);
-  const addFilterBtnRef = useRef<HTMLButtonElement>(null);
-  const filterDropdownRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const [showSearchColumnSelect, setShowSearchColumnSelect] = useState(false);
-  const searchColBtnRef = useRef<HTMLButtonElement>(null);
   const [showSortSelect, setShowSortSelect] = useState(false);
-  const sortBtnRef = useRef<HTMLButtonElement>(null);
   const [showDateSort, setShowDateSort] = useState(false);
-  const dateSortBtnRef = useRef<HTMLButtonElement>(null);
   const [showSubGroupSelect, setShowSubGroupSelect] = useState(false);
-  const subGroupBtnRef = useRef<HTMLButtonElement>(null);
   const [showDivisionSelect, setShowDivisionSelect] = useState(false);
-  const divisionButtonRef = useRef<HTMLButtonElement>(null);
 
   // Sync local search input with parent
   useEffect(() => {
@@ -47,8 +40,10 @@ export function KanbanToolbar({
     return filterStateTableColumns.filter(col => {
       if (filterStateActiveFilterColumns.includes(col.id)) return false;
       const colType = col.type || (col as any).column_type || '';
+      const relation = col.config?.relation;
+      const relationEnabled = relation !== null && typeof relation === 'object' && 'enabled' in relation && relation.enabled;
       const isFilterable = ['select', 'multi-select', 'multi_select', 'relation', 'date', 'datetime'].includes(colType) ||
-        (col.config as Record<string, unknown>)?.relation?.enabled ||
+        relationEnabled ||
         (col.config as Record<string, unknown>)?.relatedTableId;
       return isFilterable;
     });
@@ -190,35 +185,37 @@ export function KanbanToolbar({
 
       {/* Search-by-column selector */}
       <div className="relative">
-        <button
-          ref={searchColBtnRef}
-          onClick={(e) => { e.stopPropagation(); setShowSearchColumnSelect(!showSearchColumnSelect); }}
-          className={`relative p-1.5 rounded-md transition-colors ${
-            (filterState?.searchColumns?.length || 0) > 0
-              ? 'bg-[var(--color-primary-500)] text-white'
-              : 'hover:bg-[var(--bg-tertiary)]'
-          }`}
-          title={t('table.searchInColumns')}
-        >
-          <Filter className="w-4 h-4" />
-          {(filterState?.searchColumns?.length || 0) > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[var(--color-primary-700)] text-white text-[10px] font-medium flex items-center justify-center leading-none">
-              {filterState!.searchColumns.length}
-            </span>
-          )}
-        </button>
-        {showSearchColumnSelect && createPortal(
-          <div className="fixed inset-0 z-[9998]" onClick={() => setShowSearchColumnSelect(false)}>
-            <div
-              className="fixed z-[9999]"
-              style={{
-                top: (searchColBtnRef.current?.getBoundingClientRect().bottom || 0) + 4,
-                left: searchColBtnRef.current?.getBoundingClientRect().left || 0,
-              }}
+        <Popover.Root open={showSearchColumnSelect} onOpenChange={setShowSearchColumnSelect}>
+          <Popover.Trigger asChild>
+            <button
+              onClick={(e) => { e.stopPropagation(); }}
+              className={`relative p-1.5 rounded-md transition-colors ${
+                (filterState?.searchColumns?.length || 0) > 0
+                  ? 'bg-[var(--color-primary-500)] text-white'
+                  : 'hover:bg-[var(--bg-tertiary)]'
+              }`}
+              title={t('table.searchInColumns')}
+            >
+              <Filter className="w-4 h-4" />
+              {(filterState?.searchColumns?.length || 0) > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[var(--color-primary-700)] text-white text-[10px] font-medium flex items-center justify-center leading-none">
+                  {filterState!.searchColumns.length}
+                </span>
+              )}
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              aria-label={t('table.searchInColumns')}
+              align="start"
+              sideOffset={4}
+              collisionPadding={8}
+              className="z-[9999] max-w-[calc(100vw-16px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
+              asChild
             >
               <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl min-w-[220px] max-h-[300px] overflow-y-auto">
-                <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium border-b border-[var(--border-primary)]">{t('table.searchInColumns')}</div>
+                <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-medium border-b border-[var(--border-primary)]">{t('table.searchInColumns')}</div>
                 <div className="p-1.5">
                   <label className="flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[var(--bg-tertiary)] cursor-pointer transition border-b border-[var(--border-primary)] mb-1 pb-2">
                     <input
@@ -230,17 +227,18 @@ export function KanbanToolbar({
                     <span className="text-xs font-medium text-[var(--text-primary)]">{t('table.allColumns')}</span>
                   </label>
                   {(searchableColumns.length > 0 ? searchableColumns : (filterState?.tableColumns || columnsInfo || [])).map(col => {
-                    const isChecked = (filterState?.searchColumns || []).includes(col.id);
+                    const columnId = 'id' in col && typeof col.id === 'string' ? col.id : col.name;
+                    const isChecked = (filterState?.searchColumns || []).includes(columnId);
                     return (
-                      <label key={col.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[var(--bg-tertiary)] cursor-pointer transition">
+                      <label key={columnId} className="flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-[var(--bg-tertiary)] cursor-pointer transition">
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => {
                             if (!filterState) return;
                             const next = isChecked
-                              ? filterState.searchColumns.filter(id => id !== col.id)
-                              : [...filterState.searchColumns, col.id];
+                              ? filterState.searchColumns.filter(id => id !== columnId)
+                              : [...filterState.searchColumns, columnId];
                             filterState.onSearchColumnsChange(next);
                           }}
                           className="rounded"
@@ -251,10 +249,9 @@ export function KanbanToolbar({
                   })}
                 </div>
               </div>
-            </div>
-          </div>,
-          document.body
-        )}
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
       </div>
 
       {/* Search button */}
@@ -269,35 +266,37 @@ export function KanbanToolbar({
       {/* Add Filter Button */}
       {filterState && (
         <div className="relative">
-          <button
-            ref={addFilterBtnRef}
-            onClick={(e) => { e.stopPropagation(); setShowAddFilter(!showAddFilter); }}
-            title={t('table.addFilter')}
-            className={`relative p-1.5 rounded-md transition-colors ${
-              activeFilters.length > 0
-                ? 'bg-[var(--color-primary-500)] text-white'
-                : 'hover:bg-[var(--bg-tertiary)]'
-            }`}
-          >
-            <Plus className="w-4 h-4" />
-            {activeFilters.length > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[var(--color-primary-700)] text-white text-[10px] font-medium flex items-center justify-center leading-none">
-                {activeFilters.length}
-              </span>
-            )}
-          </button>
-          {showAddFilter && createPortal(
-            <div className="fixed inset-0 z-[9998]" onClick={() => setShowAddFilter(false)}>
-              <div
-                className="fixed z-[9999]"
-                style={{
-                  top: (addFilterBtnRef.current?.getBoundingClientRect().bottom || 0) + 4,
-                  left: addFilterBtnRef.current?.getBoundingClientRect().left || 0,
-                }}
+          <Popover.Root open={showAddFilter} onOpenChange={setShowAddFilter}>
+            <Popover.Trigger asChild>
+              <button
+                onClick={(e) => { e.stopPropagation(); }}
+                title={t('table.addFilter')}
+                className={`relative p-1.5 rounded-md transition-colors ${
+                  activeFilters.length > 0
+                    ? 'bg-[var(--color-primary-500)] text-white'
+                    : 'hover:bg-[var(--bg-tertiary)]'
+                }`}
+              >
+                <Plus className="w-4 h-4" />
+                {activeFilters.length > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[var(--color-primary-700)] text-white text-[10px] font-medium flex items-center justify-center leading-none">
+                    {activeFilters.length}
+                  </span>
+                )}
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                aria-label={t('table.addFilter')}
+                align="start"
+                sideOffset={4}
+                collisionPadding={8}
+                className="z-[9999] max-w-[calc(100vw-16px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
+                asChild
               >
                 <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl min-w-[200px] max-h-[300px] overflow-y-auto">
-                  <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium border-b border-[var(--border-primary)]">{t('table.addFilter')}</div>
+                  <div className="px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-medium border-b border-[var(--border-primary)]">{t('table.addFilter')}</div>
                   <div className="p-1">
                     {availableFilterColumns.length > 0 ? availableFilterColumns.map(col => (
                       <button
@@ -312,14 +311,13 @@ export function KanbanToolbar({
                         {col.displayName || col.name}
                       </button>
                     )) : (
-                      <div className="px-3 py-2 text-xs text-[var(--text-tertiary)]">{t('kanban.allFiltersAdded')}</div>
+                      <div className="px-3 py-2 text-xs text-[var(--text-secondary)]">{t('kanban.allFiltersAdded')}</div>
                     )}
                   </div>
                 </div>
-              </div>
-            </div>,
-            document.body
-          )}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
         </div>
       )}
 
@@ -338,8 +336,6 @@ export function KanbanToolbar({
           isOpen={openFilterDropdown === col.id}
           onToggle={() => setOpenFilterDropdown(openFilterDropdown === col.id ? null : col.id)}
           onClose={() => setOpenFilterDropdown(null)}
-          registerRef={(el) => { if (el) filterDropdownRefs.current.set(col.id, el); }}
-          getRect={() => filterDropdownRefs.current.get(col.id)?.getBoundingClientRect()}
         />
       ))}
 
@@ -370,30 +366,32 @@ export function KanbanToolbar({
       {/* Division/Grouping selector */}
       {divisionColumns.length > 0 && (
         <div className="relative">
-          <button
-            ref={divisionButtonRef}
-            onClick={(e) => { e.stopPropagation(); setShowDivisionSelect(!showDivisionSelect); }}
-            className={`p-1.5 rounded-md transition-colors ${
-              groupByOverride
-                ? 'bg-purple-500 text-white hover:bg-purple-600'
-                : 'hover:bg-[var(--bg-tertiary)]'
-            }`}
-            title={`${t('kanban.division')}: ${activeDivisionLabel}`}
-          >
-            <Layers className="w-4 h-4" />
-          </button>
-          {showDivisionSelect && createPortal(
-            <div className="fixed inset-0 z-[9998]" onClick={() => setShowDivisionSelect(false)}>
-              <div
-                className="fixed z-[9999]"
-                style={{
-                  top: (divisionButtonRef.current?.getBoundingClientRect().bottom || 0) + 4,
-                  left: divisionButtonRef.current?.getBoundingClientRect().left || 0,
-                }}
+          <Popover.Root open={showDivisionSelect} onOpenChange={setShowDivisionSelect}>
+            <Popover.Trigger asChild>
+              <button
+                onClick={(e) => { e.stopPropagation(); }}
+                className={`p-1.5 rounded-md transition-colors ${
+                  groupByOverride
+                    ? 'bg-purple-500 text-white hover:bg-purple-600'
+                    : 'hover:bg-[var(--bg-tertiary)]'
+                }`}
+                title={`${t('kanban.division')}: ${activeDivisionLabel}`}
+              >
+                <Layers className="w-4 h-4" />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                aria-label={t('kanban.divisionBy')}
+                align="start"
+                sideOffset={4}
+                collisionPadding={8}
+                className="z-[9999] max-w-[calc(100vw-16px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
+                asChild
               >
                 <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-1 min-w-[180px]">
-                  <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">{t('kanban.divisionBy')}</div>
+                  <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-medium">{t('kanban.divisionBy')}</div>
                   {divisionColumns.map(col => (
                     <button
                       key={col.name}
@@ -403,7 +401,7 @@ export function KanbanToolbar({
                         setShowDivisionSelect(false);
                       }}
                       className={`w-full text-left px-2.5 py-1.5 text-xs hover:bg-[var(--bg-tertiary)] rounded transition flex items-center gap-2 ${
-                        groupByColumn === col.name ? 'font-medium text-[var(--color-primary-500)]' : 'text-[var(--text-secondary)]'
+                        groupByColumn === col.name ? 'font-medium text-[var(--color-primary-600)]' : 'text-[var(--text-secondary)]'
                       }`}
                     >
                       {groupByColumn === col.name && <Check className="w-3 h-3" />}
@@ -416,7 +414,7 @@ export function KanbanToolbar({
                       <div className="h-px bg-[var(--border-primary)] my-1" />
                       <button
                         onClick={() => { setGroupByOverride(null); setColumnOrder(null); setShowDivisionSelect(false); }}
-                        className="w-full text-left px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-500/10 rounded transition flex items-center gap-2"
+                        className="w-full text-left px-2.5 py-1.5 text-xs text-red-700 dark:text-red-400 hover:bg-red-500/10 rounded transition flex items-center gap-2"
                       >
                         <X className="w-3 h-3" />
                         {t('kanban.reset')}
@@ -424,42 +422,43 @@ export function KanbanToolbar({
                     </>
                   )}
                 </div>
-              </div>
-            </div>,
-            document.body
-          )}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
         </div>
       )}
 
       {/* Sub-grouping inside columns */}
       {subGroupableColumns.length > 0 && (
         <div className="relative">
-          <button
-            ref={subGroupBtnRef}
-            onClick={(e) => { e.stopPropagation(); setShowSubGroupSelect(!showSubGroupSelect); }}
-            className={`p-1.5 rounded-md transition-colors ${
-              subGroupColumn
-                ? 'bg-green-500 text-white hover:bg-green-600'
-                : 'hover:bg-[var(--bg-tertiary)]'
-            }`}
-            title={subGroupColumn
-              ? `${t('kanban.subGroupActive')}: ${columnsInfo.find(c => c.name === subGroupColumn)?.displayName || subGroupColumn}`
-              : t('kanban.subGroup')}
-          >
-            <ColumnsIcon className="w-4 h-4" />
-          </button>
-          {showSubGroupSelect && createPortal(
-            <div className="fixed inset-0 z-[9998]" onClick={() => setShowSubGroupSelect(false)}>
-              <div
-                className="fixed z-[9999]"
-                style={{
-                  top: (subGroupBtnRef.current?.getBoundingClientRect().bottom || 0) + 4,
-                  left: subGroupBtnRef.current?.getBoundingClientRect().left || 0,
-                }}
+          <Popover.Root open={showSubGroupSelect} onOpenChange={setShowSubGroupSelect}>
+            <Popover.Trigger asChild>
+              <button
+                onClick={(e) => { e.stopPropagation(); }}
+                className={`p-1.5 rounded-md transition-colors ${
+                  subGroupColumn
+                    ? 'bg-green-500 text-white hover:bg-green-600'
+                    : 'hover:bg-[var(--bg-tertiary)]'
+                }`}
+                title={subGroupColumn
+                  ? `${t('kanban.subGroupActive')}: ${columnsInfo.find(c => c.name === subGroupColumn)?.displayName || subGroupColumn}`
+                  : t('kanban.subGroup')}
+              >
+                <ColumnsIcon className="w-4 h-4" />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                aria-label={t('kanban.subGroup')}
+                align="start"
+                sideOffset={4}
+                collisionPadding={8}
+                className="z-[9999] max-w-[calc(100vw-16px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
+                asChild
               >
                 <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-1 min-w-[180px]">
-                  <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">{t('kanban.subGroupBy')}</div>
+                  <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-medium">{t('kanban.subGroupBy')}</div>
                   {subGroupableColumns.map(col => (
                     <button
                       key={col.name}
@@ -468,7 +467,7 @@ export function KanbanToolbar({
                         setShowSubGroupSelect(false);
                       }}
                       className={`w-full text-left px-2.5 py-1.5 text-xs hover:bg-[var(--bg-tertiary)] rounded transition flex items-center gap-2 ${
-                        subGroupColumn === col.name ? 'font-medium text-green-400' : 'text-[var(--text-secondary)]'
+                        subGroupColumn === col.name ? 'font-medium text-green-700 dark:text-green-400' : 'text-[var(--text-secondary)]'
                       }`}
                     >
                       {subGroupColumn === col.name && <Check className="w-3 h-3" />}
@@ -481,7 +480,7 @@ export function KanbanToolbar({
                       <div className="h-px bg-[var(--border-primary)] my-1" />
                       <button
                         onClick={() => { setSubGroupColumn(null); setShowSubGroupSelect(false); }}
-                        className="w-full text-left px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-500/10 rounded transition flex items-center gap-2"
+                        className="w-full text-left px-2.5 py-1.5 text-xs text-red-700 dark:text-red-400 hover:bg-red-500/10 rounded transition flex items-center gap-2"
                       >
                         <X className="w-3 h-3" />
                         {t('kanban.reset')}
@@ -489,42 +488,43 @@ export function KanbanToolbar({
                     </>
                   )}
                 </div>
-              </div>
-            </div>,
-            document.body
-          )}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
         </div>
       )}
 
       {/* Sorting selector */}
       {sortableColumns.length > 0 && (
         <div className="relative">
-          <button
-            ref={sortBtnRef}
-            onClick={(e) => { e.stopPropagation(); setShowSortSelect(!showSortSelect); }}
-            className={`p-1.5 rounded-md transition-colors ${
-              sortColumn
-                ? 'bg-amber-500 text-white hover:bg-amber-600'
-                : 'hover:bg-[var(--bg-tertiary)]'
-            }`}
-            title={sortColumn
-              ? `${t('kanban.sortActive')}: ${columnsInfo.find(c => c.name === sortColumn)?.displayName || sortColumn} ${sortDirection === 'asc' ? '↑' : '↓'}`
-              : t('kanban.sort')}
-          >
-            <ArrowUpDown className="w-4 h-4" />
-          </button>
-          {showSortSelect && createPortal(
-            <div className="fixed inset-0 z-[9998]" onClick={() => setShowSortSelect(false)}>
-              <div
-                className="fixed z-[9999]"
-                style={{
-                  top: (sortBtnRef.current?.getBoundingClientRect().bottom || 0) + 4,
-                  left: sortBtnRef.current?.getBoundingClientRect().left || 0,
-                }}
+          <Popover.Root open={showSortSelect} onOpenChange={setShowSortSelect}>
+            <Popover.Trigger asChild>
+              <button
+                onClick={(e) => { e.stopPropagation(); }}
+                className={`p-1.5 rounded-md transition-colors ${
+                  sortColumn
+                    ? 'bg-amber-500 text-white hover:bg-amber-600'
+                    : 'hover:bg-[var(--bg-tertiary)]'
+                }`}
+                title={sortColumn
+                  ? `${t('kanban.sortActive')}: ${columnsInfo.find(c => c.name === sortColumn)?.displayName || sortColumn} ${sortDirection === 'asc' ? '↑' : '↓'}`
+                  : t('kanban.sort')}
+              >
+                <ArrowUpDown className="w-4 h-4" />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                aria-label={t('kanban.sort')}
+                align="start"
+                sideOffset={4}
+                collisionPadding={8}
+                className="z-[9999] max-w-[calc(100vw-16px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
+                asChild
               >
                 <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-1 min-w-[200px]">
-                  <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">{t('kanban.sortBy')}</div>
+                  <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-medium">{t('kanban.sortBy')}</div>
                   {sortableColumns.map(col => {
                     const isActive = sortColumn === col.name;
                     return (
@@ -539,7 +539,7 @@ export function KanbanToolbar({
                           }
                         }}
                         className={`w-full text-left px-2.5 py-1.5 text-xs hover:bg-[var(--bg-tertiary)] rounded transition flex items-center gap-2 ${
-                          isActive ? 'font-medium text-amber-400' : 'text-[var(--text-secondary)]'
+                          isActive ? 'font-medium text-amber-700 dark:text-amber-400' : 'text-[var(--text-secondary)]'
                         }`}
                       >
                         {isActive ? (
@@ -556,7 +556,7 @@ export function KanbanToolbar({
                       <div className="h-px bg-[var(--border-primary)] my-1" />
                       <button
                         onClick={() => { setSortColumn(null); setShowSortSelect(false); }}
-                        className="w-full text-left px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-500/10 rounded transition flex items-center gap-2"
+                        className="w-full text-left px-2.5 py-1.5 text-xs text-red-700 dark:text-red-400 hover:bg-red-500/10 rounded transition flex items-center gap-2"
                       >
                         <X className="w-3 h-3" />
                         {t('kanban.reset')}
@@ -564,46 +564,47 @@ export function KanbanToolbar({
                     </>
                   )}
                 </div>
-              </div>
-            </div>,
-            document.body
-          )}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
         </div>
       )}
 
       {/* Date sort/filter */}
       {dateColumns.length > 0 && (
         <div className="relative">
-          <button
-            ref={dateSortBtnRef}
-            onClick={(e) => { e.stopPropagation(); setShowDateSort(!showDateSort); }}
-            className={`p-1.5 rounded-md transition-colors ${
-              dateSortColumn
-                ? 'bg-blue-500 text-white hover:bg-blue-600'
-                : 'hover:bg-[var(--bg-tertiary)]'
-            }`}
-            title={dateSortColumn
-              ? `${t('kanban.dateActive')}: ${columnsInfo.find(c => c.name === dateSortColumn)?.displayName || dateSortColumn}${
-                  dateFilterFrom || dateFilterTo
-                    ? ` (${dateFilterFrom && dateFilterTo ? `${dateFilterFrom} — ${dateFilterTo}` : dateFilterFrom ? `${t('table.fromDate')} ${dateFilterFrom}` : `${t('table.toDate')} ${dateFilterTo}`})`
-                    : ''
-                }`
-              : t('kanban.dateFilter')}
-          >
-            <Calendar className="w-4 h-4" />
-          </button>
-          {showDateSort && createPortal(
-            <div className="fixed inset-0 z-[9998]" onClick={() => setShowDateSort(false)}>
-              <div
-                className="fixed z-[9999]"
-                style={{
-                  top: (dateSortBtnRef.current?.getBoundingClientRect().bottom || 0) + 4,
-                  left: dateSortBtnRef.current?.getBoundingClientRect().left || 0,
-                }}
+          <Popover.Root open={showDateSort} onOpenChange={setShowDateSort}>
+            <Popover.Trigger asChild>
+              <button
+                onClick={(e) => { e.stopPropagation(); }}
+                className={`p-1.5 rounded-md transition-colors ${
+                  dateSortColumn
+                    ? 'bg-blue-500 text-white hover:bg-blue-600'
+                    : 'hover:bg-[var(--bg-tertiary)]'
+                }`}
+                title={dateSortColumn
+                  ? `${t('kanban.dateActive')}: ${columnsInfo.find(c => c.name === dateSortColumn)?.displayName || dateSortColumn}${
+                      dateFilterFrom || dateFilterTo
+                        ? ` (${dateFilterFrom && dateFilterTo ? `${dateFilterFrom} — ${dateFilterTo}` : dateFilterFrom ? `${t('table.fromDate')} ${dateFilterFrom}` : `${t('table.toDate')} ${dateFilterTo}`})`
+                        : ''
+                    }`
+                  : t('kanban.dateFilter')}
+              >
+                <Calendar className="w-4 h-4" />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                aria-label={t('kanban.dateFilter')}
+                align="start"
+                sideOffset={4}
+                collisionPadding={8}
+                className="z-[9999] max-w-[calc(100vw-16px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
+                asChild
               >
                 <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-1 min-w-[260px]">
-                  <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">{t('kanban.dateColumn')}</div>
+                  <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-medium">{t('kanban.dateColumn')}</div>
                   {dateColumns.map(col => {
                     const isActive = dateSortColumn === col.name;
                     return (
@@ -620,7 +621,7 @@ export function KanbanToolbar({
                           }
                         }}
                         className={`w-full text-left px-2.5 py-1.5 text-xs hover:bg-[var(--bg-tertiary)] rounded transition flex items-center gap-2 ${
-                          isActive ? 'font-medium text-blue-400' : 'text-[var(--text-secondary)]'
+                          isActive ? 'font-medium text-blue-700 dark:text-blue-400' : 'text-[var(--text-secondary)]'
                         }`}
                       >
                         {isActive ? (
@@ -635,31 +636,31 @@ export function KanbanToolbar({
                   {dateSortColumn && (
                     <>
                       <div className="h-px bg-[var(--border-primary)] my-1" />
-                      <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-medium">{t('kanban.dateRange')}</div>
+                      <div className="px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-secondary)] font-medium">{t('kanban.dateRange')}</div>
                       <div className="px-2.5 py-1 flex flex-col gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-[var(--text-tertiary)] w-6">{t('table.fromDate')}:</span>
+                        <label className="flex items-center gap-2">
+                          <span className="text-[10px] text-[var(--text-secondary)] w-6">{t('table.fromDate')}:</span>
                           <input
                             type="date"
                             value={dateFilterFrom}
                             onChange={(e) => setDateFilterFrom(e.target.value)}
                             className="flex-1 px-2 py-1 text-xs rounded border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
                           />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-[var(--text-tertiary)] w-6">{t('table.toDate')}:</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <span className="text-[10px] text-[var(--text-secondary)] w-6">{t('table.toDate')}:</span>
                           <input
                             type="date"
                             value={dateFilterTo}
                             onChange={(e) => setDateFilterTo(e.target.value)}
                             className="flex-1 px-2 py-1 text-xs rounded border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:border-blue-500"
                           />
-                        </div>
+                        </label>
                       </div>
                       <div className="h-px bg-[var(--border-primary)] my-1" />
                       <button
                         onClick={() => { setDateSortColumn(null); setDateFilterFrom(''); setDateFilterTo(''); setShowDateSort(false); }}
-                        className="w-full text-left px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-500/10 rounded transition flex items-center gap-2"
+                        className="w-full text-left px-2.5 py-1.5 text-xs text-red-700 dark:text-red-400 hover:bg-red-500/10 rounded transition flex items-center gap-2"
                       >
                         <X className="w-3 h-3" />
                         {t('kanban.reset')}
@@ -667,10 +668,9 @@ export function KanbanToolbar({
                     </>
                   )}
                 </div>
-              </div>
-            </div>,
-            document.body
-          )}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
         </div>
       )}
 

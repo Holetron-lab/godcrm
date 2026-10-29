@@ -258,7 +258,7 @@ export const MissingColumnDialog = () => {
               <p className="text-sm text-[var(--text-primary)]">
                 {t('Колонка', 'Column')} <code className="font-mono bg-[var(--bg-secondary)] px-1.5 py-0.5 rounded text-[var(--accent-primary)]">
                   {context?.missingColumnKey}
-                </code> {t('не найдена в таблице', 'not found in table')} "{context?.tableName}"
+                </code> {t('не найдена в таблице', 'not found in table')} &quot;{context?.tableName}&quot;
               </p>
               {context?.source && (
                 <p className="text-xs text-[var(--text-tertiary)] mt-1">

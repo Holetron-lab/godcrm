@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 import { useState, useRef, useEffect } from 'react';
 import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -21,6 +22,7 @@ export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, w
   const checkboxUser = authUser ? { name: authUser.name, id: Number(authUser.id) } : undefined;
   const [editingCell, setEditingCell] = useState<{ row: number; col: number } | null>(null);
   const [cellValue, setCellValue] = useState('');
+  const requestedFocusRef = useRequestedFocus<HTMLTextAreaElement>(editingCell ? `${editingCell.row}:${editingCell.col}` : null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Click outside to save
@@ -132,10 +134,11 @@ export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, w
       <div ref={containerRef} style={{ fontSize: 'inherit' }}>
         {/* Content before table */}
         {beforeTable && (
-          <div
+          <div role="presentation"
             className="mb-3 cursor-text hover:bg-[var(--bg-secondary)] rounded p-1 -m-1"
             onClick={onEditRaw}
           >
+            {onEditRaw && <button type="button" className="text-xs underline text-[var(--text-tertiary)]">Редактировать текст</button>}
             <MarkdownPreview content={beforeTable} variables={variables} widgetId={widgetId} onContentChange={onContentChange} currentUser={checkboxUser} />
           </div>
         )}
@@ -158,33 +161,40 @@ export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, w
                   {row.map((cell, colIdx) => (
                     <td key={colIdx} className="px-3 py-2">
                       {editingCell?.row === rowIdx && editingCell?.col === colIdx ? (
-                        <input
-                          type="text"
-                          value={cellValue}
-                          onChange={(e) => setCellValue(e.target.value)}
-                          className="py-0 bg-transparent border border-blue-500 rounded outline-none"
-                          style={{ fontSize: 'inherit', lineHeight: 'inherit', width: '80%' }}
-                          autoFocus
-                          onBlur={saveCellEdit}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') saveCellEdit();
-                            if (e.key === 'Escape') { setEditingCell(null); setCellValue(''); }
-                            if (e.key === 'Tab') {
-                              e.preventDefault();
-                              saveCellEdit();
-                              // Move to next cell
-                              const nextCol = colIdx + 1;
-                              if (nextCol < row.length) {
-                                setTimeout(() => {
-                                  setEditingCell({ row: rowIdx, col: nextCol });
-                                  setCellValue(row[nextCol] || '');
-                                }, 50);
+                        <div className="relative min-w-[20px]">
+                          {/* Mirror keeps the column width and grows with wrapped text, including on resize. */}
+                          <div aria-hidden="true" className="invisible whitespace-pre-wrap break-words border border-transparent">
+                            {cellValue || ' '}
+                          </div>
+                          <textarea
+                            aria-label={`${headers[colIdx]}, строка ${rowIdx + 1}`}
+                            rows={1}
+                            value={cellValue}
+                            onChange={(e) => setCellValue(e.target.value.replace(/[\r\n]+/g, ' '))}
+                            className="absolute inset-0 w-full h-full resize-none overflow-hidden p-0 bg-transparent border border-blue-500 rounded outline-none"
+                            style={{ fontSize: 'inherit', lineHeight: 'inherit' }}
+                            ref={requestedFocusRef}
+                            onBlur={saveCellEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); saveCellEdit(); }
+                              if (e.key === 'Escape') { setEditingCell(null); setCellValue(''); }
+                              if (e.key === 'Tab') {
+                                e.preventDefault();
+                                saveCellEdit();
+                                // Move to next cell
+                                const nextCol = colIdx + 1;
+                                if (nextCol < row.length) {
+                                  setTimeout(() => {
+                                    setEditingCell({ row: rowIdx, col: nextCol });
+                                    setCellValue(row[nextCol] || '');
+                                  }, 50);
+                                }
                               }
-                            }
-                          }}
-                        />
+                            }}
+                          />
+                        </div>
                       ) : (
-                        <span
+                        <button type="button"
                           className="cursor-text hover:bg-blue-500/10 px-1 -mx-1 rounded inline-block min-w-[20px]"
                           onClick={() => {
                             setEditingCell({ row: rowIdx, col: colIdx });
@@ -197,7 +207,7 @@ export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, w
                               {cell.slice(1, -1)}
                             </code>
                           ) : cell || <span className="text-[var(--text-tertiary)]">—</span>}
-                        </span>
+                        </button>
                       )}
                     </td>
                   ))}
@@ -209,10 +219,11 @@ export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, w
 
         {/* Content after table */}
         {afterTable && (
-          <div
+          <div role="presentation"
             className="mt-3 cursor-text hover:bg-[var(--bg-secondary)] rounded p-1 -m-1"
             onClick={onEditRaw}
           >
+            {onEditRaw && <button type="button" className="text-xs underline text-[var(--text-tertiary)]">Редактировать текст</button>}
             <MarkdownPreview content={afterTable} variables={variables} widgetId={widgetId} onContentChange={onContentChange} currentUser={checkboxUser} />
           </div>
         )}
@@ -222,12 +233,21 @@ export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, w
 
   // No table - regular preview with click to edit
   return (
-    <div
+    <div role="presentation"
       className="text-[var(--text-secondary)] cursor-text hover:bg-[var(--bg-secondary)] rounded p-2 -m-2"
       style={{ fontSize: 'inherit' }}
       onClick={onEditRaw}
     >
-      <MarkdownPreview content={content || 'Нажмите чтобы редактировать...'} variables={variables} widgetId={widgetId} onContentChange={onContentChange} currentUser={checkboxUser} />
+      {/* Preserve this button when an async refetch replaces an empty block. */}
+      {onEditRaw && (
+        <button type="button"
+          className={content ? 'text-xs underline text-[var(--text-tertiary)]' : 'text-[var(--text-tertiary)] italic cursor-text'}
+          style={content ? undefined : { fontSize: '0.875em' }}
+        >
+          {content ? 'Редактировать текст' : 'Нажмите чтобы редактировать...'}
+        </button>
+      )}
+      {(content || !onEditRaw) && <MarkdownPreview content={content || 'Нажмите чтобы редактировать...'} variables={variables} widgetId={widgetId} onContentChange={onContentChange} currentUser={checkboxUser} />}
     </div>
   );
 }

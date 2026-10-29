@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * RowPickerFilters — collapsible filter strip for the attach/bind row picker
  * AND for the Tickets/Documents header panels.
@@ -94,6 +95,7 @@ function RelationFilterButton({
 }
 
 export function RowPickerFilters({ columns, value, onChange }: RowPickerFiltersProps) {
+  const { t } = useLanguage();
   const filterableCols = useMemo(() => {
     return columns.filter(c => {
       if (c.type === 'select' || c.type === 'multi_select') {
@@ -108,8 +110,7 @@ export function RowPickerFilters({ columns, value, onChange }: RowPickerFiltersP
   if (filterableCols.length === 0) {
     return (
       <div className="px-2 py-2 text-[11px] text-[var(--text-tertiary)] text-center border-t border-[var(--border-secondary)]">
-        Нет колонок-селектов для фильтрации
-      </div>
+        {t('aiChat.ui.noSelectColumnsAvailableForFiltering')}</div>
     );
   }
 
@@ -158,6 +159,7 @@ interface RowPickerFiltersToggleProps {
 }
 
 export function RowPickerFiltersToggle({ open, setOpen, activeCount, onClear, compact, slim }: RowPickerFiltersToggleProps) {
+  const { t } = useLanguage();
   const padCls = slim ? 'p-1' : compact ? 'p-1.5' : 'p-2';
   const iconCls = slim || compact ? 'w-3.5 h-3.5' : 'w-4 h-4';
   const radiusCls = slim ? 'rounded' : 'rounded-lg';
@@ -174,7 +176,7 @@ export function RowPickerFiltersToggle({ open, setOpen, activeCount, onClear, co
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        title={open ? 'Скрыть фильтры' : 'Показать фильтры'}
+        title={open ? t('aiChat.ui.hideFilters') : t('aiChat.ui.showFilters')}
         className={cn(
           padCls,
           radiusCls,
@@ -194,7 +196,7 @@ export function RowPickerFiltersToggle({ open, setOpen, activeCount, onClear, co
         <button
           type="button"
           onClick={onClear}
-          title="Сбросить фильтры"
+          title={t('aiChat.ui.resetFilters')}
           className="p-1 rounded text-[var(--text-tertiary)] hover:text-red-400"
         >
           <X className="w-3 h-3" />

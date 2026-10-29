@@ -30,6 +30,8 @@ export interface RelationOption {
   color?: string;
 }
 
+const EMPTY_RELATION_OPTIONS: RelationOption[] = [];
+
 interface ColumnInfo {
   name?: string;
   column_name?: string;
@@ -210,10 +212,10 @@ export function useBoundRowDisplay(
 
   const statusOptions = (statusDictQuery.data && statusDictQuery.data.length > 0)
     ? statusDictQuery.data
-    : (statusStaticOptions ?? []);
+    : (statusStaticOptions ?? EMPTY_RELATION_OPTIONS);
   const secondaryOptions = (secondaryDictQuery.data && secondaryDictQuery.data.length > 0)
     ? secondaryDictQuery.data
-    : (secondaryStaticOptions ?? []);
+    : (secondaryStaticOptions ?? EMPTY_RELATION_OPTIONS);
 
   const rowData = rowQuery.data?.data || {};
   const titleColName = resolved.displayColumn;
@@ -249,10 +251,10 @@ export function useBoundRowDisplay(
     secondaryOption,
     statusOptions,
     secondaryOptions,
-    statusLoading: !!statusRelationTableId
+    statusLoading: statusRelationTableId
       ? (statusDictQuery.isLoading && !statusStaticOptions)
       : false,
-    secondaryLoading: !!secondaryRelationTableId
+    secondaryLoading: secondaryRelationTableId
       ? (secondaryDictQuery.isLoading && !secondaryStaticOptions)
       : false,
     isLoading: rowQuery.isLoading || columnsQuery.isLoading,

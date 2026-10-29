@@ -1,3 +1,5 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
+import { useEffect, useRef } from 'react';
 import { MoreVertical, Atom, Ticket, Check, Scissors } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { type DocumentLevel, type DocumentItem } from '../../../../types/documents.types';
@@ -48,6 +50,21 @@ export function DocumentItemRenderer({
 
   const isEditing = ctx.editingItemId === item.id;
   const isSelected = ctx.selectedItemId === item.id;
+  const isHeading = item.level === 'h1' || item.level === 'h2' || item.level === 'h3';
+  const textEditorRef = useRef<HTMLTextAreaElement>(null);
+  const editTriggerRef = useRef<HTMLElement | null>(null);
+  const textPreviewRef = useRef<HTMLDivElement>(null);
+  const headingEditorRef = useRequestedFocus<HTMLInputElement>(isEditing && isHeading);
+
+  useEffect(() => {
+    if (isEditing) textEditorRef.current?.focus();
+    else if (editTriggerRef.current) {
+      if (editTriggerRef.current.isConnected) editTriggerRef.current.focus();
+      // Saving can replace the empty-block trigger with the populated preview.
+      else textPreviewRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+      editTriggerRef.current = null;
+    }
+  }, [isEditing]);
 
   // ADR-0012 Phase 5 / M4: probe atoms_v2 for ticket_ref atoms. The probe is
   // a normal hook (no conditional) — useAtomRow is a no-op when atomId is
@@ -73,7 +90,7 @@ export function DocumentItemRenderer({
 
   if (item.level === 'divider') {
     return (
-      <div
+      <div role="presentation"
         key={item.id}
         id={`item-${item.id}`}
         className="group relative py-4 cursor-pointer"
@@ -83,11 +100,11 @@ export function DocumentItemRenderer({
           ctx.setRightPanelOpen(true);
         }}
       >
-        <div className="flex items-center gap-2">
+        <button type="button" aria-label="Настройки разделителя" className="w-full flex items-center gap-2">
           <div className="flex-1 border-t border-dashed border-[var(--border-secondary)]" />
           <span className="px-3 text-xs text-[var(--text-tertiary)]">• • •</span>
           <div className="flex-1 border-t border-dashed border-[var(--border-secondary)]" />
-        </div>
+        </button>
 
         {!ctx.isReadOnly && (
           <div className={cn(
@@ -129,7 +146,7 @@ export function DocumentItemRenderer({
 
   if (item.level === 'page_break') {
     return (
-      <div
+      <div role="presentation"
         key={item.id}
         id={`item-${item.id}`}
         className="group relative py-3 cursor-pointer"
@@ -139,11 +156,11 @@ export function DocumentItemRenderer({
           ctx.setRightPanelOpen(true);
         }}
       >
-        <div className="flex items-center gap-2">
+        <button type="button" aria-label="Настройки разрыва страницы" className="w-full flex items-center gap-2">
           <div className="flex-1 border-t border-dashed border-gray-400 dark:border-gray-500" />
           <Scissors className="w-4 h-4 text-gray-400 dark:text-gray-500 rotate-90" />
           <div className="flex-1 border-t border-dashed border-gray-400 dark:border-gray-500" />
-        </div>
+        </button>
 
         {!ctx.isReadOnly && (
           <div className={cn(
@@ -188,7 +205,7 @@ export function DocumentItemRenderer({
     const maxHeight = item.image_max_height || 300;
 
     return (
-      <div
+      <div role="presentation"
         key={item.id}
         id={`item-${item.id}`}
         className={cn(
@@ -240,9 +257,10 @@ export function DocumentItemRenderer({
         )}
 
         {imageUrl ? (
+          <button type="button" aria-label="Настройки иллюстрации" className="block max-w-full text-left">
           <img
             src={imageUrl}
-            alt="Document image"
+            alt={item.content || "Иллюстрация документа"}
             className="rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
             style={{
               maxHeight: `${maxHeight}px`,
@@ -261,8 +279,9 @@ export function DocumentItemRenderer({
               }
             }}
           />
+          </button>
         ) : (
-          <div
+          <button type="button"
             className="cursor-pointer flex items-center justify-center gap-2 p-8 bg-[var(--bg-tertiary)] rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--bg-secondary)] transition-colors"
             style={{ minHeight: '120px' }}
           >
@@ -272,7 +291,7 @@ export function DocumentItemRenderer({
               <path d="M21 15l-5-5L5 21" />
             </svg>
             <span className="text-sm">Нажмите чтобы добавить изображение</span>
-          </div>
+          </button>
         )}
       </div>
     );
@@ -435,86 +454,85 @@ export function DocumentItemRenderer({
           </div>
         )}
 
-        {isEditing ? (
+        {isHeading && isEditing ? (
           <div>
-            {(item.level === 'h1' || item.level === 'h2' || item.level === 'h3') ? (
-              <input
-                type="text"
-                value={ctx.editingData.content || ''}
-                onChange={(e) => ctx.setEditingData({ ...ctx.editingData, content: e.target.value })}
-                placeholder="Заголовок..."
-                className="w-full bg-transparent border-none outline-none text-[var(--text-primary)] focus:ring-2 focus:ring-[var(--color-primary-500)]/50 rounded px-1 -ml-1"
-                style={headingStyle}
-                autoFocus
-                onBlur={onSaveEditing}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onSaveEditing();
-                  if (e.key === 'Escape') onCancelEditing();
-                }}
-              />
-            ) : (
+            <input
+              type="text"
+              value={ctx.editingData.content || ''}
+              onChange={(e) => ctx.setEditingData({ ...ctx.editingData, content: e.target.value })}
+              placeholder="Заголовок..."
+              className="w-full bg-transparent border-none outline-none text-[var(--text-primary)] focus:ring-2 focus:ring-[var(--color-primary-500)]/50 rounded px-1 -ml-1"
+              style={headingStyle}
+              ref={headingEditorRef}
+              onBlur={onSaveEditing}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onSaveEditing();
+                if (e.key === 'Escape') onCancelEditing();
+              }}
+            />
+          </div>
+        ) : (
+          <div className="relative">
+            {/* Keep the rendered block in flow so editing cannot move neighbouring blocks. */}
+            <div ref={textPreviewRef} className={isEditing ? 'invisible pointer-events-none' : undefined} aria-hidden={isEditing || undefined}>
+              {isHeading ? (
+                <button type="button" disabled={ctx.isReadOnly}
+                  className={ctx.isReadOnly ? "cursor-default" : "cursor-text"}
+                  onClick={() => onStartEditing(item)}
+                >
+                  {item.content ? (
+                    <div className="text-[var(--text-primary)] leading-relaxed" style={headingStyle}>{item.content}</div>
+                  ) : (
+                    !ctx.isReadOnly && (
+                      <div className="text-[var(--text-tertiary)] italic text-sm">
+                        Нажмите чтобы редактировать...
+                      </div>
+                    )
+                  )}
+                </button>
+              ) : (
+                (item.content || !ctx.isReadOnly) && (
+                  <div className="prose dark:prose-invert max-w-none" style={{ fontSize: '1em' }}>
+                    <EditableMarkdownPreview
+                      content={item.content || ''}
+                      onContentChange={ctx.isReadOnly ? undefined : async (newContent) => {
+                        if (!ctx.selectedDocument?.content_table_id) return;
+                        const contentField = `content_${ctx.currentLanguage}` as const;
+                        await ctx.updateItem({
+                          documentId: ctx.selectedDocumentId!,
+                          itemId: item.id,
+                          tableId: ctx.selectedDocument.content_table_id,
+                          data: { [contentField]: newContent }
+                        });
+                      }}
+                      onEditRaw={ctx.isReadOnly ? undefined : () => {
+                        editTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+                        onStartEditing(item);
+                      }}
+                      variables={variables}
+                    />
+                  </div>
+                )
+              )}
+            </div>
+            {isEditing && (
               <textarea
+                ref={textEditorRef}
+                aria-label="Текст блока (Markdown)"
                 value={ctx.editingData.content || ''}
                 onChange={(e) => ctx.setEditingData({ ...ctx.editingData, content: e.target.value })}
                 placeholder="Введите текст в формате Markdown..."
-                className="w-full text-sm bg-[var(--bg-primary)] border border-[var(--color-primary-500)]/50 rounded-lg p-3 focus:border-[var(--color-primary-500)] outline-none resize-none font-mono leading-relaxed"
-                rows={Math.max(5, (ctx.editingData.content?.split('\n').length || 1) + 1)}
-                autoFocus
-                onBlur={onSaveEditing}
+                className="absolute inset-0 block w-full h-full resize-none overflow-auto p-0 border-0 rounded bg-[var(--bg-primary)] text-[var(--text-secondary)] leading-relaxed outline outline-1 outline-[var(--color-primary-500)]"
+                style={{ fontSize: 'inherit', fontFamily: 'inherit' }}
+                onBlur={() => {
+                  editTriggerRef.current = null;
+                  onSaveEditing();
+                }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Escape') onCancelEditing();
-                  if (e.key === 'Enter' && e.ctrlKey) onSaveEditing();
+                  if (e.key === 'Escape') { e.preventDefault(); onCancelEditing(); }
+                  if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); onSaveEditing(); }
                 }}
               />
-            )}
-          </div>
-        ) : (
-          <div>
-            {(item.level === 'h1' || item.level === 'h2' || item.level === 'h3') ? (
-              <div
-                className={ctx.isReadOnly ? "cursor-default" : "cursor-text"}
-                onClick={() => onStartEditing(item)}
-              >
-                {item.content ? (
-                  <div className="text-[var(--text-primary)] leading-relaxed" style={headingStyle}>{item.content}</div>
-                ) : (
-                  !ctx.isReadOnly && (
-                    <div className="text-[var(--text-tertiary)] italic text-sm">
-                      Нажмите чтобы редактировать...
-                    </div>
-                  )
-                )}
-              </div>
-            ) : (
-              item.content ? (
-                <div className="prose dark:prose-invert max-w-none" style={{ fontSize: '1em' }}>
-                  <EditableMarkdownPreview
-                    content={item.content}
-                    onContentChange={ctx.isReadOnly ? undefined : async (newContent) => {
-                      if (!ctx.selectedDocument?.content_table_id) return;
-                      const contentField = `content_${ctx.currentLanguage}` as const;
-                      await ctx.updateItem({
-                        documentId: ctx.selectedDocumentId!,
-                        itemId: item.id,
-                        tableId: ctx.selectedDocument.content_table_id,
-                        data: { [contentField]: newContent }
-                      });
-                    }}
-                    onEditRaw={ctx.isReadOnly ? undefined : () => onStartEditing(item)}
-                    variables={variables}
-                  />
-                </div>
-              ) : (
-                !ctx.isReadOnly && (
-                  <div
-                    className="text-[var(--text-tertiary)] italic cursor-text"
-                    style={{ fontSize: '0.875em' }}
-                    onClick={() => onStartEditing(item)}
-                  >
-                    Нажмите чтобы редактировать...
-                  </div>
-                )
-              )
             )}
           </div>
         )}
@@ -566,7 +584,7 @@ function DocumentTicketAtomItem({
   // entry without a second fetch.
 
   return (
-    <div
+    <div role="presentation"
       key={item.id}
       id={`item-${item.id}`}
       className={cn(
@@ -586,9 +604,9 @@ function DocumentTicketAtomItem({
             isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
           )}
         >
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-blue-500/20 text-blue-400">
+          <button type="button" aria-label="Настройки тикета" className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-blue-500/20 text-blue-400">
             ticket
-          </span>
+          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();

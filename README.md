@@ -2,14 +2,26 @@
 
 # GOD CRM
 
-> **Everything is a row.** One primitive — a row in Postgres — and everything
-> is made of it. Tickets, documents, chat, the AI agents themselves. All the
-> way down. That's not a tagline; it's the whole architecture.
->
-> Which is why an agent here doesn't just fill in fields. It adds the table, the
-> column, the widget — in the running system, no code generation and no redeploy.
-> `create_table` and `manage_columns` sit in the same tool list as
-> `query_table_data`. Clone it and check.
+**Not that CRM. A substrate between any model and your business.**
+
+The model thinks. The substrate remembers, permits, builds and acts.
+GOD CRM is a self-hosted workspace where humans and agents share tables,
+documents, dashboards and chat. Context · Rights · Memory — with the model
+underneath and your business on top. Build with widgets or code.
+
+Memory integrates [RCLL](https://rcll.ai), our shared memory engine and a fork
+of Hindsight. Swap the model, keep the history, rights and memory.
+
+[Website](https://godcrm.ai) · [Documentation](https://godcrm.ai/s/help)
+· [Agent-readable guide](https://godcrm.ai/llms.txt)
+· [Canonical source](https://godcrm.ai/git/holetron-lab/godcrm)
+· [GitHub mirror](https://github.com/Holetron-lab/godcrm)
+
+Explore the public read-only MCP endpoint without an account:
+
+```sh
+claude mcp add --transport http godcrm https://godcrm.ai/s/help/mcp
+```
 
 ## Everything is a row
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FOLDER_EMOJIS } from './utils';
 import type { WidgetFolder } from './types';
 
@@ -12,6 +12,10 @@ interface InlineCreateFolderProps {
 }
 
 export function InlineCreateFolder({ isOpen, onClose, onCreate }: InlineCreateFolderProps) {
+  const nameRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (isOpen) nameRef.current?.focus();
+  }, [isOpen]);
   const [name, setName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState<string>('📁');
   const [customEmoji, setCustomEmoji] = useState('');
@@ -65,7 +69,8 @@ export function InlineCreateFolder({ isOpen, onClose, onCreate }: InlineCreateFo
           onKeyDown={handleKeyDown}
           placeholder="Folder name..."
           className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]"
-          autoFocus
+          aria-label="Folder name"
+          ref={nameRef}
         />
       </div>
 
@@ -123,10 +128,15 @@ interface InlineEditFolderProps {
 }
 
 export function InlineEditFolder({ folder, onClose, onSave, onDelete }: InlineEditFolderProps) {
+  const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(folder.name);
   const [selectedIcon, setSelectedIcon] = useState<string>(folder.icon || '📁');
   const [customEmoji, setCustomEmoji] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  useEffect(() => {
+    if (!showDeleteConfirm) nameRef.current?.focus();
+  }, [showDeleteConfirm]);
 
   const displayedEmoji = customEmoji || selectedIcon;
 
@@ -156,7 +166,7 @@ export function InlineEditFolder({ folder, onClose, onSave, onDelete }: InlineEd
     return (
       <div className="ml-5 px-2 py-1.5 space-y-1.5 border-t border-[var(--border-secondary)] bg-[var(--bg-tertiary)]/50">
         <p className="text-[10px] text-[var(--text-secondary)]">
-          Delete "{folder.name}"? {folder.items.length > 0 && (
+          Delete &quot;{folder.name}&quot;? {folder.items.length > 0 && (
             <span className="text-amber-500">
               ({folder.items.length} widgets → root)
             </span>
@@ -206,7 +216,8 @@ export function InlineEditFolder({ folder, onClose, onSave, onDelete }: InlineEd
           onKeyDown={handleKeyDown}
           placeholder="Folder name..."
           className="flex-1 min-w-0 px-2 py-1 text-xs rounded border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]"
-          autoFocus
+          aria-label="Folder name"
+          ref={nameRef}
         />
       </div>
 

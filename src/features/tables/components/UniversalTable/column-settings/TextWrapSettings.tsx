@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { ColumnModel, TextWrapMode } from '@/features/tables/types/table.types';
 
 interface TextWrapSettingsProps {
@@ -43,8 +43,10 @@ export const TextWrapSettings: React.FC<TextWrapSettingsProps> = ({ draft, setDr
     }));
   };
 
+  const groupId = useId();
+
   return (
-    <div className="space-y-4 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-4 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
         📏 Перенос текста
       </h4>
@@ -52,6 +54,8 @@ export const TextWrapSettings: React.FC<TextWrapSettingsProps> = ({ draft, setDr
       <div className="space-y-3">
         {modes.map(mode => (
           <label
+            aria-label={mode.label}
+            htmlFor={`${groupId}-${mode.value}`}
             key={mode.value}
             className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
               currentMode === mode.value
@@ -61,7 +65,9 @@ export const TextWrapSettings: React.FC<TextWrapSettingsProps> = ({ draft, setDr
           >
             <input
               type="radio"
-              name="textWrap"
+              id={`${groupId}-${mode.value}`}
+              aria-label={mode.label}
+              name={groupId}
               value={mode.value}
               checked={currentMode === mode.value}
               onChange={() => handleModeChange(mode.value)}
@@ -93,7 +99,7 @@ export const TextWrapSettings: React.FC<TextWrapSettingsProps> = ({ draft, setDr
         ))}
       </div>
 
-      <div className="p-3 bg-primary-50 dark:bg-primary-100 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
+      <div className="p-3 bg-primary-50 dark:bg-primary-900 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
         <p className="text-primary-600 dark:text-primary-300">
           💡 <strong>Совет:</strong> Для длинных текстов используйте &quot;Перенос строки&quot;, 
           для коротких идентификаторов - &quot;В одну строку&quot;

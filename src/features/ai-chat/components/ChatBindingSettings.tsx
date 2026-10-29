@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatBindingSettings Component
  * ADR-024: Chat & Message Architecture Redesign
@@ -73,6 +74,7 @@ export function ChatBindingSettings({
   currentSpaceId,
   className
 }: ChatBindingSettingsProps) {
+  const { t } = useLanguage();
   const [isAddingBinding, setIsAddingBinding] = useState(false);
   const [selectedSpaceId, setSelectedSpaceId] = useState<number | null>(
     config.defaultSpaceId || currentSpaceId || null
@@ -195,19 +197,18 @@ export function ChatBindingSettings({
       <div className="space-y-3">
         <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
           <Settings className="w-4 h-4" />
-          Настройки привязки
-        </h4>
+          {t('aiChat.ui.linkSettings')}</h4>
 
         {/* Default Space */}
         <div className="space-y-1">
-          <label className="text-xs text-gray-500">Пространство по умолчанию</label>
+          <label className="text-xs text-gray-500">{t('aiChat.ui.defaultSpace')}</label>
           <div className="relative">
             <select
               value={selectedSpaceId || ''}
               onChange={(e) => handleDefaultSpaceChange(Number(e.target.value))}
               className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg appearance-none cursor-pointer pr-8"
             >
-              <option value="">Выберите пространство...</option>
+              <option value="">{t('aiChat.ui.selectASpaceLabel')}</option>
               {spaces.map(space => (
                 <option key={space.id} value={space.id}>
                   {space.icon || '📁'} {space.name}
@@ -221,7 +222,7 @@ export function ChatBindingSettings({
         {/* Default Table */}
         {selectedSpaceId && (
           <div className="space-y-1">
-            <label className="text-xs text-gray-500">Таблица задач по умолчанию</label>
+            <label className="text-xs text-gray-500">{t('aiChat.ui.defaultTaskTable')}</label>
             <div className="relative">
               <select
                 value={selectedTableId || ''}
@@ -229,7 +230,7 @@ export function ChatBindingSettings({
                 className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg appearance-none cursor-pointer pr-8"
                 disabled={isLoadingTables}
               >
-                <option value="">Выберите таблицу...</option>
+                <option value="">{t('aiChat.ui.selectATable')}</option>
                 {tables.map(table => (
                   <option key={table.id} value={table.id}>
                     {table.icon || '📋'} {table.name}
@@ -247,22 +248,19 @@ export function ChatBindingSettings({
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
             <Link2 className="w-4 h-4" />
-            Привязанные записи
-          </h4>
+            {t('aiChat.ui.linkedRecords')}</h4>
           <button
             onClick={() => setIsAddingBinding(true)}
             className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1"
           >
             <Plus className="w-3 h-3" />
-            Добавить
-          </button>
+            {t('aiChat.ui.add')}</button>
         </div>
 
         {/* Bindings List */}
         {config.bindings.length === 0 ? (
           <p className="text-xs text-gray-400 italic py-2">
-            Нет привязанных записей
-          </p>
+            {t('aiChat.ui.noLinkedRecords')}</p>
         ) : (
           <div className="space-y-1">
             {config.bindings.map((binding, index) => (
@@ -293,7 +291,7 @@ export function ChatBindingSettings({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="font-medium">Привязать запись</h3>
+              <h3 className="font-medium">{t('aiChat.ui.linkRecord')}</h3>
               <button
                 onClick={() => {
                   setIsAddingBinding(false);
@@ -308,14 +306,14 @@ export function ChatBindingSettings({
             <div className="p-4 space-y-3">
               {/* Table Selector */}
               <div className="space-y-1">
-                <label className="text-xs text-gray-500">Таблица</label>
+                <label className="text-xs text-gray-500">{t('columnSettings.relation.table')}</label>
                 <div className="relative">
                   <select
                     value={selectedTableId || ''}
                     onChange={(e) => setSelectedTableId(Number(e.target.value))}
                     className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg appearance-none cursor-pointer pr-8"
                   >
-                    <option value="">Выберите таблицу...</option>
+                    <option value="">{t('aiChat.ui.selectATable')}</option>
                     {tables.map(table => (
                       <option key={table.id} value={table.id}>
                         {table.icon || '📋'} {table.name}
@@ -334,7 +332,7 @@ export function ChatBindingSettings({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Поиск записей..."
+                    placeholder={t('aiChat.ui.searchRecords')}
                     className="w-full pl-9 pr-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg"
                   />
                 </div>
@@ -349,8 +347,7 @@ export function ChatBindingSettings({
                     </div>
                   ) : rows.length === 0 ? (
                     <p className="text-center py-8 text-sm text-gray-400">
-                      Записи не найдены
-                    </p>
+                      {t('aiChat.ui.noRecordsFound')}</p>
                   ) : (
                     rows.map(row => {
                       const table = tables.find(t => t.id === selectedTableId);

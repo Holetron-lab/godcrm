@@ -249,29 +249,7 @@ async function del(id) {
   await dbRun('DELETE FROM data_sources WHERE id = ?', [id]);
 }
 
-/**
- * Test connection to data source
- * @param {string} id - Data source ID
- * @returns {Promise<Object>} Test result
- */
-async function testConnection(id) {
-  const dataSource = await get(id);
-
-  const result = {
-    status: 'failed',
-    error: 'Connection testing not implemented yet',
-    tested_at: new Date().toISOString()
-  };
-
-  // Update test status in database
-  await dbRun(`
-    UPDATE data_sources
-    SET last_test_at = ?, last_test_status = ?, last_test_error = ?
-    WHERE id = ?
-  `, [result.tested_at, result.status, result.error, id]);
-
-  return result;
-}
+// testConnection lives in ./mysql.js — it needs a real connection, not a stub.
 
 /**
  * Validate data source configuration
@@ -332,7 +310,6 @@ export {
   create,
   update,
   del as delete_,
-  testConnection,
   validateConfig,
   getDecryptedPassword,
 };

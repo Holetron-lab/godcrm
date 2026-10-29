@@ -22,9 +22,10 @@ vi.mock('../../../database/connection.js', () => ({
   sqlNow: (...args) => sqlNow(...args),
 }));
 
-vi.mock('../../../utils/logger.js', () => ({
-  apiLogger: { error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-}));
+// logger is auto-mocked: a self-similar recorder whose .child() is itself, so a
+// module that grows `apiLogger.child(...)` can no longer break this file's import
+// (see backend/test/loggerMock.js).
+vi.mock('../../../utils/logger.js', async () => (await import('../../../test/loggerMock.js')).loggerMock());
 
 vi.mock('../../chat/invocation-dispatcher.js', () => ({
   dispatchInvocationsFromContent: vi.fn(),
@@ -152,6 +153,23 @@ describe('move_chat_messages — auth gating', () => {
       userId: 1,
       actorIsChatOwner: true,
     });
+  });
+
+  it('short-circuits on chat owner: canAdminister is not consulted', async () => {
+    // Regression: the role service used to throw on schema drift, and an
+    // unconditional canAdminister() call took chat owners down with it.
+    dbGet.mockResolvedValueOnce({ created_by: 1, space_id: 11 });
+    canAdminister.mockRejectedValueOnce(new Error('column "permission" does not exist'));
+    moveMessages.mockResolvedValueOnce({
+      moved_count: 1, source_message_ids: [5], target_message_ids: [50], batch_id: 'b',
+    });
+
+    const res = await chatToolHandlers.move_chat_messages(
+      { source_conversation_id: 10, target_conversation_id: 20, message_ids: [5] }, 1
+    );
+
+    expect(res.success).toBe(true);
+    expect(canAdminister).not.toHaveBeenCalled();
   });
 
   it('passes when caller is space admin (not chat owner)', async () => {

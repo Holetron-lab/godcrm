@@ -43,7 +43,7 @@ interface RecordingStartResponse {
   egress_id?: string;
 }
 
-interface CallStoreState {
+export interface CallStoreState {
   state: CallState;
   roomName: string | null;
   conversationId: number | null;
@@ -112,7 +112,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
 
   startCall: async (conversationId, opts) => {
     const current = get();
-    if (current.state !== 'idle') {
+    if (current.state !== 'idle' && current.state !== 'error') {
       // Already in a call — no-op rather than double-connect.
       return;
     }
@@ -174,7 +174,7 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       });
       lkRoom.on(RoomEvent.Disconnected, () => {
         // Called by both server-initiated and client-initiated disconnects.
-        void get().endCall();
+        if (room === lkRoom && get().state === 'connected') void get().endCall();
       });
 
       await lkRoom.connect(url, token);
@@ -209,16 +209,17 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
       const friendly = /permission|denied|NotAllowed/i.test(msg)
         ? 'Нет доступа к микрофону. Разрешите доступ в настройках браузера.'
         : msg;
-      set({ state: 'error', errorMessage: friendly });
-      if (room) {
+      const failedRoom = room;
+      room = null;
+      if (failedRoom) {
         try {
-          await room.disconnect();
+          await failedRoom.disconnect();
         } catch {
           /* noop */
         }
-        room = null;
       }
       stopElapsedTimer();
+      set({ state: 'error', errorMessage: friendly });
     }
   },
 
@@ -226,13 +227,14 @@ export const useCallStore = create<CallStoreState>((set, get) => ({
     const { conversationId, egressId } = get();
     stopElapsedTimer();
 
-    if (room) {
+    const endingRoom = room;
+    room = null;
+    if (endingRoom) {
       try {
-        await room.disconnect();
+        await endingRoom.disconnect();
       } catch {
         /* noop */
       }
-      room = null;
     }
 
     // Recording stop + transcription is fire-and-forget; the bubble

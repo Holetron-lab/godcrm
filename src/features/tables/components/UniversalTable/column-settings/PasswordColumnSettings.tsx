@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { Input, Select } from '@/shared/components/ui';
 import { ColumnSettingsProps } from './types';
 
@@ -19,6 +19,7 @@ export const PasswordColumnSettings: React.FC<ColumnSettingsProps> = ({
   setDraft,
   firstRow,
 }) => {
+  const fieldId = useId();
   const passwordConfig = draft.config?.password || {};
 
   const updateConfig = (updates: Partial<typeof passwordConfig>) => {
@@ -39,18 +40,18 @@ export const PasswordColumnSettings: React.FC<ColumnSettingsProps> = ({
 
       <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm border border-yellow-200 dark:border-yellow-800">
         <p className="text-yellow-600 dark:text-yellow-300">
-          ⚠️ Пароли отображаются скрыто. Используйте кнопку "показать" для просмотра.
+          ⚠️ Пароли отображаются скрыто. Используйте кнопку &quot;показать&quot; для просмотра.
         </p>
       </div>
 
       {/* Формат отображения */}
-      <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+      <fieldset className="min-w-0">
+        <legend className="block text-sm font-medium text-[var(--text-primary)] mb-2">
           Формат отображения
-        </label>
+        </legend>
         <div className="grid grid-cols-2 gap-2">
           {displayFormats.map(format => (
-            <button
+            <button aria-pressed={(passwordConfig.displayFormat || 'dots') === format.value}
               key={format.value}
               type="button"
               onClick={() => updateConfig({ displayFormat: format.value })}
@@ -68,16 +69,16 @@ export const PasswordColumnSettings: React.FC<ColumnSettingsProps> = ({
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       {/* Требования к паролю */}
-      <div className="space-y-3">
-        <label className="block text-sm font-medium text-[var(--text-primary)]">
+      <fieldset className="min-w-0 space-y-3">
+        <legend className="block text-sm font-medium text-[var(--text-primary)]">
           Требования к паролю
-        </label>
+        </legend>
         
         <div className="grid grid-cols-2 gap-3">
-          <Input
+          <Input id={`${fieldId}-input-1`}
             label="Мин. длина"
             type="number"
             min={1}
@@ -85,7 +86,7 @@ export const PasswordColumnSettings: React.FC<ColumnSettingsProps> = ({
             value={passwordConfig.minLength || 8}
             onChange={(e) => updateConfig({ minLength: parseInt(e.target.value) || 8 })}
           />
-          <Input
+          <Input id={`${fieldId}-input-2`}
             label="Макс. длина"
             type="number"
             min={1}
@@ -136,13 +137,13 @@ export const PasswordColumnSettings: React.FC<ColumnSettingsProps> = ({
             <span className="text-sm text-[var(--text-secondary)]">Требовать спецсимволы (!@#$%)</span>
           </label>
         </div>
-      </div>
+      </fieldset>
 
       {/* Опции отображения */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-[var(--text-primary)]">
+      <fieldset className="min-w-0 space-y-2">
+        <legend className="block text-sm font-medium text-[var(--text-primary)]">
           Опции отображения
-        </label>
+        </legend>
 
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -151,7 +152,7 @@ export const PasswordColumnSettings: React.FC<ColumnSettingsProps> = ({
             onChange={(e) => updateConfig({ showToggle: e.target.checked })}
             className="rounded border-[var(--border-primary)]"
           />
-          <span className="text-sm text-[var(--text-secondary)]">Кнопка "Показать/Скрыть"</span>
+          <span className="text-sm text-[var(--text-secondary)]">Кнопка &quot;Показать/Скрыть&quot;</span>
         </label>
 
         <label className="flex items-center gap-2 cursor-pointer">
@@ -161,7 +162,7 @@ export const PasswordColumnSettings: React.FC<ColumnSettingsProps> = ({
             onChange={(e) => updateConfig({ showCopy: e.target.checked })}
             className="rounded border-[var(--border-primary)]"
           />
-          <span className="text-sm text-[var(--text-secondary)]">Кнопка "Копировать"</span>
+          <span className="text-sm text-[var(--text-secondary)]">Кнопка &quot;Копировать&quot;</span>
         </label>
 
         <label className="flex items-center gap-2 cursor-pointer">
@@ -171,9 +172,9 @@ export const PasswordColumnSettings: React.FC<ColumnSettingsProps> = ({
             onChange={(e) => updateConfig({ showGenerator: e.target.checked })}
             className="rounded border-[var(--border-primary)]"
           />
-          <span className="text-sm text-[var(--text-secondary)]">Кнопка "Сгенерировать"</span>
+          <span className="text-sm text-[var(--text-secondary)]">Кнопка &quot;Сгенерировать&quot;</span>
         </label>
-      </div>
+      </fieldset>
 
       {/* Превью */}
       <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-secondary)]">

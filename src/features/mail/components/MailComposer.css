@@ -34,3 +34,14 @@
   margin: 0.25rem 0;
   color: var(--text-secondary);
 }
+
+/* Collapsed reply bar: the editor is one line that grows with the text up to a
+ * few lines, then scrolls — no fixed box height until the bar is opened. */
+.mail-composer--collapsed .ql-container.ql-snow {
+  height: auto;
+}
+.mail-composer--collapsed .ql-editor {
+  min-height: 2rem;
+  max-height: 6rem;
+  overflow-y: auto;
+}

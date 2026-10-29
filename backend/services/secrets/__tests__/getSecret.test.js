@@ -39,7 +39,11 @@ async function applyMigration(adapter) {
     raw: async (sql, bindings = []) => adapter.query(sql, bindings),
   };
   await migModule.up(knexShim);
+  const scopedMigration = await import('../../../database/migrations/knex/093_space_secrets.js');
+  await scopedMigration.up(knexShim);
 }
+
+const { lockSecretsSuite } = await import('../../../tests/helpers/secrets-suite.js');
 
 async function dropTable(adapter) {
   await adapter.query(`DROP TABLE IF EXISTS ${TABLE} CASCADE`);
@@ -47,29 +51,36 @@ async function dropTable(adapter) {
 
 describe('getSecret — vault + env fallback (ADR-0040 P3)', () => {
   let adapter;
+  let releaseSuite;
   let vault;
   let getSecret;
   let __resetWarnedForTests;
 
   beforeAll(async () => {
+    releaseSuite = await lockSecretsSuite();
     adapter = await makeAdapter();
     await dropTable(adapter);
     await applyMigration(adapter);
     const vaultMod = await import('../SecretsVault.js');
     vault = vaultMod.default;
     await vault.init({ adapter });
+    // Make the TTL-only path deterministic: no asynchronous NOTIFY eviction.
+    vault._listener?.removeAllListeners('notification');
     const helperMod = await import('../getSecret.js');
     getSecret = helperMod.getSecret;
     __resetWarnedForTests = helperMod.__resetWarnedForTests;
-  });
+  }, 120_000);
 
   afterAll(async () => {
     try { await vault.shutdown(); } catch { /* ignore */ }
     try { await adapter.close(); } catch { /* ignore */ }
+    await releaseSuite?.();
   });
 
   beforeEach(async () => {
-    await adapter.query(`TRUNCATE ${TABLE}`);
+    await adapter.query(`DELETE FROM ${TABLE} WHERE space_id = 11`); // space-scoped: table is shared by every suite
+    // TRUNCATE does not invalidate the vault's 60-second in-process cache.
+    vault._cache.clear();
     __resetWarnedForTests();
   });
 
@@ -161,11 +172,13 @@ describe('getSecret — vault + env fallback (ADR-0040 P3)', () => {
 
 describe('getSecret — stale-singleton self-heal (ADR-0040 regression)', () => {
   let adapter;
+  let releaseSuite;
   let vault;
   let getSecret;
   let __resetWarnedForTests;
 
   beforeAll(async () => {
+    releaseSuite = await lockSecretsSuite();
     adapter = await makeAdapter();
     await dropTable(adapter);
     await applyMigration(adapter);
@@ -175,15 +188,18 @@ describe('getSecret — stale-singleton self-heal (ADR-0040 regression)', () => 
     const helperMod = await import('../getSecret.js');
     getSecret = helperMod.getSecret;
     __resetWarnedForTests = helperMod.__resetWarnedForTests;
-  });
+  }, 120_000);
 
   afterAll(async () => {
     try { await vault.shutdown(); } catch { /* ignore */ }
     try { await adapter.close(); } catch { /* ignore */ }
+    await releaseSuite?.();
   });
 
   beforeEach(async () => {
-    await adapter.query(`TRUNCATE ${TABLE}`);
+    await adapter.query(`DELETE FROM ${TABLE} WHERE space_id = 11`); // space-scoped: table is shared by every suite
+    // TRUNCATE does not invalidate the vault's 60-second in-process cache.
+    vault._cache.clear();
     __resetWarnedForTests();
   });
 
@@ -232,11 +248,13 @@ describe('getSecret — stale-singleton self-heal (ADR-0040 regression)', () => 
 
 describe('getSecret — per-key smoke loop (every Tier-1 entry)', () => {
   let adapter;
+  let releaseSuite;
   let vault;
   let getSecret;
   let __resetWarnedForTests;
 
   beforeAll(async () => {
+    releaseSuite = await lockSecretsSuite();
     adapter = await makeAdapter();
     await dropTable(adapter);
     await applyMigration(adapter);
@@ -246,15 +264,18 @@ describe('getSecret — per-key smoke loop (every Tier-1 entry)', () => {
     const helperMod = await import('../getSecret.js');
     getSecret = helperMod.getSecret;
     __resetWarnedForTests = helperMod.__resetWarnedForTests;
-  });
+  }, 120_000);
 
   afterAll(async () => {
     try { await vault.shutdown(); } catch { /* ignore */ }
     try { await adapter.close(); } catch { /* ignore */ }
+    await releaseSuite?.();
   });
 
   beforeEach(async () => {
-    await adapter.query(`TRUNCATE ${TABLE}`);
+    await adapter.query(`DELETE FROM ${TABLE} WHERE space_id = 11`); // space-scoped: table is shared by every suite
+    // TRUNCATE does not invalidate the vault's 60-second in-process cache.
+    vault._cache.clear();
     __resetWarnedForTests();
   });
 

@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, MessageCirclePlus } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Modal } from '@/shared/components/ui';
+import { useInfiniteScroll } from '@/shared/hooks/useInfiniteScroll';
 import { AccountSwitcher, useConnectedAccounts, SpaceConnectorsTab } from '@/features/connectors';
 import { useCurrentSpace } from '@/features/spaces/store/spacesStore';
+import { useAIChat } from '@/features/ai-chat/context/AIChatContext';
 import { MailList } from './components/MailList';
 import { MailDisplay } from './components/MailDisplay';
 import { MailReplyBar, type ComposeMode } from './components/MailReplyBar';
 import { MailToolbar } from './components/MailToolbar';
 import { MailReadToolbar } from './components/MailReadToolbar';
-import { MailLinkBar } from './components/MailLinkBar';
 import { MailFolderRail } from './components/MailFolderRail';
 import { MailScheduledList } from './components/MailScheduledList';
 import { MailSettingsPanel } from './components/MailSettingsPanel';
@@ -29,28 +30,26 @@ import {
   useCreateLabel,
   useTagMessage,
 } from './hooks/useMailLabels';
+import { useUserFolderMutations } from './hooks/useMailFolders';
 import { useMailLabelColorize } from './labelPrefs';
 import { MailLabelBar } from './components/MailLabelBar';
 import { MailBulkActions } from './components/MailBulkActions';
 import type { MailPatch } from './api/mailApi';
+import { useMailListResize } from './hooks/useMailListResize';
 import { useMailHotkeys } from './hooks/useMailHotkeys';
 import type { MailFolder, MailFolderId, MailMessage, MailScheduled } from './types';
 import './mail.css';
-
-// Resizable list-column bounds (px). Default matches the old fixed w-72 (288px)
-// so nothing shifts on first paint.
-const LIST_WIDTH_DEFAULT = 288;
-const LIST_WIDTH_MIN = 220;
-const LIST_WIDTH_MAX = 560;
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 // Nav skeleton for first paint — the server returns the same list with live unread
 // counts once useMailFolders resolves; this just avoids an empty rail on load.
+// Labels resolve through `folderLabel` (`mail.folders.*`), so these are keys.
 const FALLBACK_FOLDERS: MailFolder[] = [
-  { id: 'inbox', label: 'Inbox' },
-  { id: 'sent', label: 'Sent' },
-  { id: 'drafts', label: 'Drafts' },
-  { id: 'archive', label: 'Archive' },
-  { id: 'trash', label: 'Trash' },
+  { id: 'inbox', label: 'inbox', system: true },
+  { id: 'sent', label: 'sent', system: true },
+  { id: 'drafts', label: 'drafts', system: true },
+  { id: 'archive', label: 'archive', system: true },
+  { id: 'trash', label: 'trash', system: true },
 ];
 
 /**
@@ -72,6 +71,7 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
   const currentSpace = useCurrentSpace();
   const spaceId = spaceIdProp ?? currentSpace?.id;
   const queryClient = useQueryClient();
+  const { t } = useLanguage();
 
   // Folder selection defaults to single-select (click a folder → show only it).
   // The rail's "Мультивыбор" toggle flips `folderMultiSelect` on, after which the
@@ -116,9 +116,9 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
   useEffect(() => {
     const msg = searchParams.get('msg');
     if (!msg) return;
-    const folder = searchParams.get('folder') as MailFolderId | null;
-    const VALID: MailFolderId[] = ['inbox', 'sent', 'drafts', 'archive', 'trash'];
-    if (folder && VALID.includes(folder)) {
+    // Any folder key (system or user `f<id>`) — the server validates on read.
+    const folder = searchParams.get('folder');
+    if (folder) {
       setShowScheduled(false);
       setActiveLabelIds([]);
       setFolders([folder]);
@@ -136,10 +136,7 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
   // fresh label draft (the rail's "+" under labels sets both).
   const [settingsTab, setSettingsTab] = useState<'general' | 'labels'>('general');
   const [settingsNewLabel, setSettingsNewLabel] = useState(false);
-  // Width of the left message-list column, in px. The full-height divider drags
-  // this; the reading pane's left edge follows it so the two stay aligned.
-  const [listWidth, setListWidth] = useState(LIST_WIDTH_DEFAULT);
-  const paneRef = useRef<HTMLDivElement>(null);
+  const { listWidth, paneRef, dividerProps } = useMailListResize();
 
   // ADR-159 — active connected account (view concern; server-side default
   // per module instance is a backend follow-up).
@@ -200,6 +197,40 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
 
   const foldersQuery = useMailFolders(spaceId, activeAccountId);
   const folderList = foldersQuery.data ?? FALLBACK_FOLDERS;
+  // User folders (Archive rename, Spam, …) — the rail's inline editor awaits
+  // these; the last failure is shown under it.
+  const folderMut = useUserFolderMutations(spaceId);
+  const folderError =
+    (folderMut.create.error ?? folderMut.rename.error ?? folderMut.remove.error)?.message ?? null;
+
+  // "Прикрепить к сообщению" — hand the mail row to the chat composer. Rides the
+  // chat's bound-row pipeline: `mailRef` is what the chip renders from;
+  // `table_id: 0` marks "not a universal-table row" (dedupe by row_id = message id).
+  const { attachRowToMessage } = useAIChat();
+  const attachToMessage = (m: MailMessage) => {
+    if (spaceId == null) return;
+    attachRowToMessage({
+      table_id: 0,
+      row_id: Number(m.id),
+      table_name: t('mail.page.tableName'),
+      table_icon: '✉️',
+      row_title: m.subject || t('mail.common.noSubject'),
+      mailRef: {
+        messageId: m.id,
+        spaceId,
+        connectorId: activeAccountId,
+        folder: m.folder,
+        subject: m.subject,
+        fromName: m.fromName,
+        fromAddress: m.fromAddress,
+        to: m.to ?? [],
+        date: m.date ?? null,
+        read: m.read,
+        attachmentCount: m.attachments?.length ?? 0,
+        preview: m.preview,
+      },
+    });
+  };
 
   // Message source is always the selected real folder(s). Labels are a *filter*
   // layered on top (in the `messages` memo below), not a separate view — clicking
@@ -207,6 +238,16 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
   // with that label across all folders.
   const messagesQuery = useMailMessagesMulti(spaceId, folders, activeAccountId);
   const allMessages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
+  const { fetchNextPage, hasNextPage, isFetching, isFetchNextPageError, isError } = messagesQuery;
+  const loadMore = useCallback(() => {
+    if (hasNextPage && !isFetching) void fetchNextPage({ cancelRefetch: false });
+  }, [hasNextPage, isFetching, fetchNextPage]);
+  const { sentinelRef } = useInfiniteScroll({
+    hasNextPage,
+    isFetchingNextPage: isFetching,
+    fetchNextPage: loadMore,
+    enabled: hasNextPage && !showScheduled && !isError && typeof IntersectionObserver !== 'undefined',
+  });
 
   // Pulls IMAP on its own: cold-start when a mailbox/folder first comes into view
   // (a just-connected account has no rows yet), then on an interval. The toolbar
@@ -355,37 +396,19 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
   const bulkMarkRead = () => bulkPatch({ is_read: true });
   const bulkMarkUnread = () => bulkPatch({ is_read: false });
   const bulkStar = () => bulkPatch({ starred: true });
-  const bulkArchive = () => {
-    // Rows leave the current view once archived — close any open one and clear
+  const bulkMoveToFolder = (folder: MailFolderId) => {
+    // Rows leave the current view once moved — close any open one and clear
     // the now-stale selection.
     checkedIds.forEach((id) => {
       if (selectedId === id) setSelectedId(null);
-      updateMessage.mutate({ id, patch: { folder: 'archive' } });
+      updateMessage.mutate({ id, patch: { folder } });
     });
     setCheckedIds(new Set());
   };
+  const bulkArchive = () => bulkMoveToFolder('archive');
   const bulkTag = (labelId: number) =>
     checkedIds.forEach((id) => tagMessage.mutate({ msgId: id, labelId }));
 
-  // Drag the full-height divider to resize the list column.
-  const onDividerDrag = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    const rect = paneRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const move = (ev: MouseEvent) => {
-      const next = Math.min(LIST_WIDTH_MAX, Math.max(LIST_WIDTH_MIN, ev.clientX - rect.left));
-      setListWidth(next);
-    };
-    const up = () => {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', up);
-      document.body.style.userSelect = '';
-    };
-    // Kill text selection while dragging.
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
-  }, []);
   // Sync pulls fresh IMAP for every folder currently in view.
   const syncSelected = () => folders.forEach((f) => sync.mutate(f));
 
@@ -419,7 +442,7 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
 
   const handlePrint = () => window.print();
   const focusSearch = () => {
-    const el = document.querySelector<HTMLInputElement>('input[aria-label="Search mail"]');
+    const el = document.querySelector<HTMLInputElement>(`input[aria-label="${t('mail.toolbar.search')}"]`);
     el?.focus();
   };
 
@@ -443,7 +466,7 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
 
   return (
     <>
-    <div className="flex h-full min-h-0 flex-col bg-[var(--bg-primary)]">
+    <div className="flex h-full min-h-0 min-w-0 flex-col bg-[var(--bg-primary)]">
       <MailToolbar
         query={query}
         onQueryChange={setQuery}
@@ -469,6 +492,8 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
             <MailBulkActions
               count={checkedIds.size}
               labels={labelsQuery.data ?? []}
+              folders={folderList}
+              onMoveToFolder={bulkMoveToFolder}
               onMarkRead={bulkMarkRead}
               onMarkUnread={bulkMarkUnread}
               onArchive={bulkArchive}
@@ -488,16 +513,26 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
           />
         }
       />
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <MailFolderRail
           folders={folderList}
           selectedFolders={folders}
           onFoldersChange={changeFolders}
           multiSelect={folderMultiSelect}
           onMultiSelectChange={changeMultiSelect}
+          threads={settings.threads}
+          onThreadsChange={(v) => setSettings((s) => ({ ...s, threads: v }))}
           starredOnly={starredOnly}
           onStarredOnlyChange={setStarredOnly}
           expanded={railOpen}
+          onCreateFolder={(name) => folderMut.create.mutateAsync(name)}
+          onRenameFolder={(id, name) => folderMut.rename.mutateAsync({ id, name })}
+          onDeleteFolder={(id) => {
+            // A deleted folder can't stay selected — fall back to Inbox.
+            if (folders.includes(id)) changeFolders(folders.filter((f) => f !== id));
+            return folderMut.remove.mutateAsync(id);
+          }}
+          folderError={folderError}
           labels={labelsQuery.data ?? []}
           activeLabelIds={activeLabelIds}
           onSelectLabel={selectLabel}
@@ -512,7 +547,7 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
         />
       <div
         ref={paneRef}
-        className="relative min-h-0 flex-1"
+        className="relative min-h-0 min-w-0 flex-1"
         style={{ '--list-w': `${listWidth}px` } as React.CSSProperties}
       >
         {settingsOpen ? (
@@ -520,6 +555,8 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
             settings={settings}
             onChange={setSettings}
             spaceId={spaceId}
+            activeAccountId={activeAccountId}
+            onConnect={openConnect}
             initialTab={settingsTab}
             autoNewLabel={settingsNewLabel}
             onClose={() => setSettingsOpen(false)}
@@ -544,19 +581,19 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
               />
             </div>
             {editingScheduled && (
-              <aside className="absolute inset-y-0 left-0 right-0 z-10 flex flex-col bg-[var(--bg-primary)] shadow-xl md:left-[var(--list-w)]">
+              <aside className="absolute inset-y-0 left-0 right-0 z-10 flex flex-col overflow-y-auto bg-[var(--bg-primary)] shadow-xl md:left-[var(--list-w)] md:overflow-visible">
                 <div className="flex items-center gap-2 border-b border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-1.5">
                   <Button
                     variant="ghost"
                     size="sm"
-                    aria-label="Закрыть"
-                    title="Закрыть"
+                    aria-label={t('mail.common.close')}
+                    title={t('mail.common.close')}
                     onClick={closeScheduledEditor}
                   >
                     <ArrowLeft size={16} />
                   </Button>
                   <span className="text-sm font-medium text-[var(--text-primary)]">
-                    Отложенное письмо
+                    {t('mail.page.scheduledTitle')}
                   </span>
                 </div>
                 <MailReplyBar
@@ -578,31 +615,49 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
         <div className="h-full overflow-auto">
           {messagesQuery.isLoading ? (
             <div className="flex h-full items-center justify-center p-6 text-sm text-[var(--text-tertiary)]">
-              Loading messages…
+              {t('mail.page.loadingMessages')}
             </div>
-          ) : messagesQuery.isError ? (
+          ) : messagesQuery.isError && allMessages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--text-tertiary)]">
-              <span>Couldn’t load messages</span>
+              <span>{t('mail.page.loadFailed')}</span>
               <Button variant="secondary" size="sm" onClick={() => messagesQuery.refetch()}>
-                Retry
+                {t('mail.common.retry')}
               </Button>
             </div>
           ) : (
-            <MailList
-              messages={messages}
-              spaceId={spaceId}
-              selectedId={selectedId}
-              listWidth={listWidth}
-              onSelect={toggleSelected}
-              onForward={openForward}
-              onStar={toggleStar}
-              onArchive={toggleArchive}
-              onDelete={(m) => moveToFolder(m, 'trash')}
-              checkedIds={checkedIds}
-              onToggleChecked={toggleChecked}
-              settings={settings}
-              colorizeIds={colorizeIds}
-            />
+            <>
+              <MailList
+                messages={messages}
+                spaceId={spaceId}
+                selectedId={selectedId}
+                listWidth={listWidth}
+                onSelect={toggleSelected}
+                onForward={openForward}
+                onStar={toggleStar}
+                onArchive={toggleArchive}
+                onDelete={(m) => moveToFolder(m, 'trash')}
+                onAttachToMessage={attachToMessage}
+                folders={folderList}
+                onMoveToFolder={moveToFolder}
+                checkedIds={checkedIds}
+                onToggleChecked={toggleChecked}
+                settings={settings}
+                colorizeIds={colorizeIds}
+              />
+              <div ref={sentinelRef} className="flex flex-col items-start gap-2 p-3">
+                {isError && (
+                  <p role="alert" className="text-sm text-[var(--text-secondary)]">
+                    {isFetchNextPageError ? t('mail.page.nextPageFailed') : t('mail.page.refreshFailed')}
+                  </p>
+                )}
+                {(hasNextPage || isError) && (
+                  <Button variant="secondary" size="sm" disabled={isFetching}
+                    onClick={isError && !isFetchNextPageError ? () => void messagesQuery.refetch() : loadMore}>
+                    {isFetching ? t('mail.common.loading') : isError ? t('mail.page.retryLoad') : t('mail.page.loadMore')}
+                  </Button>
+                )}
+              </div>
+            </>
           )}
         </div>
 
@@ -610,14 +665,16 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
             pane. Draggable to resize the list column; sits above the reading pane
             (z-20) so you can resize while a message is open. */}
         <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize message list"
-          onMouseDown={onDividerDrag}
-          className="group absolute inset-y-0 z-20 -ml-1 hidden w-2 cursor-col-resize md:block"
+          role="slider"
+          aria-orientation="horizontal"
+          aria-label={t('mail.page.resizeList')}
+          tabIndex={0}
+          aria-valuenow={listWidth}
+          {...dividerProps}
+          className="group absolute inset-y-0 z-20 -ml-1 hidden w-2 cursor-col-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary-500)] md:block"
           style={{ left: listWidth }}
         >
-          <div className="mx-auto h-full w-px bg-[var(--border-primary)] transition-colors group-hover:bg-[var(--color-primary-500)]" />
+          <span className="mx-auto block h-full w-px bg-[var(--border-primary)] transition-colors group-hover:bg-[var(--color-primary-500)]" />
         </div>
 
         {/* Reading pane — overlays the body-preview column (left edge aligned to
@@ -626,7 +683,7 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
             opens. */}
         {(selected || newCompose) && (
           <aside
-            className="absolute inset-y-0 left-0 right-0 z-10 flex flex-col bg-[var(--bg-primary)] shadow-xl md:left-[var(--list-w)]"
+            className="absolute inset-y-0 left-0 right-0 z-10 flex flex-col overflow-y-auto bg-[var(--bg-primary)] shadow-xl md:left-[var(--list-w)] md:overflow-visible"
           >
             {newCompose ? (
               <>
@@ -635,13 +692,13 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    aria-label="Закрыть"
-                    title="Закрыть (u)"
+                    aria-label={t('mail.common.close')}
+                    title={t('mail.page.closeHint')}
                     onClick={() => setNewCompose(false)}
                   >
                     <ArrowLeft size={16} />
                   </Button>
-                  <span className="text-sm font-medium text-[var(--text-primary)]">Новое письмо</span>
+                  <span className="text-sm font-medium text-[var(--text-primary)]">{t('mail.page.newTitle')}</span>
                 </div>
                 <MailReplyBar
                   mode="new"
@@ -664,6 +721,8 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
                   onToggleStar={() => toggleStar(selected)}
                   renderHtml={renderHtml}
                   onRenderHtmlChange={setRenderHtml}
+                  bodyTheme={settings.bodyTheme}
+                  onBodyThemeChange={(bodyTheme) => setSettings((s) => ({ ...s, bodyTheme }))}
                   mode={inlineMode}
                   onReply={handleReply}
                   onForward={handleForward}
@@ -673,10 +732,22 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
                   canPrev={canPrev}
                   canNext={canNext}
                   labelSlot={<MailLabelBar spaceId={spaceId} message={selected} />}
-                  linkSlot={<MailLinkBar spaceId={spaceId} message={selected} />}
+                  linkSlot={
+                    // Same action as the row's "attach to chat message" — hand the
+                    // open message to the chat composer as a mail chip.
+                    <button
+                      type="button"
+                      onClick={() => attachToMessage(selected)}
+                      title={t('mail.list.attachToChat')}
+                      className="inline-flex max-w-[14rem] items-center gap-1 rounded-full border border-dashed border-[var(--border-primary)] px-2 py-0.5 text-xs font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+                    >
+                      <MessageCirclePlus size={12} className="flex-shrink-0" />
+                      <span className="truncate">{t('mail.list.attachToChat')}</span>
+                    </button>
+                  }
                 />
-                <div className="min-h-0 flex-1 overflow-hidden">
-                  <MailDisplay message={selected} renderHtml={renderHtml} />
+                <div className="shrink-0 md:min-h-0 md:flex-1 md:overflow-hidden">
+                  <MailDisplay message={selected} renderHtml={renderHtml} bodyTheme={settings.bodyTheme} spaceId={spaceId} />
                 </div>
                 {/* Docked composer — reply by default, forward when the toolbar
                     flips it; a sent forward drops back to reply on the same thread. */}
@@ -707,15 +778,15 @@ export function MailPage({ spaceId: spaceIdProp }: MailPageProps = {}) {
           void queryClient.invalidateQueries({ queryKey: ['connectors', 'compatible'] });
         }
       }}
-      title="Connect a mailbox"
-      description="Link an IMAP/SMTP account or OAuth provider to this space."
+      title={t('mail.page.connectTitle')}
+      description={t('mail.page.connectDescription')}
       size="lg"
     >
       {spaceId ? (
         <SpaceConnectorsTab spaceId={spaceId} initialExpandedSlug="imap" />
       ) : (
         <p className="text-sm text-[var(--text-tertiary)]">
-          Не удалось определить пространство. Откройте почту из дашборда пространства и попробуйте снова.
+          {t('mail.page.noSpace')}
         </p>
       )}
     </Modal>

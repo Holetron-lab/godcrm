@@ -1,6 +1,7 @@
 // System Tables Creation Service - v0.002.008
 // ADR-026: Added Variables table for formulas and aggregations
-import { dbRun, dbGet, toBool } from '../database/connection.js';
+import { dbRun, dbGet, toBool, withTransactionAsync } from '../database/connection.js';
+import { SECRETS_SYNC_TARGET, SECRETS_COLUMNS } from './secrets/secretsSystemTable.js';
 
 /**
  * Create system tables for Admin Owner's Space
@@ -786,8 +787,25 @@ export async function createTicketsModuleTables(projectId) {
  * @param {number} projectId - Project ID where to create the table
  * @returns {Promise<number>} Created table ID
  */
-export async function createMailMessagesSystemTable(projectId) {
-  const result = await dbRun(`
+export async function createMailMessagesSystemTable(projectId, { trx = null } = {}) {
+  if (!trx) return withTransactionAsync(tx => createMailMessagesSystemTable(projectId, { trx: tx }));
+  // Serialize both same-project creation and adoption across projects in one space.
+  const project = await trx.get(`SELECT p.space_id FROM projects p
+    JOIN spaces s ON s.id = p.space_id WHERE p.id = ? FOR UPDATE OF s`, [projectId]);
+  if (!project) throw new Error('Project not found');
+  const existing = await trx.get("SELECT id FROM universal_tables WHERE project_id = ? AND sync_target = 'mail_messages' ORDER BY id LIMIT 1", [projectId]);
+  if (existing) return existing.id;
+  // Keep old row references valid. Never take a table from another mail module.
+  const legacy = await trx.get(`SELECT t.id FROM universal_tables t JOIN projects p ON p.id = t.project_id
+    WHERE p.space_id = ? AND p.type = 'system_data' AND t.sync_target = 'mail_messages'
+      AND NOT EXISTS (SELECT 1 FROM widgets w JOIN dashboards d ON d.id = w.dashboard_id
+        WHERE d.project_id = p.id AND w.preset_name = 'mail')
+    ORDER BY t.id LIMIT 1`, [project.space_id]);
+  if (legacy) {
+    await trx.run('UPDATE universal_tables SET project_id = ? WHERE id = ?', [projectId, legacy.id]);
+    return legacy.id;
+  }
+  const result = await trx.run(`
     INSERT INTO universal_tables (project_id, name, description, icon, is_system, sync_target)
     VALUES (?, ?, ?, ?, 1, ?)
   `, [projectId, 'Mail', 'Email messages (read-only)', '📬', 'mail_messages']);
@@ -810,7 +828,7 @@ export async function createMailMessagesSystemTable(projectId) {
   ];
 
   for (const col of columns) {
-    await dbRun(`
+    await trx.run(`
       INSERT INTO table_columns (
         table_id, column_name, display_name, type, config,
         order_index, is_required, is_system
@@ -822,7 +840,7 @@ export async function createMailMessagesSystemTable(projectId) {
 }
 
 /**
- * Ensure the read-only Mail system table exists in a space's System Data project.
+ * Ensure Mail is registered in the module project, or System Data without a module.
  * Idempotent + gated: only spaces that actually own an `imap` connector get the
  * table (ADR-158 §P3 — no mail connector ⇒ nothing to show, and provisioning
  * everywhere would litter empty Mail tables across unrelated spaces).
@@ -839,6 +857,11 @@ export async function ensureMailSystemTableForSpace(spaceId) {
   );
   if (!connector) return null;
 
+  const placement = await dbGet(`SELECT d.project_id FROM widgets w
+    JOIN dashboards d ON d.id = w.dashboard_id JOIN projects p ON p.id = d.project_id
+    WHERE p.space_id = ? AND w.preset_name = 'mail' ORDER BY w.id LIMIT 1`, [spaceId]);
+  if (placement) return createMailMessagesSystemTable(placement.project_id);
+
   // Reuse (or create) the space's System Data project — same home as core tables.
   const core = await ensureCoreSystemTablesForSpace(spaceId);
   if (!core) return null;
@@ -850,6 +873,54 @@ export async function ensureMailSystemTableForSpace(spaceId) {
   if (existing) return existing.id;
 
   return await createMailMessagesSystemTable(core.systemProjectId);
+}
+
+/**
+ * ADR-0040 §space-secrets — `Secrets` system table (is_system + sync_target
+ * '_secrets'). Rows are served masked from `_secrets` by SystemTableService;
+ * writes go through tableRow*Controller into the vault. Columns mirror
+ * SECRETS_COLUMNS so the grid and the /secrets route agree on one contract.
+ * @param {number} projectId - the space's System Data project
+ */
+export async function createSecretsSystemTable(projectId) {
+  const result = await dbRun(`
+    INSERT INTO universal_tables (project_id, name, description, icon, is_system, sync_target)
+    VALUES (?, ?, ?, ?, 1, ?)
+  `, [projectId, 'Secrets', 'Encrypted API keys and tokens of this space (ADR-0040)', '🔐', SECRETS_SYNC_TARGET]);
+
+  const tableId = result.lastInsertRowid || result.lastID;
+
+  for (const col of SECRETS_COLUMNS) {
+    await dbRun(`
+      INSERT INTO table_columns (
+        table_id, column_name, display_name, type, config,
+        order_index, is_required, is_system, is_readonly
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [tableId, col.name, col.displayName, col.type, null, col.orderIndex,
+        toBool(!!col.isRequired), toBool(col.name === 'id'), toBool(!!col.isReadonly)]);
+  }
+
+  return tableId;
+}
+
+/**
+ * Ensure the space has its Secrets system table (lazy, like Mail/automations):
+ * called when the owner opens Settings → Secrets or creates the first secret.
+ * @param {number} spaceId
+ * @returns {Promise<number|null>} table id, or null when the space is missing
+ */
+export async function ensureSecretsSystemTableForSpace(spaceId) {
+  if (!spaceId) return null;
+  const core = await ensureCoreSystemTablesForSpace(spaceId);
+  if (!core) return null;
+
+  const existing = await dbGet(
+    `SELECT id FROM universal_tables WHERE project_id = ? AND sync_target = ?`,
+    [core.systemProjectId, SECRETS_SYNC_TARGET]
+  );
+  if (existing) return existing.id;
+
+  return await createSecretsSystemTable(core.systemProjectId);
 }
 
 /**

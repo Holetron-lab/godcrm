@@ -1,6 +1,8 @@
 import { logger } from '@/shared/utils/logger';
 import type {
   TableNode,
+  WidgetNode,
+  SchemaNode,
   SchemaConnection,
   ColumnData,
   NavTreeNode,
@@ -26,7 +28,7 @@ const getDefaultPosition = (index: number) => ({
 });
 
 export interface LoadSchemaResult {
-  nodes: TableNode[];
+  nodes: SchemaNode[];
   edges: SchemaConnection[];
   navTree: NavTreeNode[];
   expandedProjects: Set<number>;
@@ -45,6 +47,7 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
     const position = savedPosition
       ? { x: savedPosition.x, y: savedPosition.y }
       : getDefaultPosition(index);
+    const isPinned = savedPosition?.locked === true;
 
     // Map columns with icons from config
     const columns: ColumnData[] = table.columns.map((col) => {
@@ -61,14 +64,21 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
         isPrimaryKey: col.name === 'id', // Convention
         isForeignKey: col.type === 'relation',
         isRequired: col.is_required,
+        orderIndex: col.order_index ?? undefined,
+        isVisible: col.is_visible == null ? true : Boolean(col.is_visible),
+        isReadonly: Boolean(col.is_readonly),
+        isLocked: Boolean(col.is_locked),
+        isFromSource: Boolean(col.is_from_source),
         config: config,
       };
     });
+    const rowCount = table.row_count == null ? undefined : Number(table.row_count);
 
     return {
       id: `table-${table.id}`,
       type: 'tableNode',
       position,
+      draggable: !isPinned,
       data: {
         tableId: table.id,
         name: table.name,
@@ -84,6 +94,8 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
         isSystem: Boolean(table.is_system),
         syncTarget: table.sync_target,
         columns,
+        rowCount,
+        isPinned,
       },
     };
   });
@@ -151,7 +163,7 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
             : `source-col-${col.name}`;
           const edgeTargetHandle = isBacklink ? `target-col-${col.name}` : finalTargetHandle;
 
-          const edge = {
+          const edge: SchemaConnection = {
             id: `edge-${table.id}-${col.name}-${targetTableId}`,
             source: edgeSource,
             target: edgeTarget,
@@ -191,7 +203,7 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
       if (!isNaN(parentTableId)) {
         const parentExists = schema.tables.some((t) => t.id === parentTableId);
         if (parentExists) {
-          const formEdge = {
+          const formEdge: SchemaConnection = {
             id: `form-edge-${table.id}-${parentTableId}`,
             source: `table-${parentTableId}`,
             target: `table-${table.id}`,
@@ -219,7 +231,7 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
   // Position form tables below their parent tables
   for (const node of nodes) {
     const tableData = node.data as any;
-    if (tableData.isSystem && tableData.name?.startsWith('form_')) {
+    if (tableData.isSystem && tableData.name?.startsWith('form_') && !tableData.isPinned) {
       const parentTableId = parseInt(tableData.name.replace('form_', ''));
       if (!isNaN(parentTableId)) {
         const parentNode = nodes.find((n) => (n.data as any).tableId === parentTableId);
@@ -284,6 +296,7 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
       id: `project:${project.id}`,
       type: 'project' as const,
       numericId: project.id,
+      parentId: null,
       name: project.name,
       displayName: project.name,
       icon: project.icon,
@@ -309,7 +322,7 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
   const expandedFolders = new Set<string>();
   const folderVisibility: Record<string, TableVisibilityState> = {};
   const projectColors: Record<number, string> = {};
-  const widgetNodes: TableNode[] = [];
+  const widgetNodes: WidgetNode[] = [];
 
   const collectExpandedIds = (treeNodes: NavTreeNode[]) => {
     for (const node of treeNodes) {
@@ -339,6 +352,8 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
             displayName: node.displayName || node.name,
             icon: node.icon,
             widgetType: node.widgetType || 'widget',
+            presetName: node.presetName,
+            widgetConfig: node.widgetConfig,
             mainTableId: node.mainTableId,
             projectId: node.parentId ? parseInt(node.parentId.split(':')[1]) || 0 : 0,
           },
@@ -351,91 +366,41 @@ export const loadSchemaData = async (spaceId: number): Promise<LoadSchemaResult>
   };
   collectExpandedIds(navTree);
 
-  // Position widgets above their linked tables
-  let unlinkedWidgetIndex = 0;
+  // A module with a main table on the canvas is glued to that table: the TableNode draws it as a
+  // strip above its card (full card width, stacked, moves with the table). Only modules without a
+  // resolvable table stay standalone cards, laid out in a row above the canvas.
+  const standaloneWidgets: WidgetNode[] = [];
   for (const widgetNode of widgetNodes) {
-    const mainTableIdRaw = widgetNode.data.mainTableId;
-    const mainTableId =
-      typeof mainTableIdRaw === 'string' ? parseInt(mainTableIdRaw) : mainTableIdRaw;
-
-    if (mainTableId && !isNaN(mainTableId)) {
-      // Find the table node with this tableId
-      const tableNode = nodes.find((n) => n.data.tableId === mainTableId);
-      if (tableNode) {
-        // Position widget above the table (same X, Y - 150)
-        widgetNode.position = {
-          x: tableNode.position.x + 50, // Slightly offset to the right
-          y: tableNode.position.y - 150,
-        };
-      } else {
-        // Table not found, use default position
-        widgetNode.position = {
-          x: 50 + (unlinkedWidgetIndex % 4) * 300,
-          y: -150,
-        };
-        unlinkedWidgetIndex++;
-      }
+    const tableNode = nodes.find((n) => n.data.tableId === widgetNode.data.mainTableId);
+    if (tableNode) {
+      tableNode.data.widgets = [
+        ...(tableNode.data.widgets ?? []),
+        {
+          widgetId: widgetNode.data.widgetId,
+          name: widgetNode.data.displayName,
+          icon: widgetNode.data.icon,
+          presetName: widgetNode.data.presetName,
+          widgetConfig: widgetNode.data.widgetConfig,
+        },
+      ];
     } else {
-      // No mainTableId, use default position
-      widgetNode.position = {
-        x: 50 + (unlinkedWidgetIndex % 4) * 300,
-        y: -150,
-      };
-      unlinkedWidgetIndex++;
+      widgetNode.position = { x: 50 + (standaloneWidgets.length % 4) * 300, y: -150 };
+      standaloneWidgets.push(widgetNode);
     }
   }
 
-  // Create edges from widgets to tables based on mainTableId
-  // Widget is above table, so edge goes FROM widget (bottom) TO table (top)
-  const widgetEdges: SchemaConnection[] = [];
-  for (const widgetNode of widgetNodes) {
-    const mainTableIdRaw = widgetNode.data.mainTableId;
-    const mainTableId =
-      typeof mainTableIdRaw === 'string' ? parseInt(mainTableIdRaw) : mainTableIdRaw;
-
-    if (mainTableId && !isNaN(mainTableId)) {
-      // Find the table node with this tableId
-      const tableNode = nodes.find((n) => n.data.tableId === mainTableId);
-      if (tableNode) {
-        logger.debug(`[Schema Editor] Creating widget edge: ${widgetNode.id} -> ${tableNode.id}`);
-        widgetEdges.push({
-          id: `widget-edge-${widgetNode.id}-${tableNode.id}`,
-          source: widgetNode.id, // Widget is source (above)
-          target: tableNode.id, // Table is target (below)
-          sourceHandle: 'widget-bottom', // Bottom of widget
-          targetHandle: 'table-top', // Top of table
-          type: 'glowEdge',
-          animated: false,
-          style: { stroke: '#a855f7', strokeWidth: 2 },
-          data: {
-            sourceColumn: null,
-            targetColumn: null,
-            relationType: 'widget',
-            isReversed: false,
-          },
-        });
-      } else {
-        logger.debug(
-          `[Schema Editor] Table not found for widget ${widgetNode.id}, mainTableId: ${mainTableId}`
-        );
-      }
-    }
-  }
-
-  // Combine table nodes and widget nodes
-  const allNodes = [...nodes, ...widgetNodes];
-  const allEdges = [...edges, ...widgetEdges];
+  const allNodes = [...nodes, ...standaloneWidgets];
   logger.debug(
-    '[Schema Editor] Created',
-    widgetNodes.length,
-    'widget nodes,',
-    widgetEdges.length,
-    'widget edges'
+    '[Schema Editor] Modules:',
+    widgetNodes.length - standaloneWidgets.length,
+    'glued to tables,',
+    standaloneWidgets.length,
+    'standalone'
   );
 
   return {
     nodes: allNodes,
-    edges: allEdges,
+    edges,
     navTree,
     expandedProjects,
     expandedFolders,

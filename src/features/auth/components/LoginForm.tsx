@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { logger } from '@/shared/utils/logger';
 import { FormProvider } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { useLoginForm } from '../hooks/useLogin';
+import { publicConfigApi } from '../api/publicConfigApi';
 import { Input, Button } from '@/shared/components/ui';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { apiClient } from '@/shared/utils/apiClient';
@@ -24,6 +26,21 @@ export const LoginForm = ({ onForgotPassword }: LoginFormProps) => {
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [oauthRedirectUri, setOauthRedirectUri] = useState<string | null>(null);
   const setAuth = useAuthStore((state) => state.setAuth);
+
+  const { data: publicConfig, isError: policyError, isFetchedAfterMount } = useQuery({
+    queryKey: ['public-registration-config'],
+    queryFn: async () => {
+      const res = await publicConfigApi.get();
+      return res.success ? res.data : null;
+    },
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  // Never advertise signup until this visit confirms the current policy.
+  const canRegister = isFetchedAfterMount && !policyError &&
+    (publicConfig?.signup_mode === 'open' || publicConfig?.signup_mode === 'invite');
 
   // Desktop app server status
   const [serverUrl, setServerUrl] = useState('');
@@ -139,12 +156,13 @@ export const LoginForm = ({ onForgotPassword }: LoginFormProps) => {
     <div className="space-y-4">
       {/* Desktop App: Server Status Indicator */}
       {isDesktop && (
-        <div 
-          className="flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-background-secondary)] p-3 cursor-pointer hover:bg-[var(--color-background-tertiary)] transition-colors"
+        <button
+          type="button"
+          className="w-full text-left flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-background-secondary)] p-3 cursor-pointer hover:bg-[var(--color-background-tertiary)] transition-colors"
           onClick={openDesktopSettings}
-          title="Правый клик для открытия настроек"
+          title="Открыть настройки сервера"
         >
-          <div className="flex items-center gap-2">
+          <span className="flex items-center gap-2">
             <Server className="w-4 h-4 text-[var(--color-text-secondary)]" />
             <span className="text-sm text-[var(--color-text-secondary)]">
               {serverUrl.replace(/\/api\/v3$/, '').replace(/^https?:\/\//, '')}
@@ -152,9 +170,9 @@ export const LoginForm = ({ onForgotPassword }: LoginFormProps) => {
             {serverStatus === 'checking' && <Loader2 className="w-4 h-4 animate-spin text-[var(--color-text-tertiary)]" />}
             {serverStatus === 'success' && <CheckCircle className="w-4 h-4 text-green-500" />}
             {serverStatus === 'error' && <XCircle className="w-4 h-4 text-red-500" />}
-          </div>
+          </span>
           <Settings className="w-4 h-4 text-[var(--color-text-tertiary)]" />
-        </div>
+        </button>
       )}
 
       {/* Google Sign-In Button */}
@@ -212,16 +230,18 @@ export const LoginForm = ({ onForgotPassword }: LoginFormProps) => {
 
           {/* Register + forgot password links */}
           <div className="flex items-center justify-between gap-4 text-sm">
-            <Link
-              to="/auth/register"
-              className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:underline"
-            >
-              {t('auth.login.register')}
-            </Link>
+            {canRegister && (
+              <Link
+                to="/auth/register"
+                className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:underline"
+              >
+                {t('auth.login.register')}
+              </Link>
+            )}
             <button
               type="button"
               onClick={onForgotPassword}
-              className="text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:underline"
+              className="ml-auto text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:underline"
             >
               {t('auth.login.forgotPassword')}
             </button>

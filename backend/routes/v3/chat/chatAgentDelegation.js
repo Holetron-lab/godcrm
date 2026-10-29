@@ -198,6 +198,16 @@ async function callAgentAI(agent, message, history, systemPrompt, agentConfig, o
     let { apiKey } = resolved;
     const { model, provider, isLocal } = resolved;
 
+    if (provider === 'kimi-code') {
+      apiLogger.info({ agentName: agent.name, model }, 'Using Kimi Code CLI (local)');
+      const { executeSimpleAI } = await import('../../../services/labs/ai-execution-service.js');
+      const result = await executeSimpleAI({ provider: 'kimi-code', model: model || 'kimi-code/k3.1-pro', input: message, systemPrompt });
+      if (!result.success) {
+        return { success: false, error: 'kimi_code_error', message: `Kimi Code execution failed: ${result.error || 'unknown error'}` };
+      }
+      return { success: true, content: result.content };
+    }
+
     if (provider === 'claude-code') {
       apiLogger.info({ agentName: agent.name, model }, 'Using Claude Code CLI (local)');
       const { executeSimpleAI } = await import('../../../services/labs/ai-execution-service.js');

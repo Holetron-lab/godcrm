@@ -1,3 +1,4 @@
+import * as Checkbox from '@radix-ui/react-checkbox';
 import { useCallback, MouseEvent } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { Check, Minus } from 'lucide-react';
@@ -32,16 +33,19 @@ export const HeaderSelectionCheckbox = ({
   }, [isAllSelected, isIndeterminate, onSelectAll, onDeselectAll, disabled]);
   
   return (
-    <div 
+    <Checkbox.Root
+      checked={isAllSelected || (isIndeterminate ? 'indeterminate' : false)}
+      disabled={disabled}
+      aria-label="Select all rows"
       className={cn(
-        "flex items-center justify-center w-6 h-8 cursor-pointer select-none",
+        "flex items-center justify-center w-6 h-8 cursor-pointer select-none rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]",
         disabled && "cursor-not-allowed"
       )}
       onClick={handleClick}
       data-testid="header-checkbox"
     >
       {/* Blur glow container - 30% larger than row checkboxes */}
-      <div className={cn(
+      <span className={cn(
         "relative flex items-center justify-center",
         "w-5 h-5 rounded-full",
         "backdrop-blur-sm",
@@ -51,7 +55,7 @@ export const HeaderSelectionCheckbox = ({
         "transition-all duration-200"
       )}>
         {/* Round checkbox */}
-        <div className={cn(
+        <span className={cn(
           "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all duration-150",
           (isAllSelected || isIndeterminate)
             ? "bg-[var(--color-primary-500)] border-[var(--color-primary-500)]" 
@@ -64,8 +68,8 @@ export const HeaderSelectionCheckbox = ({
           {isIndeterminate && !isAllSelected && (
             <Minus className="w-2.5 h-2.5 text-white" strokeWidth={3} />
           )}
-        </div>
-      </div>
-    </div>
+        </span>
+      </span>
+    </Checkbox.Root>
   );
 };

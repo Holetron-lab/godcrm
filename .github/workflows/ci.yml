@@ -18,9 +18,24 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "22"
 
 jobs:
+  mail-browser-smoke:
+    name: Mail browser smoke / accessibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Mail keyboard, resize, mobile and axe checks
+        run: node scripts/qa/mail-accessibility-smoke.mjs
+
   # ──────────────────────────────────────────────
   # Job 1: Lint, Typecheck, Unit Tests, Build
   # ──────────────────────────────────────────────

@@ -74,6 +74,8 @@ export interface DocumentAtom {
   key: string;
   title: string;
   content: string;
+  content_en?: string | null;
+  content_ru?: string | null;
   type?: DocumentItemType;
   http_method?: HttpMethod;
   http_path?: string;
@@ -93,8 +95,9 @@ export interface DocumentItem {
   base_id?: string;
   order: number;
   level: DocumentLevel;
+  title?: string;
   content?: string;  // For headers: the heading text. For text: markdown content.
-  comment?: string;
+  comment?: string | null;
   type?: DocumentItemType;
   atom_ref?: number | null;
   task_ref?: number | null;  // ADR-038: Link to task in tasks table
@@ -105,25 +108,25 @@ export interface DocumentItem {
   is_hidden?: boolean;
   
   // Translation fields (added dynamically)
-  content_en?: string;
-  content_ru?: string;
-  [key: `content_${string}`]: string | undefined;
+  content_en?: string | null;
+  content_ru?: string | null;
+  [key: `content_${string}`]: string | null | undefined;
   
   // Custom fields (from widget config)
   http_method?: HttpMethod;
-  http_path?: string;
+  http_path?: string | null;
   department?: string;
   priority?: string;
   
   // Page layout fields
   keep_with_next?: boolean;  // Don't separate this item from the next one across pages
-  image_url?: string;        // URL for image level
+  image_url?: string | null;        // URL for image level
   image_max_height?: number; // Max height in px for image
   
   // Atom fields (for atom modal)
   atom_key?: string;
-  atom_title?: string;
-  atom_comment?: string;
+  atom_title?: string | null;
+  atom_comment?: string | null;
   
   created_at?: string;
   updated_at?: string;
@@ -224,6 +227,7 @@ export interface TicketBindingConfig {
     priority?: string;           // e.g. "priority"
     acceptance_criteria?: string; // e.g. "acceptance_criteria"
     test_steps?: string;         // e.g. "test_steps"
+    due_date?: string;
     created_date?: string;       // e.g. "created_date", "created_at"
   };
 

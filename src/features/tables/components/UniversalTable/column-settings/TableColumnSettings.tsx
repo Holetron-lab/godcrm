@@ -26,7 +26,7 @@ export const TableColumnSettings: React.FC<ColumnSettingsProps> = ({
   firstRow,
 }) => {
   return (
-    <div className="space-y-4 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-4 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
         📊 Настройки встроенной таблицы
       </h4>
@@ -166,12 +166,12 @@ export const TableColumnSettings: React.FC<ColumnSettingsProps> = ({
             />
           </div>
           <p className="text-xs text-[var(--text-tertiary)]">
-            💡 Если строк/колонок больше лимита, будет показано "... и ещё N"
+            💡 Если строк/колонок больше лимита, будет показано &quot;... и ещё N&quot;
           </p>
         </>
       )}
       
-      <div className="pt-3 border-t border-[var(--border-color)] space-y-3">
+      <div className="pt-3 border-t border-[var(--border-primary)] space-y-3">
         <h5 className="text-sm font-medium text-[var(--text-secondary)]">Фильтрация связанных записей</h5>
         
         {draft.config?.relation?.tableId ? (
@@ -219,12 +219,12 @@ export const TableColumnSettings: React.FC<ColumnSettingsProps> = ({
           </>
         ) : (
           <p className="text-xs text-amber-600 dark:text-amber-400 p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-200 dark:border-amber-800">
-            ⚠️ Сначала привяжите таблицу на вкладке "Источник данных" → "Связь с таблицей"
+            ⚠️ Сначала привяжите таблицу на вкладке &quot;Источник данных&quot; → &quot;Связь с таблицей&quot;
           </p>
         )}
       </div>
       
-      <div className="p-3 bg-primary-50 dark:bg-primary-100 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
+      <div className="p-3 bg-primary-50 dark:bg-primary-900 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
         <p className="font-medium text-primary-800 dark:text-primary-200 flex items-center gap-2">
           💡 Режимы отображения
         </p>

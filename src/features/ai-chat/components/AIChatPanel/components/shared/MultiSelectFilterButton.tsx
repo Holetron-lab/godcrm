@@ -1,3 +1,5 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * MultiSelectFilterButton — compact popover-style multi-select used by the
  * tickets/documents/attach-row picker filter strip. Replaces the previous
@@ -34,11 +36,13 @@ interface MultiSelectFilterButtonProps {
 }
 
 export function MultiSelectFilterButton({ label, options, value, onChange }: MultiSelectFilterButtonProps) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const btnRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const requestedFocusRef = useRequestedFocus<HTMLInputElement>(open && pos !== null);
 
   useEffect(() => {
     if (!open) { setSearch(''); return; }
@@ -117,15 +121,15 @@ export function MultiSelectFilterButton({ label, options, value, onChange }: Mul
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Поиск..."
+                placeholder={t('aiChat.ui.search')}
                 className="w-full pl-7 pr-2 py-1 text-xs rounded bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
-                autoFocus
+                ref={requestedFocusRef}
               />
             </div>
           </div>
           <div className="max-h-56 overflow-y-auto py-1">
             {filtered.length === 0 ? (
-              <div className="py-3 text-center text-[10px] text-[var(--text-tertiary)]">Не найдено</div>
+              <div className="py-3 text-center text-[10px] text-[var(--text-tertiary)]">{t('aiChat.contacts.notFound')}</div>
             ) : filtered.map(opt => {
               const sel = value.includes(opt.value);
               const safe = opt.color && /^#?[0-9a-f]{3,8}$/i.test(opt.color)
@@ -170,8 +174,7 @@ export function MultiSelectFilterButton({ label, options, value, onChange }: Mul
                 onClick={() => onChange([])}
                 className="w-full flex items-center justify-center gap-1 px-2 py-1 text-[10px] text-[var(--text-tertiary)] hover:text-red-400 transition-colors rounded"
               >
-                <X className="w-3 h-3" /> Сбросить
-              </button>
+                <X className="w-3 h-3" /> {t('aiChat.ui.reset')}</button>
             </div>
           )}
         </div>,

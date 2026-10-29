@@ -3,11 +3,14 @@
  * Centralized state management for all 47+ useState hooks from AIChatPanel
  */
 
-import { useState, useEffect } from 'react';
+import { useChatInputMode } from '@/shared/hooks/useChatInputMode';
+import { useState, useEffect, useCallback, type SetStateAction } from 'react';
 import { ChatState, ChatActions, PanelTab, ChatPartner, TasksSourceConfig, FilesSourceConfig, FavoritesConfig, AttachTabId, PanelMode, AgentMode, SettingsTab, UserTypeFilter, SortOption, VoiceInputMode, AgentChat, MessageReaction, ReplyTo } from '../types';
 import { MentionUser } from '../../../components/MentionInput';
 import { BoundRow } from '../../../components/RowBindingV2';
 import { Participant } from '../../../components/ParticipantSelector';
+
+const EMPTY_DRAFT = { text: '', attachments: [] as File[], mentionedUsers: [] as MentionUser[], messageBoundRows: [] as BoundRow[], replyTo: null as ReplyTo | null };
 
 const DEFAULT_QUICK_EMOJIS = ['👍', '❤️', '😂', '🔥', '💯', '🙏', '😍', '😮'];
 
@@ -20,19 +23,19 @@ const DEFAULT_QUICK_EMOJIS = ['👍', '❤️', '😂', '🔥', '💯', '🙏', 
  * panel. Glued/width are NOT persisted in this mode (the embed shares its origin's
  * localStorage with the edit app — persisting would bleed into it).
  */
-export function useChatState(opts?: { fillContainer?: boolean }) {
+export function useChatState(opts?: {
+  fillContainer?: boolean;
+  currentConversationId?: number | null;
+  pendingConversationId?: number | null;
+}) {
   const fillContainer = opts?.fillContainer ?? false;
   // UI State
   const [activePanel, setActivePanel] = useState<PanelTab>('none');
   const [chatMode, setChatMode] = useState<'ai' | 'people'>('ai');
   const [chatPartner, setChatPartner] = useState<ChatPartner | null>(null);
-  const [inputValue, setInputValue] = useState('');
-  const [attachments, setAttachments] = useState<File[]>([]);
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [mentionedUsers, setMentionedUsers] = useState<MentionUser[]>([]);
   const [boundRows, setBoundRows] = useState<BoundRow[]>([]);
-  const [messageBoundRows, setMessageBoundRows] = useState<BoundRow[]>([]);
   const [chatParticipants, setChatParticipants] = useState<Participant[]>([]);
   const [tasksSource, setTasksSource] = useState<TasksSourceConfig | undefined>();
   const [filesSource, setFilesSource] = useState<FilesSourceConfig | undefined>();
@@ -53,7 +56,7 @@ export function useChatState(opts?: { fillContainer?: boolean }) {
       const v = localStorage.getItem('chat-panel-width');
       const n = v ? parseInt(v, 10) : NaN;
       if (Number.isFinite(n) && n >= 320 && n <= 1170) return n;
-    } catch {}
+    } catch { /* Use the default panel width when browser storage is unavailable. */ }
     return 420;
   });
   // favoriteWidth = the user's preferred mid-range width, used as a cycle stop
@@ -64,7 +67,7 @@ export function useChatState(opts?: { fillContainer?: boolean }) {
       const v = localStorage.getItem('chat-panel-favorite-width');
       const n = v ? parseInt(v, 10) : NaN;
       if (Number.isFinite(n) && n >= 320 && n <= 1170) return n;
-    } catch {}
+    } catch { /* Use the default favorite width when browser storage is unavailable. */ }
     return 420;
   });
   const [isResizingWidth, setIsResizingWidth] = useState(false);
@@ -81,7 +84,7 @@ export function useChatState(opts?: { fillContainer?: boolean }) {
       const v = localStorage.getItem('chat-panel-sidebar-width');
       const n = v ? parseInt(v, 10) : NaN;
       if (Number.isFinite(n) && n >= 180 && n <= 500) return n;
-    } catch {}
+    } catch { /* Use the default sidebar width when browser storage is unavailable. */ }
     return 256;
   });
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
@@ -90,17 +93,17 @@ export function useChatState(opts?: { fillContainer?: boolean }) {
     // Only persist the user's free-mode width — don't overwrite it with the
     // viewport-derived glued width (which is recomputed on every sync).
     if (isGlued) return;
-    try { localStorage.setItem('chat-panel-width', String(panelWidth)); } catch {}
+    try { localStorage.setItem('chat-panel-width', String(panelWidth)); } catch { /* Keep the in-memory width when browser storage cannot persist it. */ }
   }, [panelWidth, isGlued]);
   useEffect(() => {
     if (fillContainer) return; // don't bleed the forced-glue state into the edit app's localStorage
-    try { localStorage.setItem('chat-panel-glued', isGlued ? '1' : '0'); } catch {}
+    try { localStorage.setItem('chat-panel-glued', isGlued ? '1' : '0'); } catch { /* Keep the in-memory docking mode when browser storage cannot persist it. */ }
   }, [isGlued, fillContainer]);
   useEffect(() => {
-    try { localStorage.setItem('chat-panel-favorite-width', String(favoriteWidth)); } catch {}
+    try { localStorage.setItem('chat-panel-favorite-width', String(favoriteWidth)); } catch { /* Keep the in-memory favorite width when browser storage cannot persist it. */ }
   }, [favoriteWidth]);
   useEffect(() => {
-    try { localStorage.setItem('chat-panel-sidebar-width', String(sidebarWidth)); } catch {}
+    try { localStorage.setItem('chat-panel-sidebar-width', String(sidebarWidth)); } catch { /* Keep the in-memory sidebar width when browser storage cannot persist it. */ }
   }, [sidebarWidth]);
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [mobileKeyboardHeight, setMobileKeyboardHeight] = useState(0);
@@ -129,7 +132,7 @@ export function useChatState(opts?: { fillContainer?: boolean }) {
     try { const v = localStorage.getItem('chat-favorites'); return v ? JSON.parse(v) : []; } catch { return []; }
   });
   // Persist favorites to localStorage
-  useEffect(() => { try { localStorage.setItem('chat-favorites', JSON.stringify(favorites)); } catch {} }, [favorites]);
+  useEffect(() => { try { localStorage.setItem('chat-favorites', JSON.stringify(favorites)); } catch { /* Keep favorites usable in memory when browser storage cannot persist them. */ } }, [favorites]);
 
   // Inbox sort & unread filter
   const [inboxSortBy, setInboxSortBy] = useState<'created' | 'updated'>('updated');
@@ -190,9 +193,53 @@ export function useChatState(opts?: { fillContainer?: boolean }) {
   // User/group chat conversation id (ADR-024)
   const [userConversationId, setUserConversationId] = useState<number | null>(null);
 
-  // ADR-0068 WP-C: composer reply-to. Set by bubble Quote action (step 5); read
-  // by handleSubmit to attach `reply_to` to the POST body; cleared after send.
-  const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
+  const conversationId = chatPartner?.type === 'agent'
+    ? opts?.pendingConversationId ?? opts?.currentConversationId ?? null : userConversationId;
+  const partnerKey = chatPartner ? `${chatPartner.type}:${chatPartner.id}` : 'none';
+  const { mode: inputMode } = useChatInputMode();
+  const [sharedText, setSharedText] = useState('');
+  const [previousInputMode, setPreviousInputMode] = useState(inputMode);
+  const [drafts, setDrafts] = useState([{ conversationId, partnerKey, ...EMPTY_DRAFT }]);
+  let draftIndex = drafts.findIndex(draft => conversationId !== null
+    ? draft.conversationId === conversationId
+    : draft.conversationId === null && draft.partnerKey === partnerKey);
+
+  // Allocate before commit: no frame may show another conversation's text.
+  if (draftIndex === -1) {
+    draftIndex = drafts.length;
+    setDrafts([...drafts, { conversationId, partnerKey, ...EMPTY_DRAFT }]);
+  }
+
+  const draft = drafts[draftIndex] ?? EMPTY_DRAFT;
+  // Keep existing per-chat drafts when changing modes; seed only an empty slot.
+  if (previousInputMode !== inputMode) {
+    setPreviousInputMode(inputMode);
+    if (inputMode === 'shared') {
+      if (!sharedText) setSharedText(draft.text);
+    } else if (!draft.text) setDrafts(previous => previous.map((item, index) =>
+      index === draftIndex ? { ...item, text: sharedText } : item));
+  }
+  const updateDraft = useCallback(<K extends keyof typeof EMPTY_DRAFT>(key: K, value: SetStateAction<(typeof EMPTY_DRAFT)[K]>) => {
+    setDrafts(previous => previous.map((item, index) => index === draftIndex
+      ? { ...item, [key]: typeof value === 'function' ? value(item[key]) : value }
+      : item));
+  }, [draftIndex]);
+  const setInputValue = useCallback((value: SetStateAction<string>) => {
+    if (inputMode === 'shared') setSharedText(value);
+    else updateDraft('text', value);
+  }, [inputMode, updateDraft]);
+  const setAttachments = useCallback((value: SetStateAction<File[]>) => updateDraft('attachments', value), [updateDraft]);
+  const setMentionedUsers = useCallback((value: SetStateAction<MentionUser[]>) => updateDraft('mentionedUsers', value), [updateDraft]);
+  const setMessageBoundRows = useCallback((value: SetStateAction<BoundRow[]>) => updateDraft('messageBoundRows', value), [updateDraft]);
+  const setReplyTo = useCallback((value: SetStateAction<ReplyTo | null>) => updateDraft('replyTo', value), [updateDraft]);
+  const { attachments, mentionedUsers, messageBoundRows, replyTo } = draft;
+  // Only creation can promote a draft. Navigation to an existing chat must not.
+  // Preserve the slot so pending sends/transcriptions still address their draft.
+  const bindDraftToConversation = useCallback((id: number) => {
+    setDrafts(previous => previous.map((draft, index) => index === draftIndex
+      ? { ...draft, conversationId: id } : draft));
+  }, [draftIndex]);
+  const inputValue = inputMode === 'shared' ? sharedText : draft.text;
 
   // Mobile detection effect
   useEffect(() => {
@@ -361,5 +408,5 @@ export function useChatState(opts?: { fillContainer?: boolean }) {
     setReplyTo
   };
 
-  return { state, actions };
+  return { state, actions, bindDraftToConversation };
 }

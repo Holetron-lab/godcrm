@@ -94,7 +94,7 @@ export function PublicWidgetPage() {
         {isDocuments ? (
           <div className="flex-1 min-h-0 min-h-[60vh] overflow-hidden border-[var(--border-primary)] rounded-2xl border">
             <DocumentsWidget
-              config={(widget.view_config || {}) as Parameters<typeof DocumentsWidget>[0]['config']}
+              config={{ ...widget.view_config, project_id: typeof widget.view_config?.project_id === 'number' ? widget.view_config.project_id : 0 }}
               spaceId={0}
               isEditMode={false}
               dataSource="public"

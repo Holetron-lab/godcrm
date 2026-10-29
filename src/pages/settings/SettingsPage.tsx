@@ -11,10 +11,9 @@ import { SecuritySettings } from './components/SecuritySettings';
 import { TwoFactorSettings } from './components/TwoFactorSettings';
 import { RateLimitSettings } from './components/RateLimitSettings';
 import { CallsSettings } from './components/CallsSettings';
-import { PromoSettings } from './components/PromoSettings';
 import { PrimaryColorPicker } from './components/PrimaryColorPicker';
 import { ApiSettings } from './components/ApiSettings';
-import { AddAgentSettings } from './components/AddAgentSettings';
+import { ChatSendSettings } from './components/ChatSendSettings';
 import { RegistrationPolicySettings } from '@/features/registration/components/RegistrationPolicySettings';
 import { useEffect } from 'react';
 import { setPageTitle } from '@/shared/utils/pageTitle';
@@ -73,9 +72,6 @@ const SettingsPage = () => {
 
       {/* 2FA Section */}
       <TwoFactorSettings />
-
-      {/* ADR-0079 §2: Add Agent — unlocks Tier-B coding pack on demand */}
-      <AddAgentSettings />
 
       {/* ADR-188 Block F — referral surface now lives inside ProfileSettings
           (code + link + scannable QR, sourced from /auth/profile). */}
@@ -161,6 +157,8 @@ const SettingsPage = () => {
             </p>
           </div>
 
+          <ChatSendSettings />
+
           {/* Row 2: Primary Color (full width) */}
           <div className="md:col-span-2">
             <PrimaryColorPicker />
@@ -202,7 +200,6 @@ const SettingsPage = () => {
             </div>
           </div>
           <CallsSettings />
-          <PromoSettings />
           <SMTPConfigurator />
           <GoogleAuthSettings />
           <RateLimitSettings />

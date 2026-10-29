@@ -1,4 +1,4 @@
-import { describe, test, expect, vi } from 'vitest';
+import { beforeEach, describe, test, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SelectionContainer } from '../SelectionContainer';
 import type { SelectionSortMode } from '../../../types/selection.types';

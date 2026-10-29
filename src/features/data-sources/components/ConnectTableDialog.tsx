@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { dataSourcesApi } from '../api/dataSourcesApi';
@@ -16,6 +16,7 @@ interface ConnectTableDialogProps {
 }
 
 export function ConnectTableDialog({ dataSourceId, tableId, onClose, onSuccess }: ConnectTableDialogProps) {
+  const fieldId = useId();
   
   const { t } = useLanguage();
   const queryClient = useQueryClient();
@@ -103,10 +104,10 @@ export function ConnectTableDialog({ dataSourceId, tableId, onClose, onSuccess }
         {tables && tables.length > 0 && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label htmlFor={`${fieldId}-label-0`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Выберите таблицу из базы данных
               </label>
-              <Select
+              <Select id={`${fieldId}-label-0`}
                 value={selectedTable}
                 onChange={(value) => setSelectedTable(value)}
                 placeholder="Выберите таблицу..."
@@ -119,14 +120,14 @@ export function ConnectTableDialog({ dataSourceId, tableId, onClose, onSuccess }
 
             {selectedTable && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor={`${fieldId}-label-1`} className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   ID колонка (для связывания)
                 </label>
                 {columnsLoading ? (
                   <p className="text-sm text-gray-500 dark:text-gray-400">Загрузка колонок...</p>
                 ) : columns && columns.length > 0 ? (
                   <>
-                    <Select
+                    <Select id={`${fieldId}-label-1`}
                       value={selectedIdColumn}
                       onChange={(value) => setSelectedIdColumn(value)}
                       placeholder="Выберите ID колонку..."
@@ -136,7 +137,7 @@ export function ConnectTableDialog({ dataSourceId, tableId, onClose, onSuccess }
                       }))}
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Обычно это поле 'id' или 'primary_key'
+                      Обычно это поле &apos;id&apos; или &apos;primary_key&apos;
                     </p>
                   </>
                 ) : (

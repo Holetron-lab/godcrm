@@ -1,7 +1,7 @@
 /**
  * Owner Secrets Vault API — ADR-0040 Phase 1.
  *
- * Owner-only CRUD over the `_secrets` registry, plus an audited reveal
+ * Space owner/admin CRUD over the `_secrets` registry, plus an audited reveal
  * endpoint for the Settings → Secrets UI (P2).
  *
  * Wraps `services/secrets/SecretsVault.js` so PG NOTIFY-driven cache eviction
@@ -12,9 +12,10 @@
  *
  * Authorization model (mirrors ADR-0040 Tier 1):
  *   - JWT-authenticated (parent mount).
- *   - Owner-only: `req.user.id === space(11).owner_id`. Admin role is NOT
- *     enough — only the literal Development space owner can read/write
- *     vault entries. Rejects with 403 otherwise.
+ *   - Space owner OR space admin for the requested space_id. "Admin" is the
+ *     caller's role IN THE SPACE (access_control users table via
+ *     checkUserAccessViaTableV2) — the global users.role is never consulted.
+ *   - space_id is required on every request; missing scope fails closed.
  *
  * Audit: every state-changing action AND every reveal writes a row into
  * the existing `audit_log` table. The `details` payload NEVER carries
@@ -22,10 +23,14 @@
  */
 
 import express from 'express';
+import { z } from 'zod';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
-import { dbGet, dbAll, dbRun } from '../../database/connection.js';
+import { dbGet, dbAll, dbRun, safeJsonParse } from '../../database/connection.js';
+import { checkUserAccessViaTableV2 } from '../../services/space/access.js';
 import secretsVault from '../../services/secrets/SecretsVault.js';
+import { validateKey } from '../../services/secrets/secretsSystemTable.js';
+import { ensureSecretsSystemTableForSpace } from '../../services/SystemTablesCreator.js';
 import { apiLogger } from '../../utils/logger.js';
 import {
   success,
@@ -39,35 +44,50 @@ import {
 
 const log = apiLogger.child({ module: 'secrets_api' });
 
-const OWNER_SPACE_ID = 11; // Development — owner of this space owns the vault.
+const spaceIdSchema = z.string().regex(/^[1-9]\d*$/).transform(Number)
+  .pipe(z.number().int().positive().max(2147483647));
 const SECRETS_TABLE = '_secrets';
 
 const router = express.Router();
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-async function requireOwner(req, res) {
+/** Space-level role of the caller: 'owner' | 'admin' | other | null. */
+async function spaceRoleOf(userId, space) {
+  if (space.owner_id === userId) return 'owner';
+  const accessControl = safeJsonParse(space.access_control, null);
+  if (!accessControl?.enabled || !accessControl.users_table_id) return null;
+  const { accessLevel } = await checkUserAccessViaTableV2(userId, accessControl);
+  return accessLevel;
+}
+
+async function requireSpaceAdmin(req, res) {
   if (!req.user?.id) {
     forbidden(res, 'Authentication required');
     return false;
   }
-  const space = await dbGet('SELECT id, owner_id FROM spaces WHERE id = ?', [OWNER_SPACE_ID]);
+  const parsed = spaceIdSchema.safeParse(req.query.space_id);
+  if (!parsed.success) {
+    badRequest(res, 'space_id must be a positive integer');
+    return false;
+  }
+  const space = await dbGet('SELECT id, owner_id, access_control FROM spaces WHERE id = ?', [parsed.data]);
   if (!space) {
-    // Should never happen on a real deployment — but if space 11 vanishes,
-    // fail closed rather than silently elevating.
-    error(res, 'OWNER_SPACE_MISSING', `Space ${OWNER_SPACE_ID} not found`, 500);
+    notFound(res, 'Space');
     return false;
   }
-  if (space.owner_id !== req.user.id) {
-    forbidden(res, 'Owner-only endpoint');
+  const role = await spaceRoleOf(req.user.id, space);
+  if (role !== 'owner' && role !== 'admin') {
+    forbidden(res, 'Space owner or admin only');
     return false;
   }
+  req.secretSpaceId = parsed.data;
   return true;
 }
 
 async function auditSecret({ userId, action, key, extra, req }) {
   try {
-    const details = JSON.stringify({ key, ...(extra || {}) });
+    const details = JSON.stringify({ key, space_id: req.secretSpaceId, ...(extra || {}) });
     await dbRun(
       `INSERT INTO audit_log (user_id, action, entity_type, entity_id, details, ip_address, user_agent)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -95,19 +115,6 @@ function scrubRow(row) {
   return rest;
 }
 
-function validateKey(raw) {
-  if (typeof raw !== 'string') return { ok: false, error: 'key must be a string' };
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return { ok: false, error: 'key cannot be empty' };
-  if (trimmed.length > 128) return { ok: false, error: 'key cannot exceed 128 chars' };
-  // Conservative charset — letters, digits, underscore, dash, dot. Mirrors
-  // typical env-var conventions so seed migration (P3) maps 1:1.
-  if (!/^[A-Za-z0-9_\-.]+$/.test(trimmed)) {
-    return { ok: false, error: 'key may contain only [A-Za-z0-9_-.]' };
-  }
-  return { ok: true, value: trimmed };
-}
-
 // ─── Reveal rate limiter ────────────────────────────────────────────
 //
 // 30 reveals/hour/user (ticket AC2). Per-user key so a compromised owner
@@ -132,19 +139,23 @@ const revealLimiter = rateLimit({
 
 // GET /api/v3/secrets — list (no plaintext)
 router.get('/', async (req, res) => {
-  if (!(await requireOwner(req, res))) return;
+  if (!(await requireSpaceAdmin(req, res))) return;
+  // ADR-0040 §space-secrets — the space's `Secrets` system table (lazy, like Mail).
+  const tableId = await ensureSecretsSystemTableForSpace(req.secretSpaceId);
   const rows = await dbAll(
     `SELECT id, key, description, created_by, created_at, updated_at,
             last_revealed_at, last_revealed_by
        FROM ${SECRETS_TABLE}
-       ORDER BY key ASC`
+       WHERE space_id = ?
+       ORDER BY key ASC`,
+    [req.secretSpaceId]
   );
-  return success(res, { secrets: rows.map(scrubRow) });
+  return success(res, { secrets: rows.map(scrubRow), table_id: tableId });
 });
 
 // POST /api/v3/secrets — create (409 on conflict)
 router.post('/', async (req, res) => {
-  if (!(await requireOwner(req, res))) return;
+  if (!(await requireSpaceAdmin(req, res))) return;
   const { key, plaintext, description } = req.body || {};
 
   const keyCheck = validateKey(key);
@@ -157,16 +168,18 @@ router.post('/', async (req, res) => {
   }
 
   const existing = await dbGet(
-    `SELECT id FROM ${SECRETS_TABLE} WHERE key = ? LIMIT 1`,
-    [keyCheck.value]
+    `SELECT id FROM ${SECRETS_TABLE} WHERE key = ? AND space_id = ? LIMIT 1`,
+    [keyCheck.value, req.secretSpaceId]
   );
   if (existing) {
     return conflict(res, `Secret "${keyCheck.value}" already exists — use PUT to update`);
   }
 
   try {
+    await ensureSecretsSystemTableForSpace(req.secretSpaceId);
     await secretsVault.putSecret(keyCheck.value, plaintext, {
       actor: req.user.id,
+      spaceId: req.secretSpaceId,
       description: description ?? null,
     });
   } catch (err) {
@@ -188,15 +201,15 @@ router.post('/', async (req, res) => {
   const row = await dbGet(
     `SELECT id, key, description, created_by, created_at, updated_at,
             last_revealed_at, last_revealed_by
-       FROM ${SECRETS_TABLE} WHERE key = ?`,
-    [keyCheck.value]
+       FROM ${SECRETS_TABLE} WHERE key = ? AND space_id = ?`,
+    [keyCheck.value, req.secretSpaceId]
   );
   return created(res, { secret: scrubRow(row) });
 });
 
 // PUT /api/v3/secrets/:key — partial update (plaintext and/or description)
 router.put('/:key', async (req, res) => {
-  if (!(await requireOwner(req, res))) return;
+  if (!(await requireSpaceAdmin(req, res))) return;
   const keyCheck = validateKey(req.params.key);
   if (!keyCheck.ok) return badRequest(res, keyCheck.error);
 
@@ -215,8 +228,8 @@ router.put('/:key', async (req, res) => {
   }
 
   const existing = await dbGet(
-    `SELECT id, description FROM ${SECRETS_TABLE} WHERE key = ? LIMIT 1`,
-    [keyCheck.value]
+    `SELECT id, description FROM ${SECRETS_TABLE} WHERE key = ? AND space_id = ? LIMIT 1`,
+    [keyCheck.value, req.secretSpaceId]
   );
   if (!existing) return notFound(res, 'Secret');
 
@@ -226,6 +239,7 @@ router.put('/:key', async (req, res) => {
       // description: pass through if provided this call, else preserve existing.
       await secretsVault.putSecret(keyCheck.value, plaintext, {
         actor: req.user.id,
+        spaceId: req.secretSpaceId,
         description: hasDesc ? description : existing.description,
       });
     } else {
@@ -233,8 +247,8 @@ router.put('/:key', async (req, res) => {
       await dbRun(
         `UPDATE ${SECRETS_TABLE}
             SET description = ?, updated_at = NOW()
-          WHERE key = ?`,
-        [description, keyCheck.value]
+          WHERE key = ? AND space_id = ?`,
+        [description, keyCheck.value, req.secretSpaceId]
       );
     }
   } catch (err) {
@@ -258,21 +272,21 @@ router.put('/:key', async (req, res) => {
   const row = await dbGet(
     `SELECT id, key, description, created_by, created_at, updated_at,
             last_revealed_at, last_revealed_by
-       FROM ${SECRETS_TABLE} WHERE key = ?`,
-    [keyCheck.value]
+       FROM ${SECRETS_TABLE} WHERE key = ? AND space_id = ?`,
+    [keyCheck.value, req.secretSpaceId]
   );
   return success(res, { secret: scrubRow(row) });
 });
 
-// POST /api/v3/secrets/:key/reveal — owner-only, rate-limited, audited.
+// POST /api/v3/secrets/:key/reveal — space owner/admin, rate-limited, audited.
 router.post('/:key/reveal', revealLimiter, async (req, res) => {
-  if (!(await requireOwner(req, res))) return;
+  if (!(await requireSpaceAdmin(req, res))) return;
   const keyCheck = validateKey(req.params.key);
   if (!keyCheck.ok) return badRequest(res, keyCheck.error);
 
   let plaintext;
   try {
-    plaintext = await secretsVault.revealSecret(keyCheck.value, { actor: req.user.id });
+    plaintext = await secretsVault.revealSecret(keyCheck.value, { actor: req.user.id, spaceId: req.secretSpaceId });
   } catch (err) {
     log.error({ err, key: keyCheck.value }, 'revealSecret failed');
     if (err?.code === 'VAULT_NOT_CONFIGURED') {
@@ -296,18 +310,18 @@ router.post('/:key/reveal', revealLimiter, async (req, res) => {
 
 // DELETE /api/v3/secrets/:key — hard delete + audit row.
 router.delete('/:key', async (req, res) => {
-  if (!(await requireOwner(req, res))) return;
+  if (!(await requireSpaceAdmin(req, res))) return;
   const keyCheck = validateKey(req.params.key);
   if (!keyCheck.ok) return badRequest(res, keyCheck.error);
 
   const existing = await dbGet(
-    `SELECT id, description FROM ${SECRETS_TABLE} WHERE key = ? LIMIT 1`,
-    [keyCheck.value]
+    `SELECT id, description FROM ${SECRETS_TABLE} WHERE key = ? AND space_id = ? LIMIT 1`,
+    [keyCheck.value, req.secretSpaceId]
   );
   if (!existing) return notFound(res, 'Secret');
 
   try {
-    await secretsVault.deleteSecret(keyCheck.value, { actor: req.user.id });
+    await secretsVault.deleteSecret(keyCheck.value, { actor: req.user.id, spaceId: req.secretSpaceId });
   } catch (err) {
     log.error({ err, key: keyCheck.value }, 'deleteSecret failed');
     return error(res, 'DELETE_FAILED', err?.message || 'unknown', 500);

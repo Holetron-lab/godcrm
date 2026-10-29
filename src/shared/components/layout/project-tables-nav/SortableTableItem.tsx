@@ -10,12 +10,16 @@ export function SortableTableItem({ table, isActive, isDragging, isPrivileged }:
   const { language } = useLanguage();
   const t = (ru: string, en: string) => (language === 'ru' ? ru : en);
   // Handle Ctrl+Click to copy table ID
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (e.ctrlKey && isPrivileged) {
       e.preventDefault();
-      e.stopPropagation();
-      navigator.clipboard.writeText(table.id);
-      showToast(t(`ID ${table.id} скопирован`, `ID ${table.id} copied`), 'success');
+      try {
+        await navigator.clipboard.writeText(table.id);
+        showToast(t(`ID ${table.id} скопирован`, `ID ${table.id} copied`), 'success');
+      } catch {
+        showToast(t('Не удалось скопировать ID таблицы', 'Could not copy table ID'), 'error');
+      }
     }
   };
   const {
@@ -41,20 +45,21 @@ export function SortableTableItem({ table, isActive, isDragging, isPrivileged }:
       <div
         ref={setNodeRef}
         style={style}
-        onClick={handleClick}
         className="group relative flex items-center gap-1 px-1 py-1 rounded text-xs bg-[var(--color-primary-500)]/20 text-[var(--color-primary-600)]"
       >
         <button
+          type="button"
           {...attributes}
           {...listeners}
-          className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing p-0.5 hover:bg-[var(--bg-secondary)] rounded"
+          aria-label={t(`Переместить таблицу ${technicalName}`, `Move table ${technicalName}`)}
+          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 cursor-grab active:cursor-grabbing p-0.5 hover:bg-[var(--bg-secondary)] rounded"
         >
           <GripVertical className="w-3 h-3 text-[var(--text-tertiary)]" />
         </button>
         <NavLink
           to={`/tables/${table.id}?mode=raw`}
           className="flex items-center gap-2 flex-1 min-w-0"
-          onClick={(e) => e.stopPropagation()}
+          onClick={handleClick}
         >
           <Table className="w-3 h-3 flex-shrink-0 text-slate-400" />
           <span className="truncate font-mono text-[10px]">{technicalName}</span>
@@ -69,20 +74,21 @@ export function SortableTableItem({ table, isActive, isDragging, isPrivileged }:
     <div
       ref={setNodeRef}
       style={style}
-      onClick={handleClick}
-      className="group relative flex items-center gap-1 px-1 py-1 rounded text-xs transition cursor-grab active:cursor-grabbing text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-secondary)]"
+      className="group relative flex items-center gap-1 px-1 py-1 rounded text-xs transition cursor-grab active:cursor-grabbing text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
     >
-      <span
+      <button
+        type="button"
         {...attributes}
         {...listeners}
-        className="opacity-0 group-hover:opacity-100 p-0.5"
+        aria-label={t(`Переместить таблицу ${technicalName}`, `Move table ${technicalName}`)}
+        className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-0.5"
       >
         <GripVertical className="w-3 h-3 text-[var(--text-tertiary)]" />
-      </span>
+      </button>
       <NavLink
         to={`/tables/${table.id}?mode=raw`}
         className="flex items-center gap-2 flex-1 min-w-0"
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleClick}
       >
         <Table className="w-3 h-3 flex-shrink-0 text-slate-400" />
         <span className="truncate font-mono text-[10px]">{technicalName}</span>

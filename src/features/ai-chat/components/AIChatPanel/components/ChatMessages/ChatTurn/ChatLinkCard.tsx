@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatLinkCard — ADR-0031 §Z / WP-24.
  *
@@ -75,12 +76,12 @@ export interface ChatLinkCardProps {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const TYPE_LABEL: Record<string, string> = {
-  group: 'Группа',
-  direct: 'Личный чат',
-  task: 'Задача',
-  inbox: 'Входящие',
-  ticket: 'Тикет',
-  row: 'Строка',
+  group: "aiChat.ui.group",
+  direct: "aiChat.ui.directChat",
+  task: "aiChat.ui.task",
+  inbox: "aiChat.ui.inbox",
+  ticket: "aiChat.ui.ticket",
+  row: "aiChat.ui.row",
 };
 
 const TypeIconInner: React.FC<{ type?: ChatSummary['type']; className?: string }> = ({ type, className = 'w-3 h-3' }) => {
@@ -100,11 +101,11 @@ const TypeIconInner: React.FC<{ type?: ChatSummary['type']; className?: string }
   }
 };
 
-const formatChatCreatedAt = (iso?: string | null): string | null => {
+const formatChatCreatedAt = (iso: string | null | undefined, language: string): string | null => {
   if (!iso) return null;
   const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString(language, { day: 'numeric', month: 'short' });
 };
 
 const initialOf = (name?: string | null): string => {
@@ -146,9 +147,9 @@ const pluralRu = (n: number, one: string, few: string, many: string): string => 
   return many;
 };
 
-const formatParticipants = (n: number): string => `${n} уч.`;
+const formatParticipants = (n: number, t: (key: string, params?: Record<string, unknown>) => string): string => t('aiChat.ui.participantCount', { count: n });
 
-const formatMovedCount = (n: number): string => `${n} сообщ.`;
+const formatMovedCount = (n: number, t: (key: string, params?: Record<string, unknown>) => string): string => t('aiChat.ui.messageCount', { count: n });
 
 // ─── Subcomponents (gray plates) ──────────────────────────────────────────────
 
@@ -186,6 +187,7 @@ const ChatLinkCard: React.FC<ChatLinkCardProps> = ({
   onExpandToggle,
   accentColor,
 }) => {
+  const { t, language } = useLanguage();
   const { data, isLoading, error } = useChatSummary(conversationId);
 
   // Loading skeleton.
@@ -193,34 +195,34 @@ const ChatLinkCard: React.FC<ChatLinkCardProps> = ({
 
   // Error: no access.
   if (error && error.kind === 'forbidden') {
-    return <GrayPlate>Нет доступа к чату #{conversationId}</GrayPlate>;
+    return <GrayPlate>{t('aiChat.ui.noChatAccess', { id: conversationId })}</GrayPlate>;
   }
   // Error: not found / generic — still render a stable plate.
   if (error) {
-    return <GrayPlate>Чат #{conversationId} недоступен</GrayPlate>;
+    return <GrayPlate>{t('aiChat.ui.chatUnavailable', { id: conversationId })}</GrayPlate>;
   }
   if (!data) return null;
 
   // Soft-deleted.
   if (data.deleted) {
-    return <GrayPlate>Чат удалён #{conversationId}</GrayPlate>;
+    return <GrayPlate>{t('aiChat.ui.chatDeleted', { id: conversationId })}</GrayPlate>;
   }
 
-  const title = data.title || `Чат #${conversationId}`;
+  const title = data.title || t('aiChat.ui.chatNumber', { id: conversationId });
   const moverName = movedBy?.name || null;
   const headerText = moverName
-    ? `Перенесено · ${moverName}`
-    : 'Перенесено';
+    ? t('aiChat.ui.movedBy', { name: moverName })
+    : t('aiChat.ui.moved');
 
   const movedCount = count ?? 1;
   const participantsTotal = data.participants_total || 0;
-  const createdAtLabel = formatChatCreatedAt(data.created_at);
-  const typeLabel = data.type ? (TYPE_LABEL[data.type] || data.type) : null;
+  const createdAtLabel = formatChatCreatedAt(data.created_at, language);
+  const typeLabel = data.type ? t(TYPE_LABEL[data.type] || data.type) : null;
 
   // Combined meta line: "#<id> · Группа · 6 уч. · 9 мая"
   const metaParts: string[] = [`#${conversationId}`];
   if (typeLabel) metaParts.push(typeLabel);
-  if (participantsTotal > 0) metaParts.push(formatParticipants(participantsTotal));
+  if (participantsTotal > 0) metaParts.push(formatParticipants(participantsTotal, t));
   if (createdAtLabel) metaParts.push(createdAtLabel);
   const metaLine = metaParts.join(' · ');
 
@@ -233,7 +235,7 @@ const ChatLinkCard: React.FC<ChatLinkCardProps> = ({
     onExpandToggle?.();
   };
 
-  const directionWord = direction === 'forward' ? 'в' : 'из';
+  const directionWord = direction === 'forward' ? t('aiChat.ui.toChat') : t('aiChat.ui.fromChat');
 
   return (
     <div
@@ -261,7 +263,7 @@ const ChatLinkCard: React.FC<ChatLinkCardProps> = ({
         type="button"
         onClick={handleNavigate}
         className="w-full text-left px-3 pt-2 pb-1 hover:bg-[var(--bg-secondary)]/40 transition-colors"
-        title={`Открыть чат #${conversationId}`}
+        title={t('aiChat.ui.openChatNumber', { id: conversationId })}
       >
         {/* Title row: tiny chat-type icon inline with chat title */}
         <div className="flex items-center gap-1.5 min-w-0">
@@ -291,25 +293,25 @@ const ChatLinkCard: React.FC<ChatLinkCardProps> = ({
           type="button"
           onClick={handleNavigate}
           className="text-left text-[10px] text-[var(--text-tertiary)] truncate flex-1 min-w-0 hover:text-[var(--text-secondary)] transition-colors"
-          title={`Открыть чат #${conversationId}`}
+          title={t('aiChat.ui.openChatNumber', { id: conversationId })}
         >
           {metaLine}
         </button>
         <span className="text-[10px] text-[var(--text-tertiary)] truncate flex-shrink-0">
-          {formatMovedCount(movedCount)}
+          {formatMovedCount(movedCount, t)}
         </span>
         {expandable && (
           <button
             type="button"
             onClick={handleToggleExpand}
             className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-[var(--text-tertiary)] hover:bg-[var(--bg-secondary)]/70 hover:text-[var(--text-secondary)] transition-colors flex-shrink-0"
-            title={expanded ? 'Свернуть сообщения' : 'Показать сообщения'}
-            aria-label={expanded ? 'Свернуть сообщения' : 'Показать сообщения'}
+            title={expanded ? t('aiChat.ui.collapseMessages') : t('aiChat.ui.showMessages')}
+            aria-label={expanded ? t('aiChat.ui.collapseMessages') : t('aiChat.ui.showMessages')}
             aria-expanded={expanded}
           >
             {expanded
-              ? <><ChevronUp className="w-3 h-3" /> <span>Скрыть</span></>
-              : <><ChevronDown className="w-3 h-3" /> <span>Показать</span></>}
+              ? <><ChevronUp className="w-3 h-3" /> <span>{t('aiChat.ui.hide')}</span></>
+              : <><ChevronDown className="w-3 h-3" /> <span>{t('aiChat.ui.show')}</span></>}
           </button>
         )}
       </div>

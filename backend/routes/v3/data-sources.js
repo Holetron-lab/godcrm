@@ -19,9 +19,11 @@
  *           type: object
  */
 import express from 'express';
+import { z } from 'zod';
 import DataSourceService from '../../services/DataSourceService.js';
 // SEC-6: Use connection.js instead of init.js for database operations
-import { dbRun, dbGet, dbAll } from '../../database/connection.js';
+import { dbRun, dbGet, dbAll, safeJsonParse } from '../../database/connection.js';
+import { checkUserSpaceAccess } from '../../services/space/access.js';
 import { apiLogger } from '../../utils/logger.js';
 import { success, created, error, badRequest, notFound, forbidden, unauthorized } from '../../utils/response.js';
 // ADR-064 Task 5: Encrypt data source credentials
@@ -49,6 +51,31 @@ async function checkSpaceAccess(spaceId, userId, userRole) {
     return { allowed: false, error: 'Access denied to this workspace', status: 403 };
   }
   
+  return { allowed: true, space };
+}
+
+/**
+ * Read access to a space: owner, global admin, or anyone the canonical
+ * checkUserSpaceAccess() admits (explicit grant, open space, access-control
+ * table). The SPA lists data sources for every space it opens, so members must
+ * not be bounced with 403 here — writes keep the stricter checkSpaceAccess.
+ */
+async function checkSpaceReadAccess(spaceId, userId, userRole) {
+  if (!spaceId) return { allowed: false, error: 'Space ID required', status: 400 };
+
+  const space = await dbGet('SELECT * FROM spaces WHERE id = ?', [spaceId]);
+  if (!space) {
+    return { allowed: false, error: 'Space not found', status: 404 };
+  }
+
+  const isAdmin = userRole === 'admin' || userRole === 'owner';
+  const accessControl = typeof space.access_control === 'string'
+    ? safeJsonParse(space.access_control)
+    : space.access_control;
+  if (!isAdmin && !(await checkUserSpaceAccess(userId, userRole, space, accessControl || null))) {
+    return { allowed: false, error: 'Access denied to this workspace', status: 403 };
+  }
+
   return { allowed: true, space };
 }
 
@@ -117,8 +144,8 @@ router.get('/', async (req, res) => {
       return notFound(res, 'Workspace or project not found');
     }
 
-    // SEC-2: Verify user has access to this workspace
-    const access = await checkSpaceAccess(spaceId, userId, userRole);
+    // SEC-2: Verify user can see this workspace (members included — read only)
+    const access = await checkSpaceReadAccess(spaceId, userId, userRole);
     if (!access.allowed) {
       if (access.status === 403) return forbidden(res, access.error);
       if (access.status === 404) return notFound(res, access.error);
@@ -261,7 +288,8 @@ router.post('/', async (req, res) => {
       sshPrivateKeyEncrypted: encryptedSshKey // ADR-064: encrypted SSH key
     };
 
-    apiLogger.debug('[POST /data-sources] Calling DataSourceService.create with:', params);
+    // Ticket 231940 (AC#2): never log `params` — it carries the credential ciphertexts.
+    apiLogger.debug({ name, type, host, port, database, username, use_ssh: !!use_ssh }, '[POST /data-sources] Calling DataSourceService.create');
 
     const dataSource = await dataSourceService.create(params);
     
@@ -385,7 +413,30 @@ router.get('/:id/tables', async (req, res) => {
  */
 router.get('/:id/tables/:tableName/columns', async (req, res) => {
   try {
-    const { id, tableName } = req.params;
+    if (!req.user?.id) return unauthorized(res);
+    const params = z.object({
+      id: z.string().min(1).max(255),
+      tableName: z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/).max(64),
+    }).safeParse(req.params);
+    if (!params.success) return badRequest(res, 'Invalid data source or table name');
+    const { id, tableName } = params.data;
+
+    const source = await dataSourceService.get(id);
+    if (source.type === 'internal') {
+      // Native tables have no universal-table ACL. Metadata is global-admin only.
+      if (!['admin', 'owner'].includes(req.user.role)) return forbidden(res);
+      const columns = await dbAll(`
+        SELECT column_name AS name, data_type AS type,
+               is_nullable = 'YES' AS nullable, column_default AS "default",
+               is_identity = 'YES' AS is_identity,
+               is_generated <> 'NEVER' AS is_generated
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = $1
+        ORDER BY ordinal_position
+      `, [tableName]);
+      if (!columns.length) return notFound(res, 'Table');
+      return success(res, columns);
+    }
     
     const columns = await dataSourceService.listTableColumns(id, tableName);
     

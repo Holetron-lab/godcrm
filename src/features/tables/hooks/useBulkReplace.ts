@@ -7,6 +7,7 @@ import { useTablesStore } from '../store/tablesStore';
 import type { BulkReplaceConfig, BulkReplaceResult } from '../types/selection.types';
 import type { ColumnModel, RowModel } from '../types/table.types';
 import { getTargetRowIds, prepareBatchUpdatePayload } from '../utils/bulkReplaceUtils';
+import { fetchAllTableRows } from '../utils/fetchAllTableRows';
 import { BATCH_UPDATE_LIMIT, BATCH_UPDATE_LIMIT_MESSAGE } from '../constants';
 
 /**
@@ -32,7 +33,12 @@ export interface UseBulkReplaceOptions {
   rows: RowModel[];
   selectedRowIds: Set<string | number>;
   filteredRowIds: (string | number)[];
-  allRowIds: (string | number)[];
+  /**
+   * Whole table for the "all rows" scope. `rows` is only the loaded,
+   * UI-filtered window, so "all" has to come from the server. Defaults to
+   * paging through tablesApi.getRows.
+   */
+  fetchAllRows?: () => Promise<RowModel[]>;
 }
 
 export interface UseBulkReplaceReturn {
@@ -49,7 +55,7 @@ export function useBulkReplace({
   rows,
   selectedRowIds,
   filteredRowIds,
-  allRowIds
+  fetchAllRows
 }: UseBulkReplaceOptions): UseBulkReplaceReturn {
   const queryClient = useQueryClient();
   const updateCell = useTablesStore((state) => state.updateCell);
@@ -60,13 +66,17 @@ export function useBulkReplace({
         throw new Error('Table ID is required');
       }
       
-      // Get target row IDs based on scope
+      // "All rows" is the whole table, not the loaded window or the UI filter.
+      const scopeRows = config.targetScope === 'all'
+        ? await (fetchAllRows ?? (() => fetchAllTableRows(String(tableId))))()
+        : rows;
+
       const targetIds = getTargetRowIds(config.targetScope, {
         selected: selectedRowIds,
         filtered: filteredRowIds,
-        all: allRowIds
+        all: scopeRows.map(r => r.id)
       });
-      
+
       if (targetIds.size === 0) {
         return {
           success: true,
@@ -74,9 +84,9 @@ export function useBulkReplace({
           totalChanged: 0
         };
       }
-      
+
       // Prepare batch update payload
-      const updates = prepareBatchUpdatePayload(config, rows, columns, targetIds);
+      const updates = prepareBatchUpdatePayload(config, scopeRows, columns, targetIds);
 
       if (updates.length === 0) {
         return {

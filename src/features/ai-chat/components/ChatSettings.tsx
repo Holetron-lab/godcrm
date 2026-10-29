@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatSettings Component
  * ADR-024: Chat & Message Architecture
@@ -77,6 +78,7 @@ export function ChatSettings({
   onClose,
   className
 }: ChatSettingsProps) {
+  const { t } = useLanguage();
   const [selectedSpaceId, setSelectedSpaceId] = useState<number | null>(spaceId ?? null);
   const [selectedTableId, setSelectedTableId] = useState<number | null>(defaultTableId ?? null);
   const [showSpaceSelector, setShowSpaceSelector] = useState(false);
@@ -168,7 +170,7 @@ export function ChatSettings({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Settings2 className="w-4 h-4 text-[var(--text-tertiary)]" />
-            <span className="text-sm font-medium text-[var(--text-primary)]">Настройки чата</span>
+            <span className="text-sm font-medium text-[var(--text-primary)]">{t('aiChat.ui.chatSettings')}</span>
           </div>
           <button
             onClick={onClose}
@@ -181,8 +183,7 @@ export function ChatSettings({
         {/* Space Binding */}
         <div className="mb-4">
           <label className="text-xs text-[var(--text-tertiary)] mb-1.5 block">
-            Привязка к Space
-          </label>
+            {t('aiChat.ui.spaceLink')}</label>
           <div className="relative">
             <button
               onClick={() => setShowSpaceSelector(!showSpaceSelector)}
@@ -191,7 +192,7 @@ export function ChatSettings({
               <div className="flex items-center gap-2">
                 <Database className="w-4 h-4 text-[var(--text-tertiary)]" />
                 <span className={selectedSpace ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"}>
-                  {selectedSpace ? `${selectedSpace.icon || '📁'} ${selectedSpace.name}` : 'Не выбран'}
+                  {selectedSpace ? `${selectedSpace.icon || '📁'} ${selectedSpace.name}` : t('aiChat.ui.notSelectedPlain')}
                 </span>
               </div>
               <ChevronDown className={cn(
@@ -207,8 +208,7 @@ export function ChatSettings({
                   className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--bg-tertiary)] text-sm text-[var(--text-tertiary)]"
                 >
                   <Unlink className="w-4 h-4" />
-                  Убрать привязку
-                </button>
+                  {t('aiChat.ui.removeLink')}</button>
                 {isLoadingSpaces ? (
                   <div className="flex items-center justify-center py-3">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -237,8 +237,7 @@ export function ChatSettings({
         {selectedSpaceId && (
           <div className="mb-4">
             <label className="text-xs text-[var(--text-tertiary)] mb-1.5 block">
-              Таблица по умолчанию
-            </label>
+              {t('aiChat.ui.defaultTable')}</label>
             <div className="relative">
               <button
                 onClick={() => setShowTableSelector(!showTableSelector)}
@@ -247,7 +246,7 @@ export function ChatSettings({
                 <div className="flex items-center gap-2">
                   <Table2 className="w-4 h-4 text-[var(--text-tertiary)]" />
                   <span className={selectedTable ? "text-[var(--text-primary)]" : "text-[var(--text-tertiary)]"}>
-                    {selectedTable ? `${selectedTable.icon || '📋'} ${selectedTable.name}` : 'Не выбрана'}
+                    {selectedTable ? `${selectedTable.icon || '📋'} ${selectedTable.name}` : t('aiChat.ui.notSelectedLabel')}
                   </span>
                 </div>
                 <ChevronDown className={cn(
@@ -263,8 +262,7 @@ export function ChatSettings({
                     className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-[var(--bg-tertiary)] text-sm text-[var(--text-tertiary)]"
                   >
                     <Unlink className="w-4 h-4" />
-                    Убрать
-                  </button>
+                    {t('aiChat.ui.remove')}</button>
                   {isLoadingTables ? (
                     <div className="flex items-center justify-center py-3">
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -294,16 +292,14 @@ export function ChatSettings({
         <div className="mb-2">
           <div className="flex items-center justify-between mb-1.5">
             <label className="text-xs text-[var(--text-tertiary)]">
-              Привязанные строки
-            </label>
+              {t('aiChat.ui.linkedRows')}</label>
             {selectedTableId && (
               <button
                 onClick={() => setShowRowSelector(!showRowSelector)}
                 className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-[var(--bg-tertiary)] text-[var(--color-primary-500)]"
               >
                 <Plus className="w-3 h-3" />
-                Добавить
-              </button>
+                {t('aiChat.ui.add')}</button>
             )}
           </div>
 
@@ -314,7 +310,7 @@ export function ChatSettings({
                 type="text"
                 value={rowSearchQuery}
                 onChange={(e) => setRowSearchQuery(e.target.value)}
-                placeholder="Поиск..."
+                placeholder={t('aiChat.ui.search')}
                 className="w-full px-2 py-1.5 text-sm rounded border border-[var(--border-secondary)] bg-[var(--bg-secondary)] text-[var(--text-primary)] mb-2"
               />
               <div className="max-h-32 overflow-y-auto">
@@ -324,8 +320,7 @@ export function ChatSettings({
                   </div>
                 ) : tableRows.length === 0 ? (
                   <div className="text-xs text-[var(--text-tertiary)] text-center py-2">
-                    Нет строк
-                  </div>
+                    {t('aiChat.ui.noRows')}</div>
                 ) : (
                   tableRows.map(row => {
                     const bound = isRowBound(row.table_id, row.id);
@@ -347,8 +342,7 @@ export function ChatSettings({
                         </span>
                         {bound && (
                           <span className="text-xs text-[var(--text-tertiary)] ml-auto">
-                            привязано
-                          </span>
+                            {t('aiChat.ui.linked')}</span>
                         )}
                       </button>
                     );
@@ -361,8 +355,7 @@ export function ChatSettings({
           {/* List of bound rows */}
           {boundRows.length === 0 ? (
             <div className="text-xs text-[var(--text-tertiary)] py-2">
-              Нет привязанных строк
-            </div>
+              {t('aiChat.ui.noLinkedRows')}</div>
           ) : (
             <div className="space-y-1">
               {boundRows.map((br, idx) => (

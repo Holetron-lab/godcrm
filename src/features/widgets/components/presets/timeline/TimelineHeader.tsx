@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import * as Popover from '@radix-ui/react-popover';
 import {
   format, addDays, addWeeks, addMonths as addMonthsFn, endOfMonth,
   startOfMonth, startOfWeek, endOfWeek, parseISO, isSameDay
@@ -59,6 +60,7 @@ export function TimelineHeader({
   onAddEvent,
   onEventUpdate,
 }: TimelineHeaderProps) {
+  const fieldId = useId();
   const [showScaleMenu, setShowScaleMenu] = useState(false);
   const [showGoToDate, setShowGoToDate] = useState(false);
   const [goToDateValue, setGoToDateValue] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -106,116 +108,123 @@ export function TimelineHeader({
           <ChevronLeft className="w-5 h-5 text-[var(--text-secondary)]" />
         </button>
 
-        <div className="relative">
-          <button
-            onClick={() => {
+        <Popover.Root
+          open={showDateRangePicker}
+          onOpenChange={(open) => {
+            if (open) {
               setRangeStartDate(format(viewStartDate, 'yyyy-MM-dd'));
               const endDate = timeUnits[timeUnits.length - 1] || viewStartDate;
               setRangeEndDate(format(endDate, 'yyyy-MM-dd'));
-              setShowDateRangePicker(true);
-            }}
-            className="text-lg font-semibold text-[var(--text-primary)] capitalize min-w-[200px] text-center hover:bg-[var(--bg-secondary)] px-3 py-1 rounded-lg transition-colors cursor-pointer"
-            title="Нажмите для выбора диапазона дат"
-          >
-            {formatHeaderLabel()}
-          </button>
+            }
+            setShowDateRangePicker(open);
+          }}
+        >
+          <Popover.Trigger asChild>
+            <button
+              className="text-lg font-semibold text-[var(--text-primary)] capitalize min-w-[200px] text-center hover:bg-[var(--bg-secondary)] px-3 py-1 rounded-lg transition-colors cursor-pointer"
+              title="Нажмите для выбора диапазона дат"
+            >
+              {formatHeaderLabel()}
+            </button>
+          </Popover.Trigger>
 
           {/* Date Range Picker Dropdown */}
-          {showDateRangePicker && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowDateRangePicker(false)} />
-              <div
-                className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 bg-[var(--bg-primary)] rounded-lg shadow-xl p-4 min-w-[300px] border border-[var(--border-primary)]"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <div className="flex-1">
-                      <label className="block text-xs text-[var(--text-secondary)] mb-1">С</label>
-                      <input
-                        type="date"
-                        value={rangeStartDate}
-                        onChange={e => setRangeStartDate(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-[var(--border-primary)] rounded bg-[var(--bg-secondary)] text-[var(--text-primary)] text-sm"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-xs text-[var(--text-secondary)] mb-1">По</label>
-                      <input
-                        type="date"
-                        value={rangeEndDate}
-                        onChange={e => setRangeEndDate(e.target.value)}
-                        className="w-full px-2 py-1.5 border border-[var(--border-primary)] rounded bg-[var(--bg-secondary)] text-[var(--text-primary)] text-sm"
-                      />
-                    </div>
+          <Popover.Portal>
+            <Popover.Content
+              aria-label="Диапазон дат"
+              sideOffset={8}
+              collisionPadding={12}
+              className="z-50 bg-[var(--bg-primary)] rounded-lg shadow-xl p-4 w-[300px] max-w-[calc(100vw-24px)] border border-[var(--border-primary)]"
+            >
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label htmlFor={`${fieldId}-0`} className="block text-xs text-[var(--text-secondary)] mb-1">С</label>
+                    <input
+                      id={`${fieldId}-0`}
+                      type="date"
+                      value={rangeStartDate}
+                      onChange={e => setRangeStartDate(e.target.value)}
+                      className="w-full px-2 py-1.5 border border-[var(--border-primary)] rounded bg-[var(--bg-secondary)] text-[var(--text-primary)] text-sm"
+                    />
                   </div>
-
-                  {/* Quick presets */}
-                  <div className="flex flex-wrap gap-1.5">
-                    <button
-                      onClick={() => {
-                        const now = new Date();
-                        setRangeStartDate(format(startOfWeek(now, { locale: ru }), 'yyyy-MM-dd'));
-                        setRangeEndDate(format(endOfWeek(now, { locale: ru }), 'yyyy-MM-dd'));
-                      }}
-                      className="px-2 py-1 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
-                    >
-                      Неделя
-                    </button>
-                    <button
-                      onClick={() => {
-                        const now = new Date();
-                        setRangeStartDate(format(now, 'yyyy-MM-dd'));
-                        setRangeEndDate(format(addDays(now, 14), 'yyyy-MM-dd'));
-                      }}
-                      className="px-2 py-1 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
-                    >
-                      2 недели
-                    </button>
-                    <button
-                      onClick={() => {
-                        const now = new Date();
-                        setRangeStartDate(format(startOfMonth(now), 'yyyy-MM-dd'));
-                        setRangeEndDate(format(endOfMonth(now), 'yyyy-MM-dd'));
-                      }}
-                      className="px-2 py-1 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
-                    >
-                      Месяц
-                    </button>
-                    <button
-                      onClick={() => {
-                        const now = new Date();
-                        setRangeStartDate(format(now, 'yyyy-MM-dd'));
-                        setRangeEndDate(format(addDays(now, 90), 'yyyy-MM-dd'));
-                      }}
-                      className="px-2 py-1 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
-                    >
-                      Квартал
-                    </button>
+                  <div className="flex-1">
+                    <label htmlFor={`${fieldId}-1`} className="block text-xs text-[var(--text-secondary)] mb-1">По</label>
+                    <input
+                      id={`${fieldId}-1`}
+                      type="date"
+                      value={rangeEndDate}
+                      onChange={e => setRangeEndDate(e.target.value)}
+                      className="w-full px-2 py-1.5 border border-[var(--border-primary)] rounded bg-[var(--bg-secondary)] text-[var(--text-primary)] text-sm"
+                    />
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-[var(--border-primary)]">
+                {/* Quick presets */}
+                <div className="flex flex-wrap gap-1.5">
                   <button
-                    onClick={() => setShowDateRangePicker(false)}
-                    className="px-3 py-1.5 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
+                    onClick={() => {
+                      const now = new Date();
+                      setRangeStartDate(format(startOfWeek(now, { locale: ru }), 'yyyy-MM-dd'));
+                      setRangeEndDate(format(endOfWeek(now, { locale: ru }), 'yyyy-MM-dd'));
+                    }}
+                    className="px-2 py-1 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
                   >
-                    Отмена
+                    Неделя
                   </button>
                   <button
                     onClick={() => {
-                      onApplyDateRange(rangeStartDate, rangeEndDate, setTimeScale);
-                      setShowDateRangePicker(false);
+                      const now = new Date();
+                      setRangeStartDate(format(now, 'yyyy-MM-dd'));
+                      setRangeEndDate(format(addDays(now, 14), 'yyyy-MM-dd'));
                     }}
-                    className="px-3 py-1.5 text-xs bg-[var(--color-primary-500)] hover:bg-[var(--color-primary-600)] rounded text-white"
+                    className="px-2 py-1 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
                   >
-                    Применить
+                    2 недели
+                  </button>
+                  <button
+                    onClick={() => {
+                      const now = new Date();
+                      setRangeStartDate(format(startOfMonth(now), 'yyyy-MM-dd'));
+                      setRangeEndDate(format(endOfMonth(now), 'yyyy-MM-dd'));
+                    }}
+                    className="px-2 py-1 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
+                  >
+                    Месяц
+                  </button>
+                  <button
+                    onClick={() => {
+                      const now = new Date();
+                      setRangeStartDate(format(now, 'yyyy-MM-dd'));
+                      setRangeEndDate(format(addDays(now, 90), 'yyyy-MM-dd'));
+                    }}
+                    className="px-2 py-1 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
+                  >
+                    Квартал
                   </button>
                 </div>
               </div>
-            </>
-          )}
-        </div>
+
+              <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-[var(--border-primary)]">
+                <button
+                  onClick={() => setShowDateRangePicker(false)}
+                  className="px-3 py-1.5 text-xs bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] rounded text-[var(--text-secondary)]"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={() => {
+                    onApplyDateRange(rangeStartDate, rangeEndDate, setTimeScale);
+                    setShowDateRangePicker(false);
+                  }}
+                  className="px-3 py-1.5 text-xs bg-[var(--color-primary-500)] hover:bg-[var(--color-primary-600)] rounded text-white"
+                >
+                  Применить
+                </button>
+              </div>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
 
         <button onClick={() => onNavigate(1)} className="p-2 hover:bg-[var(--bg-secondary)] rounded-lg transition-colors">
           <ChevronRight className="w-5 h-5 text-[var(--text-secondary)]" />
@@ -237,21 +246,26 @@ export function TimelineHeader({
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
-          <button
-            onClick={() => setShowStepPicker(!showStepPicker)}
-            className="px-2 py-1.5 text-[10px] text-[var(--text-tertiary)] min-w-[40px] text-center hover:bg-[var(--bg-tertiary)] transition-colors flex items-center gap-0.5"
-            title="Выбрать шаг навигации"
-          >
-            {stepSize === 'division'
-              ? (timeScale === 'minute' ? '±1м' : timeScale === 'hour' ? '±1ч' : timeScale === 'day' ? (viewStartDate.getDate() === 1 ? '±1мес' : '±1д') : timeScale === 'week' ? '±1н' : '±1мес')
-              : stepSize === 'day' ? '±1д' : stepSize === 'week' ? '±1н' : stepSize === 'month' ? '±1мес' : stepSize === 'quarter' ? '±1кв' : '±1г'
-            }
-            <ChevronDown className="w-2.5 h-2.5" />
-          </button>
-          {showStepPicker && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowStepPicker(false)} />
-              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 bg-[var(--bg-primary)] rounded-lg shadow-xl border border-[var(--border-primary)] py-1 min-w-[100px]">
+          <Popover.Root open={showStepPicker} onOpenChange={setShowStepPicker}>
+            <Popover.Trigger asChild>
+              <button
+                className="px-2 py-1.5 text-[10px] text-[var(--text-tertiary)] min-w-[40px] text-center hover:bg-[var(--bg-tertiary)] transition-colors flex items-center gap-0.5"
+                title="Выбрать шаг навигации"
+              >
+                {stepSize === 'division'
+                  ? (timeScale === 'minute' ? '±1м' : timeScale === 'hour' ? '±1ч' : timeScale === 'day' ? (viewStartDate.getDate() === 1 ? '±1мес' : '±1д') : timeScale === 'week' ? '±1н' : '±1мес')
+                  : stepSize === 'day' ? '±1д' : stepSize === 'week' ? '±1н' : stepSize === 'month' ? '±1мес' : stepSize === 'quarter' ? '±1кв' : '±1г'
+                }
+                <ChevronDown className="w-2.5 h-2.5" />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                aria-label="Шаг навигации"
+                sideOffset={4}
+                collisionPadding={12}
+                className="z-50 bg-[var(--bg-primary)] rounded-lg shadow-xl border border-[var(--border-primary)] py-1 min-w-[100px]"
+              >
                 {(['division', 'day', 'week', 'month', 'quarter', 'year'] as StepSize[]).map(s => {
                   const labels: Record<StepSize, string> = {
                     division: 'Деление',
@@ -271,9 +285,9 @@ export function TimelineHeader({
                     </button>
                   );
                 })}
-              </div>
-            </>
-          )}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
           <button
             onClick={() => onStepNavigate(1, stepSize)}
             className="px-2 py-1.5 hover:bg-[var(--bg-tertiary)] transition-colors text-[var(--text-secondary)] border-l border-[var(--border-primary)]"

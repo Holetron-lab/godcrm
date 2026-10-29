@@ -11,12 +11,14 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import * as Popover from '@radix-ui/react-popover';
 import {
   MessageCircle, Paperclip, Maximize2, ChevronRight, ChevronDown,
   Calendar, Check, AlertCircle, Tag,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { formatDate } from '@/shared/utils/dateFormat';
+import type { TicketBindingConfig } from '../../../../types/documents.types';
 import type { ColumnModel } from '@/features/tables/types/table.types';
 import {
   getTypeIcon,
@@ -72,7 +74,7 @@ function resolveStateAccentColor(stateId: number | string | undefined, states: T
 
 export interface TicketRowHeaderProps {
   ticket: TicketRow;
-  ticketConfig: { columns: Record<string, string>; table_id: number };
+  ticketConfig: TicketBindingConfig;
   tableColumns?: ColumnModel[];
   types: TicketDictItem[];
   states: TicketDictItem[];
@@ -116,7 +118,6 @@ export function TicketRowHeader({
   const statusButtonRef = useRef<HTMLButtonElement>(null);
   const priorityButtonRef = useRef<HTMLButtonElement>(null);
   const typeButtonRef = useRef<HTMLButtonElement>(null);
-  const colorButtonRef = useRef<HTMLButtonElement>(null);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const priorityDropdownRef = useRef<HTMLDivElement>(null);
   const typeDropdownRef = useRef<HTMLDivElement>(null);
@@ -239,16 +240,16 @@ export function TicketRowHeader({
   const typeName = getTypeName(typeVal as number | string | undefined, types);
 
   return (
+    <Popover.Root open={showColorPicker} onOpenChange={setShowColorPicker}>
     <div
-      onClick={onToggle}
       style={currentColor ? { borderLeftColor: currentColor, borderLeftWidth: '4px', borderLeftStyle: 'solid' } : undefined}
-      className="p-3 cursor-pointer group flex flex-col gap-1.5"
+      className="p-3 group flex flex-col gap-1.5"
     >
-      <div className="flex items-start gap-3">
+      <div className="relative flex items-start gap-3">
         {!hideChevron && (
-          <button className="p-0.5 mt-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] shrink-0">
+          <span className="p-0.5 mt-0.5 text-[var(--text-tertiary)] shrink-0" aria-hidden="true">
             {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
+          </span>
         )}
 
         <span className="text-lg leading-none mt-0.5 shrink-0">{getTypeIcon(typeVal as number, types)}</span>
@@ -256,13 +257,17 @@ export function TicketRowHeader({
         <div className="flex-1 min-w-0 flex items-baseline gap-2">
           <span className="text-[10px] text-blue-400 font-mono shrink-0">#{ticket.id}</span>
           <h3 className="font-medium text-sm leading-snug line-clamp-2 break-words">
-            {getTicketTitle(ticket, ticketConfig) || 'Без названия'}
+            <button type="button" onClick={onToggle} aria-expanded={hideChevron ? undefined : isExpanded}
+              className="text-left after:absolute after:inset-0 after:rounded focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-blue-500">
+              {getTicketTitle(ticket, ticketConfig) || 'Без названия'}
+            </button>
           </h3>
         </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
           <button
+            type="button"
             ref={statusButtonRef}
             onClick={handleStatusClick}
             className={cn(
@@ -275,6 +280,7 @@ export function TicketRowHeader({
           </button>
 
           <button
+            type="button"
             ref={priorityButtonRef}
             onClick={handlePriorityClick}
             className={cn(
@@ -289,6 +295,7 @@ export function TicketRowHeader({
 
           {types.length > 0 && (
             <button
+              type="button"
               ref={typeButtonRef}
               onClick={handleTypeClick}
               disabled={!onTypeChange}
@@ -332,9 +339,10 @@ export function TicketRowHeader({
 
           <div className="flex items-center gap-0.5 shrink-0">
             {colorColumn && onColorChange && (
+              <Popover.Trigger asChild>
               <button
-                ref={colorButtonRef}
-                onClick={(e) => { e.stopPropagation(); setShowColorPicker(!showColorPicker); }}
+                type="button"
+                onClick={(e) => e.stopPropagation()}
                 className="p-1 rounded hover:bg-[var(--bg-tertiary)] transition-colors"
                 title="Цвет"
               >
@@ -343,9 +351,11 @@ export function TicketRowHeader({
                   style={{ backgroundColor: currentColor || 'var(--bg-tertiary)' }}
                 />
               </button>
+              </Popover.Trigger>
             )}
             {onOpenModal && (
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); onOpenModal(); }}
                 className="p-1 rounded hover:bg-gray-500/20 transition-colors"
                 title="Открыть в модалке"
@@ -354,6 +364,7 @@ export function TicketRowHeader({
               </button>
             )}
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); onOpenChat(); }}
               className="p-1 rounded hover:bg-blue-500/20 transition-colors"
               title="Открыть чат"
@@ -362,6 +373,7 @@ export function TicketRowHeader({
             </button>
             {onAttachToMessage && (
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); onAttachToMessage(); }}
                 className="p-1 rounded hover:bg-green-500/20 transition-colors"
                 title="Прикрепить к сообщению"
@@ -380,6 +392,7 @@ export function TicketRowHeader({
         >
           {states.map(state => (
             <button
+              type="button"
               key={state.id}
               onClick={(e) => {
                 e.stopPropagation();
@@ -408,6 +421,7 @@ export function TicketRowHeader({
         >
           {priorities.map(p => (
             <button
+              type="button"
               key={p.id}
               onClick={(e) => {
                 e.stopPropagation();
@@ -433,6 +447,7 @@ export function TicketRowHeader({
         >
           {types.map(t => (
             <button
+              type="button"
               key={t.id}
               onClick={(e) => {
                 e.stopPropagation();
@@ -450,20 +465,14 @@ export function TicketRowHeader({
         document.body
       )}
 
-      {showColorPicker && colorColumn && onColorChange && createPortal(
-        <div className="fixed inset-0 z-[9998]" onClick={(e) => { e.stopPropagation(); setShowColorPicker(false); }}>
-          <div
-            className="fixed z-[9999]"
-            style={{
-              top: (colorButtonRef.current?.getBoundingClientRect().bottom || 0) + 4,
-              left: (colorButtonRef.current?.getBoundingClientRect().left || 0) - 80,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      {colorColumn && onColorChange && (
+        <Popover.Portal>
+          <Popover.Content aria-label="Цвет тикета" align="end" sideOffset={4} className="z-[9999]">
             <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-2">
               <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
                 {COLOR_PALETTE.map((c, i) => (
                   <button
+                    type="button"
                     key={i}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -486,11 +495,11 @@ export function TicketRowHeader({
                 ))}
               </div>
             </div>
-          </div>
-        </div>,
-        document.body
+          </Popover.Content>
+        </Popover.Portal>
       )}
 
     </div>
+    </Popover.Root>
   );
 }

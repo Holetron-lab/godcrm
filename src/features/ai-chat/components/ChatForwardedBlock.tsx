@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatForwardedBlock — extracted from ChatMessageList.
  *
@@ -41,6 +42,7 @@ export function ForwardedMessageBlock({
   // Cross-chat falls back to the window event handled by the layout host.
   onJumpInSameChat?: (messageId: number | string) => void;
 }) {
+  const { t } = useLanguage();
   // From another chat → expanded by default; from same chat → collapsed
   const isFromOtherChat = chatId && currentConversationId && String(chatId) !== String(currentConversationId);
   const effectiveCollapsed = defaultCollapsed ?? (isFromOtherChat ? false : true);
@@ -74,8 +76,10 @@ export function ForwardedMessageBlock({
       style={{ borderLeft: `4px solid ${borderColor}` }}
     >
       {/* ── Header ── */}
-      <div
-        className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-tertiary)]/80 transition-colors select-none"
+      <button
+        type="button"
+        aria-expanded={expanded}
+        className="w-full text-left flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-tertiary)]/80 transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-primary-500)]"
         onClick={() => setExpanded(prev => !prev)}
       >
         {expanded
@@ -91,7 +95,7 @@ export function ForwardedMessageBlock({
         {!expanded && preview && (
           <span className="text-[11px] text-[var(--text-tertiary)] truncate ml-1 opacity-70">— {preview}</span>
         )}
-      </div>
+      </button>
 
       {/* ── Header separator ── */}
       {expanded && (
@@ -101,7 +105,7 @@ export function ForwardedMessageBlock({
       {/* ── Body — the forwarded content ── */}
       {expanded && cleanContent && (
         <div className="px-3 py-2 text-sm text-[var(--text-secondary)] bg-[var(--bg-tertiary)]/30">
-          <MarkdownPreview content={cleanContent} />
+          <MarkdownPreview mediaLinks content={cleanContent} />
         </div>
       )}
 
@@ -114,13 +118,13 @@ export function ForwardedMessageBlock({
               <button
                 onClick={handleNavigate}
                 className="inline-flex items-center gap-1 hover:text-[var(--text-secondary)] transition-colors"
-                title={`Перейти к чату #${refChatId}, сообщение #${refMsgId || '?'}`}
+                title={t('aiChat.ui.jumpToChatMessage', { chat: refChatId, message: refMsgId || '?' })}
               >
                 <ExternalLink className="w-3 h-3" />
-                <span>Перейти к сообщению</span>
+                <span>{t('aiChat.ui.goToMessage')}</span>
               </button>
             )}
-            {refChatId && <span className="opacity-50">чат #{refChatId}</span>}
+            {refChatId && <span className="opacity-50">{t('aiChat.ui.chatNumber', { id: refChatId })}</span>}
           </div>
         </>
       )}

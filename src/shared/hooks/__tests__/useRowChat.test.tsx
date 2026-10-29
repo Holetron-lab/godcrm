@@ -34,11 +34,13 @@ const createWrapper = () => {
       mutations: { retry: false },
     },
   });
-  return ({ children }: { children: ReactNode }) => (
+  return function QueryWrapper({ children }: { children: ReactNode }) {
+    return (
     <QueryClientProvider client={queryClient}>
       {children}
     </QueryClientProvider>
   );
+  };
 };
 
 // Helpers

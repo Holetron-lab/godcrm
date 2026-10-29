@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatEmbeddedWidget — ADR-0031 WP-20+21 (T-141238).
  *
@@ -79,9 +80,9 @@ const ROW_PAGE_SIZE_CAP = 200;
 const SKELETON_MIN_HEIGHT = 240;
 
 const VIEW_LABEL: Record<WidgetEmbedConfig['view'], string> = {
-  list: 'Список',
-  kanban: 'Канбан',
-  table: 'Таблица',
+  list: "aiChat.ui.list",
+  kanban: "aiChat.ui.kanban",
+  table: "columnSettings.relation.table",
 };
 
 const VIEW_TO_PRESET: Record<WidgetEmbedConfig['view'], PresetWidgetName> = {
@@ -264,6 +265,7 @@ interface ChatEmbeddedWidgetProps {
 }
 
 export function ChatEmbeddedWidget({ widgetEmbed }: ChatEmbeddedWidgetProps) {
+  const { t } = useLanguage();
   const { table_id, view, filter, limit } = widgetEmbed;
 
   // Lazy mount via IntersectionObserver. Defer the data fetch until the
@@ -362,30 +364,30 @@ export function ChatEmbeddedWidget({ widgetEmbed }: ChatEmbeddedWidgetProps) {
       data-view={view}
     >
       {!isInView || isLoading ? (
-        <SkeletonBlock label={`${VIEW_LABEL[view] ?? view} #${effectiveTableId}`} />
+        <SkeletonBlock label={`${t(VIEW_LABEL[view] ?? view)} #${effectiveTableId}`} />
       ) : filteredRows.length === 0 && (widgetData ?? []).length === 0 ? (
         <ErrorPill
-          message={`Нет строк (table #${effectiveTableId})`}
+          message={t('aiChat.ui.emptyTable', { id: effectiveTableId })}
           onRetry={() => { refetchData(); }}
         />
       ) : filteredRows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[var(--border-secondary)] bg-[var(--bg-tertiary)]/40 px-3 py-4 text-center text-xs text-[var(--text-tertiary)]">
-          Нет строк, удовлетворяющих фильтру (table #{effectiveTableId})
+          {t('aiChat.ui.filteredTableEmpty', { id: effectiveTableId })}
         </div>
       ) : (
         <div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] overflow-hidden">
           <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]/40 text-[11px] text-[var(--text-tertiary)]">
             <span className="inline-flex items-center gap-1.5">
               <Layers className="w-3 h-3" />
-              <span>{VIEW_LABEL[view] ?? view}</span>
+              <span>{t(VIEW_LABEL[view] ?? view)}</span>
               <span className="opacity-50">·</span>
               <span>#{effectiveTableId}</span>
               <span className="opacity-50">·</span>
-              <span>{filteredRows.length} {filteredRows.length === 1 ? 'строка' : 'строк'}</span>
+              <span>{t('aiChat.ui.rowCount', { count: filteredRows.length })}</span>
               {filters.length > 0 && (
                 <>
                   <span className="opacity-50">·</span>
-                  <span>{filters.length} {filters.length === 1 ? 'фильтр' : 'фильтра'}</span>
+                  <span>{t('aiChat.ui.filterCount', { count: filters.length })}</span>
                 </>
               )}
             </span>
@@ -454,6 +456,7 @@ export function ChatEmbeddedWidget({ widgetEmbed }: ChatEmbeddedWidgetProps) {
 // ── Tiny presentational subcomponents ──────────────────────────────────────
 
 function SkeletonBlock({ label }: { label: string }) {
+  const { t } = useLanguage();
   return (
     <div
       role="status"
@@ -472,7 +475,7 @@ function SkeletonBlock({ label }: { label: string }) {
         <div className="h-3 rounded bg-[var(--bg-tertiary)] w-5/6 animate-pulse" />
         <div className="h-3 rounded bg-[var(--bg-tertiary)] w-2/3 animate-pulse" />
       </div>
-      <span className="sr-only">Загрузка виджета…</span>
+      <span className="sr-only">{t('aiChat.ui.loadingWidget')}</span>
     </div>
   );
 }
@@ -484,6 +487,7 @@ function ErrorPill({
   message: string;
   onRetry?: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div
       role="alert"
@@ -498,7 +502,7 @@ function ErrorPill({
           className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 transition-colors"
         >
           <RefreshCw className="w-3 h-3" />
-          <span>Повторить</span>
+          <span>{t('aiChat.ui.retry')}</span>
         </button>
       )}
     </div>

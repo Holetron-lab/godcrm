@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Plus, Loader2, Upload, Filter, ChevronDown } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useDocumentsContext } from '../DocumentsContext';
-import { type DocumentLevel, LEVEL_LABELS, LEVEL_ICONS } from '../../../../types/documents.types';
+import { type DocumentLevel, LEVEL_ICONS } from '../../../../types/documents.types';
 import { InsertTicketAtomModal } from '../atoms/TicketRefAtom/InsertTicketAtomModal';
 
 export function ToolbarCreateMenu() {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [showTicketAtomModal, setShowTicketAtomModal] = useState(false);
 
@@ -60,7 +62,6 @@ export function ToolbarCreateMenu() {
 
     await ctx.addItem({
       documentId: ctx.selectedDocumentId,
-      tableId: ctx.selectedDocument.content_table_id,
       item: {
         order,
         level,
@@ -75,11 +76,13 @@ export function ToolbarCreateMenu() {
     <>
       {/* ADR-105: Read-only badge */}
       {ctx.isReadOnly && (
-        <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full font-medium">Read-only</span>
+        <span className="px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full font-medium">{t('documents.readOnly')}</span>
       )}
 
       {!ctx.isReadOnly && (
         <button
+          aria-label={t('documents.newDocument')}
+          title={t('documents.newDocument')}
           onClick={handleCreateDocument}
           disabled={ctx.isCreating}
           className={cn(
@@ -94,7 +97,7 @@ export function ToolbarCreateMenu() {
       {!ctx.isReadOnly && !ctx.isMobile && (
         <button
           onClick={() => ctx.setShowFileUploadModal(true)}
-          title="Импорт MD"
+          title={t('documents.importMarkdown')}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] text-sm border border-[var(--border-primary)] hover:bg-[var(--bg-secondary)]"
         >
           <Upload className="w-4 h-4" />
@@ -106,6 +109,7 @@ export function ToolbarCreateMenu() {
         <div className="flex items-center gap-1.5">
           <Filter className="w-4 h-4 text-[var(--text-tertiary)]" />
           <select
+            aria-label={t('documents.allStatuses')}
             value={ctx.statusFilter}
             onChange={(e) => ctx.setStatusFilter(e.target.value)}
             className={cn(
@@ -113,7 +117,7 @@ export function ToolbarCreateMenu() {
               ctx.statusFilter !== 'all' && "border-blue-500/50 bg-blue-500/10 text-blue-400"
             )}
           >
-            <option value="all">All statuses</option>
+            <option value="all">{t('documents.allStatuses')}</option>
             {ctx.statusOptions.map(option => (
               <option key={option.id} value={option.slug}>
                 {option.icon ? `${option.icon} ` : ''}{option.label}
@@ -139,7 +143,7 @@ export function ToolbarCreateMenu() {
             className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] text-sm border border-[var(--border-primary)] hover:bg-[var(--bg-secondary)]"
           >
             <Plus className="w-4 h-4" />
-            Добавить
+            {t('common.add')}
             <ChevronDown className="w-3 h-3" />
           </button>
 
@@ -168,7 +172,7 @@ export function ToolbarCreateMenu() {
                       data-testid={`documents-add-menu-item-${level}`}
                       className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs text-left hover:bg-[var(--bg-secondary)] transition-colors"
                     >
-                      <span>{LEVEL_LABELS[level]}</span>
+                      <span>{t(`documents.levels.${level}`)}</span>
                       <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-mono uppercase", badgeClass)}>
                         {LEVEL_ICONS[level]}
                       </span>

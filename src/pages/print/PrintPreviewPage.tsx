@@ -148,6 +148,7 @@ export function PrintPreviewPage() {
       for (const col of relationColumns) {
         const relation = col.config?.relation;
         if (!relation?.tableId || !relation?.valueColumn || !relation?.labelColumn) continue;
+        const { valueColumn, labelColumn } = relation;
         
         try {
           const response = await apiClient.request<{ 
@@ -172,11 +173,11 @@ export function PrintPreviewPage() {
             if (relation.valueColumn === 'id') {
               val = String(originalId ?? rowData['id'] ?? rowId ?? '');
             } else {
-              val = String(rowData[relation.valueColumn] ?? '');
+              val = String(rowData[valueColumn] ?? '');
             }
             
             optionsMap.set(val, {
-              label: String(rowData[relation.labelColumn] ?? ''),
+              label: String(rowData[labelColumn] ?? ''),
               color: relation.colorColumn ? String(rowData[relation.colorColumn] ?? '') || undefined : undefined
             });
           });

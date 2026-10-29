@@ -8,6 +8,7 @@ export {
   publishToTelegram,
   aggregateContent,
   processNewsWithAI,
+  summariseAndTranslate,
   formatNewsForTopic,
   aggregateAndPublishNews,
 } from './content-aggregator/index.js';

@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import * as RadixPopover from '@radix-ui/react-popover';
 
 export interface PopoverProps {
+  ariaLabel?: string;
   trigger: ReactNode;
   content: ReactNode;
   align?: RadixPopover.PopoverContentProps['align'];
@@ -9,12 +10,13 @@ export interface PopoverProps {
   sideOffset?: number;
 }
 
-export const Popover = ({ trigger, content, align = 'center', side = 'bottom', sideOffset = 4 }: PopoverProps) => {
+export const Popover = ({ ariaLabel, trigger, content, align = 'center', side = 'bottom', sideOffset = 4 }: PopoverProps) => {
   return (
     <RadixPopover.Root>
       <RadixPopover.Trigger asChild>{trigger}</RadixPopover.Trigger>
       <RadixPopover.Portal>
         <RadixPopover.Content
+          aria-label={ariaLabel}
           align={align}
           side={side}
           sideOffset={sideOffset}

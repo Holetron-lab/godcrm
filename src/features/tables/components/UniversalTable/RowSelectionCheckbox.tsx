@@ -1,3 +1,4 @@
+import * as Checkbox from '@radix-ui/react-checkbox';
 import { useCallback, useRef, useState, MouseEvent } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { Check, MessageCircle, MessageCirclePlus, Paperclip, Pencil, Copy, Trash2 } from 'lucide-react';
@@ -69,22 +70,33 @@ export const RowSelectionCheckbox = ({
       )}
       data-testid={`row-checkbox-${rowId}`}
       onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onMouseLeave={(event) => {
+        if (!event.currentTarget.contains(document.activeElement)) handleMouseLeave();
+      }}
+      onFocus={() => { if (hasActions) setShowActions(true); }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) handleMouseLeave();
+      }}
     >
       {/* Checkbox — always visible */}
-      <div className="flex items-center justify-center" onClick={handleClick}>
+      <Checkbox.Root
+        checked={isSelected}
+        disabled={disabled}
+        aria-label={`Select row ${rowId}`}
+        className="flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
+        onClick={handleClick}
+      >
         {/* Blur glow container */}
-        <div className={cn(
+        <span className={cn(
           "relative flex items-center justify-center",
           "w-4 h-4 rounded-full",
-          "backdrop-blur-sm",
           isSelected
             ? "bg-[var(--color-primary-500)]/20 shadow-[0_0_6px_2px_var(--color-primary-500)]"
             : "bg-[var(--bg-primary)]/60 hover:bg-[var(--color-primary-500)]/10 hover:shadow-[0_0_4px_1px_var(--color-primary-400)]",
           "transition-all duration-200"
         )}>
           {/* Round checkbox */}
-          <div className={cn(
+          <span className={cn(
             "w-3 h-3 rounded-full border-[1.5px] flex items-center justify-center transition-all duration-150",
             isSelected
               ? "bg-[var(--color-primary-500)] border-[var(--color-primary-500)]"
@@ -94,9 +106,9 @@ export const RowSelectionCheckbox = ({
             {isSelected && (
               <Check className="w-2 h-2 text-white" strokeWidth={3} />
             )}
-          </div>
-        </div>
-      </div>
+          </span>
+        </span>
+      </Checkbox.Root>
 
       {/* Quick action icons — appear after delay, above or below the checkbox */}
       {hasActions && showActions && (
@@ -121,6 +133,7 @@ export const RowSelectionCheckbox = ({
                   : "text-[var(--text-secondary)] hover:text-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/10"
               )}
               title={action.title}
+              aria-label={action.title}
               onClick={(e) => {
                 e.stopPropagation();
                 action.onClick();

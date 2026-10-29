@@ -99,6 +99,41 @@ describe('schemaEditorStore', () => {
     it.todo('should save layout to API');
     it.todo('should collect all node positions');
     it.todo('should handle save error');
+
+    it('toggleTablePinned locks the node against drag and persists `locked` in the layout', async () => {
+      const { useSchemaEditorStore } = await import('../store/schemaEditorStore');
+      const { schemaApi } = await import('../api/schemaApi');
+      vi.mocked(schemaApi.saveLayout).mockResolvedValue(undefined);
+      useSchemaEditorStore.getState().reset();
+      useSchemaEditorStore.setState({
+        spaceId: 11,
+        nodes: [
+          { id: 'table-1', type: 'tableNode', position: { x: 10, y: 20 }, data: { tableId: 1, name: 'a', displayName: 'A', key: 'a', icon: '', projectId: 1, isExternal: false, columns: [] } },
+          { id: 'table-2', type: 'tableNode', position: { x: 30, y: 40 }, data: { tableId: 2, name: 'b', displayName: 'B', key: 'b', icon: '', projectId: 1, isExternal: false, columns: [] } },
+        ],
+      });
+
+      useSchemaEditorStore.getState().toggleTablePinned(1);
+      const pinned = useSchemaEditorStore.getState().nodes.find((n) => n.id === 'table-1');
+      expect(pinned?.draggable).toBe(false);
+      expect(pinned?.data.isPinned).toBe(true);
+      expect(schemaApi.saveLayout).toHaveBeenLastCalledWith(11, {
+        nodes: [
+          { tableId: 1, x: 10, y: 20, locked: true },
+          { tableId: 2, x: 30, y: 40 },
+        ],
+      });
+
+      useSchemaEditorStore.getState().toggleTablePinned(1);
+      const unpinned = useSchemaEditorStore.getState().nodes.find((n) => n.id === 'table-1');
+      expect(unpinned?.draggable).toBe(true);
+      expect(schemaApi.saveLayout).toHaveBeenLastCalledWith(11, {
+        nodes: [
+          { tableId: 1, x: 10, y: 20 },
+          { tableId: 2, x: 30, y: 40 },
+        ],
+      });
+    });
   });
 
   describe('UI toggles', () => {

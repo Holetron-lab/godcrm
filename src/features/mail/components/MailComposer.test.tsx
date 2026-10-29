@@ -1,4 +1,5 @@
-import { render, fireEvent } from '@testing-library/react';
+import { fireEvent } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { describe, expect, it, vi } from 'vitest';
 import { MailComposer } from './MailComposer';
 
@@ -52,5 +53,56 @@ describe('MailComposer (ADR-158 P4)', () => {
   it('hard-disables Send when the composer is disabled (no mailbox)', () => {
     const { getByLabelText } = render(<MailComposer value="<p>hi</p>" onChange={noop} onSend={noop} disabled />);
     expect(getByLabelText('Отправить')).toBeDisabled();
+  });
+
+  describe('collapsible reply bar', () => {
+    const header = <div data-testid="header">To / Subject</div>;
+
+    it('starts as a one-line bar: input + actions, no header or format strip', () => {
+      const { getByLabelText, queryByLabelText, queryByTestId } = render(
+        <MailComposer value="" onChange={noop} onSend={noop} collapsible header={header} />
+      );
+      expect(getByLabelText('body')).toBeTruthy();
+      expect(getByLabelText('Прикрепить файл')).toBeTruthy();
+      expect(getByLabelText('Отправить')).toBeTruthy();
+      expect(queryByLabelText('Жирный')).toBeNull();
+      expect(queryByTestId('header')).toBeNull();
+      expect(getByLabelText('Развернуть окно ответа')).toBeTruthy();
+    });
+
+    it('expands to the full composer and collapses back', () => {
+      const { getByLabelText, queryByLabelText, getByTestId, queryByTestId } = render(
+        <MailComposer value="" onChange={noop} onSend={noop} collapsible header={header} />
+      );
+      fireEvent.click(getByLabelText('Развернуть окно ответа'));
+      expect(getByLabelText('Жирный')).toBeTruthy();
+      expect(getByTestId('header')).toBeTruthy();
+      fireEvent.click(getByLabelText('Свернуть окно ответа'));
+      expect(queryByLabelText('Жирный')).toBeNull();
+      expect(queryByTestId('header')).toBeNull();
+    });
+
+    it('opens from the resize slider with the keyboard and reports 0 while collapsed', () => {
+      const { getByRole, getByLabelText } = render(
+        <MailComposer value="" onChange={noop} onSend={noop} collapsible header={header} />
+      );
+      const handle = getByRole('slider', { name: 'Изменить высоту' });
+      expect(handle).toHaveAttribute('aria-valuemin', '0');
+      expect(handle).toHaveAttribute('aria-valuenow', '0');
+      fireEvent.keyDown(handle, { key: 'ArrowUp' });
+      expect(handle).toHaveAttribute('aria-valuenow', '180');
+      expect(getByLabelText('Жирный')).toBeTruthy();
+      fireEvent.keyDown(handle, { key: 'Home' });
+      expect(handle).toHaveAttribute('aria-valuenow', '0');
+    });
+
+    it('is ignored for the non-collapsible (new message) composer', () => {
+      const { getByLabelText, queryByLabelText } = render(
+        <MailComposer value="" onChange={noop} onSend={noop} header={header} />
+      );
+      expect(getByLabelText('Жирный')).toBeTruthy();
+      expect(queryByLabelText('Развернуть окно ответа')).toBeNull();
+      expect(queryByLabelText('Свернуть окно ответа')).toBeNull();
+    });
   });
 });

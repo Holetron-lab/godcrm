@@ -42,6 +42,72 @@ export interface CSVColumnDefinition {
 // Type for CSVColumnDefinition field values
 export type CSVColumnFieldValue = CSVColumnDefinition[keyof CSVColumnDefinition];
 
+// Excel preview contract — backend/services/README.excel-import.md
+export type ExcelCellValue = string | number | boolean | null;
+
+export interface ExcelSheetInfo {
+  index: number;
+  name: string;
+  rowCount: number;
+  columnCount: number;
+  hidden: boolean;
+}
+
+export interface ExcelWarning {
+  code: string;
+  message: string;
+  sheetIndex?: number;
+  rowIndex?: number;
+  colIndex?: number;
+}
+
+export interface ExcelPreviewResponse {
+  format: 'xls' | 'xlsx';
+  sheets: ExcelSheetInfo[];
+  sheet: null | (ExcelSheetInfo & {
+    rows: string[][];
+    values: ExcelCellValue[][];
+    emptyRowCount: number;
+    skippedCellCount: number;
+  });
+  warnings: ExcelWarning[];
+  limits: Record<string, number>;
+}
+
+// One fixed rows/import request. Each batch keeps its own stable UUID.
+export interface ExcelImportBatch {
+  importId: string;
+  rows: Record<string, unknown>[];
+}
+
+// Frozen once creation starts; retried verbatim so the backend receipts match.
+export interface ExcelImportState {
+  importId: string;
+  createBody: string;
+  batches: ExcelImportBatch[];
+  skippedEmptyRows: number;
+  excludedColumns: number;
+  tableId?: number;
+  completedBatchIds: string[];
+  importedRows: number;
+  error?: string | null;
+}
+
+export interface ExcelFileState {
+  file: File;
+  format: 'xls' | 'xlsx' | null;
+  sheets: ExcelSheetInfo[];
+  sheetIndex: number | null;
+  values: ExcelCellValue[][];
+  warnings: ExcelWarning[];
+  emptyRowCount: number;
+  skippedCellCount: number;
+  loading: boolean;
+  error: string | null;
+  importId: string; // regenerated whenever another sheet is chosen
+  importState?: ExcelImportState;
+}
+
 // CSV File Definition for multi-file support
 export interface CSVFileData {
   id: string;
@@ -60,6 +126,9 @@ export interface CSVFileData {
   columnDefinitions: CSVColumnDefinition[];
   // Map of primary value (Name) -> row index for relation matching
   primaryValueIndex?: Map<string, number>;
+  // 'csv' (default) keeps every existing path; 'excel' is server-previewed.
+  source?: 'csv' | 'excel';
+  excel?: ExcelFileState;
 }
 
 export interface NotionImportLogEntry {

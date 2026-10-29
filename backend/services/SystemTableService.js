@@ -1,6 +1,7 @@
 // System Table Service - Sync real database tables to universal_tables interface
 import { dbAll, dbGet } from '../database/connection.js';
 import { getMailColumns, MAIL_OPTIONAL_COLS } from './mail/schema.js';
+import { SECRETS_SYNC_TARGET, SECRETS_COLUMNS, MASKED_VALUE } from './secrets/secretsSystemTable.js';
 
 /**
  * Get data from real system tables and format as universal table rows
@@ -59,6 +60,9 @@ export async function getSystemTableData(syncTarget, projectId) {
     case 'mail_messages':
       // ADR-158 §P3 — mail is ALWAYS space-scoped; no admin-global path.
       return await getMailMessagesData(spaceId);
+    case SECRETS_SYNC_TARGET:
+      // ADR-0040 §space-secrets — always space-scoped, values masked.
+      return await getSecretsData(spaceId);
     default:
       throw new Error(`Unknown sync_target: ${syncTarget}`);
   }
@@ -189,7 +193,8 @@ export function getSystemTableColumns(syncTarget) {
       { id: 'ticket_id', name: 'ticket_id', displayName: 'Ticket', type: 'number', isReadonly: true, orderIndex: 9 },
       { id: 'linked_table_id', name: 'linked_table_id', displayName: 'Linked Table', type: 'number', isReadonly: true, orderIndex: 10 },
       { id: 'linked_row_id', name: 'linked_row_id', displayName: 'Linked Row', type: 'number', isReadonly: true, orderIndex: 11 }
-    ]
+    ],
+    [SECRETS_SYNC_TARGET]: SECRETS_COLUMNS
   };
 
   return columnsMap[syncTarget] || [];
@@ -677,6 +682,32 @@ function mailSelect(cols) {
   const proj = [...MAIL_BASE_SELECT];
   for (const c of MAIL_OPTIONAL_COLS) proj.push(cols.has(c) ? c : `NULL AS ${c}`);
   return `SELECT ${proj.join(', ')}\n    FROM mail_messages`;
+}
+
+// ADR-0040 §space-secrets — the space's vault rows, masked. No space → no rows:
+// unlike users/projects there is no admin-global stock of secrets.
+async function getSecretsData(spaceId) {
+  if (!spaceId) return [];
+  const rows = await dbAll(`
+    SELECT id, key, description, created_at, updated_at, last_revealed_at
+    FROM _secrets WHERE space_id = ? ORDER BY key
+  `, [spaceId]);
+  return rows.map(s => ({
+    id: `secret-${s.id}`,
+    base_id: `SECRET${String(s.id).padStart(4, '0')}`,
+    data: {
+      id: s.id,
+      key: s.key,
+      value: MASKED_VALUE,
+      description: s.description,
+      created_at: s.created_at,
+      updated_at: s.updated_at,
+      last_revealed_at: s.last_revealed_at
+    },
+    created_at: s.created_at,
+    updated_at: s.updated_at,
+    created_by: 'system'
+  }));
 }
 
 async function getMailMessagesData(spaceId) {

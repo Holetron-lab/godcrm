@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useMemo } from 'react';
 import { Users, Bot, User, MessageSquare, AlertCircle, X } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
@@ -202,6 +203,7 @@ const TurnListRenderer: React.FC<TurnListRendererProps> = ({
           />
           <ChatTurn
             messages={turn.messages}
+            planMessage={turn.planMessage}
             turnType={turn.turnType}
             senderName={turn.senderName}
             senderAvatar={turn.senderAvatar}
@@ -236,6 +238,7 @@ const TurnListRenderer: React.FC<TurnListRendererProps> = ({
         <ChatTurn
           key={turn.id}
           messages={turn.messages}
+          planMessage={turn.planMessage}
           turnType={turn.turnType}
           senderName={turn.senderName}
           senderAvatar={turn.senderAvatar}
@@ -334,6 +337,7 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
   isAgentProcessing = false,
   onMentionClick
 }) => {
+  const { t } = useLanguage();
   return (
     <>
       {/* Messages Area */}
@@ -354,18 +358,15 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               <Users className="w-10 h-10 text-blue-400" />
             </div>
             <h3 className="font-medium text-[var(--text-primary)] mb-2">
-              Выберите собеседника
-            </h3>
+              {t('aiChat.ui.chooseSomeoneToChatWith')}</h3>
             <p className="text-sm text-[var(--text-tertiary)] mb-4">
-              Выберите контакт из списка для начала разговора
-            </p>
+              {t('aiChat.ui.selectAContactFromTheListToStartAConversation')}</p>
             <button
               onClick={() => setActivePanel('contacts')}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
             >
               <Users className="w-4 h-4" />
-              Открыть контакты
-            </button>
+              {t('aiChat.ui.openContacts')}</button>
           </div>
         ) : displayMessages.length === 0 ? (
           <div className="text-center px-6">
@@ -381,12 +382,11 @@ export const ChatMessages: React.FC<ChatMessagesProps> = ({
               )}
             </div>
             <h3 className="font-medium text-[var(--text-primary)] mb-2">
-              Начните разговор
-            </h3>
+              {t('aiChat.ui.startAConversation')}</h3>
             <p className="text-sm text-[var(--text-tertiary)]">
               {chatPartner
-                ? `Чат с ${chatPartner.name}`
-                : 'Выберите собеседника из контактов или AI агентов'}
+                ? t('aiChat.ui.chatWith', { name: chatPartner.name })
+                : t('aiChat.ui.chooseAContactOrAnAIAgentToChatWith')}
             </p>
           </div>
         ) : (

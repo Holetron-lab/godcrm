@@ -21,6 +21,57 @@ function msg(overrides: Partial<ChatMessage> & { id: string; role: ChatMessage['
 const NO_REACTIONS = {};
 
 describe('groupMessagesIntoTurns', () => {
+  it.each([
+    ['pending', ''], ['loaded', ''], ['lazy', ''],
+    ['pending', 'Processing...'], ['loaded', 'Processing...'], ['lazy', 'Processing...'],
+  ])('keeps a pending handoff after its source answer (%s, %s)', (mode, content) => {
+    const status = msg({ id: '2', role: 'assistant', contentType: 'agent_status', content,
+      agentName: 'SysAdmin', agentId: 43, metadata: { placeholder: true, agent_status: 'running' } });
+    const answer = msg({ id: '3', role: 'assistant', contentType: 'text',
+      agentName: 'Frontend Developer', agentId: 42, content: 'Ready for integration' });
+    if (mode === 'lazy') Object.assign(answer, {
+      _step_groups_after: [{ type: 'thinking', count: 1, first_id: 4, last_id: 4,
+        agent_id: 43, agent_name: 'SysAdmin', preview: 'Checking staging' }],
+      _total_hidden_after: 1,
+    });
+    const step = msg({ id: '4', role: 'assistant', contentType: 'thinking',
+      agentName: 'SysAdmin', agentId: 43, content: 'Checking staging' });
+    const messages = [
+      msg({ id: '1', role: 'assistant', contentType: 'text', agentName: 'Frontend Developer', agentId: 42, content: 'Previous answer' }),
+      status, answer,
+      ...(mode === 'loaded' ? [step] : []),
+    ];
+    const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, true);
+    expect(turns.map(turn => turn.senderName)).toEqual(['Frontend Developer', 'Frontend Developer', 'SysAdmin']);
+    expect(turns[2].messages.map(message => message.id)).toEqual(
+      mode === 'loaded' ? ['2', '4'] : mode === 'lazy' ? ['2', 'synthetic_agent_after_3_0'] : ['2']);
+    expect(turns[2].isProcessing).toBe(true);
+  });
+
+  it.each([false, true])('keeps post-answer work active from the running job (global=%s)', (processing) => {
+    const started = '2026-09-14T09:30:00Z';
+    const messages = [
+      msg({ id: '1', role: 'assistant', contentType: 'text', content: 'Progress update', agentName: 'Dev', agentId: 42 }),
+      msg({ id: '2', role: 'assistant', contentType: 'tool_call', agentName: 'Dev', agentId: 42,
+        timestamp: new Date('2026-09-14T09:31:00Z') }),
+      msg({ id: '3', role: 'user', content: 'One more detail' }),
+    ];
+    const active = [{ agent_name: 'Dev', started_at: started }];
+    const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, processing, undefined, active);
+    expect(turns.map(turn => turn.isProcessing)).toEqual([false, true, false]);
+    expect(groupMessagesIntoTurns(messages, NO_REACTIONS, false, undefined, [])
+      .map(turn => turn.isProcessing)).toEqual([false, false, false]);
+    for (const job of [
+      { agent_name: 'Other', started_at: started },
+      { agent_name: 'Dev', started_at: '2026-09-14T09:32:00Z' },
+      { agent_name: 'Dev', started_at: started, inflight_status: 'paused' },
+    ]) {
+      expect(groupMessagesIntoTurns(messages, NO_REACTIONS, false, undefined, [job])
+        .map(turn => turn.isProcessing)).toEqual([false, false, false]);
+    }
+    expect(groupMessagesIntoTurns(messages.slice(0, 1), NO_REACTIONS, false, undefined, active)[0].isProcessing).toBe(false);
+  });
+
   // ─── Empty input ─────────────────────────────────────────────
   it('returns empty array for empty messages', () => {
     const turns = groupMessagesIntoTurns([], NO_REACTIONS, false);
@@ -196,6 +247,16 @@ describe('groupMessagesIntoTurns', () => {
     const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 5);
     expect(turns).toHaveLength(1);
     expect(turns[0].messages).toHaveLength(2);
+  });
+
+  it.each(['assistant', 'system'] as const)('renders watchdog notices as system events with %s role', (role) => {
+    const turns = groupMessagesIntoTurns([
+      msg({ id: '1', role: 'assistant', content: 'Working', agentName: 'Frontend Developer' }),
+      msg({ id: '2', role, senderType: 'system', contentType: 'text', content: 'Agent timed out' }),
+    ], NO_REACTIONS, false);
+    expect(turns).toHaveLength(2);
+    expect(turns[1]).toMatchObject({ senderName: 'system', isSystemEvent: true, isProcessing: false, turnType: 'human' });
+    expect(turns[1].messages.map(message => message.id)).toEqual(['2']);
   });
 
   // ─── System messages treated as agent ───────────────────────
@@ -407,5 +468,306 @@ describe('groupMessagesIntoTurns', () => {
     expect(turns[1].isLastInGroup).toBe(true); // completed answer breaks the group
     // Second bubble: the post-seal work
     expect(turns[2].messages.map(m => m.id)).toEqual(['5', '6', '7']);
+  });
+
+  it.each([false, true])('keeps a sealed status bubble idle while later work runs (global=%s)', (processing) => {
+    const turns = groupMessagesIntoTurns([
+      msg({ id: '1', role: 'assistant', contentType: 'agent_status', agentName: 'Dev', agentId: 42,
+        metadata: { placeholder: true, agent_status: 'running' } }),
+      msg({ id: '2', role: 'assistant', contentType: 'text', content: 'Done', agentName: 'Dev', agentId: 42 }),
+      msg({ id: '3', role: 'assistant', contentType: 'thinking', content: 'Next task', agentName: 'Dev', agentId: 42 }),
+    ], NO_REACTIONS, processing);
+    expect(turns.map(turn => turn.isProcessing)).toEqual([false, true]);
+  });
+
+  it('does not revive a completed answer from its running placeholder', () => {
+    const turns = groupMessagesIntoTurns([
+      msg({ id: '1', role: 'assistant', contentType: 'agent_status', agentName: 'Dev', agentId: 42,
+        metadata: { placeholder: true, agent_status: 'running' } }),
+      msg({ id: '2', role: 'assistant', contentType: 'text', content: 'Done', agentName: 'Dev', agentId: 42 }),
+    ], NO_REACTIONS, true);
+    expect(turns[0].isProcessing).toBe(false);
+  });
+
+  it('shows processing only on the latest segment of each concurrent agent', () => {
+    const turns = groupMessagesIntoTurns([
+      msg({ id: '1', role: 'assistant', contentType: 'thinking', content: 'Please review <<@qa>>', agentName: 'Dev', agentId: 42 }),
+      msg({ id: '2', role: 'assistant', contentType: 'thinking', content: 'Reviewing', agentName: 'QA', agentId: 43 }),
+      msg({ id: '3', role: 'assistant', contentType: 'text', content: 'Review complete', agentName: 'QA', agentId: 43 }),
+      msg({ id: '4', role: 'assistant', contentType: 'thinking', content: 'Continuing', agentName: 'Dev', agentId: 42 }),
+      msg({ id: '5', role: 'assistant', contentType: 'thinking', content: 'Another check', agentName: 'QA', agentId: 43 }),
+    ], NO_REACTIONS, true);
+    expect(turns.map(turn => [turn.senderName, turn.isProcessing])).toEqual([
+      ['Dev', false], ['QA', false], ['Dev', true], ['QA', true],
+    ]);
+  });
+
+  // ─── WP-2 FE (Bugs 1552/228710): lazy step groups from two agents ────
+  // The backend closes a step group when the agent changes and stamps
+  // agent_id/agent_name on it. One annotation may therefore carry runs from
+  // several agents; each run must become its own bubble.
+  describe('lazy step groups from several agents (WP-2, 228710)', () => {
+    const ORCH = { agent_id: 7, agent_name: 'Orchestrator', agent_icon: '🎯', agent_color: '#f59e0b' };
+    const ARCH = { agent_id: 9, agent_name: 'Architect', agent_icon: '🏛️', agent_color: '#3b82f6' };
+    const grp = (type: 'thinking' | 'tools', count: number, first: number, agent?: Partial<typeof ORCH>) =>
+      ({ type, count, first_id: first, last_id: first + count - 1, ...(type === 'thinking' ? { preview: 'hm' } : {}), ...agent });
+    const annotated = (m: ChatMessage, ann: Record<string, unknown>): ChatMessage => ({ ...m, ...ann } as ChatMessage);
+    const groupsOf = (turn: Turn, side: 'before' | 'after') =>
+      turn.messages.flatMap(m => ((m as any)[`_step_groups_${side}`] as unknown[] | undefined) ?? []);
+
+    it('splits _step_groups_after on a human message into one synthetic turn per agent', () => {
+      const messages: ChatMessage[] = [
+        annotated(msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }), {
+          _step_groups_after: [grp('tools', 3, 2, ORCH), grp('thinking', 2, 5, ARCH)],
+          _total_hidden_after: 5,
+        }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1);
+      expect(turns.map(t => [t.turnType, t.senderName])).toEqual([
+        ['human', 'You'], ['agent', 'Orchestrator'], ['agent', 'Architect'],
+      ]);
+      expect(turns[1].agentChainId).not.toBe(turns[2].agentChainId);
+      expect(turns[1].agentIcon).toBe('🎯');
+      expect(turns[2].agentColor).toBe('#3b82f6');
+      expect(groupsOf(turns[1], 'after')).toHaveLength(1);
+      expect((turns[1].messages[0] as any)._total_hidden_after).toBe(3);
+      expect(groupsOf(turns[2], 'after')).toHaveLength(1);
+      expect((turns[2].messages[0] as any)._total_hidden_after).toBe(2);
+      // synthetic placeholders never spin
+      expect(turns[1].isProcessing).toBe(false);
+      expect(turns[2].isProcessing).toBe(false);
+      // the human message itself is handed out clean
+      expect((turns[0].messages[0] as any)._step_groups_after).toBeUndefined();
+    });
+
+    it('keeps an agent\'s own groups on its text message and lifts the other agent\'s run out', () => {
+      const messages: ChatMessage[] = [
+        msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }),
+        annotated(msg({ id: '2', role: 'assistant', content: 'dispatching', contentType: 'text', metadata: { agent_name: 'Orchestrator', agent_row_id: 7 } }), {
+          _step_groups_after: [grp('tools', 2, 3, ORCH), grp('thinking', 4, 5, ARCH), grp('tools', 1, 9, ORCH)],
+          _total_hidden_after: 7,
+        }),
+        msg({ id: '10', role: 'user', content: 'thanks', sender_id: 1 }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1);
+      expect(turns.map(t => t.senderName)).toEqual(['You', 'Orchestrator', 'Architect', 'You']);
+      const orch = turns[1];
+      expect(groupsOf(orch, 'after')).toHaveLength(2);
+      expect((orch.messages[0] as any)._total_hidden_after).toBe(3);
+      expect(orch.messages[0].content).toBe('dispatching');
+      const arch = turns[2];
+      expect(groupsOf(arch, 'after')).toHaveLength(1);
+      expect((arch.messages[0] as any)._total_hidden_after).toBe(4);
+      expect(arch.messages[0].contentType).toBe('agent_status');
+      expect(arch.messages[0].metadata?.agent_row_id).toBe(9);
+    });
+
+    it('puts _step_groups_before runs of two agents ahead of the human turn, in order', () => {
+      const messages: ChatMessage[] = [
+        annotated(msg({ id: '20', role: 'user', content: 'and now?', sender_id: 1 }), {
+          _step_groups_before: [grp('thinking', 1, 11, ARCH), grp('tools', 2, 12, ORCH)],
+          _total_hidden_before: 3,
+        }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1);
+      expect(turns.map(t => t.senderName)).toEqual(['Architect', 'Orchestrator', 'You']);
+      expect(groupsOf(turns[0], 'before')).toHaveLength(1);
+      expect(groupsOf(turns[1], 'before')).toHaveLength(1);
+    });
+
+    it('does not merge two human messages when another agent\'s steps sit between them', () => {
+      const messages: ChatMessage[] = [
+        annotated(msg({ id: '1', role: 'user', content: 'first', sender_id: 1 }), {
+          _step_groups_after: [grp('tools', 1, 2, ARCH)],
+          _total_hidden_after: 1,
+        }),
+        msg({ id: '3', role: 'user', content: 'second', sender_id: 1 }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1);
+      expect(turns.map(t => [t.turnType, t.senderName])).toEqual([
+        ['human', 'You'], ['agent', 'Architect'], ['human', 'You'],
+      ]);
+    });
+
+    it('legacy groups without agent info still form a single synthetic turn', () => {
+      const messages: ChatMessage[] = [
+        annotated(msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }), {
+          _step_groups_after: [grp('thinking', 1, 2), grp('tools', 2, 3)],
+          _total_hidden_after: 3,
+        }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1);
+      expect(turns).toHaveLength(2);
+      expect(turns[1].turnType).toBe('agent');
+      expect(groupsOf(turns[1], 'after')).toHaveLength(2);
+    });
+
+    // An interrupted run has no final text row, so its bubble is built from the
+    // lazy groups alone. Those carry the raw metadata colour (null for agents
+    // whose writer never stamps one) — the directory must fill the gap, or the
+    // stripe falls back to purple the moment the agent is stopped.
+    it('resolves colour/icon for a synthetic turn from the agent directory', () => {
+      const messages: ChatMessage[] = [
+        annotated(msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }), {
+          _step_groups_after: [grp('thinking', 1, 2, { agent_id: 44465, agent_name: 'Marketer' })],
+          _total_hidden_after: 1,
+        }),
+      ];
+      const resolveAgent = (id: number) => id === 44465 ? { color: '#f97316', icon: '📣' } : null;
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1, [], resolveAgent);
+      expect(turns[1].senderName).toBe('Marketer');
+      expect(turns[1].agentColor).toBe('#f97316');
+      expect(turns[1].agentIcon).toBe('📣');
+    });
+
+    it('keeps the colour stamped on the group over the directory one', () => {
+      const messages: ChatMessage[] = [
+        annotated(msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }), {
+          _step_groups_after: [grp('tools', 1, 2, ORCH)],
+          _total_hidden_after: 1,
+        }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1, [], () => ({ color: '#000000' }));
+      expect(turns[1].agentColor).toBe(ORCH.agent_color);
+      expect(turns[1].agentIcon).toBe(ORCH.agent_icon);
+    });
+
+    // A user message sent mid-run cuts the agent's bubble: the steps before it
+    // have no text row, so after any full reload (reconnect, chat switch) the
+    // list endpoint hands them back as _step_groups_before on that user message.
+    // The cut-off segment is then a synthetic turn and must keep the agent colour.
+    it('keeps the colour of a segment cut off by a user message (lazy reload)', () => {
+      const marketer = { agent_name: 'Marketer', agent_row_id: 44465 };
+      const messages: ChatMessage[] = [
+        msg({ id: '1', role: 'user', content: 'draw the garden', sender_id: 1 }),
+        annotated(msg({ id: '10', role: 'user', content: 'can you also…', sender_id: 1 }), {
+          _step_groups_before: [
+            grp('thinking', 1, 2, { agent_id: 44465, agent_name: 'Marketer' }),
+            grp('tools', 7, 3, { agent_id: 44465, agent_name: 'Marketer' }),
+          ],
+          _total_hidden_before: 8,
+        }),
+        msg({ id: '11', role: 'assistant', contentType: 'thinking', content: 'here it is', sender_id: 51, agent_color: '#f97316', metadata: marketer }),
+        msg({ id: '12', role: 'assistant', contentType: 'text', content: 'here it is', sender_id: 51, agent_color: '#f97316', metadata: marketer }),
+      ];
+      const resolveAgent = (id: number) => id === 44465 ? { color: '#f97316', icon: '📣' } : null;
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1, [], resolveAgent);
+      expect(turns.map(t => t.senderName)).toEqual(['You', 'Marketer', 'You', 'Marketer']);
+      expect(groupsOf(turns[1], 'before')).toHaveLength(2);
+      expect(turns[1].agentColor).toBe('#f97316');
+      expect(turns[3].agentColor).toBe('#f97316');
+      // the directory is the only source here — without it the stripe goes purple
+      expect(groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1)[1].agentColor).toBeUndefined();
+    });
+
+    it('drops a stale annotation when the real step messages are already in the cache', () => {
+      const messages: ChatMessage[] = [
+        annotated(msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }), {
+          _step_groups_after: [grp('thinking', 1, 2, ARCH)],
+          _total_hidden_after: 1,
+        }),
+        msg({ id: '2', role: 'assistant', content: 'hm', contentType: 'thinking', metadata: { agent_name: 'Architect', agent_row_id: 9 } }),
+        msg({ id: '3', role: 'assistant', content: 'done', contentType: 'text', metadata: { agent_name: 'Architect', agent_row_id: 9 } }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1);
+      expect(turns.map(t => t.senderName)).toEqual(['You', 'Architect']);
+      expect(turns[1].messages.map(m => m.id)).toEqual(['2', '3']);
+    });
+
+    it('does not mutate the input messages', () => {
+      const user = annotated(msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }), {
+        _step_groups_after: [grp('tools', 1, 2, ORCH), grp('tools', 1, 3, ARCH)],
+        _total_hidden_after: 2,
+      });
+      groupMessagesIntoTurns([user], NO_REACTIONS, false, 1);
+      expect((user as any)._step_groups_after).toHaveLength(2);
+      expect((user as any)._total_hidden_after).toBe(2);
+    });
+  });
+
+  // ─── Settled status leftovers (empty bubbles after 228709) ───────────────
+  describe('settled agent_status rows', () => {
+    const settled = (id: string, name: string, rowId: number) =>
+      msg({
+        id, role: 'assistant', contentType: 'agent_status', content: '',
+        metadata: { agent_name: name, agent_row_id: rowId, agent_status: 'finished', placeholder: false },
+      });
+
+    it('drops a turn made only of an empty finished status row', () => {
+      const messages: ChatMessage[] = [
+        msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }),
+        settled('2', 'Orchestrator', 5),
+        msg({ id: '3', role: 'user', content: 'next', sender_id: 1 }),
+        settled('4', 'SysAdmin', 6),
+        msg({ id: '5', role: 'assistant', contentType: 'agent_status', content: '',
+          metadata: { agent_name: 'Architect', agent_row_id: 7, agent_status: 'error', placeholder: false } }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, true, 1);
+      expect(turns.map(t => t.senderName)).toEqual(['You', 'You']);
+      // Even with the backend reporting processing, no ghost bubble is revived.
+      expect(turns.some(t => t.isProcessing)).toBe(false);
+    });
+
+    it('keeps the status row when the same turn has steps or text', () => {
+      const meta = { agent_name: 'Architect', agent_row_id: 7 };
+      const messages: ChatMessage[] = [
+        msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }),
+        msg({ id: '2', role: 'assistant', contentType: 'agent_status', content: '',
+          metadata: { ...meta, agent_status: 'finished', placeholder: false, terminal_session_id: 42 } }),
+        msg({ id: '3', role: 'assistant', contentType: 'tool_call', content: 'x', metadata: meta }),
+        msg({ id: '4', role: 'assistant', contentType: 'text', content: 'done', metadata: meta }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1);
+      expect(turns).toHaveLength(2);
+      expect(turns[1].messages.map(m => m.id)).toEqual(['2', '3', '4']);
+    });
+
+    it('keeps an active placeholder and a synthetic step-group carrier', () => {
+      const messages: ChatMessage[] = [
+        msg({ id: '1', role: 'user', content: 'go', sender_id: 1 }),
+        msg({ id: '2', role: 'assistant', contentType: 'agent_status', content: '',
+          metadata: { agent_name: 'Orchestrator', agent_row_id: 5, agent_status: 'thinking', placeholder: true } }),
+        msg({ id: 'synthetic_agent_after_1_0', role: 'assistant', contentType: 'agent_status', content: '',
+          metadata: { agent_name: 'SysAdmin', agent_row_id: 6, placeholder: true, synthetic: true } }),
+      ];
+      const turns = groupMessagesIntoTurns(messages, NO_REACTIONS, false, 1);
+      expect(turns.map(t => t.senderName)).toEqual(['You', 'Orchestrator', 'SysAdmin']);
+    });
+  });
+});
+
+
+describe('plan migration', () => {
+  const plan = msg({ id: '101', role: 'assistant', contentType: 'plan', agentName: 'Dev', agentId: 42,
+    content: JSON.stringify({ tasks: [{ id: 1, title: 'Check', status: 'in_progress' }] }) });
+  const answer = msg({ id: '102', role: 'assistant', contentType: 'text', content: 'First answer', agentName: 'Dev', agentId: 42 });
+
+  it.each(['thinking', 'tool_call', 'agent_status'] as const)('moves on the first %s before any plan update', (contentType) => {
+    const messages = [plan, answer];
+    const before = groupMessagesIntoTurns(messages, {}, false);
+    expect(before[0].planMessage).toBe(plan);
+    const next = msg({ id: '103', role: 'assistant', contentType, agentName: 'Dev', agentId: 42,
+      metadata: { placeholder: true, agent_status: 'running' } });
+    const after = groupMessagesIntoTurns([...messages, next], {}, true);
+    expect(after).toHaveLength(2);
+    expect(after[0].planMessage).toBeNull();
+    expect(after[1].planMessage).toBe(plan);
+    expect(after[0].messages).toEqual([plan, answer]);
+    expect(after[1].messages).toEqual([next]);
+    expect(after[0].id).toBe(before[0].id);
+    expect(messages).toEqual([plan, answer]);
+  });
+
+  it('keeps plans separate for concurrent agents and replaces the carried plan on update', () => {
+    const otherPlan = msg({ ...plan, id: '103', agentId: 43 });
+    const next = msg({ id: '104', role: 'assistant', contentType: 'thinking', content: 'Next', agentName: 'Dev', agentId: 42 });
+    const messages = [plan, answer, otherPlan, next];
+    const turns = groupMessagesIntoTurns(messages, {}, true);
+    expect(turns.filter(t => t.planMessage).map(t => t.planMessage?.id).sort()).toEqual(['101', '103']);
+    expect(turns.find(t => t.messages.includes(next))?.planMessage).toBe(plan);
+    const updated = msg({ ...plan, id: '105', content: JSON.stringify({ tasks: [] }) });
+    const after = groupMessagesIntoTurns([...messages, updated], {}, true);
+    expect(after.find(t => t.messages.includes(next))?.planMessage).toBe(updated);
+    expect(after.filter(t => t.planMessage).map(t => t.planMessage?.id).sort()).toEqual(['103', '105']);
   });
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronRight, FileText, MessageCircle, Paperclip, Puzzle } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useAIChat } from '@/features/ai-chat';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useDocumentsContext } from '../DocumentsContext';
 import { useDocumentChat } from '../useDocumentChat';
 import { CATEGORY_ICONS } from '../../../../types/documents.types';
@@ -28,6 +29,7 @@ function getIndent(level: string): number {
 
 export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: SidebarItemsTreeProps) {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const { openDocumentChat } = useDocumentChat();
   const { attachRowToMessage } = useAIChat();
 
@@ -35,6 +37,7 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
     <div className="flex flex-col h-full">
       <div className="flex items-center border-b border-[var(--border-secondary)]">
         <button
+          type="button"
           onClick={() => {
             ctx.setSelectedDocumentId(null);
             ctx.setShowDocumentsGrid(false);
@@ -47,10 +50,11 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
             ctx.isMobile && 'min-h-[44px]'
           )}
         >
-          <ChevronRight className="w-4 h-4 rotate-180" /> Все документы
+          <ChevronRight className="w-4 h-4 rotate-180" /> {t('documents.allDocuments')}
         </button>
         <div className="flex items-center gap-1 pr-2">
           <button
+            type="button"
             onClick={() => setShowInlineWidgets(!showInlineWidgets)}
             className={cn(
               'flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors',
@@ -58,11 +62,12 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
                 ? 'bg-cyan-500/20 text-cyan-400'
                 : 'hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
             )}
-            title={showInlineWidgets ? 'Скрыть виджеты в дереве' : 'Показать виджеты в дереве'}
+            title={showInlineWidgets ? t('documents.hideTreeWidgets') : t('documents.showTreeWidgets')}
           >
             <Puzzle className="w-3.5 h-3.5" />
           </button>
           <button
+            type="button"
             onClick={() => ctx.setShowAllElements(!ctx.showAllElements)}
             className={cn(
               'p-1.5 text-xs rounded transition-colors',
@@ -70,7 +75,7 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
                 ? 'text-[var(--color-primary-400)] bg-[var(--color-primary-500)]/10'
                 : 'text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)]'
             )}
-            title={ctx.showAllElements ? 'Скрыть детали' : 'Показать все'}
+            title={ctx.showAllElements ? t('documents.hideDetails') : t('documents.showAll')}
           >
             {ctx.showAllElements ? '−' : '+'}
           </button>
@@ -99,16 +104,18 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
             {ctx.dataSource !== 'public' && (
               <div className="flex flex-col gap-1 shrink-0">
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     openDocumentChat(ctx.selectedDocumentId!, ctx.selectedDocument?.name || '');
                   }}
                   className="w-6 h-6 rounded-full bg-blue-500/20 hover:bg-blue-500/30 flex items-center justify-center text-blue-400 transition-colors"
-                  title="Open document chat"
+                  title={t('documents.openChat')}
                 >
                   <MessageCircle className="w-3.5 h-3.5" />
                 </button>
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     attachRowToMessage({
@@ -120,7 +127,7 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
                     });
                   }}
                   className="w-6 h-6 rounded-full bg-green-500/20 hover:bg-green-500/30 flex items-center justify-center text-green-400 transition-colors"
-                  title="Attach to message"
+                  title={t('documents.attachToMessage')}
                 >
                   <Paperclip className="w-3.5 h-3.5" />
                 </button>
@@ -181,9 +188,12 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
 
             return (
               <React.Fragment key={item.id}>
-                <div
+                <button
+                  type="button"
+                  aria-label={item.level === 'divider' ? t('documents.levels.divider') : undefined}
+                  aria-current={ctx.selectedItemId === item.id ? 'location' : undefined}
                   className={cn(
-                    'flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer text-sm border-l-2',
+                    'flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer text-left text-sm border-l-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500',
                     ctx.selectedItemId === item.id
                       ? 'bg-[var(--color-primary-500)]/20 text-[var(--color-primary-400)] border-[var(--color-primary-500)]'
                       : 'hover:bg-[var(--bg-tertiary)] border-transparent',
@@ -191,7 +201,7 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
                     item.level === 'text' && 'text-[var(--text-secondary)]',
                     item.level === 'widget' && 'text-cyan-400'
                   )}
-                  style={{ marginLeft: indent }}
+                  style={{ marginLeft: indent, width: `calc(100% - ${indent}px)` }}
                   onClick={() => {
                     ctx.setSelectedItemId(item.id);
                     const element = document.getElementById(`item-${item.id}`);
@@ -201,27 +211,27 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
                   }}
                 >
                   {item.level === 'divider' ? (
-                    <div className="flex-1 h-[1px] bg-[var(--border-secondary)]" />
+                    <span className="flex-1 h-[1px] bg-[var(--border-secondary)]" />
                   ) : item.level === 'page_break' ? (
-                    <div className="flex items-center gap-2 flex-1">
-                      <div className="flex-1 h-[1px] border-t border-dashed border-orange-500" />
+                    <span className="flex items-center gap-2 flex-1">
+                      <span className="flex-1 h-[1px] border-t border-dashed border-orange-500" />
                       <span className="text-[10px] text-orange-500">PAGE</span>
-                      <div className="flex-1 h-[1px] border-t border-dashed border-orange-500" />
-                    </div>
+                      <span className="flex-1 h-[1px] border-t border-dashed border-orange-500" />
+                    </span>
                   ) : item.level === 'image' ? (
                     <span className="truncate flex-1 text-[var(--text-tertiary)]">
-                      🖼️ {item.content?.substring(0, 20) || 'Изображение'}
+                      🖼️ {item.content?.substring(0, 20) || t('documents.levels.image')}
                     </span>
                   ) : item.level === 'widget' ? (
                     <span className="truncate flex-1 flex items-center gap-1.5">
                       <Puzzle className="w-3 h-3 shrink-0" />
                       <span className="truncate">
-                        {item.content?.substring(0, 30) || `Widget #${item.widget_ref ?? item.id}`}
+                        {item.content?.substring(0, 30) || t('documents.widgetNumber', { id: item.widget_ref ?? item.id })}
                       </span>
                     </span>
                   ) : (
                     <span className="truncate flex-1">
-                      {item.content?.substring(0, 30) || 'Без названия'}
+                      {item.content?.substring(0, 30) || t('documents.untitled')}
                     </span>
                   )}
 
@@ -252,7 +262,7 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
                       {item.level === 'divider' ? 'DIV' : item.level === 'page_break' ? 'PAGE' : item.level === 'image' ? 'IMG' : item.level === 'widget' ? 'WIDGET' : item.level}
                     </span>
                   )}
-                </div>
+                </button>
               </React.Fragment>
             );
           })}
@@ -260,7 +270,7 @@ export function SidebarItemsTree({ showInlineWidgets, setShowInlineWidgets }: Si
         {ctx.items.length === 0 && (
           <div className="text-center py-8 text-[var(--text-tertiary)]">
             <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Документ пуст</p>
+            <p className="text-sm">{t('documents.empty')}</p>
           </div>
         )}
       </div>

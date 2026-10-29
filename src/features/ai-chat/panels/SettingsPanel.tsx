@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * SettingsPanel — extracted from AIChatPanel.renderSettingsPanel()
  * Settings panel with three tabs: AI, People, Widget.
@@ -189,6 +190,7 @@ export function SettingsPanel({
   TasksSourceInlineSelector,
   FilesSourceInlineSelector,
 }: SettingsPanelProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col h-full">
       {/* Settings Tabs: AI | People | Widget */}
@@ -215,8 +217,7 @@ export function SettingsPanel({
           )}
         >
           <Users className="w-3 h-3" />
-          Люди
-        </button>
+          {t('aiChat.contacts.filterHumans')}</button>
         <button
           onClick={() => setSettingsTab('widget')}
           className={cn(
@@ -227,8 +228,7 @@ export function SettingsPanel({
           )}
         >
           <Settings className="w-3 h-3" />
-          Виджет
-        </button>
+          {t('aiChat.ui.widget')}</button>
       </div>
 
       {/* AI Settings Tab */}
@@ -239,7 +239,7 @@ export function SettingsPanel({
               {currentAgent?.icon || '🤖'}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">AI Агент</div>
+              <div className="text-[10px] text-[var(--text-tertiary)] mb-0.5">{t('aiChat.ui.aIAgent')}</div>
               <select
                 value={currentAgent?.id || ''}
                 onChange={(e) => {
@@ -251,7 +251,7 @@ export function SettingsPanel({
                 }}
                 className="w-full px-1.5 py-1 text-xs rounded bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-secondary)] focus:outline-none focus:ring-1 focus:ring-purple-500/30"
               >
-                <option value="">— Выберите агента —</option>
+                <option value="">{t('aiChat.ui.selectAnAgent')}</option>
                 {agents.map(a => (
                   <option key={a.id} value={a.id}>{a.icon || '🤖'} {a.name}</option>
                 ))}
@@ -262,7 +262,7 @@ export function SettingsPanel({
             <>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label htmlFor="chat-operator-select" className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">Оператор</label>
+                  <label htmlFor="chat-operator-select" className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">{t('aiChat.ui.operator')}</label>
                   <select
                     id="chat-operator-select"
                     value={chatOperatorId || ''}
@@ -273,14 +273,14 @@ export function SettingsPanel({
                     disabled={!isAdminOrOwner}
                     className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-60"
                   >
-                    <option value="">— Выбрать —</option>
+                    <option value="">{t('aiChat.ui.select')}</option>
                     {operators.map(op => (
                       <option key={op.id} value={op.id}>{op.name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label htmlFor="chat-model-select" className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">Модель</label>
+                  <label htmlFor="chat-model-select" className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">{t('aiChat.ui.model')}</label>
                   <select
                     id="chat-model-select"
                     value={chatModelId}
@@ -288,7 +288,7 @@ export function SettingsPanel({
                     disabled={!isAdminOrOwner || !chatOperatorId}
                     className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-60"
                   >
-                    <option value="">— Выбрать —</option>
+                    <option value="">{t('aiChat.ui.select')}</option>
                     {models.map((m: {id: number; name: string; model_id?: string}) => (
                       <option key={m.model_id || m.id} value={m.model_id}>{m.name || m.model_id}</option>
                     ))}
@@ -296,7 +296,7 @@ export function SettingsPanel({
                 </div>
               </div>
               <div>
-                <label htmlFor="chat-system-prompt" className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">Системный промпт</label>
+                <label htmlFor="chat-system-prompt" className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">{t('aiChat.ui.systemPrompt')}</label>
                 <textarea
                   id="chat-system-prompt"
                   value={chatSystemPrompt}
@@ -304,7 +304,7 @@ export function SettingsPanel({
                   readOnly={!isAdminOrOwner}
                   rows={4}
                   className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 resize-none"
-                  placeholder="Системный промпт..."
+                  placeholder={t('aiChat.ui.systemPromptPlaceholder')}
                 />
               </div>
               {isAdminOrOwner && (
@@ -321,8 +321,7 @@ export function SettingsPanel({
                     ) : (
                       <Save className="w-3.5 h-3.5" />
                     )}
-                    Сохранить в агента
-                  </button>
+                    {t('aiChat.ui.saveToAgent')}</button>
                 )
               )}
             </>
@@ -334,8 +333,7 @@ export function SettingsPanel({
               className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Очистить AI историю
-            </button>
+              {t('aiChat.ui.clearAIHistory')}</button>
           </div>
           {/* Ticket #81439: SubAgentSelector removed — sub-agents invoked via /command in new chat */}
           {/* ADR-110: Context Settings */}
@@ -370,16 +368,16 @@ export function SettingsPanel({
             )}
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-[var(--text-primary)] truncate">
-                {chatPartner?.name || 'Не выбран'}
+                {chatPartner?.name || t('aiChat.ui.notSelectedPlain')}
               </div>
               <div className="text-[10px] text-[var(--text-tertiary)]">
-                {chatPartner?.email || 'Выберите контакт'}
+                {chatPartner?.email || t('aiChat.ui.selectAContact')}
               </div>
             </div>
           </div>
           <div className="p-3 rounded-lg bg-[var(--bg-tertiary)]">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-[var(--text-tertiary)]">Непрочитанных сообщений</span>
+              <span className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.unreadMessages')}</span>
               <span className={cn(
                 "px-2 py-0.5 rounded-full text-xs font-medium",
                 totalUnreadCount > 0 ? "bg-red-500/20 text-red-400" : "bg-gray-500/20 text-gray-400"
@@ -388,7 +386,7 @@ export function SettingsPanel({
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[var(--text-tertiary)]">Активных бесед</span>
+              <span className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.activeConversations')}</span>
               <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">
                 {inboxConversations.length}
               </span>
@@ -397,8 +395,8 @@ export function SettingsPanel({
           <div className="p-3 rounded-lg bg-[var(--bg-tertiary)]">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm text-[var(--text-primary)]">Уведомления</div>
-                <div className="text-[10px] text-[var(--text-tertiary)]">Звук при новых сообщениях</div>
+                <div className="text-sm text-[var(--text-primary)]">{t('statusBar.notifications')}</div>
+                <div className="text-[10px] text-[var(--text-tertiary)]">{t('aiChat.ui.soundForNewMessages')}</div>
               </div>
               <button className="w-10 h-5 rounded-full bg-[var(--color-primary-500)] relative">
                 <span className="absolute right-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow"></span>
@@ -414,8 +412,7 @@ export function SettingsPanel({
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
             >
               <Users className="w-3.5 h-3.5" />
-              Открыть контакты
-            </button>
+              {t('aiChat.ui.openContacts')}</button>
             <button
               onClick={() => {
                 setChatMode('people');
@@ -425,8 +422,7 @@ export function SettingsPanel({
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
             >
               <Inbox className="w-3.5 h-3.5" />
-              Открыть входящие
-            </button>
+              {t('aiChat.ui.openInbox')}</button>
           </div>
         </div>
       )}
@@ -435,8 +431,8 @@ export function SettingsPanel({
       {settingsTab === 'widget' && (
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
           <div>
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Источник задач</h4>
-            <p className="text-xs text-[var(--text-tertiary)] mb-2">Настройка для всех пользователей виджета</p>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.taskSource')}</h4>
+            <p className="text-xs text-[var(--text-tertiary)] mb-2">{t('aiChat.ui.settingForAllUsersOfThisWidget')}</p>
             {tasksSource ? (
               <>
                 <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)]">
@@ -448,23 +444,22 @@ export function SettingsPanel({
                     onClick={() => updateTasksSource(undefined)}
                     className="text-xs text-red-400 hover:underline"
                   >
-                    Удалить
-                  </button>
+                    {t('aiChat.ui.delete')}</button>
                 </div>
                 {/* Column mapping */}
                 {tasksTableColumns.length > 0 && (
                   <div className="mt-3 space-y-2">
-                    <p className="text-[10px] text-[var(--text-tertiary)] uppercase font-medium">Маппинг полей</p>
+                    <p className="text-[10px] text-[var(--text-tertiary)] uppercase font-medium">{t('aiChat.ui.fieldMapping')}</p>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label htmlFor="tasks-display-col" className="block text-[10px] text-[var(--text-tertiary)] mb-1">Название</label>
+                        <label htmlFor="tasks-display-col" className="block text-[10px] text-[var(--text-tertiary)] mb-1">{t('aiChat.ui.name')}</label>
                         <select
                           id="tasks-display-col"
                           value={tasksSource.displayColumn || ''}
                           onChange={(e) => updateTasksSource({ ...tasksSource, displayColumn: e.target.value || undefined })}
                           className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
                         >
-                          <option value="">— авто —</option>
+                          <option value="">{t('aiChat.ui.auto')}</option>
                           {tasksTableColumns.map(col => (
                             <option key={col.column_name} value={col.column_name}>
                               {col.display_name || col.column_name}
@@ -473,14 +468,14 @@ export function SettingsPanel({
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="tasks-desc-col" className="block text-[10px] text-[var(--text-tertiary)] mb-1">Описание</label>
+                        <label htmlFor="tasks-desc-col" className="block text-[10px] text-[var(--text-tertiary)] mb-1">{t('aiChat.ui.description')}</label>
                         <select
                           id="tasks-desc-col"
                           value={tasksSource.descriptionColumn || ''}
                           onChange={(e) => updateTasksSource({ ...tasksSource, descriptionColumn: e.target.value || undefined })}
                           className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
                         >
-                          <option value="">— нет —</option>
+                          <option value="">{t('aiChat.ui.none')}</option>
                           {tasksTableColumns.map(col => (
                             <option key={col.column_name} value={col.column_name}>
                               {col.display_name || col.column_name}
@@ -489,7 +484,7 @@ export function SettingsPanel({
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="tasks-status-col" className="block text-[10px] text-[var(--text-tertiary)] mb-1">Статус</label>
+                        <label htmlFor="tasks-status-col" className="block text-[10px] text-[var(--text-tertiary)] mb-1">{t('aiChat.ui.status')}</label>
                         <select
                           id="tasks-status-col"
                           value={tasksSource.statusColumn || ''}
@@ -507,7 +502,7 @@ export function SettingsPanel({
                           }}
                           className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
                         >
-                          <option value="">— нет —</option>
+                          <option value="">{t('aiChat.ui.none')}</option>
                           {tasksTableColumns.map(col => (
                             <option key={col.column_name} value={col.column_name}>
                               {col.display_name || col.column_name}
@@ -516,7 +511,7 @@ export function SettingsPanel({
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="tasks-priority-col" className="block text-[10px] text-[var(--text-tertiary)] mb-1">Приоритет</label>
+                        <label htmlFor="tasks-priority-col" className="block text-[10px] text-[var(--text-tertiary)] mb-1">{t('aiChat.ui.priority')}</label>
                         <select
                           id="tasks-priority-col"
                           value={tasksSource.priorityColumn || ''}
@@ -534,7 +529,7 @@ export function SettingsPanel({
                           }}
                           className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
                         >
-                          <option value="">— нет —</option>
+                          <option value="">{t('aiChat.ui.none')}</option>
                           {tasksTableColumns.map(col => (
                             <option key={col.column_name} value={col.column_name}>
                               {col.display_name || col.column_name}
@@ -558,8 +553,8 @@ export function SettingsPanel({
             )}
           </div>
           <div>
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Источник файлов</h4>
-            <p className="text-xs text-[var(--text-tertiary)] mb-2">Таблица файлов для кнопки &quot;+&quot; (по умолчанию Files из System Data)</p>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.fileSource')}</h4>
+            <p className="text-xs text-[var(--text-tertiary)] mb-2">{t('aiChat.ui.fileTableForTheButtonDefaultsToFilesInSystemData')}</p>
             {filesSource ? (
               <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)]">
                 <div className="flex items-center gap-2">
@@ -570,8 +565,7 @@ export function SettingsPanel({
                   onClick={() => updateFilesSource(undefined)}
                   className="text-xs text-red-400 hover:underline"
                 >
-                  Удалить
-                </button>
+                  {t('aiChat.ui.delete')}</button>
               </div>
             ) : (
               <FilesSourceInlineSelector
@@ -585,8 +579,8 @@ export function SettingsPanel({
             )}
           </div>
           <div className="pt-2 border-t border-[var(--border-secondary)]">
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Агент по умолчанию</h4>
-            <p className="text-xs text-[var(--text-tertiary)] mb-2">Автоматически выбирается при открытии чата в этом спейсе</p>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.defaultAgent')}</h4>
+            <p className="text-xs text-[var(--text-tertiary)] mb-2">{t('aiChat.ui.selectedAutomaticallyWhenOpeningAChatInThisSpaceLabel')}</p>
             <div className="flex items-center gap-2">
               <select
                 value={defaultAgentId || ''}
@@ -597,7 +591,7 @@ export function SettingsPanel({
                 disabled={isSavingDefaultAgent || !isAdminOrOwner}
                 className="flex-1 px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50"
               >
-                <option value="">— Не выбран —</option>
+                <option value="">{t('aiChat.ui.notSelected')}</option>
                 {agents.map(agent => (
                   <option key={agent.id} value={agent.id}>
                     {agent.icon || '🤖'} {agent.name}
@@ -620,15 +614,14 @@ export function SettingsPanel({
             )}
             {!isAdminOrOwner && (
               <p className="mt-2 text-[10px] text-[var(--text-tertiary)] italic">
-                Только администраторы могут изменять эту настройку
-              </p>
+                {t('aiChat.ui.onlyAdministratorsCanChangeThisSetting')}</p>
             )}
           </div>
 
           {/* Quick Reaction Emojis */}
           <div className="pt-2 border-t border-[var(--border-secondary)]">
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Быстрые реакции</h4>
-            <p className="text-xs text-[var(--text-tertiary)] mb-3">До 6 эмодзи для быстрых реакций в чате</p>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.quickReactions')}</h4>
+            <p className="text-xs text-[var(--text-tertiary)] mb-3">{t('aiChat.ui.upTo6EmojiForQuickChatReactions')}</p>
 
             <div className="flex flex-wrap gap-2 mb-3">
               {quickEmojis.map((emoji, index) => (
@@ -684,27 +677,24 @@ export function SettingsPanel({
                   ) : (
                     <Save className="w-3.5 h-3.5" />
                   )}
-                  Сохранить
-                </button>
+                  {t('aiChat.ui.save')}</button>
                 <button
                   onClick={() => setQuickEmojis(DEFAULT_QUICK_EMOJIS)}
                   className="px-3 py-2 rounded-lg text-xs bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] transition-colors"
                 >
-                  Сбросить
-                </button>
+                  {t('aiChat.ui.reset')}</button>
               </div>
             )}
             {!isAdminOrOwner && (
               <p className="text-[10px] text-[var(--text-tertiary)] italic">
-                Только администраторы могут изменять эмодзи
-              </p>
+                {t('aiChat.ui.onlyAdministratorsCanChangeEmoji')}</p>
             )}
           </div>
 
           {/* Voice Input Settings */}
           <div className="pt-2 border-t border-[var(--border-secondary)]">
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Голосовой ввод</h4>
-            <p className="text-xs text-[var(--text-tertiary)] mb-3">Режим транскрипции голоса в текст</p>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.voiceInput')}</h4>
+            <p className="text-xs text-[var(--text-tertiary)] mb-3">{t('aiChat.ui.voiceTranscriptionMode')}</p>
 
             <div className="space-y-2">
               {/* eslint-disable-next-line jsx-a11y/label-has-associated-control -- label wraps radio input with nested text */}
@@ -722,14 +712,13 @@ export function SettingsPanel({
                   <div className="text-sm text-[var(--text-primary)] flex items-center gap-2">
                     Web Speech API
                     {webSpeechAvailable ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">Доступен</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">{t('aiChat.ui.available')}</span>
                     ) : (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Недоступен</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">{t('aiChat.ui.unavailable')}</span>
                     )}
                   </div>
                   <p className="text-[10px] text-[var(--text-tertiary)]">
-                    Бесплатно, быстро, работает в браузере
-                  </p>
+                    {t('aiChat.ui.freeFastRunsInTheBrowser')}</p>
                 </div>
               </label>
 
@@ -747,8 +736,7 @@ export function SettingsPanel({
                 <div className="flex-1">
                   <div className="text-sm text-[var(--text-primary)]">OpenAI Whisper</div>
                   <p className="text-[10px] text-[var(--text-tertiary)]">
-                    Высокое качество, поддержка 50+ языков, платный
-                  </p>
+                    {t('aiChat.ui.highQualitySupports50LanguagesPaid')}</p>
                 </div>
               </label>
             </div>
@@ -763,8 +751,7 @@ export function SettingsPanel({
 
           <div className="pt-2 border-t border-[var(--border-secondary)]">
             <p className="text-xs text-[var(--text-tertiary)]">
-              Нажмите 🎤 рядом с кнопкой отправки для голосового ввода
-            </p>
+              {t('aiChat.ui.pressNextToTheSendButtonToUseVoiceInput')}</p>
           </div>
         </div>
       )}

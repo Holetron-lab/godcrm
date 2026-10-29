@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useCallback } from 'react';
 import { 
   Link2, 
@@ -123,6 +124,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isAgentProcessing = false,
   onStopAgent
 }) => {
+  const { t } = useLanguage();
   // Submit is handled by parent (useEventHandlers). Bare @mentions are NOT auto-wrapped — they stay as references.
   const handleSubmitWithValidation = useCallback((e?: React.FormEvent) => {
     handleSubmit(e);
@@ -178,14 +180,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     type="text"
                     value={filesSearch}
                     onChange={(e) => setFilesSearch(e.target.value)}
-                    placeholder="Поиск..."
+                    placeholder={t('aiChat.ui.search')}
                     className="w-full pl-7 pr-2 py-1 text-xs rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
                   />
                 </div>
                 <button
                   onClick={() => setFilesSource(undefined)}
                   className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] flex-shrink-0 mr-1"
-                  title="Сменить источник"
+                  title={t('aiChat.ui.changeSource')}
                 >
                   <Settings className="w-3.5 h-3.5" />
                 </button>
@@ -206,8 +208,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   </div>
                 ) : filteredProjectFiles.length === 0 ? (
                   <div className="py-6 text-center text-xs text-[var(--text-tertiary)]">
-                    Нет файлов в проекте
-                  </div>
+                    {t('aiChat.ui.noFilesInThisProject')}</div>
                 ) : (
                   filteredProjectFiles.map(file => (
                     <button
@@ -220,7 +221,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             row_id: Number(file.id) || 0,
                             table_name: filesSource.tableName,
                             table_icon: filesSource.tableIcon || '📁',
-                            row_title: file.name || file.originalName || file.original_name || 'Файл'
+                            row_title: file.name || file.originalName || file.original_name || t('columnTypes.file.label')
                           };
                           setBoundRows(prev => [...prev, binding]);
                         }
@@ -253,7 +254,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
                   <FolderOpen className="w-4 h-4" />
-                  <span>Выберите источник файлов</span>
+                  <span>{t('aiChat.ui.chooseAFileSource')}</span>
                 </div>
                 <button
                   onClick={() => {
@@ -307,7 +308,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   ? "text-[var(--color-primary-500)]"
                   : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
               )}
-              title="Привязать строку"
+              title={t('aiChat.ui.linkARow')}
             >
               <Link2 className="w-3.5 h-3.5" />
               {boundRows.length > 0 && (
@@ -326,7 +327,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     ? "text-[var(--color-primary-500)]"
                     : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                 )}
-                title={showBoundRowsBar ? "Скрыть привязки" : "Показать привязки"}
+                title={showBoundRowsBar ? t('aiChat.ui.hideLinks') : t('aiChat.ui.showLinks')}
               >
                 {showBoundRowsBar ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
@@ -346,7 +347,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                       ? "bg-pink-500/20 text-pink-400"
                       : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
                   )}
-                  title={thinkingEnabled ? "Цепочка рассуждений: ВКЛ" : "Цепочка рассуждений: ВЫКЛ"}
+                  title={thinkingEnabled ? t('aiChat.ui.reasoningON') : t('aiChat.ui.reasoningOFF')}
                 >
                   <Brain className="w-3.5 h-3.5" />
                 </button>
@@ -364,7 +365,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     agentMode === 'ask' && "bg-blue-500/20 text-blue-400",
                     agentMode === 'read' && "bg-green-500/20 text-green-400"
                   )}
-                  title={`Режим: ${agentMode === 'agent' ? 'Agent (выполняет задачи)' : agentMode === 'ask' ? 'Ask (отвечает на вопросы)' : 'Read (только чтение)'}`}
+                  title={t(agentMode === 'agent' ? 'aiChat.ui.modeAgent' : agentMode === 'ask' ? 'aiChat.ui.modeAsk' : 'aiChat.ui.modeRead')}
                 >
                   <Zap className="w-3 h-3" />
                   {agentMode}
@@ -394,7 +395,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onChange={handleFileSelect}
             multiple
             className="hidden"
-            accept="image/*,.pdf,.txt,.md,.json,.csv"
             data-testid="file-input"
           />
 
@@ -418,7 +418,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             }}
             availableUsers={availableMentionUsers}
             availableAgents={availableSlashAgents}
-            placeholder={chatPartner?.type === 'agent' ? `Спросить ${chatPartner.name}... (@ для вызова агента)` : "Введите сообщение... (@ для вызова агента)"}
+            placeholder={chatPartner?.type === 'agent' ? t('aiChat.ui.askAgentMention', { name: chatPartner.name }) : t('aiChat.ui.enterAMessageToInvokeAnAgent')}
             disabled={isLoading}
             className="flex-1"
             inputClassName="px-3 py-2 bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] border-none focus:outline-none resize-none disabled:opacity-50"
@@ -441,7 +441,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     ? "text-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10"
                     : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
                 )}
-                title="Выбрать файл из библиотеки"
+                title={t('aiChat.ui.chooseAFileFromTheLibrary')}
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -450,7 +450,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
-                title="Прикрепить файл"
+                title={t('aiChat.ui.attachFile')}
               >
                 <Paperclip className="w-4 h-4" />
               </button>
@@ -468,7 +468,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     type="button"
                     onClick={cancelRecording}
                     className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                    title="Отменить запись"
+                    title={t('aiChat.ui.cancelRecording')}
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -476,7 +476,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     type="button"
                     onClick={stopRecording}
                     className="p-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors animate-pulse"
-                    title="Остановить запись"
+                    title={t('aiChat.ui.stopRecording')}
                   >
                     <Square className="w-4 h-4 fill-current" />
                   </button>
@@ -486,7 +486,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   type="button"
                   disabled
                   className="p-1.5 rounded-lg text-[var(--text-tertiary)] cursor-wait"
-                  title="Транскрибирую..."
+                  title={t('aiChat.ui.transcribing')}
                 >
                   <Loader2 className="w-4 h-4 animate-spin" />
                 </button>
@@ -500,7 +500,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                       ? "text-red-400 hover:bg-red-500/10"
                       : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
                   )}
-                  title={voiceError || (voiceMode === 'webSpeech' ? "Голосовой ввод (Web Speech)" : "Голосовой ввод (Whisper)")}
+                  title={voiceError || (voiceMode === 'webSpeech' ? t('aiChat.ui.voiceInputWebSpeech') : t('aiChat.ui.voiceInputWhisper'))}
                 >
                   <Mic className="w-4 h-4" />
                 </button>
@@ -511,7 +511,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   type="button"
                   onClick={onStopAgent}
                   className="p-1.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
-                  title="Остановить агента"
+                  title={t('aiChat.ui.stopAgent')}
                 >
                   <Square className="w-4 h-4 fill-current" />
                 </button>

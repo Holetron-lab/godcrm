@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { DocumentsSettingsProps } from './types';
 
 export function DocumentsWidgetSettings({
@@ -30,6 +31,8 @@ export function DocumentsWidgetSettings({
   handleCreateTicketsTable,
   handleTicketsTableChange,
 }: DocumentsSettingsProps) {
+  const fieldId = useId();
+
   return (
     <>
       <div className="bg-[var(--bg-tertiary)] rounded-lg p-3 mb-4">
@@ -40,10 +43,11 @@ export function DocumentsWidgetSettings({
 
       {/* Space Selection */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-documents-space-id`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Пространство
         </label>
         <select
+          id={`${fieldId}-documents-space-id`}
           value={documentsSpaceId}
           onChange={(e) => {
             setDocumentsSpaceId(e.target.value);
@@ -65,10 +69,11 @@ export function DocumentsWidgetSettings({
       {/* Project Selection */}
       {documentsSpaceId && (
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <label htmlFor={`${fieldId}-documents-project-id`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
             Проект
           </label>
           <select
+            id={`${fieldId}-documents-project-id`}
             value={documentsProjectId}
             onChange={(e) => {
               setDocumentsProjectId(e.target.value);
@@ -90,10 +95,11 @@ export function DocumentsWidgetSettings({
       {/* Documents Table */}
       {documentsProjectId && (
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <label htmlFor={`${fieldId}-documents-table-id`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
             Таблица документов
           </label>
           <select
+            id={`${fieldId}-documents-table-id`}
             value={documentsTableId}
             onChange={(e) => {
               if (e.target.value === '__create_documents__') {
@@ -124,10 +130,11 @@ export function DocumentsWidgetSettings({
       {/* Sections Table */}
       {documentsProjectId && (
         <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <label htmlFor={`${fieldId}-sections-table-id`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
             Таблица секций (атомов)
           </label>
           <select
+            id={`${fieldId}-sections-table-id`}
             value={sectionsTableId}
             onChange={(e) => setSectionsTableId(e.target.value)}
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -148,10 +155,11 @@ export function DocumentsWidgetSettings({
       {/* Tickets Table */}
       {documentsProjectId && (
         <div className="border-t border-[var(--border-primary)] pt-4 mt-4">
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+          <label htmlFor={`${fieldId}-tickets-table-id`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
             Таблица тикетов
           </label>
           <select
+            id={`${fieldId}-tickets-table-id`}
             value={ticketsTableId}
             onChange={(e) => {
               if (e.target.value === '__create_tickets__') {
@@ -183,8 +191,9 @@ export function DocumentsWidgetSettings({
               <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">Маппинг колонок:</p>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-[var(--text-tertiary)]">Заголовок *</label>
+                  <label htmlFor={`${fieldId}-tickets-col-title`} className="text-[10px] text-[var(--text-tertiary)]">Заголовок *</label>
                   <input
+                    id={`${fieldId}-tickets-col-title`}
                     type="text"
                     value={ticketsColTitle}
                     onChange={(e) => setTicketsColTitle(e.target.value)}
@@ -193,8 +202,9 @@ export function DocumentsWidgetSettings({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-[var(--text-tertiary)]">Описание</label>
+                  <label htmlFor={`${fieldId}-tickets-col-desc`} className="text-[10px] text-[var(--text-tertiary)]">Описание</label>
                   <input
+                    id={`${fieldId}-tickets-col-desc`}
                     type="text"
                     value={ticketsColDesc}
                     onChange={(e) => setTicketsColDesc(e.target.value)}
@@ -203,8 +213,9 @@ export function DocumentsWidgetSettings({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-[var(--text-tertiary)]">Тип</label>
+                  <label htmlFor={`${fieldId}-tickets-col-type`} className="text-[10px] text-[var(--text-tertiary)]">Тип</label>
                   <input
+                    id={`${fieldId}-tickets-col-type`}
                     type="text"
                     value={ticketsColType}
                     onChange={(e) => setTicketsColType(e.target.value)}
@@ -213,8 +224,9 @@ export function DocumentsWidgetSettings({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-[var(--text-tertiary)]">Статус</label>
+                  <label htmlFor={`${fieldId}-tickets-col-state`} className="text-[10px] text-[var(--text-tertiary)]">Статус</label>
                   <input
+                    id={`${fieldId}-tickets-col-state`}
                     type="text"
                     value={ticketsColState}
                     onChange={(e) => setTicketsColState(e.target.value)}
@@ -223,8 +235,9 @@ export function DocumentsWidgetSettings({
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-[var(--text-tertiary)]">Приоритет</label>
+                  <label htmlFor={`${fieldId}-tickets-col-priority`} className="text-[10px] text-[var(--text-tertiary)]">Приоритет</label>
                   <input
+                    id={`${fieldId}-tickets-col-priority`}
                     type="text"
                     value={ticketsColPriority}
                     onChange={(e) => setTicketsColPriority(e.target.value)}

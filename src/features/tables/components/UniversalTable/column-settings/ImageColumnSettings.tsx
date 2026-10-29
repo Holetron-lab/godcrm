@@ -1,32 +1,21 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { Input, Select } from '@/shared/components/ui';
 import { ColumnSettingsProps } from './types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
+import { ImageCell, type ImageDisplayConfig } from '../../cells/ImageCell';
+import { parseImageUrls, resolveAttachmentFormula } from '../../cells/attachmentValue';
 
-type GalleryDisplayMode = 'stack' | 'carousel' | 'grid' | 'single';
-
-const displayModes: Array<{ value: GalleryDisplayMode; label: string; description: string; icon: string }> = [
-  { value: 'stack', label: 'Стек', description: 'Накладываются друг на друга', icon: '🎴' },
-  { value: 'carousel', label: 'Карусель', description: 'Перелистывание стрелками', icon: '◀️▶️' },
-  { value: 'grid', label: 'Сетка', description: 'Миниатюры в ряд', icon: '🔲' },
-  { value: 'single', label: 'Одно фото', description: 'Только первое изображение', icon: '🖼️' },
-];
-
-type ImageFit = 'cover' | 'contain' | 'fill' | 'none';
-
-const fitOptions: Array<{ value: ImageFit; label: string; description: string }> = [
-  { value: 'cover', label: 'Заполнить', description: 'Обрезает края' },
-  { value: 'contain', label: 'Вписать', description: 'Целиком с полями' },
-  { value: 'fill', label: 'Растянуть', description: 'Без сохранения пропорций' },
-  { value: 'none', label: 'Оригинал', description: 'Без изменений' },
-];
-
-type ImageShape = 'square' | 'rounded' | 'circle';
-
-const shapeOptions: Array<{ value: ImageShape; label: string; icon: string }> = [
-  { value: 'square', label: 'Квадрат', icon: '⬜' },
-  { value: 'rounded', label: 'Скруглённый', icon: '🔳' },
-  { value: 'circle', label: 'Круг', icon: '⚪' },
-];
+const displayModes = [
+  { value: 'stack', icon: '🎴' }, { value: 'carousel', icon: '◀️▶️' },
+  { value: 'grid', icon: '🔲' }, { value: 'single', icon: '🖼️' },
+] as const;
+const fitOptions = ['cover', 'contain', 'fill', 'none'] as const;
+const shapeOptions = [
+  { value: 'square', icon: '⬜' }, { value: 'rounded', icon: '🔳' }, { value: 'circle', icon: '⚪' },
+] as const;
+const sampleImages = [0, 1, 2].map(index => ({
+  url: 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90" viewBox="0 0 160 90"><rect width="160" height="90" fill="${['#164e63', '#14532d', '#713f12'][index]}"/><circle cx="120" cy="24" r="14" fill="#fef08a"/><path d="M0 90L48 24L96 90ZM60 90L120 40L160 90Z" fill="#e2e8f0"/></svg>`),
+}));
 
 /**
  * Компонент настроек для колонок типа image
@@ -34,17 +23,22 @@ const shapeOptions: Array<{ value: ImageShape; label: string; icon: string }> = 
 export const ImageColumnSettings: React.FC<ColumnSettingsProps> = ({
   draft,
   setDraft,
-  allColumns = [],
   firstRow,
 }) => {
-  const imageConfig = draft.config?.image || {};
+  const { t } = useLanguage();
+  const fieldId = useId();
+  const imageConfig: ImageDisplayConfig = draft.config?.image || {};
+  const rawValue = draft.config?.file?.formula
+    ? resolveAttachmentFormula(draft.config.file.formula, firstRow || undefined)
+    : firstRow?.[draft.name] ?? firstRow?.[draft.id];
+  const hasImages = parseImageUrls(rawValue).length > 0;
 
   const updateConfig = (updates: Partial<typeof imageConfig>) => {
     setDraft(prev => ({
       ...prev,
       config: {
         ...prev.config,
-        image: { ...imageConfig, ...updates }
+        image: { ...prev.config?.image, ...updates }
       }
     }));
   };
@@ -55,42 +49,42 @@ export const ImageColumnSettings: React.FC<ColumnSettingsProps> = ({
   return (
     <div className="space-y-4">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
-        🖼️ Настройки изображений
+        🖼️ {t('columnSettings.image.title')}
       </h4>
 
       {/* Режим отображения галереи */}
-      <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
-          Режим галереи
-        </label>
+      <fieldset className="min-w-0">
+        <legend className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+          {t('columnSettings.image.galleryMode')}
+        </legend>
         <div className="grid grid-cols-2 gap-2">
           {displayModes.map(mode => (
-            <button
+            <button aria-pressed={(imageConfig.displayMode || 'stack') === mode.value}
               key={mode.value}
               type="button"
               onClick={() => updateConfig({ displayMode: mode.value })}
-              className={`p-3 rounded-lg border text-left transition-all ${
+              className={`p-3 rounded-lg border text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 ${
                 (imageConfig.displayMode || 'stack') === mode.value
-                  ? 'border-primary-500 bg-primary-50 text-primary-600 dark:text-primary-400'
-                  : 'border-[var(--border-secondary)] hover:border-[var(--border-primary)]'
+                  ? 'border-primary-500 bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
+                  : 'border-[var(--border-primary)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
               }`}
             >
               <div className="flex items-center gap-2 mb-1">
-                <span>{mode.icon}</span>
-                <span className="font-medium text-sm">{mode.label}</span>
+                <span aria-hidden="true">{mode.icon}</span>
+                <span className="font-medium text-sm">{t(`columnSettings.image.${mode.value}`)}</span>
               </div>
-              <div className="text-xs text-[var(--text-tertiary)]">{mode.description}</div>
+              <div className="text-xs text-[var(--text-secondary)]">{t(`columnSettings.image.${mode.value}Description`)}</div>
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       {/* Высота строки */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
-          Высота изображений: {rowHeight}px
+        <label htmlFor={`${fieldId}-rowHeight`} className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+          {t('columnSettings.image.height', { height: rowHeight })}
         </label>
-        <input
+        <input id={`${fieldId}-rowHeight`}
           type="range"
           min={32}
           max={200}
@@ -99,98 +93,98 @@ export const ImageColumnSettings: React.FC<ColumnSettingsProps> = ({
           onChange={(e) => updateConfig({ rowHeight: parseInt(e.target.value) })}
           className="w-full h-2 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer accent-primary-500"
         />
-        <div className="flex justify-between text-xs text-[var(--text-tertiary)] mt-1">
-          <span>32px (компактно)</span>
-          <span>200px (большие)</span>
+        <div className="flex justify-between text-xs text-[var(--text-secondary)] mt-1">
+          <span>{t('columnSettings.image.compact')}</span>
+          <span>{t('columnSettings.image.large')}</span>
         </div>
       </div>
 
       {/* Форма изображения */}
-      <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
-          Форма
-        </label>
+      <fieldset className="min-w-0">
+        <legend className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+          {t('columnSettings.image.shape')}
+        </legend>
         <div className="grid grid-cols-3 gap-2">
           {shapeOptions.map(shape => (
-            <button
+            <button aria-pressed={(imageConfig.shape || 'rounded') === shape.value}
               key={shape.value}
               type="button"
               onClick={() => updateConfig({ shape: shape.value })}
-              className={`p-2 rounded-lg border text-center transition-all ${
+              className={`p-2 rounded-lg border text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500 ${
                 (imageConfig.shape || 'rounded') === shape.value
-                  ? 'border-green-500 bg-green-500/10 text-green-600 dark:text-green-400'
-                  : 'border-[var(--border-secondary)] hover:border-[var(--border-primary)]'
+                  ? 'border-primary-500 bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
+                  : 'border-[var(--border-primary)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
               }`}
             >
-              <span className="text-lg">{shape.icon}</span>
-              <div className="text-xs mt-1">{shape.label}</div>
+              <span aria-hidden="true" className="text-lg">{shape.icon}</span>
+              <div className="text-xs mt-1">{t(`columnSettings.image.${shape.value}`)}</div>
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       {/* Заполнение */}
       <Select
-        label="Заполнение"
+        label={t('columnSettings.image.fit')}
         value={imageConfig.fit || 'cover'}
-        onChange={(value) => updateConfig({ fit: value as ImageFit })}
+        onChange={(value) => updateConfig({ fit: value as ImageDisplayConfig['fit'] })}
         options={fitOptions.map(opt => ({
-          value: opt.value,
-          label: `${opt.label} — ${opt.description}`
+          value: opt,
+          label: t(`columnSettings.image.${opt}`)
         }))}
       />
 
       {/* Настройки стека */}
       {(imageConfig.displayMode === 'stack' || !imageConfig.displayMode) && (
-        <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-secondary)] space-y-3">
-          <label className="block text-sm font-medium text-[var(--text-primary)]">
-            Настройки стека
-          </label>
+        <fieldset className="min-w-0 p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-secondary)] space-y-3">
+          <legend className="block text-sm font-medium text-[var(--text-primary)]">
+            {t('columnSettings.image.stackSettings')}
+          </legend>
           
           <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Макс. изображений"
+            <Input id={`${fieldId}-input-1`}
+              label={t('columnSettings.image.maxImages')}
               type="number"
               min={1}
               max={10}
               value={maxImages}
-              onChange={(e) => updateConfig({ maxImages: parseInt(e.target.value) || 5 })}
+              onChange={(e) => updateConfig({ maxImages: Math.max(1, Math.min(10, parseInt(e.target.value) || 5)) })}
             />
-            <Input
-              label="Смещение (px)"
+            <Input id={`${fieldId}-input-2`}
+              label={t('columnSettings.image.stackOffset')}
               type="number"
               min={4}
               max={32}
               value={imageConfig.stackOffset || 12}
-              onChange={(e) => updateConfig({ stackOffset: parseInt(e.target.value) || 12 })}
+              onChange={(e) => updateConfig({ stackOffset: Math.max(4, Math.min(32, parseInt(e.target.value) || 12)) })}
             />
           </div>
-        </div>
+        </fieldset>
       )}
 
       {/* Настройки сетки */}
       {imageConfig.displayMode === 'grid' && (
-        <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-secondary)] space-y-3">
-          <label className="block text-sm font-medium text-[var(--text-primary)]">
-            Настройки сетки
-          </label>
+        <fieldset className="min-w-0 p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-secondary)] space-y-3">
+          <legend className="block text-sm font-medium text-[var(--text-primary)]">
+            {t('columnSettings.image.gridSettings')}
+          </legend>
           
-          <Input
-            label="Размер миниатюры (px)"
+          <Input id={`${fieldId}-input-3`}
+            label={t('columnSettings.image.thumbnailSize')}
             type="number"
             min={16}
             max={64}
             value={imageConfig.thumbnailSize || 32}
-            onChange={(e) => updateConfig({ thumbnailSize: parseInt(e.target.value) || 32 })}
+            onChange={(e) => updateConfig({ thumbnailSize: Math.max(16, Math.min(64, parseInt(e.target.value) || 32)) })}
           />
-        </div>
+        </fieldset>
       )}
 
       {/* Опции отображения */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-[var(--text-primary)]">
-          Опции
-        </label>
+      <fieldset className="min-w-0 space-y-2">
+        <legend className="block text-sm font-medium text-[var(--text-primary)]">
+          {t('columnSettings.image.options')}
+        </legend>
 
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -199,7 +193,7 @@ export const ImageColumnSettings: React.FC<ColumnSettingsProps> = ({
             onChange={(e) => updateConfig({ showCount: e.target.checked })}
             className="rounded border-[var(--border-primary)]"
           />
-          <span className="text-sm text-[var(--text-secondary)]">Показывать количество изображений</span>
+          <span className="text-sm text-[var(--text-secondary)]">{t('columnSettings.image.showCount')}</span>
         </label>
 
         <label className="flex items-center gap-2 cursor-pointer">
@@ -209,7 +203,7 @@ export const ImageColumnSettings: React.FC<ColumnSettingsProps> = ({
             onChange={(e) => updateConfig({ showOnHover: e.target.checked })}
             className="rounded border-[var(--border-primary)]"
           />
-          <span className="text-sm text-[var(--text-secondary)]">Увеличивать при наведении</span>
+          <span className="text-sm text-[var(--text-secondary)]">{t('columnSettings.image.showOnHover')}</span>
         </label>
 
         <label className="flex items-center gap-2 cursor-pointer">
@@ -219,7 +213,7 @@ export const ImageColumnSettings: React.FC<ColumnSettingsProps> = ({
             onChange={(e) => updateConfig({ lightbox: e.target.checked })}
             className="rounded border-[var(--border-primary)]"
           />
-          <span className="text-sm text-[var(--text-secondary)]">Открывать в лайтбоксе по клику</span>
+          <span className="text-sm text-[var(--text-secondary)]">{t('columnSettings.image.lightbox')}</span>
         </label>
 
         <label className="flex items-center gap-2 cursor-pointer">
@@ -229,86 +223,15 @@ export const ImageColumnSettings: React.FC<ColumnSettingsProps> = ({
             onChange={(e) => updateConfig({ showFilename: e.target.checked })}
             className="rounded border-[var(--border-primary)]"
           />
-          <span className="text-sm text-[var(--text-secondary)]">Показывать имя файла</span>
+          <span className="text-sm text-[var(--text-secondary)]">{t('columnSettings.image.showFilename')}</span>
         </label>
-      </div>
+      </fieldset>
 
-      {/* Превью */}
-      <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-secondary)]">
-        <p className="text-xs text-[var(--text-tertiary)] mb-2">Превью:</p>
-        <div className="flex items-center gap-2">
-          {/* Стек/Карусель */}
-          {(imageConfig.displayMode === 'stack' || !imageConfig.displayMode) && (
-            <div className="relative" style={{ width: rowHeight * 1.5, height: rowHeight }}>
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className={`absolute bg-gradient-to-br from-primary-400 to-purple-500 border-2 border-white dark:border-gray-800 ${
-                    imageConfig.shape === 'circle' ? 'rounded-full' : 
-                    imageConfig.shape === 'square' ? 'rounded-none' : 'rounded-lg'
-                  }`}
-                  style={{
-                    width: rowHeight,
-                    height: rowHeight,
-                    left: i * (imageConfig.stackOffset || 12),
-                    zIndex: 3 - i,
-                  }}
-                />
-              ))}
-            </div>
-          )}
-          
-          {imageConfig.displayMode === 'carousel' && (
-            <div className="flex items-center gap-1">
-              <button className="p-1 rounded bg-[var(--bg-secondary)] text-[var(--text-tertiary)]">◀</button>
-              <div
-                className={`bg-gradient-to-br from-green-400 to-primary-500 ${
-                  imageConfig.shape === 'circle' ? 'rounded-full' : 
-                  imageConfig.shape === 'square' ? 'rounded-none' : 'rounded-lg'
-                }`}
-                style={{ width: rowHeight, height: rowHeight }}
-              />
-              <button className="p-1 rounded bg-[var(--bg-secondary)] text-[var(--text-tertiary)]">▶</button>
-            </div>
-          )}
-          
-          {imageConfig.displayMode === 'grid' && (
-            <div className="flex gap-1">
-              {[0, 1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className={`bg-gradient-to-br ${
-                    i % 2 === 0 ? 'from-pink-400 to-red-500' : 'from-yellow-400 to-orange-500'
-                  } ${
-                    imageConfig.shape === 'circle' ? 'rounded-full' : 
-                    imageConfig.shape === 'square' ? 'rounded-none' : 'rounded'
-                  }`}
-                  style={{ 
-                    width: imageConfig.thumbnailSize || 32, 
-                    height: imageConfig.thumbnailSize || 32 
-                  }}
-                />
-              ))}
-            </div>
-          )}
-          
-          {imageConfig.displayMode === 'single' && (
-            <div
-              className={`bg-gradient-to-br from-cyan-400 to-teal-500 ${
-                imageConfig.shape === 'circle' ? 'rounded-full' : 
-                imageConfig.shape === 'square' ? 'rounded-none' : 'rounded-lg'
-              }`}
-              style={{ width: rowHeight, height: rowHeight }}
-            />
-          )}
-          
-          {/* Счётчик */}
-          {imageConfig.showCount !== false && (
-            <span className="text-xs text-[var(--text-tertiary)] ml-2">
-              +3 фото
-            </span>
-          )}
-        </div>
+      <div className="p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-primary)] overflow-x-auto">
+        <p className="text-xs text-[var(--text-secondary)] mb-2">{t('columnSettings.image.preview')}</p>
+        <ImageCell value={hasImages ? rawValue : sampleImages} readOnly
+          config={hasImages ? draft.config : { image: imageConfig }} rowData={firstRow || undefined} />
+        {!hasImages && <p className="text-xs text-[var(--text-secondary)] mt-2">{t('columnSettings.image.sampleHint')}</p>}
       </div>
     </div>
   );

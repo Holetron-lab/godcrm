@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { expect } from '@playwright/test';
+import { createFixtureServer, openFixture } from './browser-fixture.mjs';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const artifacts = await mkdtemp(join(tmpdir(), 'kanban-color-'));
+const entry = 'src/tests/kanban-color-fixture/index.html';
+const server = await createFixtureServer({ root, artifacts, entry });
+let browser;
+try {
+  browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  for (const width of [1440, 390]) for (const theme of ['light', 'dark']) {
+    const page = await browser.newPage({ viewport: { width, height: 800 } });
+    const trigger = page.getByRole('button', { name: 'Цвет карточки', exact: true });
+    const fixture = await openFixture({ server, page, entry: `${entry}?theme=${theme}`, ready: trigger });
+    const state = async () => JSON.parse(await page.getByLabel('State').textContent());
+    const stripe = page.getByText('Ticket', { exact: true }).locator('xpath=ancestor::div[contains(@class,"group relative")]');
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Цвет карточки' });
+    await expect(dialog).toBeVisible();
+    const box = await dialog.boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= width && box.y >= 0 && box.y + box.height <= 800);
+    await page.addScriptTag({ content: await readFile(join(root, 'node_modules/axe-core/axe.min.js'), 'utf8') });
+    const violations = await page.evaluate(async () => (await window.axe.run('[role="dialog"]', { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } })).violations);
+    await writeFile(join(artifacts, `${width}-${theme}-axe.json`), JSON.stringify(violations, null, 2));
+    assert.deepEqual(violations.map(({ id }) => id), []);
+    await page.screenshot({ path: join(artifacts, `${width}-${theme}-palette.png`) });
+    await page.getByRole('button', { name: '#ef4444', exact: true }).focus();
+    await page.keyboard.press('Space');
+    assert.equal((await state()).data.colour, '#ef4444');
+    assert.equal((await state()).updates, 1);
+    await expect(stripe).toHaveCSS('border-left-color', 'rgb(239, 68, 68)');
+    await expect(stripe).toHaveCSS('border-left-width', '4px');
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await page.getByLabel('Другой цвет').fill('#123456');
+    assert.equal((await state()).data.colour, '#123456');
+    await page.keyboard.press('Escape');
+    await trigger.click();
+    await page.getByRole('button', { name: 'Без цвета', exact: true }).click();
+    assert.equal((await state()).data.colour, null);
+    await expect(stripe).toHaveCSS('border-left-width', '1px');
+    await page.getByRole('button', { name: 'Language', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Card color', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Chat', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Attach to message', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Ticket type', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Card color', exact: true }).click();
+    await page.getByRole('heading', { name: 'Kanban color' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('checkbox', { name: 'Read only' }).check();
+    await expect(page.getByRole('button', { name: 'Card color', exact: true })).toHaveCount(0);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await fixture.assertStable();
+    await page.close();
+    console.log(`${width} ${theme}: palette, stripe, custom color, clear, keyboard, focus, RU/EN, readonly, axe PASS`);
+  }
+} finally { await browser?.close(); await server.close(); console.log(`Artifacts: ${artifacts}`); }

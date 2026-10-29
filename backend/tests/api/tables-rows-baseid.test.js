@@ -1,6 +1,7 @@
 // API v3: Table Rows - Update by base_id Tests
 // Bug fix: Support updating rows by base_id (string) not just numeric id
 import { describe, test, expect, beforeEach, afterEach, beforeAll } from 'vitest';
+import { NON_EXISTENT_ID } from '../helpers/sentinel-ids.js';
 import request from 'supertest';
 import express from 'express';
 import { dbAll, dbGet, dbRun, destroyAdapter, resetAdapter } from '../../database/connection.js';
@@ -124,7 +125,7 @@ describe('API v3: PUT /tables/:tableId/rows/:rowId - base_id support', () => {
 
   test('should return 404 for non-existent numeric id', async () => {
     const res = await request(app)
-      .put(`/api/v3/tables/${testTableId}/rows/999999`)
+      .put(`/api/v3/tables/${testTableId}/rows/${NON_EXISTENT_ID}`)
       .send({ data: { [testColumnId]: 'admin' } });
 
     expect(res.status).toBe(404);

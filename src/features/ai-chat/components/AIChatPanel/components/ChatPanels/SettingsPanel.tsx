@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useState } from 'react';
 import {
   Bot,
@@ -145,6 +146,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   isSavingSummaryAgent,
   onSummaryAgentChange,
 }) => {
+  const { t } = useLanguage();
   const hasAgentSettingsChanged = currentAgent && (
     chatOperatorId !== (currentAgent.provider_id || currentAgent.operator_id) ||
     chatModelId !== currentAgent.model ||
@@ -174,8 +176,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
           >
             <User className="w-3 h-3" />
-            Личное
-          </button>
+            {t('spaces.types.personal')}</button>
           <button
             onClick={() => setTopTab('admin')}
             className={cn(
@@ -186,8 +187,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
           >
             <Shield className="w-3 h-3" />
-            Админ
-          </button>
+            {t('spaces.types.admin')}</button>
         </div>
       )}
 
@@ -204,8 +204,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
           >
             <Bell className="w-3 h-3" />
-            Уведомл.
-          </button>
+            {t('aiChat.ui.notifications')}</button>
           <button
             onClick={() => setSettingsTab('ai')}
             className={cn(
@@ -228,8 +227,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
           >
             <Users className="w-3 h-3" />
-            Люди
-          </button>
+            {t('aiChat.contacts.filterHumans')}</button>
           <button
             onClick={() => setSettingsTab('widget')}
             className={cn(
@@ -240,8 +238,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
           >
             <Settings className="w-3 h-3" />
-            Вид
-          </button>
+            {t('tableToolbar.viewLabel')}</button>
         </div>
       ) : (
         <div className="flex border-b border-[var(--border-secondary)]">
@@ -255,8 +252,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
           >
             <Shield className="w-3 h-3" />
-            Пространство
-          </button>
+            {t('tables.create.space')}</button>
           {isAppOwner && (
             <button
               onClick={() => setAdminSubTab('global')}
@@ -268,8 +264,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               )}
             >
               <Globe2 className="w-3 h-3" />
-              Глобально
-            </button>
+              {t('aiChat.ui.global')}</button>
           )}
         </div>
       )}
@@ -284,7 +279,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               disabled={!isAdminOrOwner}
             />
           ) : adminSubTab === 'space' ? (
-            <div className="text-xs text-[var(--text-tertiary)]">Выберите пространство.</div>
+            <div className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.selectASpace')}</div>
           ) : null}
           {adminSubTab === 'global' && isAppOwner && <AdminGlobalNotifications />}
         </div>
@@ -312,16 +307,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-[var(--text-primary)] truncate">
-                {currentAgent?.name || 'Не выбран'}
+                {currentAgent?.name || t('aiChat.ui.notSelectedPlain')}
               </div>
-              <div className="text-[10px] text-[var(--text-tertiary)]">AI Агент</div>
+              <div className="text-[10px] text-[var(--text-tertiary)]">{t('aiChat.ui.aIAgent')}</div>
             </div>
           </div>
           {currentAgent && (
             <>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">Оператор</label>
+                  <label className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">{t('aiChat.ui.operator')}</label>
                   <select
                     value={chatOperatorId || ''}
                     onChange={(e) => {
@@ -331,21 +326,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                     disabled={!isAdminOrOwner}
                     className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-60"
                   >
-                    <option value="">— Выбрать —</option>
+                    <option value="">{t('aiChat.ui.select')}</option>
                     {operators.map(op => (
                       <option key={op.id} value={op.id}>{op.name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">Модель</label>
+                  <label className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">{t('aiChat.ui.model')}</label>
                   <select
                     value={chatModelId}
                     onChange={(e) => setChatModelId(e.target.value)}
                     disabled={!isAdminOrOwner || !chatOperatorId}
                     className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-60"
                   >
-                    <option value="">— Выбрать —</option>
+                    <option value="">{t('aiChat.ui.select')}</option>
                     {models.map((m: Model) => (
                       <option key={m.model_id || m.id} value={m.model_id}>{m.name || m.model_id}</option>
                     ))}
@@ -353,14 +348,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 </div>
               </div>
               <div>
-                <label className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">Системный промпт</label>
+                <label className="text-[10px] text-[var(--text-tertiary)] uppercase mb-1 block">{t('aiChat.ui.systemPrompt')}</label>
                 <textarea
                   value={chatSystemPrompt}
                   onChange={(e) => setChatSystemPrompt(e.target.value)}
                   readOnly={!isAdminOrOwner}
                   rows={4}
                   className="w-full px-2 py-1.5 text-xs rounded bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30 resize-none"
-                  placeholder="Системный промпт..."
+                  placeholder={t('aiChat.ui.systemPromptPlaceholder')}
                 />
               </div>
               {isAdminOrOwner && hasAgentSettingsChanged && (
@@ -374,8 +369,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   ) : (
                     <Save className="w-3.5 h-3.5" />
                   )}
-                  Сохранить в агента
-                </button>
+                  {t('aiChat.ui.saveToAgent')}</button>
               )}
             </>
           )}
@@ -386,8 +380,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               className="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Очистить AI историю
-            </button>
+              {t('aiChat.ui.clearAIHistory')}</button>
           </div>
           {/* Ticket #81439: SubAgentSelector removed — sub-agents invoked via /command */}
           {/* ADR-110: Context Settings */}
@@ -422,16 +415,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-[var(--text-primary)] truncate">
-                {chatPartner?.name || 'Не выбран'}
+                {chatPartner?.name || t('aiChat.ui.notSelectedPlain')}
               </div>
               <div className="text-[10px] text-[var(--text-tertiary)]">
-                {chatPartner?.email || 'Выберите контакт'}
+                {chatPartner?.email || t('aiChat.ui.selectAContact')}
               </div>
             </div>
           </div>
           <div className="p-3 rounded-lg bg-[var(--bg-tertiary)]">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-[var(--text-tertiary)]">Непрочитанных сообщений</span>
+              <span className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.unreadMessages')}</span>
               <span className={cn(
                 "px-2 py-0.5 rounded-full text-xs font-medium",
                 totalUnreadCount > 0 ? "bg-red-500/20 text-red-400" : "bg-gray-500/20 text-gray-400"
@@ -440,7 +433,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[var(--text-tertiary)]">Активных бесед</span>
+              <span className="text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.activeConversations')}</span>
               <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">
                 {inboxConversations.length}
               </span>
@@ -453,10 +446,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           >
             <Bell className="w-4 h-4 text-red-400 flex-shrink-0" />
             <div className="flex-1">
-              <div className="text-sm text-[var(--text-primary)]">Уведомления</div>
+              <div className="text-sm text-[var(--text-primary)]">{t('statusBar.notifications')}</div>
               <div className="text-[10px] text-[var(--text-tertiary)]">
-                Настроить звук, попапы и бейдж →
-              </div>
+                {t('aiChat.ui.configureSoundPopupsAndBadges')}</div>
             </div>
           </button>
           <div className="pt-2 border-t border-[var(--border-secondary)] space-y-1">
@@ -468,8 +460,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
             >
               <Users className="w-3.5 h-3.5" />
-              Открыть контакты
-            </button>
+              {t('aiChat.ui.openContacts')}</button>
             <button
               onClick={() => {
                 setChatMode('people');
@@ -479,8 +470,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]"
             >
               <Inbox className="w-3.5 h-3.5" />
-              Открыть входящие
-            </button>
+              {t('aiChat.ui.openInbox')}</button>
           </div>
         </div>
       )}
@@ -489,9 +479,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       {topTab === 'personal' && settingsTab === 'widget' && (
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
           <div>
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Источник тикетов</h4>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.ticketSource')}</h4>
             <p className="text-xs text-[var(--text-tertiary)] mb-2">
-              Настройка для спейса {currentSpace?.name ? `«${currentSpace.name}»` : ''}
+              {t('aiChat.ui.spaceSetting')}{' '}{currentSpace?.name ? `«${currentSpace.name}»` : ''}
             </p>
             {ticketsSource ? (
               <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)]">
@@ -503,8 +493,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   onClick={() => setTicketsSource(undefined)}
                   className="text-xs text-red-400 hover:underline"
                 >
-                  Удалить
-                </button>
+                  {t('aiChat.ui.delete')}</button>
               </div>
             ) : (
               <TicketsSourceInlineSelector
@@ -518,9 +507,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
           </div>
           <div>
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Источник файлов</h4>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.fileSource')}</h4>
             <p className="text-xs text-[var(--text-tertiary)] mb-2">
-              Таблица файлов для кнопки "+" в спейсе {currentSpace?.name ? `«${currentSpace.name}»` : ''}
+              {t('aiChat.ui.fileTableForTheButtonInThisSpace')}{' '}{currentSpace?.name ? `«${currentSpace.name}»` : ''}
             </p>
             {filesSource ? (
               <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)]">
@@ -532,8 +521,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   onClick={() => setFilesSource(undefined)}
                   className="text-xs text-red-400 hover:underline"
                 >
-                  Удалить
-                </button>
+                  {t('aiChat.ui.delete')}</button>
               </div>
             ) : (
               <FilesSourceInlineSelector
@@ -547,9 +535,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
           </div>
           <div className="pt-2 border-t border-[var(--border-secondary)]">
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Агент по умолчанию</h4>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.defaultAgent')}</h4>
             <p className="text-xs text-[var(--text-tertiary)] mb-2">
-              Автоматически выбирается при открытии чата в спейсе {currentSpace?.name ? `«${currentSpace.name}»` : ''}
+              {t('aiChat.ui.selectedAutomaticallyWhenOpeningAChatInThisSpace')}{' '}{currentSpace?.name ? `«${currentSpace.name}»` : ''}
             </p>
             <div className="flex items-center gap-2">
               <select
@@ -561,7 +549,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 disabled={isSavingDefaultAgent || !isAdminOrOwner}
                 className="flex-1 px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50"
               >
-                <option value="">— Не выбран —</option>
+                <option value="">{t('aiChat.ui.notSelected')}</option>
                 {agents.map(agent => (
                   <option key={agent.id} value={agent.id}>
                     {agent.icon || '🤖'} {agent.name}
@@ -584,18 +572,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             )}
             {!isAdminOrOwner && (
               <p className="mt-2 text-[10px] text-[var(--text-tertiary)] italic">
-                Только администраторы могут изменять эту настройку
-              </p>
+                {t('aiChat.ui.onlyAdministratorsCanChangeThisSetting')}</p>
             )}
           </div>
 
           {/* Summary Agent Selector */}
           {onSummaryAgentChange && (
           <div className="pt-2 border-t border-[var(--border-secondary)]">
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Summary Agent</h4>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.summaryAgent')}</h4>
             <p className="text-xs text-[var(--text-tertiary)] mb-2">
-              Агент для генерации сводок чата
-            </p>
+              {t('aiChat.ui.summaryAgentHint')}</p>
             <div className="flex items-center gap-2">
               <select
                 value={summaryAgentId || ''}
@@ -606,7 +592,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 disabled={isSavingSummaryAgent || !isAdminOrOwner}
                 className="flex-1 px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50"
               >
-                <option value="">По умолчанию (gpt-4o-mini)</option>
+                <option value="">{t('aiChat.ui.defaultSummaryModel')}</option>
                 {agents.map(agent => (
                   <option key={agent.id} value={agent.id}>
                     {agent.icon || '🤖'} {agent.name}
@@ -632,8 +618,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           {/* Quick Reaction Emojis */}
           <div className="pt-2 border-t border-[var(--border-secondary)]">
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Быстрые реакции</h4>
-            <p className="text-xs text-[var(--text-tertiary)] mb-3">До 10 эмодзи для быстрых реакций в чате</p>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.quickReactions')}</h4>
+            <p className="text-xs text-[var(--text-tertiary)] mb-3">{t('aiChat.ui.upTo10EmojiForQuickChatReactions')}</p>
             
             <div className="grid grid-cols-[repeat(auto-fill,minmax(32px,1fr))] gap-1.5 mb-3">
               {quickEmojis.map((emoji, index) => (
@@ -688,31 +674,28 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   ) : (
                     <Save className="w-3.5 h-3.5" />
                   )}
-                  Сохранить
-                </button>
+                  {t('aiChat.ui.save')}</button>
                 <button
                   onClick={() => setQuickEmojis(DEFAULT_QUICK_EMOJIS)}
                   className="px-3 py-2 rounded-lg text-xs bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] transition-colors"
                 >
-                  Сбросить
-                </button>
+                  {t('aiChat.ui.reset')}</button>
               </div>
             )}
             {!isAdminOrOwner && (
               <p className="text-[10px] text-[var(--text-tertiary)] italic">
-                Только администраторы могут изменять эмодзи
-              </p>
+                {t('aiChat.ui.onlyAdministratorsCanChangeEmoji')}</p>
             )}
           </div>
           
           {/* Voice Input Settings */}
           <div className="pt-2 border-t border-[var(--border-secondary)]">
-            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">Голосовой ввод</h4>
-            <p className="text-xs text-[var(--text-tertiary)] mb-3">Режим транскрипции голоса в текст</p>
+            <h4 className="text-xs font-medium text-[var(--text-tertiary)] uppercase mb-2">{t('aiChat.ui.voiceInput')}</h4>
+            <p className="text-xs text-[var(--text-tertiary)] mb-3">{t('aiChat.ui.voiceTranscriptionMode')}</p>
             
             <div className="space-y-2">
               <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
-                <input
+                <input aria-label="Web Speech API"
                   type="radio"
                   name="voiceMode"
                   value="webSpeech"
@@ -724,19 +707,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                   <div className="text-sm text-[var(--text-primary)] flex items-center gap-2">
                     Web Speech API
                     {webSpeechAvailable ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">Доступен</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">{t('aiChat.ui.available')}</span>
                     ) : (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Недоступен</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">{t('aiChat.ui.unavailable')}</span>
                     )}
                   </div>
                   <p className="text-[10px] text-[var(--text-tertiary)]">
-                    Бесплатно, быстро, работает в браузере
-                  </p>
+                    {t('aiChat.ui.freeFastRunsInTheBrowser')}</p>
                 </div>
               </label>
               
               <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--bg-tertiary)] cursor-pointer transition-colors">
-                <input
+                <input aria-label="OpenAI Whisper"
                   type="radio"
                   name="voiceMode"
                   value="whisper"
@@ -747,8 +729,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 <div className="flex-1">
                   <div className="text-sm text-[var(--text-primary)]">OpenAI Whisper</div>
                   <p className="text-[10px] text-[var(--text-tertiary)]">
-                    Высокое качество, поддержка 50+ языков, платный
-                  </p>
+                    {t('aiChat.ui.highQualitySupports50LanguagesPaid')}</p>
                 </div>
               </label>
             </div>
@@ -763,8 +744,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
           
           <div className="pt-2 border-t border-[var(--border-secondary)]">
             <p className="text-xs text-[var(--text-tertiary)]">
-              Нажмите 🎤 рядом с кнопкой отправки для голосового ввода
-            </p>
+              {t('aiChat.ui.pressNextToTheSendButtonToUseVoiceInput')}</p>
           </div>
         </div>
       )}

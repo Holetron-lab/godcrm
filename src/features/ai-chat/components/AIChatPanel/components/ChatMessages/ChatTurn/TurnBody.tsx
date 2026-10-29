@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useCallback } from 'react';
 import {
   Ban,
@@ -23,10 +25,11 @@ import { parseForwardedMessages } from '../../../../../utils/parseForwardedMessa
 import { ForwardedQuoteBlock } from '../ForwardedQuoteBlock';
 import type { ApprovalStatus } from '../ToolApprovalBubble';
 import { PlanWidget, type PlanTask } from '../PlanWidget';
-import type { Step, StepGroup, TurnBodyProps } from './types';
+import type { Step, StepGroup, TurnBodyProps, ToolStep, PlanStep } from './types';
 import { parseToolName, parseToolArgs, parseToolResult, formatResult } from './helpers';
 import { ToolStepsAccordion } from './ToolStepsAccordion';
 import { useStepGroups } from './useStepGroups';
+import { isMessageInStepGroup } from '../../../../../utils/groupMessagesIntoTurns';
 import { StepGroupsPanel } from './StepGroupsPanel';
 import { RowMutationBubbleStack } from './RowMutationBubble';
 import { CallBubble } from './CallBubble';
@@ -49,6 +52,7 @@ const MessageMarkdown = React.memo<{
 
   return (
     <MarkdownPreview
+      mediaLinks
       content={content}
       className={className}
       onCheckboxClick={onCheckboxClick ? handle : undefined}
@@ -57,19 +61,24 @@ const MessageMarkdown = React.memo<{
   );
 });
 
+MessageMarkdown.displayName = "MessageMarkdown";
+
 // ADR-185: shown in place of a message body while its translation into the
 // picked language is still in flight — so switching to a not-yet-cached
 // language never flashes back to the original text.
-const TranslationPendingLine: React.FC<{ langLabel: string }> = ({ langLabel }) => (
+const TranslationPendingLine: React.FC<{ langLabel: string }> = ({ langLabel }) => {
+  const { t, language } = useLanguage();
+  return (
   <div
     className="flex items-center gap-2 py-1 text-sm text-[var(--text-tertiary)]"
     role="status"
     aria-live="polite"
   >
     <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-primary-500)]" />
-    <span>Перевод на {langLabel}…</span>
+    <span>{t('aiChat.ui.translatingInto', { language: langLabel })}</span>
   </div>
-);
+  );
+};
 
 // ADR-0031 WP-20+21: collect every widget_embed attachment from a single
 // message. Author-agnostic — same code path for human (future Type A) and
@@ -94,6 +103,7 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
   translationOverride,
   pendingTranslation,
 }) => {
+  const { t, language } = useLanguage();
   if (messages.length === 0) return null;
 
   const renderHumanMessage = (message: ChatMessage, idx: number) => {
@@ -113,11 +123,19 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
     const isTranslationPending =
       !!pendingTranslation && String(message.id) === pendingTranslation.messageId;
 
+    const forwarded = !isTranslationPending && !message.content.includes('No API key configured')
+      ? parseForwardedMessages(message.content)
+      : [];
+    const audioAttachments = message.attachments?.filter(att => att.type.startsWith('audio/')) ?? [];
+    const audioPlayer = audioAttachments.length > 0
+      ? <ChatAttachmentRenderer attachments={audioAttachments} className="mb-2" />
+      : null;
+
     if (message.is_deleted) {
       return (
         <div key={message.id || idx} className="flex items-center gap-2 text-sm italic text-[var(--text-tertiary)]">
           <Ban className="w-4 h-4" />
-          <span>Сообщение удалено</span>
+          <span>{t('aiChat.ui.messageDeleted')}</span>
         </div>
       );
     }
@@ -128,15 +146,16 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
           <div className="flex justify-end pr-1 my-1 group/divider cursor-default">
             <div className="w-8 h-px bg-[var(--border-secondary)]" />
             <span className="absolute right-2 text-[9px] text-[var(--text-tertiary)] opacity-0 group-hover/divider:opacity-100 transition-opacity bg-[var(--bg-secondary)] px-1">
-              {((message as any).created_at || message.timestamp) ? new Date(((message as any).created_at || message.timestamp)!).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : ''}
+              {((message as any).created_at || message.timestamp) ? new Date(((message as any).created_at || message.timestamp)!).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' }) : ''}
             </span>
           </div>
         )}
         {onForward && (
-          <button onClick={() => onForward(message)} className="absolute right-0 top-0 w-5 h-5 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/10 transition-all opacity-0 group-hover/msg:opacity-100 z-10" title="Переслать">
+          <button onClick={() => onForward(message)} className="absolute right-0 top-0 w-5 h-5 rounded flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)] hover:bg-[var(--color-primary-500)]/10 transition-all opacity-0 group-hover/msg:opacity-100 z-10" title={t('aiChat.ui.forward')}>
             <Forward className="w-3 h-3" />
           </button>
         )}
+        {forwarded.length === 0 && audioPlayer}
         {isTranslationPending ? (
           <TranslationPendingLine langLabel={pendingTranslation!.langLabel} />
         ) : message.content ? (
@@ -144,15 +163,13 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-2 text-red-400">
                 <Key className="w-4 h-4" />
-                <span className="text-sm">API ключ не настроен</span>
+                <span className="text-sm">{t('aiChat.ui.aPIKeyIsNotConfigured')}</span>
               </div>
-              <a href="/tables/232" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-xs font-medium transition-colors">
+              <Link to="/tables/232" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-xs font-medium transition-colors">
                 <ExternalLink className="w-3 h-3" />
-                Открыть таблицу API Keys
-              </a>
+                {t('aiChat.ui.openTheAPIKeysTable')}</Link>
             </div>
           ) : (() => {
-            const forwarded = parseForwardedMessages(message.content);
             if (forwarded.length > 0) {
               // Extract user text after forwarded blocks
               const lines = message.content.split('\n');
@@ -175,7 +192,9 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
                       messageId={fw.messageId || undefined}
                       agentColor={fw.agentColor || undefined}
                       currentConversationId={conversationId}
-                    />
+                    >
+                      {i === 0 && audioPlayer}
+                    </ForwardedQuoteBlock>
                   ))}
                   {userText && (
                     markdownEnabled ? (
@@ -212,7 +231,7 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
           const atts = message.attachments;
           if (!atts || atts.length === 0) return null;
           const embeds = extractWidgetEmbeds(message);
-          const rest = atts.filter(a => !isWidgetEmbedAttachment(a));
+          const rest = atts.filter(a => !isWidgetEmbedAttachment(a) && !a.type.startsWith('audio/'));
           return (
             <>
               {rest.length > 0 && (
@@ -238,6 +257,7 @@ const HumanTurnBody: React.FC<TurnBodyProps> = ({
 // ─── Agent Turn ───────────────────────────────────────────────────────────────
 const AgentTurnBody: React.FC<TurnBodyProps> = ({
   messages,
+  planMessage,
   turnType,
   markdownEnabled,
   isProcessing,
@@ -259,6 +279,7 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
   translationOverride,
   pendingTranslation,
 }) => {
+  const { t, language } = useLanguage();
   const sg = useStepGroups(messages, {
     isProcessing: !!isProcessing,
     isLastTurn: !hasMoreSegments,
@@ -285,6 +306,9 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
     if (ct === 'row_mutation' || ct === 'moved') {
       continue; // handled separately below
     }
+
+    // Retained lazy groups render their own steps; only parse uncovered polling rows.
+    if (sg.allStepGroups.some(group => group._ranges.some(range => isMessageInStepGroup(msg, range)))) continue;
 
     if (ct === 'thinking') {
       steps.push({ kind: 'thinking', content: msg.content });
@@ -366,25 +390,21 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
 
   const totalToolCount = toolCount || legacyToolResults.length;
 
-  if (finalText?.is_deleted) {
-    return (
-      <>
-        {totalToolCount > 0 && (
-          <ToolStepsAccordion steps={steps} totalToolCount={totalToolCount} terminalSessionId={terminalSessionId} onOpenTerminal={onOpenTerminal} conversationId={conversationId} onToolApprove={onToolApprove} onToolReject={onToolReject} />
-        )}
-        <div className="flex items-center gap-2 text-sm italic text-[var(--text-tertiary)]">
-          <Ban className="w-4 h-4" /><span>Сообщение удалено</span>
-        </div>
-      </>
-    );
-  }
-
   const inlineSpecialSteps = steps.filter(s => s.kind === 'tool_approval');
   const hasInlineSpecialSteps = inlineSpecialSteps.length > 0;
 
   // Extract latest plan for always-visible rendering above stop button
   const latestPlanTasks: PlanTask[] = (() => {
-    const planSteps = steps.filter(s => s.kind === 'plan' && s.tasks);
+    if (planMessage !== undefined) {
+      if (!planMessage) return [];
+      try {
+        const data: { tasks?: PlanTask[] } = JSON.parse(planMessage.content);
+        return Array.isArray(data.tasks) ? data.tasks : [];
+      } catch {
+        return [];
+      }
+    }
+    const planSteps = steps.filter((s): s is PlanStep => s.kind === 'plan');
     if (planSteps.length === 0) return [];
     return planSteps[planSteps.length - 1].tasks!;
   })();
@@ -416,7 +436,7 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
     return null;
   })();
 
-  const stepCount = totalToolCount || toolCount || sg.allStepGroups.reduce((s, g) => s + g.count, 0) || steps.length;
+  const stepCount = sg.totalHiddenSteps + (totalToolCount || steps.length);
   const hasAnySteps = stepCount > 0 || sg.allStepGroups.length > 0;
   const isInterrupted = hasMoreSegments && !isProcessing && turnType === 'agent';
   // Detect incomplete turn: agent did work but stopped without final text and no continuation
@@ -428,7 +448,7 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
   React.useEffect(() => {
     if (!isProcessing || !hasAnySteps) { setStalledMinutes(0); return; }
     const lastMsg = messages[messages.length - 1];
-    const lastTime = lastMsg?.createdAt ? new Date(lastMsg.createdAt).getTime() : 0;
+    const lastTime = lastMsg?.timestamp ? new Date(lastMsg.timestamp).getTime() : 0;
     if (!lastTime) { setStalledMinutes(0); return; }
     const check = () => {
       const mins = Math.floor((Date.now() - lastTime) / 60000);
@@ -461,6 +481,21 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
     return () => clearTimeout(t);
   }, [isStartingHint]);
 
+  if (finalText?.is_deleted) {
+    return (
+      <>
+        {totalToolCount > 0 && (
+          <ToolStepsAccordion steps={steps} totalToolCount={totalToolCount} terminalSessionId={terminalSessionId} onOpenTerminal={onOpenTerminal} conversationId={conversationId} onToolApprove={onToolApprove} onToolReject={onToolReject} />
+        )}
+        <div className="flex items-center gap-2 text-sm italic text-[var(--text-tertiary)]">
+          <Ban className="w-4 h-4" /><span>{t('aiChat.ui.messageDeleted')}</span>
+        </div>
+      </>
+    );
+  }
+
+
+
   return (
     <>
       {/* ADR-0031 P2: row-mutation system events render above agent content */}
@@ -471,7 +506,7 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
       {showStartingHint && (
         <div className="flex items-center gap-2 py-2 text-xs text-[var(--text-tertiary)]">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--color-primary-500)]" />
-          <span>Агент запускается...</span>
+          <span>{t('aiChat.ui.agentIsStarting')}</span>
         </div>
       )}
 
@@ -487,10 +522,10 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
               <button onClick={() => sg.setMasterExpanded(prev => !prev)} className="flex items-center gap-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors cursor-pointer max-w-full">
                 {sg.masterExpanded ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />}
                 <Zap className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                <span className="flex-shrink-0">{stepCount} шагов</span>
+                <span className="flex-shrink-0">{t('aiChat.ui.stepCount', { count: stepCount })}</span>
                 {isProcessing && !stalledMinutes && <Loader2 className="w-3 h-3 animate-spin text-[var(--color-primary-500)] flex-shrink-0" />}
                 {isProcessing && stalledMinutes > 0 && <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0" />}
-                {isProcessing && stalledMinutes > 0 && <span className="text-amber-400 flex-shrink-0">без активности {stalledMinutes} мин</span>}
+                {isProcessing && stalledMinutes > 0 && <span className="text-amber-400 flex-shrink-0">{t('aiChat.ui.stalledMinutes', { count: stalledMinutes })}</span>}
                 {collapsedPreview && <span className="truncate opacity-60 text-[11px] ml-1">— {collapsedPreview}</span>}
               </button>
             );
@@ -506,6 +541,7 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
             masterExpanded={sg.masterExpanded}
             expandedGroups={sg.expandedGroups}
             loadingGroups={sg.loadingGroups}
+            failedGroups={sg.failedGroups}
             loadedGroupSteps={sg.loadedGroupSteps}
             loadedGroupToolCounts={sg.loadedGroupToolCounts}
             loadedGroupTerminals={sg.loadedGroupTerminals}
@@ -528,10 +564,10 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
         <ToolStepsAccordion steps={inlineSpecialSteps} totalToolCount={0} onOpenTerminal={onOpenTerminal} markdownEnabled={markdownEnabled} conversationId={conversationId} onToolApprove={onToolApprove} onToolReject={onToolReject} fetchFullMessage={fetchFullMessage} />
       )}
 
-      {/* Inline steps — only when NO step groups exist (avoid duplication with StepGroupsPanel) */}
-      {(shouldRenderInlineSteps || steps.some(s => s.kind === 'thinking')) && sg.allStepGroups.length === 0 && sg.masterExpanded && (
+      {/* Polling steps outside the retained history groups remain visible. */}
+      {(shouldRenderInlineSteps || steps.some(s => s.kind === 'thinking')) && sg.masterExpanded && (
         <>
-          <ToolStepsAccordion steps={steps} totalToolCount={totalToolCount} terminalSessionId={terminalSessionId} onOpenTerminal={onOpenTerminal} markdownEnabled={markdownEnabled} conversationId={conversationId} onToolApprove={onToolApprove} onToolReject={onToolReject} fetchFullMessage={fetchFullMessage} />
+          <ToolStepsAccordion steps={steps.filter(step => step.kind !== 'plan')} totalToolCount={totalToolCount} terminalSessionId={terminalSessionId} onOpenTerminal={onOpenTerminal} markdownEnabled={markdownEnabled} conversationId={conversationId} onToolApprove={onToolApprove} onToolReject={onToolReject} fetchFullMessage={fetchFullMessage} />
           {isProcessing && lastToolName && !steps.some(s => s.kind === 'tool' && s.toolName === lastToolName && s.result !== undefined) && (
             <div className="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] mt-1.5 pl-2">
               <Wrench className="w-3.5 h-3.5 flex-shrink-0" />
@@ -558,8 +594,8 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
         <div data-message-id={finalText.id} className="text-sm text-[var(--text-primary)] break-words">
           {finalText.content.includes('No API key configured') ? (
             <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-red-400"><Key className="w-4 h-4" /><span className="text-sm">API ключ не настроен</span></div>
-              <a href="/tables/232" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-xs font-medium transition-colors"><ExternalLink className="w-3 h-3" />Открыть таблицу API Keys</a>
+              <div className="flex items-center gap-2 text-red-400"><Key className="w-4 h-4" /><span className="text-sm">{t('aiChat.ui.aPIKeyIsNotConfigured')}</span></div>
+              <Link to="/tables/232" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-xs font-medium transition-colors"><ExternalLink className="w-3 h-3" />{t('aiChat.ui.openTheAPIKeysTable')}</Link>
             </div>
           ) : markdownEnabled ? (
             <MessageMarkdown content={finalDisplayContent} message={finalText} onCheckboxClick={onCheckboxClick} onForward={onForward} currentUser={currentUser} />
@@ -572,7 +608,7 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
       ) : finalText && !finalText.content && !isProcessing && !(finalText.attachments?.some(isWidgetEmbedAttachment)) ? (
         // ADR-0031 WP-20+21 (T-141238): suppress "no text response" when the
         // message intentionally carries only a widget_embed attachment.
-        <div className="text-sm text-[var(--text-tertiary)] italic">(No text response)</div>
+        <div className="text-sm text-[var(--text-tertiary)] italic">{t('aiChat.ui.noTextResponse')}</div>
       ) : null}
 
       {(() => {
@@ -604,8 +640,8 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
         <div className="mt-2 pt-2 border-t border-[var(--border-primary)]">
           <div className="flex items-center gap-1 text-xs text-[var(--text-tertiary)] mb-1">
             <Wrench className="w-3 h-3" />
-            <span>Использовано {messages[0].toolResults.length} инструментов</span>
-            {messages[0].iterations && <span className="ml-1">({messages[0].iterations} итераций)</span>}
+            <span>{t('aiChat.ui.toolsUsedCount', { count: messages[0].toolResults.length })}</span>
+            {messages[0].iterations && <span className="ml-1">({t('aiChat.ui.iterationCount', { count: messages[0].iterations })})</span>}
           </div>
           <div className="space-y-1">
             {messages[0].toolResults.map((tr: { tool: string; args?: unknown; result?: unknown }, idx: number) => (
@@ -622,20 +658,13 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
         </div>
       )}
 
-      {/* Plan widget — only show when steps are collapsed (inside accordion when expanded) */}
-      {latestPlanTasks.length > 0 && !sg.masterExpanded && (
-        <div className="mt-2">
-          <PlanWidget tasks={latestPlanTasks} />
-        </div>
-      )}
-
       {/* WP-5: Agent invocation banner — shown when thinking contains <<@slug>> */}
       {invokedAgents && invokedAgents.length > 0 && (
         <div className="mt-2 pt-2 border-t border-dashed border-blue-500/30">
           <div className="flex items-center gap-2 text-xs">
             <AtSign className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
             <span className="text-blue-400">
-              Вызов: {invokedAgents.map((slug: string) => (
+              {t('aiChat.ui.invocationLabel')}{' '}{invokedAgents.map((slug: string) => (
                 <span key={slug} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 font-medium ml-1">
                   @{slug}
                 </span>
@@ -656,7 +685,7 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
           {toolsAfterLastThinking.length > 0 && (
             <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)] mt-1">
               <Wrench className="w-3 h-3 opacity-50" />
-              <span>+{toolsAfterLastThinking.length} инструментов после reasoning</span>
+              <span>{t('aiChat.ui.toolsAfterThinking', { count: toolsAfterLastThinking.length })}</span>
             </div>
           )}
         </div>
@@ -678,6 +707,12 @@ const AgentTurnBody: React.FC<TurnBodyProps> = ({
       {!isProcessing && !finalText && messages.length === 1 && messages[0].role === 'assistant' && !messages[0].content && messages[0].isStreaming && (
         <div className="flex items-center gap-1.5">
           {[0, 150, 300].map(d => <span key={d} className="w-2 h-2 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
+        </div>
+      )}
+      {/* Keep the latest plan immediately above the turn actions, even with expanded steps. */}
+      {latestPlanTasks.length > 0 && (
+        <div className="mt-2">
+          <PlanWidget tasks={latestPlanTasks} />
         </div>
       )}
     </>

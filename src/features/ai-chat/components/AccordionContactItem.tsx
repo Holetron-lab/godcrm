@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * AccordionContactItem - TASK-043
  *
@@ -80,6 +81,7 @@ export function AccordionContactItem({
   onAddToGroup,
   onCreateNewChat,
 }: AccordionContactItemProps) {
+  const { t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const isAgent = user.managed_by_agent_table_id != null || user.user_type === 'agent';
   const isService = user.user_type === 'service';
@@ -101,7 +103,7 @@ export function AccordionContactItem({
     setIsExpanded(!isExpanded);
   };
 
-  const typeLabel = isAgent ? 'Агент' : isService ? 'Сервис' : 'Человек';
+  const typeLabel = isAgent ? t('aiChat.ui.agent') : isService ? t('aiChat.ui.service') : t('aiChat.ui.person');
   const typeColorClass = isAgent
     ? 'bg-purple-500/20 text-purple-400'
     : isService
@@ -127,7 +129,7 @@ export function AccordionContactItem({
             type="button"
             onClick={() => onCreateNewChat(user)}
             className="relative flex-shrink-0"
-            title="Новый чат"
+            title={t('aiChat.ui.newChat')}
           >
             <Avatar
               url={user.avatar_url}
@@ -154,10 +156,10 @@ export function AccordionContactItem({
               <span className="text-sm font-medium text-[var(--text-primary)] truncate select-text cursor-text">{user.name}</span>
               <span className="text-[10px] font-normal text-[var(--text-tertiary)] flex-shrink-0 select-text cursor-text">(#{user.id})</span>
               {isCurrentPartner && (
-                <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--color-primary-500)]/30 text-[var(--color-primary-400)] flex-shrink-0">текущий</span>
+                <span className="text-[8px] px-1 py-0.5 rounded bg-[var(--color-primary-500)]/30 text-[var(--color-primary-400)] flex-shrink-0">{t('aiChat.ui.current')}</span>
               )}
               {isInGroup && !isCurrentPartner && (
-                <span className="text-[8px] px-1 py-0.5 rounded bg-green-500/20 text-green-400 flex-shrink-0">в группе</span>
+                <span className="text-[8px] px-1 py-0.5 rounded bg-green-500/20 text-green-400 flex-shrink-0">{t('aiChat.ui.inTheGroup')}</span>
               )}
             </div>
 
@@ -181,7 +183,7 @@ export function AccordionContactItem({
               <div className="flex items-center gap-px flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
                 <RowToolbarBtn
                   icon={<MessageSquarePlus className="w-3 h-3" />}
-                  title="Новый чат"
+                  title={t('aiChat.ui.newChat')}
                   onClick={() => onCreateNewChat(user)}
                 />
                 <button
@@ -191,7 +193,7 @@ export function AccordionContactItem({
                     'inline-flex items-center justify-center gap-0.5 h-5 px-1 rounded text-[var(--text-secondary)] hover:text-[var(--color-primary-400)] hover:bg-[var(--bg-secondary)] transition-colors',
                     isExpanded && 'bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]'
                   )}
-                  title={isExpanded ? 'Свернуть чаты' : 'Показать чаты'}
+                  title={isExpanded ? t('aiChat.ui.collapseChats') : t('aiChat.ui.showChats')}
                 >
                   {isLoadingChats ? <Loader2 className="w-3 h-3 animate-spin" /> : (
                     <>
@@ -202,14 +204,14 @@ export function AccordionContactItem({
                 </button>
                 <RowToolbarBtn
                   icon={<Star className={cn('w-3 h-3', isFavorite && 'fill-current')} />}
-                  title={isFavorite ? 'Убрать из избранного' : 'В избранное'}
+                  title={isFavorite ? t('aiChat.ui.removeFromFavorites') : t('aiChat.ui.addToFavorites')}
                   onClick={() => onToggleFavorite(user.id)}
                   active={isFavorite}
                   activeClass="text-yellow-400"
                 />
                 <RowToolbarBtn
                   icon={isInGroup ? <UserMinus className="w-3 h-3" /> : <UserPlus className="w-3 h-3" />}
-                  title={isInGroup ? 'Убрать из группы' : 'Добавить в группу'}
+                  title={isInGroup ? t('aiChat.ui.removeFromGroup') : t('aiChat.ui.addToGroup')}
                   onClick={() => onAddToGroup(user)}
                   active={isInGroup}
                   activeClass="text-red-400 hover:bg-red-500/20"
@@ -228,14 +230,14 @@ export function AccordionContactItem({
               <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" />
             </div>
           ) : chatCount === 0 ? (
-            <div className="px-4 py-3 text-xs text-[var(--text-tertiary)] text-center">Нет общих чатов</div>
+            <div className="px-4 py-3 text-xs text-[var(--text-tertiary)] text-center">{t('aiChat.ui.noSharedChats')}</div>
           ) : (
             sharedChats!.map(chat => (
               <button key={chat.id} onClick={() => onSelectChat(chat)}
                 className="w-full flex items-center gap-2 px-3 py-2 pl-14 hover:bg-[var(--bg-secondary)] transition-colors text-left">
                 <MessageSquare className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                <span className="flex-1 text-xs text-[var(--text-secondary)] truncate">{chat.title || `Чат #${chat.id}`}</span>
-                <span className="text-[9px] text-[var(--text-tertiary)] tabular-nums">{chat.messages_count} сообщ.</span>
+                <span className="flex-1 text-xs text-[var(--text-secondary)] truncate">{chat.title || t('aiChat.ui.chatNumber', { id: chat.id })}</span>
+                <span className="text-[9px] text-[var(--text-tertiary)] tabular-nums">{t('aiChat.ui.messageCount', { count: chat.messages_count })}</span>
                 <span className="text-[9px] text-[var(--text-tertiary)]">
                   {chat.last_message_at ? new Date(chat.last_message_at).toLocaleDateString() : new Date(chat.updated_at).toLocaleDateString()}
                 </span>

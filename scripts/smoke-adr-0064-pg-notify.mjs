@@ -22,7 +22,7 @@ function makeClient() {
     port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
     database: process.env.POSTGRES_DB,
     user: process.env.POSTGRES_USER || 'godcrm',
-    password: process.env.POSTGRES_PASSWORD || 'godcrm_dev_2026',
+    password: process.env.POSTGRES_PASSWORD || 'CHANGE_ME_LOCAL_DB_PASSWORD',
   });
 }
 

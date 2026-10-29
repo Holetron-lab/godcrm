@@ -1,5 +1,7 @@
 import { apiClient } from '@/shared/utils/apiClient';
 import { logger } from '@/shared/utils/logger';
+import { normalizeColumnOptions } from '../utils/normalizeColumnOptions';
+import type { RelationsMap } from '../utils/resolveLens';
 import {
   ColumnModel,
   CreateTablePayload,
@@ -9,6 +11,14 @@ import {
   DatabaseMapping
 } from '../types/table.types';
 
+/** `relations_meta[column_name]` of GET /rows?include=relations (ADR-205 D2). */
+export interface RelationsMeta {
+  resolved: number;
+  missing: number;
+  truncated: boolean;
+  unsupported?: boolean;
+}
+
 interface RowsResponse {
   rows: RowModel[];
   pagination: {
@@ -17,6 +27,14 @@ interface RowsResponse {
     total: number;
     pages: number;
   };
+  /** Present only when the request carried `include=relations` (ADR-205 D2). */
+  relations?: RelationsMap;
+  relations_meta?: Record<string, RelationsMeta>;
+}
+
+interface GetRowsOptions {
+  /** Ask the server for the relation lens map alongside the page (ADR-205 D2). */
+  includeRelations?: boolean;
 }
 
 const unwrap = async <T>(promise: Promise<{ data: T }>) => {
@@ -110,7 +128,7 @@ const transformTable = (table: BackendTable): TableModel => ({
 
 // Transform column from backend to frontend format
 const transformColumn = (col: BackendColumn): ColumnModel => {
-  let config = {};
+  let config: ColumnModel['config'] = {};
   if (col.config) {
     if (typeof col.config === 'string') {
       try {
@@ -121,6 +139,10 @@ const transformColumn = (col: BackendColumn): ColumnModel => {
     } else {
       config = col.config;
     }
+  }
+
+  if (Array.isArray(config?.options)) {
+    config = { ...config, options: normalizeColumnOptions(config.options) };
   }
   
   // Parse mapping if needed
@@ -178,11 +200,13 @@ export const tablesApi = {
     limit: number = 50, 
     rawMode: boolean = false,
     sortColumn?: string | null,
-    sortDirection?: 'asc' | 'desc' | null
+    sortDirection?: 'asc' | 'desc' | null,
+    options: GetRowsOptions = {}
   ) => {
     const modeParam = rawMode ? '&mode=raw' : '';
     const sortParams = sortColumn && sortDirection ? `&sortColumn=${sortColumn}&sortDirection=${sortDirection}` : '';
-    const response = await unwrap<RowsResponse>(apiClient.request<{ data: RowsResponse }>(`/tables/${tableId}/rows?page=${page}&limit=${limit}${modeParam}${sortParams}`));
+    const includeParam = options.includeRelations ? '&include=relations' : '';
+    const response = await unwrap<RowsResponse>(apiClient.request<{ data: RowsResponse }>(`/tables/${tableId}/rows?page=${page}&limit=${limit}${modeParam}${sortParams}${includeParam}`));
     
     // Deduplicate rows immediately after receiving from API
     const seen = new Set<string>();
@@ -201,7 +225,7 @@ export const tablesApi = {
       rows: uniqueRows
     };
   },
-  getRow: async (tableId: string, rowId: string) => {
+  getRow: async (tableId: string, rowId: string, options: GetRowsOptions = {}) => {
     const token = apiClient.getAccessToken();
     const headers: HeadersInit = {
       'Content-Type': 'application/json'
@@ -210,7 +234,8 @@ export const tablesApi = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`/api/v3/tables/${tableId}/rows/${rowId}`, {
+    const includeParam = options.includeRelations ? '?include=relations' : '';
+    const response = await fetch(`/api/v3/tables/${tableId}/rows/${rowId}${includeParam}`, {
       method: 'GET',
       headers,
       credentials: 'include'
@@ -344,6 +369,7 @@ export const tablesApi = {
     // Transform camelCase → snake_case for backend
     const backendPayload: Record<string, unknown> = {};
     
+    if (payload.name !== undefined) backendPayload.column_name = payload.name;
     if (payload.displayName !== undefined) backendPayload.display_name = payload.displayName;
     if (payload.type !== undefined) backendPayload.column_type = payload.type;
     if (payload.isVisible !== undefined) backendPayload.is_visible = payload.isVisible;
@@ -419,7 +445,7 @@ export const tablesApi = {
     return result.data;
   },
 
-  async updateTable(tableId: string, data: { name?: string; displayName?: string; icon?: string | null; color?: string | null; description?: string; access_control?: object; show_in_nav?: boolean; comment?: string; min_row_height?: number; max_row_height?: number; fixed_row_height?: number | null; is_public?: boolean }): Promise<TableModel> {
+  async updateTable(tableId: string, data: { name?: string; displayName?: string; icon?: string | null; color?: string | null; description?: string; access_control?: object; show_in_nav?: boolean; privacy?: TableConfig['privacy']; comment?: string; min_row_height?: number; max_row_height?: number; fixed_row_height?: number | null; is_public?: boolean }): Promise<TableModel> {
     const token = apiClient.getAccessToken();
     const headers: HeadersInit = {
       'Content-Type': 'application/json'
@@ -490,15 +516,22 @@ export const tablesApi = {
     
   },
 
+  // With `importId` the backend runs the retry-safe atomic mode
+  // (backend/services/README.excel-import.md): send only importId/mode/rows.
   async importRows(
-    tableId: string, 
+    tableId: string,
     data: {
       rows: Record<string, unknown>[];
       mode: 'add' | 'update';
-      idMapping: { csvColumn: string; tableColumn: string } | null;
-      addNewIds: boolean;
+      idMapping?: { csvColumn: string; tableColumn: string } | null;
+      addNewIds?: boolean;
+      importId?: string;
     }
-  ): Promise<{ stats: { added: number; updated: number; skipped: number; errors: Array<{ row: number; error: string }> } }> {
+  ): Promise<{
+    stats: { added: number; updated: number; skipped: number; errors: Array<{ row: number; error: string }> };
+    imported?: number;
+    replayed?: boolean;
+  }> {
     const token = apiClient.getAccessToken();
     const headers: HeadersInit = {
       'Content-Type': 'application/json'

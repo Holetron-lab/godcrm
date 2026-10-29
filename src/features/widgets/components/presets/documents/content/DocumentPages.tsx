@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 import { useState, useRef, useEffect } from 'react';
 import { FileText, Loader2, Edit3, Check, Scissors, MessageCircle, Paperclip } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
@@ -46,6 +47,7 @@ export function DocumentPages({ items, document, renderItemContent, afterHeader 
 
   // Document header editing state
   const [editingHeader, setEditingHeader] = useState(false);
+  const requestedFocusRef = useRequestedFocus<HTMLInputElement>(editingHeader);
   const [editDocName, setEditDocName] = useState('');
   const [editDocDescription, setEditDocDescription] = useState('');
   const [isSavingHeader, setIsSavingHeader] = useState(false);
@@ -358,7 +360,7 @@ export function DocumentPages({ items, document, renderItemContent, afterHeader 
                           className="w-full px-2 py-1 font-bold text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 border border-blue-500 rounded outline-none"
                           style={{ fontSize: `${contentFontSize * 1.6}px` }}
                           placeholder="Название документа"
-                          autoFocus
+                          ref={requestedFocusRef}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                               e.preventDefault();
@@ -403,7 +405,7 @@ export function DocumentPages({ items, document, renderItemContent, afterHeader 
                   ) : (
                     /* Display mode - clickable to edit */
                     <div className="group rounded-lg -m-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                      <div
+                      <div role="presentation"
                         className="flex items-center gap-3 cursor-pointer"
                         onClick={startEditingHeader}
                         title="Нажмите чтобы редактировать"
@@ -414,7 +416,7 @@ export function DocumentPages({ items, document, renderItemContent, afterHeader 
                             className="font-bold text-gray-900 dark:text-gray-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors"
                             style={{ fontSize: `${contentFontSize * 1.6}px` }}
                           >
-                            {document.name}
+                            <button type="button" className="text-left">{document.name}</button>
                           </h1>
                           <div className="flex items-center gap-2" style={{ marginTop: '2px' }}>
                             {document.description ? (
@@ -479,7 +481,7 @@ export function DocumentPages({ items, document, renderItemContent, afterHeader 
                 <div
                   className="mb-3 flex flex-wrap items-center gap-y-2 text-gray-600 dark:text-gray-300 flex-shrink-0"
                   style={{ fontSize: `${contentFontSize * 1.1}px`, columnGap: `${contentFontSize * 2.5}px` }}
-                  onClick={(e) => e.stopPropagation()}
+
                 >
                   <span className="inline-flex items-center gap-2">
                     <span className="font-semibold tracking-wide">Status:</span>

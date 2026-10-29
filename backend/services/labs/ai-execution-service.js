@@ -22,6 +22,8 @@ export {
   // CLI Providers
   executeClaudeCode,
   executeCopilotCli,
+  executeCodexCli,
+  executeKimiCli,
   // Data Helpers
   getAgentDetails,
   getOperatorDetails,

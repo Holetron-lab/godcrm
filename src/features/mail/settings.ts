@@ -29,13 +29,26 @@ export interface MailSettings {
   typeIndicators: boolean;
   /** Per-type indicator colors (any CSS color). */
   typeColors: MailTypeColors;
+  /**
+   * Reading-pane body surface. Mail HTML is authored for a white page, so `light`
+   * renders it on one regardless of the app theme; `dark` forces a dark surface and
+   * neutralises the message's own colors so it stays readable. Toggled from the
+   * read toolbar, persisted like every other mail preference.
+   */
+  bodyTheme: MailBodyTheme;
+  /** Group the list into conversation threads (rail toggle under Мультивыбор). */
+  threads: boolean;
 }
+
+export type MailBodyTheme = 'light' | 'dark';
 
 export const DEFAULT_MAIL_SETTINGS: MailSettings = {
   hoverActions: true,
   showSnippets: true,
   hotkeys: true,
   typeIndicators: true,
+  bodyTheme: 'light',
+  threads: false,
   typeColors: {
     incoming: '#22c55e', // green — received
     outgoing: '#3b82f6', // blue — sent/drafts
@@ -51,12 +64,6 @@ export function messageType(folder: MailFolderId): MailMessageType {
   if (isOutgoingFolder(folder)) return 'outgoing';
   return 'incoming';
 }
-
-export const MAIL_TYPE_LABELS: Record<MailMessageType, string> = {
-  incoming: 'Входящее',
-  outgoing: 'Исходящее',
-  archive: 'Архив',
-};
 
 /** Read settings from localStorage, merged over defaults so new keys stay populated. */
 export function loadMailSettings(): MailSettings {

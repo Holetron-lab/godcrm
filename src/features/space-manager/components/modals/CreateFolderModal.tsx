@@ -2,7 +2,7 @@
  * CreateFolderModal - Modal for creating a new folder
  */
 
-import { useState, useMemo } from 'react';
+import { useId, useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Modal } from '@/shared/components/ui/Modal';
 import { Input } from '@/shared/components/ui/Input';
@@ -22,6 +22,7 @@ interface CreateFolderModalProps {
 const FOLDER_ICONS = ['📁', '📂', '🗂️', '📋', '📑', '📊', '📈', '📉', '🗃️', '📦'];
 
 export const CreateFolderModal = ({ spaceId, tree, onSuccess }: CreateFolderModalProps) => {
+  const fieldId = useId();
   const queryClient = useQueryClient();
   const { 
     createFolderModalOpen, 
@@ -114,10 +115,10 @@ export const CreateFolderModal = ({ spaceId, tree, onSuccess }: CreateFolderModa
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Project Selection */}
         <div>
-          <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+          <label htmlFor={`${fieldId}-0`} className="block text-sm font-medium text-[var(--text-primary)] mb-2">
             Project
           </label>
-          <select
+          <select id={`${fieldId}-0`}
             value={selectedProjectId ?? ''}
             onChange={(e) => setSelectedProjectId(e.target.value ? parseInt(e.target.value) : null)}
             className="
@@ -140,10 +141,10 @@ export const CreateFolderModal = ({ spaceId, tree, onSuccess }: CreateFolderModa
         </div>
         
         {/* Icon */}
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+        <div role="group" aria-labelledby={`${fieldId}-group-145`}>
+          <span id={`${fieldId}-group-145`} className="block text-sm font-medium text-[var(--text-primary)] mb-2">
             Icon
-          </label>
+          </span>
           <div className="flex flex-wrap gap-1">
             {FOLDER_ICONS.map(emoji => (
               <button
@@ -166,14 +167,13 @@ export const CreateFolderModal = ({ spaceId, tree, onSuccess }: CreateFolderModa
         
         {/* Name */}
         <div>
-          <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+          <label htmlFor={`${fieldId}-1`} className="block text-sm font-medium text-[var(--text-primary)] mb-2">
             Name
           </label>
-          <Input
+          <Input id={`${fieldId}-1`}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Folder name"
-            autoFocus
           />
         </div>
         

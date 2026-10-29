@@ -234,6 +234,7 @@ async function runSQLiteMigration() {
     
     console.log(`✅ Added column: ${column.column_name}`);
   }
+  }
 }
 
 export default { runMigration };

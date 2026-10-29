@@ -227,8 +227,8 @@ export const RelationTab = ({
 
                 {relationConfig.valueColumn && relationConfig.labelColumn && (
                   <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400 text-sm">
-                    ✅ {t('columnSettings.relation.configured')} "
-                    {availableTables.find((tbl) => String(tbl.id) === relationTableId)?.displayName}"
+                    ✅ {t('columnSettings.relation.configured')} &quot;
+                    {availableTables.find((tbl) => String(tbl.id) === relationTableId)?.displayName}&quot;
                   </div>
                 )}
               </>

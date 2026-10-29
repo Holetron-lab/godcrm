@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * RowList — unified search + create + list renderer for any row-source tab
  * inside the chat attach popup. Used by Tasks (Tickets), Documents, and
@@ -138,6 +139,7 @@ function Pill({ label, color }: { label: string; color?: string }) {
 }
 
 export function RowList({ source, enabled, boundRows, maxBindings, onBind, searchPlaceholder, showAddButton = true }: RowListProps) {
+  const { t } = useLanguage();
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -398,7 +400,7 @@ export function RowList({ source, enabled, boundRows, maxBindings, onBind, searc
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={searchPlaceholder || `Поиск в ${source.tableName}...`}
+              placeholder={searchPlaceholder || t('aiChat.ui.searchTable', { name: source.tableName })}
               className="w-full pl-8 pr-8 py-2 text-sm rounded-lg border border-[var(--border-primary)] bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
             />
             {search && (
@@ -419,7 +421,7 @@ export function RowList({ source, enabled, boundRows, maxBindings, onBind, searc
             <button
               type="button"
               onClick={() => setAddModalOpen(true)}
-              title="Создать запись"
+              title={t('aiChat.ui.createRecord')}
               className="p-2 rounded-lg transition-colors flex-shrink-0 border bg-[var(--bg-tertiary)] text-[var(--color-primary-500)] border-[var(--border-primary)] hover:bg-[var(--color-primary-500)]/10"
             ><Plus className="w-4 h-4" /></button>
           )}
@@ -440,7 +442,7 @@ export function RowList({ source, enabled, boundRows, maxBindings, onBind, searc
           </div>
         ) : rows.length === 0 ? (
           <div className="py-4 text-center text-xs text-[var(--text-tertiary)]">
-            {search ? 'Не найдено' : 'Нет записей'}
+            {search ? t('aiChat.contacts.notFound') : t('kanban.noRecords')}
           </div>
         ) : (
           <>
@@ -518,7 +520,7 @@ export function RowList({ source, enabled, boundRows, maxBindings, onBind, searc
                     )}
                   </div>
                   {bound && (
-                    <span className="text-[10px] text-[var(--text-tertiary)] flex-shrink-0 mt-1">привязано</span>
+                    <span className="text-[10px] text-[var(--text-tertiary)] flex-shrink-0 mt-1">{t('aiChat.ui.linked')}</span>
                   )}
                 </button>
               );

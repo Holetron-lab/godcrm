@@ -5,7 +5,7 @@
  * (backend/routes/v3/agent-permissions.js). Two reservation CLASSES:
  *   - file-mutation tools (Edit/Write/MultiEdit/NotebookEdit) → per-file key.
  *   - ADR-0181-A: Bash *git-write* commands → one synthetic per-tree key
- *     (`::git-index::`) modelling the shared .git index/HEAD/refs mutex.
+ *     (`::git-index::<git-dir>`) modelling each checkout index/HEAD mutex.
  * Everything else (read-only git, non-git Bash, Read, MCP) is untouched.
  *
  * Semantics:
@@ -25,6 +25,7 @@
 
 import { dbAll, dbGet } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
+import { gitReservationKeys } from './git-reservation-keys.js';
 
 const log = apiLogger.child({ module: 'agent_write_reservations' });
 
@@ -37,7 +38,9 @@ export const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'
 const DEFAULT_TTL_SECONDS = Number(process.env.AGENT_WRITE_RESERVATION_TTL_SECONDS) || 600;
 
 // ── ADR-0181-A — git-index critical-section mutex ─────────────────────────
-// One synthetic key per git tree. A Bash `git`-*write* contends on it
+// One synthetic key per canonical Git directory; unknown shell forms use the legacy key.
+// Separate worktrees have separate indexes and HEADs. Git itself locks shared refs.
+// A Bash `git`-*write* contends on it
 // regardless of which files it touches, because `git add`/`git commit` race on
 // the tree's shared `.git` index / HEAD / refs — not on any single file. The
 // `::`-prefixed sentinel can never collide with a normalizeReservationPath()
@@ -56,7 +59,8 @@ const GIT_INDEX_TTL_SECONDS = Number(process.env.AGENT_GIT_INDEX_RESERVATION_TTL
 const GIT_WRITE_VERBS = 'commit|add|mv|rm|reset|stash|merge|rebase|cherry-pick|apply';
 // Allow global options between `git` and the verb: `-C <path>`, `-c k=v`, long
 // `--flag`s, short `-x`. `(?![\w-])` keeps `commit-tree`/`add-ons` from matching.
-const GIT_GLOBAL_OPTS = String.raw`(?:\s+(?:-C\s+\S+|-c\s+\S+|--?\S+))*`;
+const GIT_GLOBAL_VALUE = String.raw`(?:"[^"\n]*"|'[^'\n]*'|[^\s"']+)`;
+const GIT_GLOBAL_OPTS = String.raw`(?:\s+(?:-C\s+${GIT_GLOBAL_VALUE}|-c\s+${GIT_GLOBAL_VALUE}|--?\S+))*`;
 const GIT_WRITE_RE = new RegExp(
   String.raw`\bgit\b${GIT_GLOBAL_OPTS}\s+(?:${GIT_WRITE_VERBS})(?![\w-])`
 );
@@ -75,7 +79,8 @@ const GIT_RESTORE_STAGED_RE = new RegExp(
  */
 export function isGitWriteCommand(command) {
   if (typeof command !== 'string' || !command.includes('git')) return false;
-  return GIT_WRITE_RE.test(command) || GIT_RESTORE_STAGED_RE.test(command);
+  return GIT_WRITE_RE.test(command) || GIT_RESTORE_STAGED_RE.test(command) ||
+    /\bworktree-git\.mjs["']?\s+(?:commit|cherry-pick)\b/.test(command);
 }
 
 const BASE_TREE = '/root/production/business-crm/';
@@ -264,7 +269,7 @@ export async function checkReservation(filePath) {
  *
  * @returns {Promise<{decision:'deny', reason:string, matched_source:'reservation', matched_rule_id:null} | null>}
  */
-export async function gateWrite({ toolName, toolInput, holderSession, wpId = null, agentId = null, spaceId = null }) {
+export async function gateWrite({ toolName, toolInput, cwd = null, holderSession, wpId = null, agentId = null, spaceId = null }) {
   try {
     if (!holderSession) return null;                       // no holder identity → cannot reserve → allow
 
@@ -272,35 +277,39 @@ export async function gateWrite({ toolName, toolInput, holderSession, wpId = nul
     //   - file-mutation tool → per-file key (ADR-0181).
     //   - Bash git-write     → the one per-tree git-index sentinel (ADR-0181-A).
     // Anything else (read-only git, non-git Bash, Read, MCP) → untouched.
-    let key = null;
+    let keys = [];
     let ttlSeconds = DEFAULT_TTL_SECONDS;
     let denyKind = 'file';
     if (WRITE_TOOLS.has(toolName)) {
-      key = normalizeReservationPath(extractPath(toolInput));   // per-file mutex (AC#6)
+      const key = normalizeReservationPath(extractPath(toolInput));
+      if (key) keys = [key];
     } else if (toolName === 'Bash' && isGitWriteCommand(toolInput?.command)) {
-      key = GIT_INDEX_KEY;                                       // shared git-index mutex (AC#1)
+      keys = await gitReservationKeys(toolInput.command, toolInput.cwd || toolInput.workdir || cwd);
       ttlSeconds = GIT_INDEX_TTL_SECONDS;
       denyKind = 'git';
     }
-    if (!key) return null;                                 // non-mutation / non-git-write / no path → allow
+    if (!keys.length) return null;                                 // non-mutation / non-git-write / no path → allow
 
-    const result = await acquireWriteReservation({
-      filePath: key, holderSession, wpId, agentId, spaceId, ttlSeconds,
-    });
-    if (result.granted) return null;                       // acquired/renewed my own → allow
+    for (const key of keys) {
+      const result = await acquireWriteReservation({
+        filePath: key, holderSession, wpId, agentId, spaceId, ttlSeconds,
+      });
+      if (result.granted) continue;                       // acquired/renewed my own → allow
 
-    const until = result.expiresAt ? new Date(result.expiresAt).toISOString() : 'soon';
-    const who = result.holder ? `${result.holder}${result.wpId ? `/${result.wpId}` : ''}` : 'another loop';
-    log.info({ key, holder: result.holder, wpId: result.wpId, kind: denyKind }, 'write-reservation soft-deny');
-    const reason = denyKind === 'git'
-      ? `git index reserved by ${who} until ${until} — retry in a moment (ADR-0181-A advisory git-index mutex).`
-      : `File reserved by ${who} until ${until} — defer & re-read (ADR-0181 advisory soft-lock).`;
-    return {
-      decision: 'deny',
-      reason,
-      matched_source: 'reservation',
-      matched_rule_id: null,
-    };
+      const until = result.expiresAt ? new Date(result.expiresAt).toISOString() : 'soon';
+      const who = result.holder ? `${result.holder}${result.wpId ? `/${result.wpId}` : ''}` : 'another loop';
+      log.info({ key, holder: result.holder, wpId: result.wpId, kind: denyKind }, 'write-reservation soft-deny');
+      const reason = denyKind === 'git'
+        ? `git index ${key} reserved by ${who} until ${until} — retry in a moment (ADR-0181-A advisory git-index mutex).`
+        : `File reserved by ${who} until ${until} — defer & re-read (ADR-0181 advisory soft-lock).`;
+      return {
+        decision: 'deny',
+        reason,
+        matched_source: 'reservation',
+        matched_rule_id: null,
+      };
+    }
+    return null;
   } catch (err) {
     // Fail-open: reservation must never break a live worker (ADR-0181 AC#5).
     log.warn({ err: String(err?.message || err) }, 'gateWrite failed — fail-open allow');

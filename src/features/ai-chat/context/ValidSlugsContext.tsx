@@ -34,6 +34,7 @@ export function ValidSlugsProvider({ mentionUsers = [], slashAgents = [], childr
     const mentionSlugs = new Set<string>();
     for (const u of mentionUsers) {
       if (u.name) mentionSlugs.add(toSlug(u.name));
+      if (u.handle) mentionSlugs.add(u.handle.toLowerCase());
     }
     // Agents are valid mentions too (<<@agent>> or @agent)
     for (const a of slashAgents) {

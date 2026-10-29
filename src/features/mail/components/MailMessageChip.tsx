@@ -13,6 +13,7 @@
 import { Mail, Paperclip } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { MailMessageRef } from '../types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 interface MailMessageChipProps {
   mailRef: MailMessageRef;
@@ -37,9 +38,10 @@ function formatChipDate(iso: string | null): string {
 
 export function MailMessageChip({ mailRef }: MailMessageChipProps) {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
-  const sender = mailRef.fromName || mailRef.fromAddress || 'Без отправителя';
-  const subject = mailRef.subject || '(без темы)';
+  const sender = mailRef.fromName || mailRef.fromAddress || t('mail.chip.noSender');
+  const subject = mailRef.subject || t('mail.common.noSubject');
   const when = formatChipDate(mailRef.date);
   const hasAttachments = mailRef.attachmentCount > 0;
 
@@ -61,7 +63,7 @@ export function MailMessageChip({ mailRef }: MailMessageChipProps) {
             {sender}
           </span>
           {hasAttachments && (
-            <Paperclip className="w-3 h-3 flex-shrink-0 text-blue-400/70" aria-label="есть вложения" />
+            <Paperclip className="w-3 h-3 flex-shrink-0 text-blue-400/70" aria-label={t('mail.chip.hasAttachments')} />
           )}
           {when && <span className="ml-auto text-[10px] flex-shrink-0 text-blue-400/60">{when}</span>}
         </div>

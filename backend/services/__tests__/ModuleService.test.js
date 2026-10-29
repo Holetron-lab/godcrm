@@ -4,6 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from '../../tests/helpers/sentinel-ids.js';
 import {
   getModulesBySpace,
   getModuleById,
@@ -13,9 +14,11 @@ import {
 } from '../ModuleService.js';
 import { createWidget, getWidgetById } from '../WidgetService.js';
 import { dbGet, dbRun, destroyAdapter, resetAdapter, toBool } from '../../database/connection.js';
-// Helper functions (matching existing test patterns)
+import { cleanupWorkspace, fixtureToken } from '../../tests/helpers/workspace-fixture.js';
+// Helper functions (matching existing test patterns). Emails live in the
+// `@test.godcrm.local` namespace so `make test-clean` can sweep what a killed run leaves.
 async function createTestUser() {
-  const uniqueEmail = `test-moduleservice-${Date.now()}@hltrn.cc`;
+  const uniqueEmail = `test-moduleservice-${fixtureToken()}@test.godcrm.local`;
   const result = await dbRun(
     'INSERT INTO users (email, password_hash, name, encryption_key_encrypted, email_verified) VALUES (?, ?, ?, ?, ?)',
     [uniqueEmail, 'hash', 'Test User', 'encrypted_key', 1]
@@ -76,6 +79,7 @@ describe('ModuleService - ADR-065', () => {
   });
 
   afterEach(async () => {
+    await cleanupWorkspace({ userId, spaceId, projectId, dashboardId });
     await destroyAdapter();
   });
 
@@ -136,17 +140,18 @@ describe('ModuleService - ADR-065', () => {
 
     test('should reject non-existent widget', async () => {
       await expect(createModule({
-        widget_id: 99999,
+        widget_id: NON_EXISTENT_ID,
         space_id: spaceId
       })).rejects.toThrow('Widget not found');
     });
 
     test('should reject non-existent space', async () => {
       const widget = await createTestWidget(dashboardId);
+      const { id: missingSpaceId } = await dbGet("SELECT nextval(pg_get_serial_sequence('spaces', 'id')) AS id");
 
       await expect(createModule({
         widget_id: widget.id,
-        space_id: 99999
+        space_id: missingSpaceId
       })).rejects.toThrow('Space not found');
     });
 
@@ -200,7 +205,7 @@ describe('ModuleService - ADR-065', () => {
     });
 
     test('should return null for non-existent module', async () => {
-      const mod = await getModuleById(99999);
+      const mod = await getModuleById(NON_EXISTENT_ID);
       expect(mod).toBeNull();
     });
   });
@@ -324,7 +329,7 @@ describe('ModuleService - ADR-065', () => {
     });
 
     test('should reject update for non-existent module', async () => {
-      await expect(updateModule(99999, { sidebar_order: 1 }))
+      await expect(updateModule(NON_EXISTENT_ID, { sidebar_order: 1 }))
         .rejects.toThrow('Module not found');
     });
 
@@ -374,7 +379,7 @@ describe('ModuleService - ADR-065', () => {
     });
 
     test('should reject delete for non-existent module', async () => {
-      await expect(deleteModule(99999)).rejects.toThrow('Module not found');
+      await expect(deleteModule(NON_EXISTENT_ID)).rejects.toThrow('Module not found');
     });
   });
 });

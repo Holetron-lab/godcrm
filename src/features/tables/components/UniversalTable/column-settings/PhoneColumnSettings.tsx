@@ -48,10 +48,10 @@ export const PhoneColumnSettings: React.FC<ColumnSettingsProps> = ({
       </h4>
 
       {/* Формат отображения */}
-      <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+      <fieldset>
+        <legend className="block text-sm font-medium text-[var(--text-primary)] mb-2">
           Формат отображения
-        </label>
+        </legend>
         <div className="grid grid-cols-2 gap-2">
           {displayFormats.map(format => (
             <button
@@ -72,7 +72,7 @@ export const PhoneColumnSettings: React.FC<ColumnSettingsProps> = ({
             </button>
           ))}
         </div>
-      </div>
+      </fieldset>
 
       {/* Страна по умолчанию */}
       <Select
@@ -94,7 +94,7 @@ export const PhoneColumnSettings: React.FC<ColumnSettingsProps> = ({
             onChange={(e) => updateConfig({ showCallButton: e.target.checked })}
             className="rounded border-[var(--border-primary)]"
           />
-          <span className="text-sm text-[var(--text-secondary)]">Показывать кнопку "Позвонить"</span>
+          <span className="text-sm text-[var(--text-secondary)]">Показывать кнопку &quot;Позвонить&quot;</span>
         </label>
 
         <label className="flex items-center gap-2 cursor-pointer">

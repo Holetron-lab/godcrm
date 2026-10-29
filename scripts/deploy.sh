@@ -142,19 +142,21 @@ HASH=$(grep -o 'index-[^"]*\.js' "$PROJ/dist/index.html" 2>/dev/null || echo "un
 if [ "$TARGET" = "dev" ] || [ "$TARGET" = "both" ]; then
   echo ""
   echo "[DEV] Syncing code PROD → DEV..."
-  rsync -azq --delete \
-    --exclude='node_modules' \
-    --exclude='.git' \
-    --exclude='.env' \
-    --exclude='dist' \
-    --exclude='pes-core/pes-data' \
-    "$PROJ/" "$DEV_HOST:$PROJ/"
+  # Only committed paths; preserve staging-owned configuration and runtime data.
+  bash "$PROJ/scripts/staging-sync.sh" "$PROJ" "$DEV_HOST:$PROJ/"
 
   echo "[DEV] Building on DEV..."
-  ssh "$DEV_HOST" "npm --prefix $PROJ install 2>&1 | tail -1 && npm --prefix $PROJ run build 2>&1 | tail -3"
+  # SSH starts a fresh shell: local pipefail does not protect remote pipelines.
+  ssh "$DEV_HOST" "bash -o pipefail -c 'npm --prefix $PROJ install --no-audit 2>&1 | tail -1 && npm --prefix $PROJ run build 2>&1 | tail -3'"
 
-  echo "[DEV] Restarting PM2..."
-  ssh "$DEV_HOST" "cd $PROJ && pm2 restart $PM2_NAME --update-env" 2>&1 | tail -3
+  # Maintenance APPLY (dev-operation.sh apply) syncs and builds with the app
+  # stopped and the DB fenced; ACTIVATE starts it later, after the identity check.
+  if [ "${DEPLOY_NO_RESTART:-0}" = 1 ]; then
+    echo "[DEV] PM2 restart skipped (DEPLOY_NO_RESTART=1 — maintenance apply; activate starts $PM2_NAME)"
+  else
+    echo "[DEV] Restarting PM2..."
+    ssh "$DEV_HOST" "cd $PROJ && pm2 restart $PM2_NAME --update-env" 2>&1 | tail -3
+  fi
 
   DEV_HASH=$(ssh "$DEV_HOST" "grep -o 'index-[^\"]*\.js' $PROJ/dist/index.html 2>/dev/null" || echo "unknown")
   echo "[DEV] Done. Bundle: $DEV_HASH"

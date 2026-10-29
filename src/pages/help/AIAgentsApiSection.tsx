@@ -216,7 +216,7 @@ export function AIAgentsApiSection() {
         <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-4">🔑 API Ключи для AI</h2>
         <div className="space-y-4">
           <p className="text-[var(--text-secondary)]">
-            API ключи провайдеров хранятся в таблице "API Keys" пространства "AI Agents".
+            API ключи провайдеров хранятся в таблице &quot;API Keys&quot; пространства &quot;AI Agents&quot;.
           </p>
 
           <div className="p-4 rounded-xl bg-primary-500/10 border border-primary-500/30">

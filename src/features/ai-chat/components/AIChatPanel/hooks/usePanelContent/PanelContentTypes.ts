@@ -56,6 +56,8 @@ export interface PanelContentDeps {
   setFavoriteAgents: (v: number[] | ((p: number[]) => number[])) => void;
   handleVectorSearch: () => void;
   handleAgentSelect: (agent: AIAgent) => void;
+  /** ADR-0079 §2.3: unlock a locked Tier-B binding for the current user, then reload agents. */
+  unlockAgent: (agent: AIAgent) => Promise<void>;
   clearMessages: () => void;
   createTablesMutation: { mutate: () => void; isPending: boolean; isError: boolean };
   currentSpace: { id?: number; settings?: unknown } | null;

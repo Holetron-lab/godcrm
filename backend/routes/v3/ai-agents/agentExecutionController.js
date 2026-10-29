@@ -58,7 +58,7 @@ router.post('/run', async (req, res) => {
       return badRequest(res, 'No API key configured for this agent');
     }
 
-    const { isClaudeCode, isCopilot, isAnthropic } = sharedDetectProvider(providerName, model);
+    const { isClaudeCode, isCopilot, isCodex, isKimi, isAnthropic } = sharedDetectProvider(providerName, model);
 
     const fullSystemPrompt = await sharedBuildAgentSystemPrompt(agentConfig, {
       conversationId,
@@ -119,10 +119,14 @@ router.post('/run', async (req, res) => {
           tokensIn: usage.prompt_tokens, tokensOut: usage.completion_tokens
         });
       }
-    } else if (isClaudeCode) {
+    } else if (isClaudeCode || isCodex || isKimi) {
       const { onEvent } = await buildClaudeCodeEventHandler({ conversationId, agentId, model, userId });
-      const cliResult = await aiExecutionService.executeClaudeCode({
-        model, messages, systemPrompt: fullSystemPrompt, maxTokens: resolvedMaxTokens, onEvent
+      const runCli = isCodex
+        ? aiExecutionService.executeCodexCli
+        : isKimi ? aiExecutionService.executeKimiCli : aiExecutionService.executeClaudeCode;
+      const cliResult = await runCli({
+        model, messages, systemPrompt: fullSystemPrompt, maxTokens: resolvedMaxTokens, onEvent,
+        ...(isKimi ? { agentId, spaceId: agentSpaceId } : {})
       });
       responseText = cliResult.content;
       usage = {

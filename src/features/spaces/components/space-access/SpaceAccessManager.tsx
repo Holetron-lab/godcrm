@@ -13,6 +13,7 @@
  *  - Effective role calculation across hierarchy
  */
 
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
@@ -38,6 +39,7 @@ import { AddUserPanel } from './AddUserPanel';
 import { UserRow } from './UserRow';
 
 export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessManagerProps) => {
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
 
   // State
@@ -134,7 +136,7 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
           row_id: row.base_id || String(row.id),
           system_user_id: Number(getValue('system_user_id')) || null,
           email: String(getValue('email') || ''),
-          name: String(getValue('name') || 'Unknown'),
+          name: String(getValue('name') || ''),
           role: String(getValue('role') || ''),
           active: getValue('active') === true || getValue('active') === 'true',
           avatar: null,
@@ -185,9 +187,9 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
 
   const getAvailableLevels = useCallback((): { value: UserAccessLevel; label: string }[] => {
     return SELECTABLE_ACCESS_LEVELS.filter(level =>
-      ACCESS_LEVEL_VALUES[currentUserLevel] > ACCESS_LEVEL_VALUES[level.value]
-    );
-  }, [currentUserLevel]);
+      ACCESS_LEVEL_VALUES[currentUserLevel] > ACCESS_LEVEL_VALUES[level]
+    ).map(level => ({ value: level, label: t(`userAccess.roles.${level}`) }));
+  }, [currentUserLevel, t]);
 
   // ─── Mutations / Handlers ─────────────────────────────────────
 
@@ -206,10 +208,10 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
         body: JSON.stringify({ data: { [roleCol[1]]: newRole } })
       });
       await refetchUsersTable();
-      showToast('Роль обновлена', 'success');
+      showToast(t('userAccess.panel.roleUpdated'), 'success');
     } catch (error) {
       logger.error('Failed to update role:', error);
-      showToast('Ошибка при обновлении роли', 'error');
+      showToast(t('userAccess.panel.errorUpdating'), 'error');
     } finally {
       setUpdatingRoleRowId(null);
     }
@@ -218,7 +220,7 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
   /** Delete a user from the users table */
   const handleDeleteUser = async (rowId: string, userName: string) => {
     if (!usersTableId) return;
-    const confirmed = confirm(`Удалить пользователя "${userName}" из таблицы доступов?`);
+    const confirmed = confirm(t('userAccess.panel.deleteConfirm', { name: userName }));
     if (!confirmed) return;
 
     setIsDeletingUser(rowId);
@@ -226,10 +228,10 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
       await apiClient.request(`/tables/${usersTableId}/rows/${rowId}`, { method: 'DELETE' });
       await refetchUsersTable();
       if (expandedUserId === rowId) setExpandedUserId(null);
-      showToast(`Пользователь ${userName} удалён`, 'success');
+      showToast(t('userAccess.panel.userDeleted', { name: userName }), 'success');
     } catch (error) {
       logger.error('Failed to delete user:', error);
-      showToast('Ошибка при удалении', 'error');
+      showToast(t('userAccess.panel.errorDeleting'), 'error');
     } finally {
       setIsDeletingUser(null);
     }
@@ -241,7 +243,7 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
 
     // Guard: columnMap must be loaded before adding users
     if (Object.keys(columnMap).length === 0) {
-      showToast('Таблица пользователей ещё загружается. Попробуйте снова.', 'error');
+      showToast(t('userAccess.panel.tableLoading'), 'error');
       logger.error('[SpaceAccessManager] handleAddUsers: columnMap is empty — table columns not loaded yet');
       return;
     }
@@ -297,13 +299,13 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
       setSelectedUsersToAdd([]);
       setAddUserSearch('');
       if (addedCount > 0) {
-        showToast(`${addedCount} пользователь(ей) добавлено`, 'success');
+        showToast(t('userAccess.panel.usersAdded', { count: addedCount }), 'success');
       } else {
-        showToast('Не удалось добавить пользователей — проверьте данные', 'error');
+        showToast(t('userAccess.panel.addFailed'), 'error');
       }
     } catch (error) {
       logger.error('Failed to add users:', error);
-      showToast('Ошибка при добавлении', 'error');
+      showToast(t('userAccess.panel.addFailed'), 'error');
     } finally {
       setIsAddingUsers(false);
     }
@@ -342,10 +344,10 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
       <div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-6 text-center">
         <Shield className="w-10 h-10 mx-auto mb-3 text-[var(--text-tertiary)] opacity-50" />
         <h4 className="text-sm font-medium text-[var(--text-primary)] mb-1">
-          Управление доступом отключено
+          {t('userAccess.panel.disabledTitle')}
         </h4>
         <p className="text-xs text-[var(--text-tertiary)]">
-          Включите управление доступом на вкладке "Доступ" для настройки прав пользователей.
+          {t('userAccess.panel.disabledHint')}
         </p>
       </div>
     );
@@ -356,10 +358,10 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-6 text-center">
         <Database className="w-10 h-10 mx-auto mb-3 text-amber-400 opacity-70" />
         <h4 className="text-sm font-medium text-[var(--text-primary)] mb-1">
-          Таблица пользователей не настроена
+          {t('userAccess.panel.noUsersTable')}
         </h4>
         <p className="text-xs text-[var(--text-tertiary)]">
-          Выберите таблицу пользователей на вкладке "Доступ" в настройках доступа.
+          {t('userAccess.panel.goToAccess')}
         </p>
       </div>
     );
@@ -370,14 +372,14 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
   return (
     <div className="space-y-4">
       {/* Header bar */}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Shield className="w-5 h-5 text-[var(--accent-primary)]" />
           <h4 className="text-sm font-medium text-[var(--text-primary)]">
-            Управление доступом
+            {t('userAccess.panel.accessManagement')}
           </h4>
           <span className="px-2 py-0.5 text-xs rounded-full bg-[var(--bg-tertiary)] text-[var(--text-tertiary)]">
-            {usersRows.length} пользователей
+            {t('userAccess.panel.userCount', { count: usersRows.length })}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -387,7 +389,7 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-[var(--accent-primary)] text-white hover:bg-[var(--accent-primary)]/90 transition-colors"
           >
             <UserPlus className="w-4 h-4" />
-            Добавить
+            {t('userAccess.panel.add')}
           </button>
         </div>
       </div>
@@ -399,7 +401,8 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Поиск по имени, email или ID..."
+          placeholder={t('userAccess.panel.searchPlaceholder')}
+          aria-label={t('userAccess.panel.searchPlaceholder')}
           className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border bg-[var(--bg-primary)] border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-primary)]/20 focus:border-[var(--accent-primary)]"
         />
       </div>
@@ -436,22 +439,22 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
         <div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-8 text-center">
           <Users className="w-8 h-8 mx-auto mb-2 text-[var(--text-tertiary)] opacity-50" />
           <p className="text-sm text-[var(--text-tertiary)]">
-            {searchQuery ? 'Пользователи не найдены' : 'Нет пользователей'}
+            {searchQuery ? t('userAccess.panel.noMatches') : t('userAccess.panel.noUsers')}
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border border-[var(--border-primary)] overflow-hidden">
+        <div className="rounded-lg border border-[var(--border-primary)] overflow-x-auto">
           {/* Table header */}
-          <div className="grid grid-cols-[1fr_1.2fr_auto_auto_auto] gap-2 px-4 py-2.5 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-            <div>Пользователь</div>
-            <div>Email</div>
-            <div className="text-center w-28">Роль</div>
-            <div className="text-center w-24">Уровень</div>
-            <div className="text-center w-20">Действия</div>
+          <div className="min-w-[720px] grid grid-cols-[1fr_1.2fr_auto_auto_auto] gap-2 px-4 py-2.5 bg-[var(--bg-tertiary)] border-b border-[var(--border-primary)] text-xs font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+            <div>{t('userAccess.panel.user')}</div>
+            <div>{t('userAccess.panel.email')}</div>
+            <div className="text-center w-36">{t('userAccess.panel.role')}</div>
+            <div className="text-center w-24">{t('userAccess.panel.level')}</div>
+            <div className="text-center w-20">{t('userAccess.panel.actions')}</div>
           </div>
 
           {/* Table body */}
-          <div className="divide-y divide-[var(--border-secondary)]">
+          <div className="min-w-[720px] divide-y divide-[var(--border-secondary)]">
             {filteredUsers.map(user => (
               <UserRow
                 key={user.row_id}
@@ -474,14 +477,14 @@ export const SpaceAccessManager = ({ spaceId, currentUserLevel }: SpaceAccessMan
       <div className="flex items-start gap-3 p-3 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-xs text-[var(--text-tertiary)]">
         <Info className="w-4 h-4 mt-0.5 shrink-0 text-[var(--accent-primary)]" />
         <div className="space-y-1">
-          <p className="font-medium text-[var(--text-secondary)]">Уровни доступа (ADR-105)</p>
+          <p className="font-medium text-[var(--text-secondary)]">{t('userAccess.panel.accessLevels')}</p>
           <p>
-            <span className="font-medium text-blue-400">Space</span> - базовый уровень, задаётся через роль.{' '}
-            <span className="font-medium text-purple-400">Project</span>,{' '}
-            <span className="font-medium text-emerald-400">Table</span>,{' '}
-            <span className="font-medium text-amber-400">Column</span> - гранулярные переопределения через колонки таблицы.
+            <span className="font-medium text-blue-400">{t('userAccess.panel.levels.space')}</span>{t('userAccess.panel.baseLevelHint')}{' '}
+            <span className="font-medium text-purple-400">{t('userAccess.panel.levels.project')}</span>,{' '}
+            <span className="font-medium text-emerald-400">{t('userAccess.panel.levels.table')}</span>,{' '}
+            <span className="font-medium text-amber-400">{t('userAccess.panel.levels.column')}</span>{t('userAccess.panel.overridesHint')}
           </p>
-          <p>Наследование: Column {'<-'} Table {'<-'} Project {'<-'} Space. Более конкретный уровень имеет приоритет.</p>
+          <p>{t('userAccess.panel.inheritanceHint')}</p>
         </div>
       </div>
     </div>

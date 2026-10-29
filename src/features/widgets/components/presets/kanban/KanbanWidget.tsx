@@ -80,8 +80,9 @@ export function KanbanWidget(props: KanbanWidgetProps) {
   const endDateCol = dueDateColumn || config.kanban?.dueDateColumn || autoEndDateCol;
 
   // Color & emoji columns from config
-  const colorCol = config.kanban?.colorColumn;
+  const colorCol = props.colorColumn || config.kanban?.colorColumn || columnsInfo.find(column => column.type === 'color')?.name;
   const emojiCol = config.kanban?.emojiColumn || config.emojiColumn;
+  const assigneeCol = config.kanban?.assigneeColumn || (typeof config.assigneeColumn === 'string' ? config.assigneeColumn : undefined);
 
   // Division override: user can switch grouping column at runtime
   const [groupByOverride, setGroupByOverride] = useState<string | null>(null);
@@ -426,6 +427,7 @@ export function KanbanWidget(props: KanbanWidgetProps) {
               activeId={activeId}
               cardTitleColumn={cardTitleColumn}
               cardSubtitleColumn={cardSubtitleColumn}
+              assigneeColumn={assigneeCol}
               startDateCol={startDateCol}
               endDateCol={endDateCol}
               colorCol={colorCol}
@@ -460,6 +462,7 @@ export function KanbanWidget(props: KanbanWidgetProps) {
               item={activeCard}
               cardTitleColumn={cardTitleColumn}
               cardSubtitleColumn={cardSubtitleColumn}
+              assigneeColumn={assigneeCol}
               scheduledDateColumn={startDateCol}
               dueDateColumn={endDateCol}
               colorColumn={colorCol}

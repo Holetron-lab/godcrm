@@ -1,0 +1,19 @@
+{
+  "_comment": "Server-owned suite registry for the local-qa profile. A grant may reference these ids only; the agent never supplies files. Paths are repository-relative and run on the committed candidate snapshot inside the isolated container.",
+  "isolation": {
+    "action": "node-test",
+    "files": ["scripts/ops-runner/isolation.test.cjs"]
+  },
+  "browser-isolation": {
+    "action": "browser-test",
+    "files": ["scripts/ops-runner/browser-isolation.test.cjs"]
+  },
+  "mention-input-vitest": {
+    "action": "vitest",
+    "files": ["src/features/ai-chat/components/__tests__/MentionInput.test.tsx"]
+  },
+  "build": {
+    "action": "build",
+    "files": []
+  }
+}

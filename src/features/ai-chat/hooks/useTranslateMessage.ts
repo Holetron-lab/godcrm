@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ADR-185 — Chat message translation mutation hook.
  *
@@ -79,6 +80,7 @@ export interface UseTranslateMessageResult {
 export function useTranslateMessage(
   conversationId: number | string | null | undefined,
 ): UseTranslateMessageResult {
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
   const queryKey = ['conversation-messages', conversationId] as const;
 
@@ -98,16 +100,16 @@ export function useTranslateMessage(
     onSuccess: (resp, { messageId, targetLang }) => {
       const data = resp?.data;
       if (!data) {
-        showToast('Перевод не вернул данные.', 'error');
+        showToast(t('aiChat.ui.translationEmpty'), 'error');
         return;
       }
       queryClient.setQueryData<CacheShape>(queryKey, (old) =>
         patchTranslation(old, messageId, targetLang, data),
       );
-      showToast(`Переведено на ${contentLanguageLabel(targetLang)}.`, 'success');
+      showToast(t('aiChat.ui.translatedSuccess', { language: contentLanguageLabel(targetLang) }), 'success');
     },
     onError: () => {
-      showToast('Не удалось перевести сообщение.', 'error');
+      showToast(t('aiChat.ui.translationFailed'), 'error');
     },
   });
 

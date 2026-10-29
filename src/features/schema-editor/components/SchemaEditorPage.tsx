@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   ReactFlow,
   Background,
@@ -10,6 +10,7 @@ import {
   useEdgesState,
   BackgroundVariant,
   useReactFlow,
+  useNodesInitialized,
   Panel,
   type Node,
 } from '@xyflow/react';
@@ -26,7 +27,7 @@ import { NavTreePanel } from './panels/NavTreePanel';
 import { MoveTablesModal } from './modals/MoveTablesModal';
 import { DeleteTablesModal } from './modals/DeleteTablesModal';
 import { ProjectBoundaries } from './layers/ProjectBoundaries';
-import type { TableNodeData, ColumnData } from '../types/schema-editor.types';
+import type { TableNodeData, TableNode as TableFlowNode, ColumnData } from '../types/schema-editor.types';
 import { useApplyLayout } from './useApplyLayout';
 import { Button } from '@/shared/components/ui/Button';
 
@@ -49,6 +50,10 @@ const rfStyle = {
 
 export const SchemaEditorPage = () => {
   const { spaceId } = useParams<{ spaceId: string }>();
+  // `?focus=<tableId>` centers that node once the schema is on the canvas (deep links, QA runs).
+  const [searchParams] = useSearchParams();
+  const focusParam = searchParams.get('focus');
+  const focusedParamRef = useRef<string | null>(null);
   const {
     nodes: storeNodes,
     edges: storeEdges,
@@ -72,6 +77,7 @@ export const SchemaEditorPage = () => {
     showProjectBoundaries,
     showProjectConnectionLines,
     toggleProjectBoundaries,
+    showWidgets,
   } = useSchemaEditorStore();
 
   // Build map of tableId -> parent folder ids for visibility inheritance
@@ -101,8 +107,8 @@ export const SchemaEditorPage = () => {
   // Filter nodes based on visibility settings
   const visibleNodes = useMemo(() => {
     return storeNodes.filter(node => {
-      // Widget nodes are always visible
-      if (node.type === 'widgetNode') return true;
+      // Standalone module cards follow the toolbar "Modules on canvas" toggle
+      if (node.type === 'widgetNode') return showWidgets;
       
       const tableId = node.data.tableId;
       const projectId = node.data.projectId;
@@ -128,9 +134,9 @@ export const SchemaEditorPage = () => {
       }
       
       // Default: show if not explicitly hidden
-      return tableVis !== 'hidden';
+      return true;
     });
-  }, [storeNodes, tableVisibility, projectVisibility, folderVisibility, tableFolderMap]);
+  }, [storeNodes, tableVisibility, projectVisibility, folderVisibility, tableFolderMap, showWidgets]);
 
   // React Flow state
   const [nodes, setLocalNodes, onNodesChange] = useNodesState(visibleNodes as any[]);
@@ -140,6 +146,7 @@ export const SchemaEditorPage = () => {
 
   // React Flow instance for zoom/pan control
   const reactFlowInstance = useReactFlow();
+  const nodesInitialized = useNodesInitialized();
   const flowWrapperRef = useRef<HTMLDivElement | null>(null);
   const selectionSyncRef = useRef(false);
   
@@ -220,12 +227,12 @@ export const SchemaEditorPage = () => {
       })
       .map((pc) => {
         // Find target node to check if target column exists
-        const targetNode = storeNodes.find(n => n.data.tableId === pc.targetTableId);
+        const targetNode = storeNodes.find((n): n is TableFlowNode => n.type === 'tableNode' && n.data.tableId === pc.targetTableId);
         const targetColExists = targetNode?.data.columns?.some((c: ColumnData) => c.name === pc.targetColumn);
         const targetHandle = targetColExists ? `target-col-${pc.targetColumn}` : 'target-table-center';
         
         // Find source node to check if source column exists  
-        const sourceNode = storeNodes.find(n => n.data.tableId === pc.sourceTableId);
+        const sourceNode = storeNodes.find((n): n is TableFlowNode => n.type === 'tableNode' && n.data.tableId === pc.sourceTableId);
         const sourceColExists = sourceNode?.data.columns?.some((c: ColumnData) => c.name === pc.sourceColumn);
         const sourceHandle = sourceColExists ? `source-col-${pc.sourceColumn}` : 'source-table-center';
         
@@ -324,11 +331,11 @@ export const SchemaEditorPage = () => {
   // Get table data for delete modal
   const tablesToDelete = useMemo(() => {
     return storeNodes
-      .filter(node => selectedTables.has(node.data.tableId))
+      .filter((node): node is TableFlowNode => node.type === 'tableNode' && selectedTables.has(node.data.tableId))
       .map(node => ({
         id: node.data.tableId,
-        name: node.data.tableName || node.data.name || `Table ${node.data.tableId}`,
-        displayName: node.data.displayName || node.data.tableName || node.data.name,
+        name: node.data.name || `Table ${node.data.tableId}`,
+        displayName: node.data.displayName || node.data.name,
         icon: node.data.icon
       }));
   }, [storeNodes, selectedTables]);
@@ -362,6 +369,15 @@ export const SchemaEditorPage = () => {
     },
     [nodes, reactFlowInstance, setSelectedTables]
   );
+
+  useEffect(() => {
+    if (!focusParam || focusedParamRef.current === focusParam) return;
+    // The initial fitView runs once every node is measured; only then can setCenter win.
+    if (!nodesInitialized || !nodes.some((node) => node.id === `table-${focusParam}`)) return;
+    focusedParamRef.current = focusParam;
+    const timer = window.setTimeout(() => focusTable(Number(focusParam)), 300);
+    return () => window.clearTimeout(timer);
+  }, [focusParam, nodes, nodesInitialized, focusTable]);
 
   const moveTableToCenter = useCallback(
     (tableId: number) => {

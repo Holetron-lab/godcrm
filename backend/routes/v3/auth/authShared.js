@@ -61,6 +61,77 @@ export const getAccessCookieOptions = () => ({
   path: '/'
 });
 
+// ---------------------------------------------------------------------------
+// Duplicate-cookie handling (chat 3660, 2026-10-16)
+//
+// A browser that logged in on a COOKIE_DOMAIN=.godcrm.ai box (dev.godcrm.ai)
+// carries a Domain=.godcrm.ai `godcrm_refresh` next to the host-only one that
+// app.godcrm.ai issued. Both are sent to app.godcrm.ai under the same name;
+// cookie-parser keeps only the first, and when that is the foreign one (signed
+// with another box's JWT_SECRET) /auth/refresh fails with "invalid signature"
+// and the SPA logs the user out mid-form. These helpers look at every value
+// the browser sent and evict parent-domain cookies on host-only boxes.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every value sent under `name`, in Cookie-header order (cookie-parser only
+ * exposes the first). Quoted and percent-encoded values are unwrapped.
+ */
+export const getCookieValues = (req, name) => {
+  const header = req.headers?.cookie;
+  if (!header) return [];
+  const values = [];
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0 || part.slice(0, eq).trim() !== name) continue;
+    let value = part.slice(eq + 1).trim();
+    if (value.length > 1 && value.startsWith('"') && value.endsWith('"')) {
+      value = value.slice(1, -1);
+    }
+    try { value = decodeURIComponent(value); } catch { /* keep raw */ }
+    if (value) values.push(value);
+  }
+  return values;
+};
+
+/**
+ * Parent domain whose cookies are foreign to this box: a host-only box
+ * (COOKIE_DOMAIN unset) never issues Domain=.<apex> cookies, so any such cookie
+ * came from another box with its own JWT_SECRET. Returns null when this box
+ * issues domain cookies itself, or for localhost / IP / single-label hosts.
+ */
+export const getForeignCookieDomain = (req) => {
+  if (process.env.COOKIE_DOMAIN) return null;
+  const host = String(req.hostname || '').toLowerCase().split(':')[0];
+  const parts = host.split('.').filter(Boolean);
+  if (parts.length < 2 || /^\d+$/.test(parts[parts.length - 1])) return null;
+  return `.${parts.slice(-2).join('.')}`;
+};
+
+/**
+ * Expire the parent-domain copies of both session cookies. Safe to call on
+ * every login/refresh/logout of a host-only box: the host-only cookies set in
+ * the same response are distinct cookies (different Domain attribute).
+ * @returns {boolean} whether anything was cleared
+ */
+export const clearForeignSessionCookies = (req, res) => {
+  const domain = getForeignCookieDomain(req);
+  if (!domain) return false;
+  res.clearCookie(REFRESH_COOKIE_NAME, { ...toClearOptions(getRefreshCookieOptions()), domain });
+  res.clearCookie(ACCESS_COOKIE_NAME, { ...toClearOptions(getAccessCookieOptions()), domain });
+  return true;
+};
+
+/**
+ * Options for res.clearCookie: Express 4 turns a maxAge into a future Expires,
+ * which keeps an empty cookie alive for 30 days instead of deleting it.
+ */
+export const toClearOptions = (options) => {
+  const clear = { ...options };
+  delete clear.maxAge;
+  return clear;
+};
+
 export const createAccessToken = (user) =>
   jwt.sign(
     { id: user.id, email: user.email, role: user.role },

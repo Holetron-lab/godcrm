@@ -27,7 +27,7 @@ export function evaluateFormulaForBulkReplace(
   if (!formula) return currentValue;
   
   // Replace {{variable}} placeholders with actual values
-  let processed = formula.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+  const processed = formula.replace(/\{\{(\w+)\}\}/g, (match, key) => {
     if (key === 'value') {
       return String(currentValue ?? '');
     }
@@ -45,7 +45,7 @@ export function evaluateFormulaForBulkReplace(
   // Try to evaluate as math expression
   try {
     // Check if it looks like a math expression (contains operators and only numbers/operators/spaces/parens)
-    if (/[\+\-\*\/]/.test(processed) && /^[\d\s\+\-\*\/\.\(\)]+$/.test(processed.trim())) {
+    if (/[+\-*/]/.test(processed) && /^[\d\s+\-*/.()]+$/.test(processed.trim())) {
       // Safe eval for simple math expressions only
       const result = Function(`'use strict'; return (${processed})`)();
       // Round to 2 decimal places if it's a float

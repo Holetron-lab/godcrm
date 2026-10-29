@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * usePanelContentWiring — Builds the dependency bag for usePanelContent.
  * ADR-119: Extracted from AIChatPanel.tsx to reduce orchestrator size.
@@ -5,8 +6,10 @@
 import { useState, useRef, useMemo } from 'react';
 import { apiClient } from '@/shared/utils/apiClient';
 import { renderPanelContentFromDeps } from './usePanelContent/index';
+import { unlockAgent } from '../../../api/unlockAgent';
+import { lockedAgentsForManagement } from '../../../utils/agentVisibility';
 import type { PanelContentDeps } from './usePanelContent/PanelContentTypes';
-import type { ContextSettings } from '../types';
+import type { ChatActions, ChatState } from '../types';
 import type { AIAgent } from '../../../types';
 
 interface PanelContentWiringParams {
@@ -17,8 +20,8 @@ interface PanelContentWiringParams {
   setContactsSearch: (v: string) => void;
   showFavorites: boolean;
   setShowFavorites: (v: any) => void;
-  userTypeFilter: string;
-  setUserTypeFilter: (v: string) => void;
+  userTypeFilter: ChatState['userTypeFilter'];
+  setUserTypeFilter: ChatActions['setUserTypeFilter'];
   showAllContacts: boolean;
   setShowAllContacts: (v: any) => void;
   users: any[];
@@ -26,7 +29,7 @@ interface PanelContentWiringParams {
   chatParticipants: any[];
   chatPartner: any;
   favorites: number[];
-  setFavorites: (v: any) => void;
+  setFavorites: ChatActions['setFavorites'];
   setUserConversationId: (v: number | null) => void;
   setChatPartner: (v: any) => void;
   setChatParticipants: (v: any) => void;
@@ -37,12 +40,15 @@ interface PanelContentWiringParams {
   openTaskChat?: (chat: { conversationId: number; tableId: number; rowId: number; rowTitle?: string }) => void;
   createNewConversation: () => void;
   forceNewChatRef: React.MutableRefObject<boolean>;
-  setChatMode: (v: string) => void;
+  setChatMode: ChatActions['setChatMode'];
   clearMessages: () => void;
   // Agents
   agentsSearch: string;
   setAgentsSearch: (v: string) => void;
   agents: AIAgent[];
+  /** Every binding incl. locked Tier-B rows (ADR-0079) — the owner list shows them with an unlock action. */
+  mentionAgents: AIAgent[];
+  loadAgents: () => Promise<void>;
   isLoadingAgents: boolean;
   currentAgent: AIAgent | null;
   showFavoriteAgents: boolean;
@@ -86,7 +92,6 @@ interface PanelContentWiringParams {
   setInboxUserFilter: (v: string[]) => void;
   inboxParticipantMode: 'any' | 'all';
   setInboxParticipantMode: (v: 'any' | 'all') => void;
-  users: any[];
   markAsReadMutation: any;
   selectAgent: (agent: AIAgent) => void;
   renameConversation: (id: number, title: string) => void;
@@ -113,8 +118,8 @@ interface PanelContentWiringParams {
   conversations: any[];
   effectiveSpaceId: number | undefined;
   // Settings
-  settingsTab: string;
-  setSettingsTab: (v: string) => void;
+  settingsTab: ChatState['settingsTab'];
+  setSettingsTab: ChatActions['setSettingsTab'];
   chatOperatorId: any;
   setChatOperatorId: (v: any) => void;
   chatModelId: string;
@@ -144,8 +149,8 @@ interface PanelContentWiringParams {
   setQuickEmojis: (v: string[]) => void;
   saveQuickEmojis: any;
   isSavingEmojis: boolean;
-  voiceMode: string;
-  setVoiceMode: (v: string) => void;
+  voiceMode: ChatState['voiceMode'];
+  setVoiceMode: ChatActions['setVoiceMode'];
   voiceError: string | null;
   webSpeechAvailable: boolean;
   filesSource: any;
@@ -161,6 +166,7 @@ interface PanelContentWiringParams {
 }
 
 export function usePanelContentWiring(params: PanelContentWiringParams) {
+  const { t } = useLanguage();
   const {
     activePanel, setActivePanel, contactsSearch, setContactsSearch,
     showFavorites, setShowFavorites, userTypeFilter, setUserTypeFilter,
@@ -169,7 +175,7 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
     setUserConversationId, setChatPartner, setChatParticipants, setBoundRows,
     setShowBoundRowsBar, handleAgentSelect, selectConversation, openTaskChat, createNewConversation,
     forceNewChatRef, setChatMode, clearMessages,
-    agentsSearch, setAgentsSearch, agents, isLoadingAgents, currentAgent,
+    agentsSearch, setAgentsSearch, agents, mentionAgents, loadAgents, isLoadingAgents, currentAgent,
     showFavoriteAgents, setShowFavoriteAgents, favoriteAgents, setFavoriteAgents,
     isVectorSearching, vectorSearchResults, setVectorSearchResults, setIsVectorSearching,
     currentSpaceId, createTablesMutation, currentSpace,
@@ -186,7 +192,7 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
     markAsReadMutation, selectAgent, renameConversation, deleteConversation,
     userConversationId, currentConversationId, allTablesDataMain,
     tasksSource, filteredTaskRows, isLoadingTasks, taskRows, tasksTotal, taskStatusDict,
-    tasksTableColumns, tasksSearch, setTasksSearch, setTasksSource,
+    tasksTableColumns, tasksSearch, setTasksSearch,
     fetchNextTasksPage, hasNextTasksPage, isFetchingNextTasksPage,
     expandedTaskChats, setExpandedTaskChats, conversations, effectiveSpaceId,
     settingsTab, setSettingsTab, chatOperatorId, setChatOperatorId,
@@ -198,7 +204,7 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
     translationAgentId, isSavingTranslationAgent, onTranslationAgentChange,
     quickEmojis, setQuickEmojis, saveQuickEmojis, isSavingEmojis,
     voiceMode, setVoiceMode, voiceError, webSpeechAvailable,
-    filesSource, setFilesSource,
+    filesSource,
     favoritesConfig, updateFavoritesConfig,
     updateTasksSource: updateTasksSourcePersist, updateFilesSource: updateFilesSourcePersist,
     attachRowToMessage,
@@ -215,7 +221,10 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
     return ms && mt && mf;
   });
 
-  const filteredAgents = agents.filter(a => {
+  // ADR-0079 §2: the owner agent list is a management surface, so admins also see the
+  // locked Tier-B bindings the invocation list drops — with an unlock action per row.
+  const managedAgents = isAdminOrOwner ? [...agents, ...lockedAgentsForManagement(agents, mentionAgents)] : agents;
+  const filteredAgents = managedAgents.filter(a => {
     const sl = agentsSearch?.toLowerCase() || '';
     const ms = !agentsSearch || a.name.toLowerCase().includes(sl) || a.description?.toLowerCase().includes(sl);
     const mf = !showFavoriteAgents || favoriteAgents.includes(a.id);
@@ -230,16 +239,16 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
     const agentMap = new Map<number, { id: number; name: string; icon?: string | null }>();
     for (const conv of convs) {
       if (conv.agent_id) {
-        const ag = (agents as any[]).find(a => a.id === conv.agent_id);
+        const ag = agents.find(a => a.id === conv.agent_id);
         agentMap.set(conv.agent_id, {
           id: conv.agent_id,
-          name: ag?.name || conv.agent_name || `Agent #${conv.agent_id}`,
+          name: ag?.name || conv.agent_name || t('aiChat.ui.agentNumber', { id: conv.agent_id }),
           icon: ag?.icon || conv.agent_icon || null,
         });
       }
     }
     return Array.from(agentMap.values());
-  }, [inboxConversations, agents]);
+  }, [inboxConversations, agents, t]);
 
   // Compute user options from conversation participants
   const inboxUserOptions = useMemo(() => {
@@ -248,7 +257,7 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
     for (const conv of convs) {
       for (const p of (conv.participants || [])) {
         if (!userMap.has(p.user_id)) {
-          userMap.set(p.user_id, { id: p.user_id, name: p.name || `User #${p.user_id}`, avatar_url: p.avatar_url });
+          userMap.set(p.user_id, { id: p.user_id, name: p.name || t('aiChat.ui.userNumber', { id: p.user_id }), avatar_url: p.avatar_url });
         }
       }
     }
@@ -259,7 +268,7 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
       }
     }
     return Array.from(userMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [inboxConversations, users]);
+  }, [inboxConversations, users, t]);
 
   // Inbox rename state (required by InboxPanelContent)
   const [inboxRenamingId, setInboxRenamingId] = useState<number | null>(null);
@@ -315,6 +324,10 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
     setChatPartner, setChatMode, setChatParticipants, setBoundRows, setShowBoundRowsBar, clearMessages,
     agentsSearch, setAgentsSearch,
     filteredAgents: filteredAgents as any,
+    unlockAgent: async (agent: AIAgent) => {
+      await unlockAgent(effectiveSpaceId ?? agent.space_id ?? 0, agent.id);
+      await loadAgents();
+    },
     isLoadingAgents, currentAgent: currentAgent as any,
     showFavoriteAgents, setShowFavoriteAgents, favoriteAgents, setFavoriteAgents,
     isVectorSearching, vectorSearchResults, setVectorSearchResults,
@@ -322,9 +335,11 @@ export function usePanelContentWiring(params: PanelContentWiringParams) {
       if (!agentsSearch || !currentSpaceId) return;
       setIsVectorSearching(true);
       try {
-        const r = await apiClient.post<any>('/ai/agents/search', { query: agentsSearch, spaceId: currentSpaceId, limit: 10 });
-        if (r.success && r.agents) setVectorSearchResults(r.agents.map((a: any) => a.id));
-      } catch {} finally { setIsVectorSearching(false); }
+        const r = await apiClient.post<{ success: boolean; agents?: Pick<AIAgent, 'id'>[] }>('/ai/agents/search', { query: agentsSearch, spaceId: currentSpaceId, limit: 10 });
+        if (r.success && r.agents) setVectorSearchResults(r.agents.map(a => a.id));
+      } catch {
+        // Keep the current local results when semantic search is unavailable.
+      } finally { setIsVectorSearching(false); }
     },
     createTablesMutation, currentSpace,
     inboxConversations, isLoadingInbox, totalUnreadCount, refetchInbox,

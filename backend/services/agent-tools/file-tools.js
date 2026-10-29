@@ -8,6 +8,8 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { z } from 'zod';
+import { resolveUploadScope } from '../file-upload-scope.js';
 import { aiLogger } from '../../utils/logger.js';
 
 // === FILE SYSTEM SECURITY ===
@@ -144,7 +146,7 @@ export const fileToolHandlers = {
       const stat = await fs.stat(abs);
       if (!stat.isDirectory()) return { error: 'Not a directory' };
 
-      async function listRecursive(dir, currentDepth) {
+      const listRecursive = async (dir, currentDepth) => {
         const entries = await fs.readdir(dir, { withFileTypes: true });
         const results = [];
         for (const entry of entries) {
@@ -178,7 +180,7 @@ export const fileToolHandlers = {
           }
         }
         return results;
-      }
+      };
 
       const entries = await listRecursive(abs, 0);
       return { success: true, path: dirPath, depth: effectiveDepth, entries, count: entries.length };
@@ -206,7 +208,7 @@ export const fileToolHandlers = {
       const matches = [];
       let filesScanned = 0;
 
-      async function scanDir(dir) {
+      const scanDir = async (dir) => {
         if (filesScanned >= FS_MAX_SEARCH_FILES || matches.length >= FS_MAX_SEARCH_MATCHES) return;
         let entries;
         try {
@@ -252,7 +254,7 @@ export const fileToolHandlers = {
             } catch { /* skip unreadable files */ }
           }
         }
-      }
+      };
 
       await scanDir(abs);
       return {
@@ -313,8 +315,32 @@ export const fileToolHandlers = {
   // T-138802: project_id is now optional. files.project_id is nullable post
   // migration 053; system uploads (avatars, agent generations) genuinely
   // have no owning project. Visibility defaults to 'internal' per ADR-0016 P5.
-  async upload_file({ source, space_id, project_id, folder = 'mcp', description = '', visibility = 'internal' }, userId) {
-    const { dbRun, sqlNow } = await import('../../database/connection.js');
+  async upload_file({ source, space_id, project_id, folder = 'mcp', description = '', visibility = 'internal' }, userId, context = {}) {
+    const { dbGet, dbRun, sqlNow } = await import('../../database/connection.js');
+    let user;
+    if (context.source === 'mcp') {
+      // The transport's userId=1 is attribution, not delegated authority.
+      // Only the server-bound live job can name the human initiating this upload.
+      const runtime = z.object({ jobId: z.number().int().positive().safe(), agentId: z.number().int().positive().safe(), spaceId: z.number().int().positive().safe() }).safeParse(context);
+      if (!runtime.success) return { error: 'Upload requires a runtime-bound agent job' };
+      const { jobId, agentId, spaceId } = runtime.data;
+      user = await dbGet(`
+        SELECT u.id, u.role FROM agent_jobs j
+        JOIN conversations c ON c.id = j.conversation_id
+        JOIN users u ON u.id = j.trigger_user_id AND u.user_type = 'human'
+        JOIN conversation_participants human ON human.conversation_id = c.id AND human.user_id = u.id
+        JOIN conversation_participants agent ON agent.conversation_id = c.id AND agent.user_id = j.agent_user_id
+        WHERE j.id = ? AND j.agent_row_id = ? AND c.space_id = ? AND j.status = 'processing'
+      `, [jobId, agentId, spaceId]);
+      if (!user) return { error: 'Upload requires the current human-initiated job in this space' };
+    } else {
+      user = userId ? await dbGet('SELECT id, role FROM users WHERE id = ?', [userId]) : null;
+    }
+    const scope = await resolveUploadScope({ spaceId: space_id, projectId: project_id }, user);
+    if (scope.error) return { error: scope.error };
+    if (context.source === 'mcp' && scope.spaceId !== context.spaceId) return { error: 'Upload must target the current job space' };
+    space_id = scope.spaceId;
+    project_id = scope.projectId;
 
     const UPLOAD_BASE_PATH = process.env.UPLOAD_PATH || '/var/lib/business-crm-data/uploads';
     const targetDir = path.join(UPLOAD_BASE_PATH, folder);
@@ -374,7 +400,7 @@ export const fileToolHandlers = {
     await dbRun(`
       INSERT INTO files (id, name, original_name, mime_type, size, path, url, storage_provider_id, space_id, project_id, uploaded_by, description, visibility, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, ?, ?, ${sqlNow()}, ${sqlNow()})
-    `, [fileId, fileName, path.basename(source), mimeType, fileSize, filePath, fileUrl, space_id || null, project_id || null, userId || 1, description, safeVisibility]);
+    `, [fileId, fileName, path.basename(source), mimeType, fileSize, filePath, fileUrl, space_id || null, project_id || null, context.source === 'mcp' ? user.id : userId || 1, description, safeVisibility]);
 
     return {
       success: true,

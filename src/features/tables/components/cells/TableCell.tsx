@@ -142,7 +142,7 @@ const EmbeddedTableView = ({
               {displayColumns.map((col, i) => (
                 <th 
                   key={col.id || i} 
-                  className="px-1.5 py-0.5 text-left font-medium text-[var(--text-tertiary)] truncate border-b border-[var(--border-primary)]"
+                  className="px-1.5 py-0.5 text-left font-medium text-[var(--text-primary)] truncate border-b border-[var(--border-primary)]"
                 >
                   {col.displayName || col.name}
                 </th>
@@ -155,7 +155,7 @@ const EmbeddedTableView = ({
               return (
                 <tr key={row.id || rowIdx} className="hover:bg-[var(--bg-tertiary)]/50">
                   {displayColumns.map((col, colIdx) => {
-                    const value = rowData[col.name] ?? rowData[col.id] ?? '';
+                    const value = rowData[col.name] ?? (col.id ? rowData[col.id] : undefined) ?? '';
                     return (
                       <td 
                         key={`${row.id}-${col.id || colIdx}`}
@@ -172,11 +172,17 @@ const EmbeddedTableView = ({
         </table>
       </div>
       
-      {/* Show all button - using div to avoid nested button issue */}
+      {/* Show all records */}
       {(hasMore || totalRows > 3) && (
-        <div
+        <button
+          type="button"
+          disabled={(expandAction === 'modal' && !onOpenNestedTable) || (expandAction === 'inline' && !onToggleInlineExpand)}
+          aria-expanded={expandAction === 'expand' ? isExpanded : undefined}
           onClick={handleShowAll}
-          className="w-full flex items-center justify-center gap-1 py-1 text-[9px] text-primary-500 hover:bg-primary-500/10 transition-colors border-t border-[var(--border-primary)] cursor-pointer"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+          }}
+          className="w-full flex items-center justify-center gap-1 py-1 text-[9px] text-[var(--text-primary)] hover:bg-primary-500/10 transition-colors border-t border-[var(--border-primary)] cursor-pointer disabled:cursor-default focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--text-primary)]"
         >
           {expandAction === 'expand' && isExpanded ? (
             <>
@@ -191,7 +197,7 @@ const EmbeddedTableView = ({
               <span>{label} ({totalRows})</span>
             </>
           )}
-        </div>
+        </button>
       )}
     </div>
   );
@@ -211,8 +217,6 @@ const EmbeddedTableView = ({
  * - label: custom label for the button
  */
 export const TableCell = ({ value, column, rowData, rowId, rawMode, isExpanded = false, onOpenNestedTable, onToggleInlineExpand }: TableCellProps) => {
-  const [isHovered, setIsHovered] = useState(false);
-  
   // Конфигурация может быть в разных местах:
   // - relation.tableId - ID связанной таблицы (устанавливается в "Источник данных")
   // - table.* - настройки отображения (устанавливаются в "Тип")
@@ -301,47 +305,51 @@ export const TableCell = ({ value, column, rowData, rowId, rawMode, isExpanded =
   // Modal mode - button to open modal
   if (displayMode === 'modal') {
     return (
-      <div
+      <button
+        type="button"
+        disabled={!onOpenNestedTable}
         onClick={handleClick}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        className={`
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+        }}
+        className="
           inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
-          transition-all duration-150 cursor-pointer
-          ${isHovered 
-            ? 'bg-primary-500/20 text-primary-600 shadow-sm' 
-            : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-primary-500/10'
-          }
-        `}
+          transition-all duration-150 cursor-pointer disabled:cursor-default
+          bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-primary-500/20 hover:shadow-sm
+          focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]
+        "
       >
         <Table2 className="w-3.5 h-3.5" />
         <span>{label}</span>
         <ExternalLink className="w-3 h-3" />
-      </div>
+      </button>
     );
   }
   
   // Inline mode - expandable view (Notion-style)
   // The actual expanded table is rendered by TableGrid between rows
   return (
-    <div
+    <button
+      type="button"
+      disabled={!onToggleInlineExpand}
+      aria-expanded={isExpanded}
       onClick={handleClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
+      }}
       className={`
         inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium
-        transition-all duration-150 cursor-pointer
+        transition-all duration-150 cursor-pointer disabled:cursor-default text-[var(--text-primary)]
+        focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]
         ${isExpanded
-          ? 'bg-primary-500/20 text-primary-600 shadow-sm'
-          : isHovered 
-            ? 'bg-primary-500/20 text-primary-600 shadow-sm' 
-            : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-primary-500/10'
+          ? 'bg-primary-500/20 shadow-sm'
+          : 'bg-[var(--bg-tertiary)] hover:bg-primary-500/20 hover:shadow-sm'
         }
       `}
     >
       <ChevronRight className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
       <Table2 className="w-3.5 h-3.5" />
       <span>{label}</span>
-    </div>
+    </button>
   );
 };

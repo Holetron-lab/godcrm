@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * MovedMessagesPreview — ADR-0031 §Z / WP-24.
  *
@@ -14,10 +15,11 @@ import {
 } from '../../../../../hooks/useMovedMessagesPreview';
 
 const PreviewMessageBubble: React.FC<{ msg: MovedMessagePreview }> = ({ msg }) => {
+  const { t } = useLanguage();
   const text = (msg.content || '').trim();
   if (!text) {
     return (
-      <div className="text-[11px] text-[var(--text-tertiary)] italic py-1">(без текста)</div>
+      <div className="text-[11px] text-[var(--text-tertiary)] italic py-1">{t('aiChat.ui.noText')}</div>
     );
   }
   const display = text.length > 1200 ? text.slice(0, 1200) + '…' : text;
@@ -37,28 +39,27 @@ export const MovedMessagesPreview: React.FC<MovedMessagesPreviewProps> = ({
   conversationId,
   messageIds,
 }) => {
+  const { t } = useLanguage();
   const preview = useMovedMessagesPreview(conversationId, messageIds, true);
 
   if (preview.isLoading) {
     return (
       <div className="flex items-center gap-2 py-1 text-[11px] text-[var(--text-tertiary)]">
         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        <span>Загрузка сообщений…</span>
+        <span>{t('aiChat.ui.loadingMessages')}</span>
       </div>
     );
   }
   if (preview.error) {
     return (
       <div className="py-1 text-[11px] text-[var(--text-tertiary)]">
-        Не удалось загрузить сообщения
-      </div>
+        {t('aiChat.ui.couldNotLoadMessages')}</div>
     );
   }
   if (!preview.data || preview.data.length === 0) {
     return (
       <div className="py-1 text-[11px] text-[var(--text-tertiary)] italic">
-        Сообщения недоступны
-      </div>
+        {t('aiChat.ui.messagesUnavailable')}</div>
     );
   }
   return (

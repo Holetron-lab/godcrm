@@ -5,7 +5,7 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { FieldRenderer } from './FieldRenderer';
 import { FormBuilder, type FormTypeValue } from '../FormBuilder';
 import { DynamicFormRenderer } from '../FormBuilder/DynamicFormRenderer';
-import { useFormConfig, useSaveFormConfig } from '../../hooks/useFormConfig';
+import { useFormConfig, useSaveFormConfig, storedFormTypes } from '../../hooks/useFormConfig';
 import type { ColumnModel } from '../../types/table.types';
 import type { FormConfig } from '../../types/form-config.types';
 
@@ -222,15 +222,10 @@ export const AddRowModal = ({
                     
                     return (
                       <div key={column.id}>
-                        <label className="mb-1.5 block text-sm font-medium text-[var(--text-primary)]">
-                          {column.displayName || column.name}
-                          {column.isRequired && <span className="ml-1 text-red-500">*</span>}
-                        </label>
                         <FieldRenderer
                           column={column}
                           value={value}
                           onChange={(newValue) => handleChange(column.id, newValue)}
-                          showLabel={false}
                         />
                       </div>
                     );
@@ -264,14 +259,14 @@ export const AddRowModal = ({
           </div>
 
           {/* Fixed footer with buttons */}
-          <div className="flex justify-between items-center pt-4 mt-4 border-t border-[var(--border-primary)] flex-shrink-0">
+          <div className="flex flex-wrap justify-between items-center gap-2 pt-4 mt-4 border-t border-[var(--border-primary)] flex-shrink-0">
             {/* Edit Form Button (left) */}
             {tableId && (
               <Button 
                 variant="ghost" 
                 size="sm"
                 onClick={() => setShowFormBuilder(true)}
-                className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
                 <Settings2 className="w-4 h-4 mr-1.5" />
                 Редактировать форму
@@ -280,7 +275,7 @@ export const AddRowModal = ({
             {!tableId && <div />}
 
             {/* Save/Cancel buttons (right) */}
-            <div className="flex gap-2">
+            <div className="ml-auto flex flex-wrap justify-end gap-2">
               <Button variant="secondary" onClick={onClose}>
                 {t('common.cancel') || 'Отмена'}
               </Button>
@@ -305,6 +300,7 @@ export const AddRowModal = ({
           columns={columns}
           initialConfig={formConfig}
           initialFormType="add_row"
+          initialFormTypes={storedFormTypes(formConfigData?.data)}
           tableName={tableName}
           tableId={typeof tableId === 'string' ? parseInt(tableId) : tableId}
           sampleData={prefilledData || {}}

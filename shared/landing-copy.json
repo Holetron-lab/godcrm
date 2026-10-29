@@ -1,0 +1,200 @@
+{
+  "_comment": "Single source of the godcrm.ai landing copy. Read by src/pages/landing/LandingPage.tsx (React) and backend/services/landingSeo.js (SSR-lite for crawlers). Copy source of truth: Marketing docs 254896 (landing v3), 254978 (GEO pack §2 anchor, §4 FAQ) and 255025 (§B model swaps). Vendors are never named on this page; tab names live only in the 'Tab #N closed' series on /blog. The FAQPage JSON-LD in index.html duplicates `faq` by hand — keep both in step. v3.2 (docs 255372 §1/§2.7/§2.8, 255392 §1/§2): enemy.link is null until Closed Tab #0 ships (restore 'SEE WHICH TABS WE'VE CLOSED →'); inside.cards[].link is an optional {label, href} rendered after the body.",
+  "siteUrl": "https://godcrm.ai/",
+  "sourceRepoUrl": "https://godcrm.ai/git/holetron-lab/godcrm",
+  "mcpEndpoint": "https://godcrm.ai/s/help/mcp",
+  "hero": {
+    "kicker": "GOD CRM · A substrate for business and life",
+    "h1": "Not that CRM.",
+    "thesis": "GOD CRM is a substrate between any model and your business. The model thinks. The substrate remembers, permits, builds and acts.",
+    "tags": "ANY MODEL · SELF-HOSTED · BETA"
+  },
+  "enemy": {
+    "title": "THE ENEMY",
+    "badge": "ONE TAB AT A TIME",
+    "headline": { "pre": "Every tool wants to be a tab ", "glow": "you can't close", "post": "." },
+    "body": "Your business lives in a dozen windows. None of them remembers you. Every model you talk to forgets you when the chat ends, and the only cure on sale is lock-in. We ran a company like that. Then we built the place where you close the tabs, one at a time, and we post every one we close.",
+    "link": null
+  },
+  "inside": {
+    "title": "WHAT'S INSIDE",
+    "badge": "04 / 04",
+    "headline": { "pre": "Everything the model ", "glow": "doesn't have", "post": "." },
+    "kicker": "Generative Orchestration & Development · Context, Rights, Memory",
+    "cards": [
+      {
+        "num": "01",
+        "label": "CONTEXT",
+        "body": "Tables, documents, chats, calendar and people in one database. The model sees what it is allowed to see and nothing more: one column, one table, one space or several. You draw the line.",
+        "link": null
+      },
+      {
+        "num": "02",
+        "label": "RIGHTS",
+        "body": "Agents are users here: roles, scopes, an audit log, accountable to the space owner. Not everything-or-nothing.",
+        "link": null
+      },
+      {
+        "num": "03",
+        "label": "MEMORY",
+        "body": "Memory is RCLL, our open-source engine (a fork of Hindsight), living inside the substrate. Agents retain and recall through it, and decide for themselves what else to keep as tables and documents next to the data. What the model learned today it still knows next month. Swap the model, keep the memory.",
+        "link": { "label": "rcll.ai →", "href": "https://rcll.ai" }
+      },
+      {
+        "num": "04",
+        "label": "BUILD",
+        "body": "Not a framework. The place where you build one: widgets when they're enough, code when they're not. Either way the result lands next to the data, with the same rights and the same memory.",
+        "link": null
+      }
+    ],
+    "outro": "The model underneath. Your business on top. Your tools built in between."
+  },
+  "story": {
+    "title": "WHY WE BUILT IT",
+    "badge": "THE SHORT VERSION",
+    "headline": { "pre": "We sell piercing supplies. ", "glow": "This went too far", "post": "." },
+    "body": "We needed a CRM for a real business with real invoices. Everything on the market sold funnels and a seat subscription, so we wrote our own. Then we gave it a model. Then we gave the model accounts, rights and memory, and colleagues.",
+    "modelSwaps": "about ten times",
+    "modelSwapsCount": 10,
+    "swapQuote": {
+      "pre": "We changed the model ",
+      "post": " while running a real company on GOD CRM: Claude, Grok, OpenAI models, a few others, Gemini next. Nothing moved. The history, the rights and the memory stayed where they were, because they were never in the model."
+    },
+    "conclusion": "The value was in the layer under the model. We went too far, and we are giving that layer away.",
+    "credit": "BUILT BY HOLETRON LTD · RUNS OUR OWN COMPANY FIRST"
+  },
+  "connect": {
+    "title": "CONNECT YOUR AGENT",
+    "badge": "PUBLIC · READ-ONLY",
+    "headline": { "pre": "Plug your agent in. ", "glow": "No login", "post": "." },
+    "body": "Point any MCP client at the endpoint below and it reads our public knowledge space: docs, decisions, architecture notes. Read-only, no token. Your own instance gets its own rights.",
+    "note": "PUBLIC KNOWLEDGE SPACE · READ-ONLY ACCESS"
+  },
+  "build": {
+    "title": "BUILD",
+    "badge": "WIDGETS OR CODE",
+    "headline": { "pre": "Widgets when they're enough. ", "glow": "Code when they're not", "post": "." },
+    "columns": { "need": "WHAT YOU NEED", "widgets": "WITH WIDGETS", "code": "WITH CODE" },
+    "rows": [
+      {
+        "need": "Track something new",
+        "widgets": "Tables, fields and relations from the built-in types.",
+        "code": "A field type or behaviour the platform doesn't have yet."
+      },
+      {
+        "need": "Give the team a screen",
+        "widgets": "Views and dashboard widgets over your records.",
+        "code": "A new renderer or interaction."
+      },
+      {
+        "need": "Handle routine work",
+        "widgets": "Rules from triggers and actions.",
+        "code": "A calculation or action nobody has written yet."
+      },
+      {
+        "need": "Give an agent a job",
+        "widgets": "Instructions, tools and access for the task.",
+        "code": "A missing integration or tool."
+      }
+    ],
+    "outro": "Both land next to the data, with the same rights and the same memory. Agents write code here too. It goes through review like anyone's."
+  },
+  "underTheHood": {
+    "title": "UNDER THE HOOD",
+    "badge": "06 / 06",
+    "headline": { "pre": "One substrate. ", "glow": "Six things you can touch", "post": "." },
+    "cards": [
+      {
+        "num": "01",
+        "label": "DATA",
+        "tag": "CONTEXT",
+        "body": "Keep business records in configurable tables.",
+        "long": "Tables, fields and relations hold what your team works with. Agents read and change both the records and the structure, through the same rights as people."
+      },
+      {
+        "num": "02",
+        "label": "VIEWS & DASHBOARDS",
+        "tag": "DEVELOPMENT",
+        "body": "Choose a useful view of the same records.",
+        "long": "Table, board, calendar, dashboard: views over the same records for different roles. No second copy of the process."
+      },
+      {
+        "num": "03",
+        "label": "AGENTS",
+        "tag": "RIGHTS",
+        "body": "Give agents context and tools for a job.",
+        "long": "An agent joins a conversation like a colleague. What it can do is its tools, its role and its approval rules, not a global key."
+      },
+      {
+        "num": "04",
+        "label": "AUTOMATIONS",
+        "tag": "ORCHESTRATION",
+        "body": "Configure routine actions around your records.",
+        "long": "Triggers and actions chain routine steps around your records. Rules are visible, editable and logged."
+      },
+      {
+        "num": "05",
+        "label": "API & MCP",
+        "tag": "ORCHESTRATION",
+        "body": "Connect external tools and agent clients.",
+        "long": "The whole system is reachable over API and MCP. The public endpoint above is read-only; your own instance sets its own rights."
+      },
+      {
+        "num": "06",
+        "label": "SELF-HOSTING",
+        "tag": "MEMORY",
+        "body": "Your data, your server, your memory.",
+        "long": "Your data, your server, your memory, one database to back up. Model access is yours to choose and to swap."
+      }
+    ],
+    "anchor": "In plain terms: GOD CRM is a self-hosted operational database with a UI for people and an MCP server for agents, where every agent is a user with a role, a passport issued in one home space with access granted per space, project, table or column, approval rules on dangerous tools, a tamper-evident audit log and persistent memory, and where the model underneath can be swapped without losing any of it."
+  },
+  "broken": {
+    "title": "HONEST STATUS",
+    "badge": "BETA",
+    "headline": { "pre": "What's broken ", "glow": "right now", "post": "." },
+    "body": "We run our own company on this. We are not naive, and we have not been audited. Here is what we know is rough:",
+    "items": [
+      "A fresh self-hosted install boots to an empty database. There is no demo seed yet, so the first hour is spent making tables by hand.",
+      "The docs are thin in places. The knowledge base covers the architecture better than the day-to-day setup.",
+      "No external security audit yet. Report issues through the repository."
+    ]
+  },
+  "faq": {
+    "title": "QUESTIONS",
+    "badge": "FIVE",
+    "headline": { "pre": "What people ", "glow": "actually ask", "post": "." },
+    "items": [
+      {
+        "q": "How do I move AI agent memory and state from markdown files and Git to a shared database for a team?",
+        "a": "Keep the files for instructions; move state and memory into a database the agents share. In GOD CRM every agent is a user with its own passport, so writes are serialized, permissioned and logged instead of racing over the same folder. Memory is retained and recalled through MCP tools and survives model swaps. We ran our own ops from text files first and wrote down where it broke: godcrm.ai/blog/markdown-ops."
+      },
+      {
+        "q": "Is there a self-hosted CRM or operational database built for AI agents with native MCP support?",
+        "a": "GOD CRM is one: self-hosted, the whole system exposed as an MCP server, agents as first-class users with roles and scopes, no per-seat pricing. People get tables, dashboards and documents in a UI; agents get the same data over MCP and API. You can try the public read-only endpoint without an account: godcrm.ai/s/help/mcp."
+      },
+      {
+        "q": "How do I give an LLM agent limited permissions to specific business tables, with approval and an audit log, instead of one all-or-nothing API key?",
+        "a": "Give the agent a passport, not a key. In GOD CRM a passport is issued in one home space and bound to a human owner, access is granted per space, project, table or down to a column, the role decides what it can read or edit, approval rules pause dangerous tools until a human says yes, and every action lands in a hash-chained audit log. Five destructive tools are gated out of the box; the owner adds rules for anything else."
+      },
+      {
+        "q": "How do I switch between Claude, GPT and local models without losing business context and agent memory?",
+        "a": "Keep context, rights and memory outside the model. In GOD CRM they live in your database and are served to whichever model is plugged in; swapping the provider changes the provider and nothing else. We changed the model about ten times while running a real company on it, Claude, Grok, OpenAI models and others, with Gemini next, and the company did not notice: history, permissions and memory were never in the model to begin with."
+      },
+      {
+        "q": "Is there a workspace where humans and AI agents work on the same tables and dashboards, not just an agent framework?",
+        "a": "Yes. GOD CRM is not a framework you import. It is the place where humans and agents share tables, documents, dashboards and chat, with the same rights model for both. If you already have a framework or a tool, you can import it the other way round: connect it to your space (Notion, GitHub, Slack, Figma, any remote MCP server) and ask your agent to wire it in. We pulled our own Notion databases into tables this way. The \"and life\" in the header is literal: the tables are universal and the calendar is built in, so a training plan lives next to an invoice under the same rights and the same memory. A fitness module ships with it; nothing in the substrate assumes a company."
+      }
+    ]
+  },
+  "finalCta": {
+    "title": "START",
+    "badge": "SELF-HOST",
+    "headline": { "pre": "Run it on your server. ", "glow": "Bring any model", "post": "." },
+    "body": "One install. Your data stays yours. Change the model like a light bulb, keep the context, the rights and the memory."
+  },
+  "footer": {
+    "copyright": "© 2026 HOLETRON LTD",
+    "lines": ["GENERATIVE ORCHESTRATION & DEVELOPMENT", "CONTEXT · RIGHTS · MEMORY", "A SUBSTRATE FOR BUSINESS AND LIFE"]
+  }
+}

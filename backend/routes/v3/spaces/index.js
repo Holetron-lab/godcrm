@@ -17,6 +17,7 @@ import registerVariablesRoutes from './variables.js';
 import registerVisibilityRoutes from './visibility.js';
 import registerInvitationRoutes from './invitations.js';
 import registerNotificationDefaultsRoutes from './notificationDefaults.js';
+import registerWidgetSourcesRoutes from './widgetSources.js';
 
 const router = Router();
 
@@ -26,5 +27,6 @@ registerVariablesRoutes(router);
 registerVisibilityRoutes(router);
 registerInvitationRoutes(router);
 registerNotificationDefaultsRoutes(router);
+registerWidgetSourcesRoutes(router);
 
 export default router;

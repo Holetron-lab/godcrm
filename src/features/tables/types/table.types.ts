@@ -250,13 +250,14 @@ export type RelationType = 'lookup' | 'link' | 'nested';
 export type RelationStorageFormat = 'json' | 'comma' | 'semicolon' | 'newline' | 'single';
 
 // Display mode for relation values
-export type RelationDisplayMode = 'badges' | 'cards' | 'list' | 'count' | 'first' | 'raw';
+export type RelationDisplayMode = 'tags' | 'badges' | 'cards' | 'list' | 'count' | 'first' | 'raw';
 
 // Relation config for columns that reference another table
 export interface ColumnRelationConfig {
   enabled?: boolean;
   type?: RelationType;     // Type of relation display (default: 'lookup')
   tableId?: string;        // Source table ID
+  table_id?: string | number; // Legacy persisted alias
   valueColumn?: string;    // Column to use as value (usually ID)
   labelColumn?: string;    // Column to display as label
   colorColumn?: string;    // Optional column for color
@@ -344,7 +345,7 @@ export interface LinkedVariablesMap {
 
 /**
  * Column summary configuration
- * Controls which aggregations are shown in TableSummaryBar
+ * Controls which aggregations are shown in the table footer (useColumnSummaries)
  * and their optional links to Variables
  */
 export interface ColumnSummaryConfig {
@@ -390,7 +391,8 @@ export interface NumberColumnConfig {
   step?: number;                     // Step for stepper
   min?: number;                      // Minimum value
   max?: number;                      // Maximum value
-  displayStyle?: 'default' | 'badge' | 'progress' | 'progress-vertical' | 'progress-ring' | 'currency' | 'percent' | 'compact' | 'rating' | 'slider';
+  displayStyle?: 'default' | 'badge' | 'progress' | 'progress-vertical' | 'progress-ring' | 'currency' | 'percent' | 'compact' | 'rating' | 'slider' | 'trend';
+  trendField?: string;               // For 'trend': name of the JSON column holding {position, prev, at, ...} (see cells/trend.ts)
   prefix?: string;                   // Prefix like "$" or "EUR"
   suffix?: string;                   // Suffix like "%" or " pcs"
   decimals?: number;                 // Number of decimal places
@@ -484,10 +486,14 @@ export interface JsonColumnConfig {
   defaultMode?: 'code' | 'tree' | 'form';         // Default editor mode in cell modal (Phase 3)
   prettyInCell?: boolean;                         // Pretty-print summary in cell preview
   previewLines?: number;                          // 1-10, lines shown in cell preview
+  cellView?: 'preview' | 'table';                 // 'table' renders arrays/objects as an editable grid in the cell
 }
 
 // Table (embedded table) column configuration
 export interface TableColumnConfig {
+  tableId?: string; // Legacy data source stored with display settings
+  label?: string; // Legacy alias for buttonLabel
+  nested?: ColumnRelationConfig['nested'];
   displayMode?: 'modal' | 'inline' | 'embedded';  // How to display the table
   buttonLabel?: string;                            // Custom button text with variable support {{column}}
   buttonStyle?: 'default' | 'outline' | 'ghost' | 'link';  // Button style
@@ -521,7 +527,65 @@ export interface VerificationColumnConfig {
 // Default fallback for missing/legacy columns is `private`.
 export type ColumnFileVisibility = 'private' | 'internal' | 'public';
 
+/**
+ * ADR-0035 Slice 1 (S1.2) — `geo_point` column config, stamped by the server on
+ * POST/PATCH. `raw_sibling` was the Slice-1 map/geo flag; ADR-0035-A removed the
+ * virtual `lat, lng` sibling, so the frontend now ignores it (the server still
+ * stores the boolean). `indexed` is stored but inert until P1c.
+ */
+export interface GeoColumnConfig {
+  version: 1;
+  raw_sibling: boolean;
+  indexed: boolean;
+}
+
+/**
+ * ADR-0035-A — stored shape of an `address` cell (no coordinates, ever).
+ * `formatted` is the only required key; `provider` / `provider_place_id` are
+ * reserved for slice B (geocoder) and pass through the editor untouched.
+ */
+export interface AddressValue {
+  formatted: string;
+  name?: string;
+  country_code?: string;
+  country?: string;
+  region?: string;
+  city?: string;
+  street?: string;
+  building?: string;
+  unit?: string;
+  postal_code?: string;
+  provider?: string;
+  provider_place_id?: string;
+}
+
+/**
+ * ADR-0035-A §Column Config (+ §Amendment 1) — `address` column config,
+ * stamped by the server on POST/PATCH.
+ * - `geo_column_id`: a `geo_point` column of the SAME table (server-checked);
+ *   clicking the address opens the map at that point when it is filled.
+ * - `name_template`: display-time default label (`{{column_key}}`), used when the
+ *   cell has no `name`; rendered by resolveRowTemplate, never written back.
+ * - `geocoder`: reserved for slice B — key *name* in the space vault + provider.
+ */
+export interface AddressColumnConfig {
+  version?: 1;
+  geo_column_id: number | null;
+  name_template?: string | null;
+  geocoder?: {
+    secret_key: string | null;
+    provider: string | null;
+  };
+}
+
 export interface ColumnConfig {
+  defaultSort?: 'asc' | 'desc';
+  geo?: GeoColumnConfig;             // ADR-0035: for geo_point columns
+  address?: AddressColumnConfig;     // ADR-0035-A: for address columns
+  // Legacy relation fields persisted by the CSV importer.
+  relatedTableId?: number;
+  relationType?: 'many-to-many';
+  storageFormat?: RelationStorageFormat;
   format?: string;
   options?: ColumnOption[];
   relation?: ColumnRelationConfig;  // For select columns: pull options from another table

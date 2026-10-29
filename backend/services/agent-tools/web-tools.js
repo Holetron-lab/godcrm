@@ -16,6 +16,7 @@
 import { dbGet } from '../../database/connection.js';
 import { aiLogger } from '../../utils/logger.js';
 import { getSecret } from '../secrets/getSecret.js';
+import { z } from 'zod';
 
 const DEFAULT_SEARXNG_URL = 'http://127.0.0.1:8890';
 // Secondary SearXNG (backup). On this box it's the DEV (.22) instance reached
@@ -23,9 +24,6 @@ const DEFAULT_SEARXNG_URL = 'http://127.0.0.1:8890';
 // Used only if the local SearXNG is down — a real metasearch fallback that
 // beats scraping Bing. Empty string disables it.
 const DEFAULT_SEARXNG_FALLBACK_URL = 'http://127.0.0.1:8891';
-
-// Lazy-loaded Firecrawl client
-let firecrawlApp = null;
 
 /**
  * Resolve the SearXNG base URL (no trailing slash). Vault first, env, default.
@@ -264,16 +262,31 @@ async function getFirecrawlClient(spaceId = null) {
     throw new Error('Firecrawl API key not configured. Add it in AI Agents → API Keys.');
   }
 
-  // Dynamic import to avoid issues if package not installed
-  if (!firecrawlApp) {
-    try {
-      const { default: FirecrawlApp } = await import('@mendable/firecrawl-js');
-      firecrawlApp = new FirecrawlApp({ apiKey });
-    } catch (err) {
-      throw new Error('Firecrawl package not installed. Run: npm install @mendable/firecrawl-js');
-    }
-  }
-  return firecrawlApp;
+  // The SDK still depends on vulnerable Zod 3. Keep the two v1 HTTP contracts
+  // used here, validating responses with our patched Zod instead.
+  const document = z.object({
+    title: z.string().nullish(), url: z.string().optional(),
+    description: z.string().nullish(), markdown: z.string().nullish(),
+    metadata: z.object({ title: z.string().nullish(), description: z.string().nullish() }).optional(),
+    links: z.array(z.string()).optional(),
+  });
+  const post = async (path, body, schema) => {
+    const response = await fetch(`https://api.firecrawl.dev/v1/${path}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(60000),
+    });
+    if (!response.ok) throw new Error(`Firecrawl HTTP ${response.status}`);
+    return schema.parse(await response.json());
+  };
+  return {
+    search: (query, options) => post('search', z.object({
+      query: z.string().min(1), limit: z.number().int().min(1).max(10), tbs: z.string().optional(),
+      scrapeOptions: z.object({ formats: z.array(z.literal('markdown')) }),
+    }).parse({ query, ...options }), z.object({ success: z.literal(true), data: z.array(document.extend({ url: z.string() })) })),
+    scrapeUrl: (url, options) => post('scrape', z.object({
+      url: z.string().url(), formats: z.array(z.literal('markdown')),
+    }).parse({ url, ...options }), z.object({ success: z.literal(true), data: document })),
+  };
 }
 
 /**

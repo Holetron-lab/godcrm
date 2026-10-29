@@ -6,8 +6,7 @@
  *  - on click: popover with full audit_log timeline, methods and jti
  */
 
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import * as Popover from '@radix-ui/react-popover';
 import { Check, X, ShieldCheck, ShieldAlert } from 'lucide-react';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 
@@ -101,45 +100,11 @@ function safeFullDate(iso: string | null | undefined): string {
 
 export const VerificationCell = ({ value, rawMode }: VerificationCellProps) => {
   const { language } = useLanguage();
-  const [open, setOpen] = useState(false);
-  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
-  const anchorRef = useRef<HTMLButtonElement | null>(null);
-  const popoverRef = useRef<HTMLDivElement | null>(null);
-
   const data = parseValue(value);
-
-  useEffect(() => {
-    if (!open) return;
-    const anchor = anchorRef.current;
-    if (!anchor) return;
-    const rect = anchor.getBoundingClientRect();
-    const top = rect.bottom + 4 + window.scrollY;
-    const left = Math.max(8, Math.min(rect.left + window.scrollX, window.scrollX + window.innerWidth - 360));
-    setPopoverPos({ top, left });
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (popoverRef.current?.contains(t)) return;
-      if (anchorRef.current?.contains(t)) return;
-      setOpen(false);
-    };
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onEsc);
-    return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onEsc);
-    };
-  }, [open]);
 
   if (rawMode) {
     if (value === null || value === undefined || value === '') {
-      return <span className="font-mono text-xs text-[var(--text-tertiary)]">NULL</span>;
+      return <span className="font-mono text-xs text-[var(--text-secondary)]">NULL</span>;
     }
     const raw = typeof value === 'object' ? JSON.stringify(value) : String(value);
     return (
@@ -157,7 +122,7 @@ export const VerificationCell = ({ value, rawMode }: VerificationCellProps) => {
   const eventCount = data?.audit_log.length ?? 0;
 
   if (isPristine) {
-    return <span className="text-[var(--text-tertiary)]">—</span>;
+    return <span className="text-[var(--text-secondary)]">—</span>;
   }
 
   const accent = isVerified
@@ -173,37 +138,39 @@ export const VerificationCell = ({ value, rawMode }: VerificationCellProps) => {
   const reverseLog = data ? [...data.audit_log].reverse() : [];
 
   return (
-    <>
-      <button
-        ref={anchorRef}
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium cursor-pointer hover:opacity-90 transition"
-        style={{
-          backgroundColor: accent.bg,
-          color: accent.color,
-          border: `1px solid ${accent.border}`,
-        }}
-        title={label}
-      >
-        {isVerified ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-        <span>{label}</span>
-        {absoluteAt && (
-          <span className="opacity-70 font-normal">· {absoluteAt}</span>
-        )}
-        {eventCount > 1 && (
-          <span className="opacity-60 font-normal">· {eventCount} {eventsWord}</span>
-        )}
-      </button>
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
+          className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium cursor-pointer hover:opacity-90 transition"
+          style={{
+            backgroundColor: accent.bg,
+            color: 'var(--text-primary)',
+            border: `1px solid ${accent.border}`,
+          }}
+          title={label}
+        >
+          {isVerified ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+          <span>{label}</span>
+          {absoluteAt && (
+            <span className="font-normal">· {absoluteAt}</span>
+          )}
+          {eventCount > 1 && (
+            <span className="font-normal">· {eventCount} {eventsWord}</span>
+          )}
+        </button>
+      </Popover.Trigger>
 
-      {open && popoverPos && data && createPortal(
-        <div
-          ref={popoverRef}
-          style={{ position: 'absolute', top: popoverPos.top, left: popoverPos.left, width: 360, zIndex: 1000 }}
-          className="rounded-xl shadow-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] overflow-hidden"
+      {data && <Popover.Portal>
+        <Popover.Content
+          aria-label={language === 'ru' ? 'История верификации' : 'Verification history'}
+          align="start"
+          sideOffset={4}
+          collisionPadding={8}
+          className="z-[1000] w-[360px] max-w-[calc(100vw-16px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto rounded-xl shadow-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)]"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -216,7 +183,7 @@ export const VerificationCell = ({ value, rawMode }: VerificationCellProps) => {
                 className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
                 style={{
                   backgroundColor: accent.bg,
-                  color: accent.color,
+                  color: 'var(--text-primary)',
                   border: `1px solid ${accent.border}`,
                 }}
               >
@@ -229,7 +196,7 @@ export const VerificationCell = ({ value, rawMode }: VerificationCellProps) => {
               )}
             </div>
             {data.verified_at && (
-              <div className="text-[11px] text-[var(--text-tertiary)]">
+              <div className="text-[11px] text-[var(--text-secondary)]">
                 {safeFullDate(data.verified_at)}
               </div>
             )}
@@ -251,7 +218,7 @@ export const VerificationCell = ({ value, rawMode }: VerificationCellProps) => {
           {/* Timeline */}
           <div className="max-h-[260px] overflow-y-auto px-3 py-2">
             {reverseLog.length === 0 ? (
-              <div className="text-xs text-[var(--text-tertiary)] italic py-2 text-center">
+              <div className="text-xs text-[var(--text-secondary)] italic py-2 text-center">
                 {language === 'ru' ? 'Нет событий' : 'No events'}
               </div>
             ) : (
@@ -272,7 +239,7 @@ export const VerificationCell = ({ value, rawMode }: VerificationCellProps) => {
                           <span className="font-medium text-[var(--text-primary)]">
                             User #{entry.actor}
                           </span>
-                          <span className="text-[var(--text-tertiary)] text-[11px]">
+                          <span className="text-[var(--text-secondary)] text-[11px]">
                             {safeFullDate(entry.at)}
                           </span>
                         </div>
@@ -305,15 +272,14 @@ export const VerificationCell = ({ value, rawMode }: VerificationCellProps) => {
           {/* Footer */}
           {data.jti && (
             <div className="px-3 py-2 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
-              <div className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-wide mb-0.5">jti</div>
+              <div className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wide mb-0.5">jti</div>
               <div className="font-mono text-[10px] text-[var(--text-secondary)] break-all select-all">
                 {data.jti}
               </div>
             </div>
           )}
-        </div>,
-        document.body,
-      )}
-    </>
+        </Popover.Content>
+      </Popover.Portal>}
+    </Popover.Root>
   );
 };

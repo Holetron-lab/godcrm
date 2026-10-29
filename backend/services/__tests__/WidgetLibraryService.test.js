@@ -4,6 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { NON_EXISTENT_ID } from '../../tests/helpers/sentinel-ids.js';
 import {
   getLibraryWidgets,
   getFavorites,
@@ -16,9 +17,11 @@ import {
 } from '../WidgetLibraryService.js';
 import { createWidget, getWidgetById } from '../WidgetService.js';
 import { dbAll, dbGet, dbRun, destroyAdapter, resetAdapter, toBool } from '../../database/connection.js';
-// Helper functions (matching existing test patterns)
+import { cleanupWorkspace, fixtureToken } from '../../tests/helpers/workspace-fixture.js';
+// Helper functions (matching existing test patterns). Emails live in the
+// `@test.godcrm.local` namespace so `make test-clean` can sweep what a killed run leaves.
 async function createTestUser(suffix = '') {
-  const uniqueEmail = `test-widgetlib-${Date.now()}${suffix}@hltrn.cc`;
+  const uniqueEmail = `test-widgetlib-${fixtureToken()}${suffix}@test.godcrm.local`;
   const result = await dbRun(
     'INSERT INTO users (email, password_hash, name, encryption_key_encrypted, email_verified) VALUES (?, ?, ?, ?, ?)',
     [uniqueEmail, 'hash', 'Test User', 'encrypted_key', 1]
@@ -109,6 +112,7 @@ describe('WidgetLibraryService - ADR-073', () => {
   });
 
   afterEach(async () => {
+    await cleanupWorkspace({ userId, spaceId, projectId, dashboardId });
     await destroyAdapter();
   });
 
@@ -133,19 +137,25 @@ describe('WidgetLibraryService - ADR-073', () => {
       const otherSpaceId = await createTestSpace(otherUserId, 'Other Space');
       const otherProjectId = await createTestProject(otherUserId, otherSpaceId);
       const otherDashboardId = await createTestDashboard(otherProjectId);
-      const publicWidget = await createTestWidget(otherDashboardId, { title: 'Public Widget' });
-      await registerWidgetInLibrary(publicWidget.id, otherSpaceId, { is_public: true });
+      try {
+        const publicWidget = await createTestWidget(otherDashboardId, { title: 'Public Widget' });
+        await registerWidgetInLibrary(publicWidget.id, otherSpaceId, { is_public: true });
 
-      // Create local widget
-      const localWidget = await createTestWidget(dashboardId, { title: 'Local Widget' });
-      await registerWidgetInLibrary(localWidget.id, spaceId);
+        // Create local widget
+        const localWidget = await createTestWidget(dashboardId, { title: 'Local Widget' });
+        await registerWidgetInLibrary(localWidget.id, spaceId);
 
-      const result = await getLibraryWidgets(spaceId, { userId, include_public: true });
+        const result = await getLibraryWidgets(spaceId, { userId, include_public: true });
 
-      expect(result.items.length).toBeGreaterThanOrEqual(2);
-      const widgetIds = result.items.map(w => w.widget_id);
-      expect(widgetIds).toContain(publicWidget.id);
-      expect(widgetIds).toContain(localWidget.id);
+        expect(result.items.length).toBeGreaterThanOrEqual(2);
+        const widgetIds = result.items.map(w => w.widget_id);
+        expect(widgetIds).toContain(publicWidget.id);
+        expect(widgetIds).toContain(localWidget.id);
+      } finally {
+        await cleanupWorkspace({
+          userId: otherUserId, spaceId: otherSpaceId, projectId: otherProjectId, dashboardId: otherDashboardId
+        });
+      }
     });
 
     test('should not include non-public widgets from other spaces', async () => {
@@ -154,13 +164,19 @@ describe('WidgetLibraryService - ADR-073', () => {
       const otherSpaceId = await createTestSpace(otherUserId, 'Other Space 2');
       const otherProjectId = await createTestProject(otherUserId, otherSpaceId);
       const otherDashboardId = await createTestDashboard(otherProjectId);
-      const privateWidget = await createTestWidget(otherDashboardId, { title: 'Private Widget' });
-      await registerWidgetInLibrary(privateWidget.id, otherSpaceId, { is_public: false });
+      try {
+        const privateWidget = await createTestWidget(otherDashboardId, { title: 'Private Widget' });
+        await registerWidgetInLibrary(privateWidget.id, otherSpaceId, { is_public: false });
 
-      const result = await getLibraryWidgets(spaceId, { userId, include_public: true });
+        const result = await getLibraryWidgets(spaceId, { userId, include_public: true });
 
-      const widgetIds = result.items.map(w => w.widget_id);
-      expect(widgetIds).not.toContain(privateWidget.id);
+        const widgetIds = result.items.map(w => w.widget_id);
+        expect(widgetIds).not.toContain(privateWidget.id);
+      } finally {
+        await cleanupWorkspace({
+          userId: otherUserId, spaceId: otherSpaceId, projectId: otherProjectId, dashboardId: otherDashboardId
+        });
+      }
     });
 
     test('should filter by category favorites', async () => {
@@ -315,7 +331,7 @@ describe('WidgetLibraryService - ADR-073', () => {
     });
 
     test('should throw error for non-existent widget', async () => {
-      await expect(toggleFavorite(userId, 99999))
+      await expect(toggleFavorite(userId, NON_EXISTENT_ID))
         .rejects.toThrow('Widget not found');
     });
   });
@@ -377,7 +393,7 @@ describe('WidgetLibraryService - ADR-073', () => {
     });
 
     test('should throw error for non-existent widget', async () => {
-      await expect(trackUsage(userId, 99999))
+      await expect(trackUsage(userId, NON_EXISTENT_ID))
         .rejects.toThrow('Widget not found');
     });
   });
@@ -516,7 +532,7 @@ describe('WidgetLibraryService - ADR-073', () => {
     });
 
     test('should throw error for non-existent source widget', async () => {
-      await expect(addFromLibrary(dashboardId, 99999, 'reference', { x: 0, y: 0, w: 6, h: 4 }, userId))
+      await expect(addFromLibrary(dashboardId, NON_EXISTENT_ID, 'reference', { x: 0, y: 0, w: 6, h: 4 }, userId))
         .rejects.toThrow('Source widget not found');
     });
 
@@ -524,7 +540,7 @@ describe('WidgetLibraryService - ADR-073', () => {
       const widget = await createTestWidget(dashboardId);
       await registerWidgetInLibrary(widget.id, spaceId);
 
-      await expect(addFromLibrary(99999, widget.id, 'reference', { x: 0, y: 0, w: 6, h: 4 }, userId))
+      await expect(addFromLibrary(NON_EXISTENT_ID, widget.id, 'reference', { x: 0, y: 0, w: 6, h: 4 }, userId))
         .rejects.toThrow('Dashboard not found');
     });
 
@@ -569,14 +585,15 @@ describe('WidgetLibraryService - ADR-073', () => {
     });
 
     test('should throw error for non-existent widget', async () => {
-      await expect(registerWidget(99999, spaceId))
+      await expect(registerWidget(NON_EXISTENT_ID, spaceId))
         .rejects.toThrow('Widget not found');
     });
 
     test('should throw error for non-existent space', async () => {
       const widget = await createTestWidget(dashboardId);
+      const { id: missingSpaceId } = await dbGet("SELECT nextval(pg_get_serial_sequence('spaces', 'id')) AS id");
 
-      await expect(registerWidget(widget.id, 99999))
+      await expect(registerWidget(widget.id, missingSpaceId))
         .rejects.toThrow('Space not found');
     });
 

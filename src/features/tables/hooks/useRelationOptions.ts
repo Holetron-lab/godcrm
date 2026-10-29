@@ -1,7 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { useState, useMemo, useCallback } from 'react';
 import { apiClient } from '@/shared/utils/apiClient';
 import type { ColumnOption, ColumnRelationConfig } from '../types/table.types';
+import type { LensEntry } from '../utils/resolveLens';
+import {
+  fetchRelationLookup,
+  isRelationLookupReady,
+  relationLookupQueryKey,
+  type RelationLookupData,
+} from './useRelationLookup';
 
 interface RelationOptionsResult {
   options: ColumnOption[];
@@ -9,8 +16,6 @@ interface RelationOptionsResult {
   error: Error | null;
 }
 
-/** Max rows to load for full lookup (display mode) */
-const LOOKUP_LIMIT = 5000;
 /** Default rows to load for search results */
 const SEARCH_LIMIT = 50;
 /** Debounce delay for server search (ms) */
@@ -26,7 +31,7 @@ function parseRows(responseData: unknown): Array<Record<string, unknown>> {
 }
 
 /**
- * Convert a row to a ColumnOption
+ * Convert a row to a ColumnOption (search results only — full lists come from the shared lookup)
  */
 function rowToOption(row: Record<string, unknown>, relation: ColumnRelationConfig): ColumnOption {
   const rowData = row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : row;
@@ -37,37 +42,42 @@ function rowToOption(row: Record<string, unknown>, relation: ColumnRelationConfi
   if (relation.valueColumn === 'id') {
     val = String(originalId ?? rowData['id'] ?? rowId ?? '');
   } else {
-    val = String(rowData[relation.valueColumn] ?? '');
+    val = relation.valueColumn ? String(rowData[relation.valueColumn] ?? '') : '';
   }
 
   return {
     value: val,
-    label: String(rowData[relation.labelColumn] ?? ''),
+    label: relation.labelColumn ? String(rowData[relation.labelColumn] ?? '') : '',
     color: relation.colorColumn ? String(rowData[relation.colorColumn] ?? '') || undefined : undefined
   };
 }
 
+/** Every related row as a select option (ADR-205 D4: derived from the one shared lookup). */
+const toOptions = (data: RelationLookupData): ColumnOption[] =>
+  data.items.map(({ value, label, color }) => ({ value, label, color }));
+
 /**
- * Загружает ВСЕ опции для select из связанной таблицы (для отображения)
- * Использует увеличенный лимит (5000) для полного маппинга
+ * Options from one column of the server map (`relations[column]` of GET /rows?include=relations).
+ * Covers only the keys of the loaded rows — enough for labels of what is on screen, never a full list.
+ */
+export const lensMapToOptions = (map: Record<string, LensEntry>): ColumnOption[] =>
+  Object.entries(map).map(([value, entry]) => ({
+    value,
+    label: entry.label ?? (entry.value === undefined || entry.value === null ? value : String(entry.value)),
+    color: entry.color,
+  }));
+
+/**
+ * Все опции select из связанной таблицы (для отображения).
+ * Читает тот же кэш, что и useRelationLookup — одна загрузка на relation.
  */
 export function useRelationOptions(relation: ColumnRelationConfig | undefined): RelationOptionsResult {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['relation-options', relation?.tableId, relation?.valueColumn, relation?.labelColumn],
-    queryFn: async () => {
-      if (!relation?.enabled || !relation.tableId || !relation.valueColumn || !relation.labelColumn) {
-        return [];
-      }
-
-      const response = await apiClient.request<{
-        data: { rows: Array<Record<string, unknown>> } | Array<Record<string, unknown>>
-      }>(`/tables/${relation.tableId}/rows?limit=${LOOKUP_LIMIT}`);
-
-      const rows = parseRows(response.data);
-      return rows.map(row => rowToOption(row, relation));
-    },
-    enabled: Boolean(relation?.enabled && relation?.tableId && relation?.valueColumn && relation?.labelColumn),
+    queryKey: relationLookupQueryKey(relation),
+    queryFn: () => fetchRelationLookup(relation),
+    enabled: isRelationLookupReady(relation),
     staleTime: 60000,
+    select: toOptions,
   });
 
   return {
@@ -105,7 +115,7 @@ export function useRelationSearch(relation: ColumnRelationConfig | undefined) {
       }>(`/tables/${relation.tableId}/rows?limit=${SEARCH_LIMIT}`);
       return parseRows(response.data).map(row => rowToOption(row, relation));
     },
-    enabled: Boolean(relation?.enabled && relation?.tableId && relation?.valueColumn && relation?.labelColumn),
+    enabled: isRelationLookupReady(relation),
     staleTime: 60000,
   });
 
@@ -147,37 +157,38 @@ export function useRelationSearch(relation: ColumnRelationConfig | undefined) {
 export function useMultiRelationOptions(
   relations: Array<{ columnId: string; relation: ColumnRelationConfig | undefined }>
 ): Map<string, ColumnOption[]> {
-  const enabledRelations = relations.filter(r =>
-    r.relation?.enabled && r.relation.tableId && r.relation.valueColumn && r.relation.labelColumn
-  );
+  const enabledRelations = relations.filter(r => isRelationLookupReady(r.relation));
 
-  const queries = enabledRelations.map(r => {
-    const { relation } = r;
-    return useQuery({
-      queryKey: ['relation-options', relation?.tableId, relation?.valueColumn, relation?.labelColumn],
-      queryFn: async () => {
-        if (!relation?.enabled || !relation.tableId || !relation.valueColumn || !relation.labelColumn) {
-          return { columnId: r.columnId, options: [] };
-        }
+  // Columns pointing at the same relation share one query (and one request).
+  const relationGroups = new Map<string, typeof enabledRelations>();
+  for (const entry of enabledRelations) {
+    const key = JSON.stringify(relationLookupQueryKey(entry.relation));
+    const group = relationGroups.get(key);
+    if (group) group.push(entry);
+    else relationGroups.set(key, [entry]);
+  }
+  const groups = [...relationGroups.values()];
 
-        const response = await apiClient.request<{
-          data: { rows: Array<Record<string, unknown>> } | Array<Record<string, unknown>>
-        }>(`/tables/${relation.tableId}/rows?limit=${LOOKUP_LIMIT}`);
-
-        const rows = parseRows(response.data);
-        const options: ColumnOption[] = rows.map(row => rowToOption(row, relation));
-        return { columnId: r.columnId, options };
-      },
-      enabled: Boolean(relation?.enabled && relation?.tableId && relation?.valueColumn && relation?.labelColumn),
+  const queries = useQueries({
+    queries: groups.map(([{ relation }]) => ({
+      queryKey: relationLookupQueryKey(relation),
+      queryFn: () => fetchRelationLookup(relation),
+      enabled: isRelationLookupReady(relation),
       staleTime: 60000,
-    });
+      select: toOptions,
+    })),
   });
 
   const result = new Map<string, ColumnOption[]>();
   queries.forEach((query, index) => {
-    const columnId = enabledRelations[index].columnId;
-    result.set(columnId, query.data?.options ?? []);
+    for (const { columnId } of groups[index]) {
+      result.set(columnId, query.data ?? []);
+    }
   });
 
   return result;
 }
+
+/** Select / multi-select columns whose options come from a related table. */
+export const isLensSelectColumn = (column: { type: string; config?: { relation?: ColumnRelationConfig } }): boolean =>
+  ['select', 'multi-select', 'multi_select'].includes(column.type) && isRelationLookupReady(column.config?.relation);

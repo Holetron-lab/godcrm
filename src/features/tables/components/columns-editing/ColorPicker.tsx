@@ -2,11 +2,13 @@
  * ColorPicker - Color selection component with preset colors and hex input
  */
 import { useState } from 'react';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { ChevronDown } from 'lucide-react';
 import { COLUMN_COLORS } from './constants';
 import type { ColorPickerProps } from './types';
 
 export const ColorPicker = ({ value, onChange, compact = false }: ColorPickerProps) => {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value || '');
 
@@ -33,6 +35,7 @@ export const ColorPicker = ({ value, onChange, compact = false }: ColorPickerPro
         />
         <input
           type="text"
+          aria-label={t('columnSettings.options.hexColor')}
           value={inputValue}
           onChange={(e) => handleInputChange(e.target.value)}
           placeholder="#000000"
@@ -40,6 +43,8 @@ export const ColorPicker = ({ value, onChange, compact = false }: ColorPickerPro
         />
         <button
           type="button"
+          aria-label={t('columnSettings.options.chooseColor')}
+          aria-expanded={isOpen}
           onClick={() => setIsOpen(!isOpen)}
           className={`${compact ? 'h-8 w-6' : 'h-10 w-8'} rounded-r-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] hover:bg-[var(--bg-tertiary)] flex items-center justify-center`}
         >
@@ -63,7 +68,7 @@ export const ColorPicker = ({ value, onChange, compact = false }: ColorPickerPro
                   backgroundImage: c ? undefined : 'linear-gradient(45deg, #666 25%, transparent 25%), linear-gradient(-45deg, #666 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #666 75%), linear-gradient(-45deg, transparent 75%, #666 75%)',
                   backgroundSize: c ? undefined : '4px 4px'
                 }}
-                title={c || 'Без цвета'}
+                title={c || t('tables.create.noColor')}
               />
             ))}
           </div>

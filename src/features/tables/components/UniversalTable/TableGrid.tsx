@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef, Fragment } from 'react';
-import { flexRender, Table as ReactTable } from '@tanstack/react-table';
+import { Table as ReactTable } from '@tanstack/react-table';
 import {
   DndContext,
   closestCenter,
@@ -12,20 +12,17 @@ import {
   DragOverlay
 } from '@dnd-kit/core';
 import { GripVertical } from 'lucide-react';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import type { RowModel, ColumnModel } from '../../types/table.types';
-import { RowActionsMenu } from './RowActionsMenu';
-import { RowSelectionCheckbox, buildRowQuickActions } from './RowSelectionCheckbox';
+import type { RelationsMap } from '../../utils/resolveLens';
 import { SelectionSummaryBar } from './SelectionSummaryBar';
 import { TableGridHeader } from './TableGridHeader';
 import { TableGridFooter } from './TableGridFooter';
 import { LoadPreviousRow, LoadNextRow, LoadingSkeletonRows } from './TablePaginationRows';
 import { useGroupedRows } from './useGroupedRows';
 import { useColumnSummaries, useRelationOptions } from './useColumnSummaries';
+import { IDLE_SUMMARY, type TableSummaryState } from '../../hooks/useTableSummary';
 import { TableGridRow } from './TableGridRow';
-import { InlineNestedTable } from '../cells/InlineNestedTable';
-import { useTablesStore } from '../../store/tablesStore';
-import { cn } from '@/shared/utils/cn';
-import { getRowColorStyle } from '../../utils/rowColorStyle';
 
 interface TableGridProps {
   table: ReactTable<RowModel>;
@@ -70,6 +67,11 @@ interface TableGridProps {
   onClearSelection?: () => void;
   onSelectAllFiltered?: () => void;
   onDeleteSelected?: () => void;
+  // Server totals (whole filtered table / explicit selection), see useTableSummary
+  tableSummary?: TableSummaryState;
+  selectionSummary?: TableSummaryState;
+  /** Server relation lens map of the loaded rows (ADR-205 D2); spares the footer/group lookups a download. */
+  relations?: RelationsMap;
   filteredCount?: number;
   totalCount?: number;
   // Grouping
@@ -98,6 +100,7 @@ export const TableGrid = ({
   table,
   columns,
   rows,
+  relations,
   hiddenColumns = [],
   editingCell,
   draftValue,
@@ -137,6 +140,8 @@ export const TableGrid = ({
   onDeleteSelected,
   filteredCount = 0,
   totalCount = 0,
+  tableSummary = IDLE_SUMMARY,
+  selectionSummary = IDLE_SUMMARY,
   // Grouping
   groupByColumn = null,
   // Load more
@@ -165,7 +170,6 @@ export const TableGrid = ({
 
   // Success-flash cells (used only by the grouped read-only render path; the
   // editable ungrouped row owns its own copy via useTablesStore).
-  const successCells = useTablesStore((state) => state.successCells);
 
   // Track horizontal scroll position
   useEffect(() => {
@@ -207,7 +211,7 @@ export const TableGrid = ({
         distance: 5 // Smaller distance for more responsive drag
       }
     }),
-    useSensor(KeyboardSensor)
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   // Get column IDs for sortable context
@@ -219,8 +223,9 @@ export const TableGrid = ({
     [activeColumnId, columns]
   );
 
-  // Load relation options for footer summaries + select column footer chips
-  const relationOptionsMap = useRelationOptions(columns, rows.length);
+  // Relation options for footer summaries, group headers and select footer chips.
+  // The server map covers the loaded rows; the related table loads only on a miss or while grouping.
+  const relationOptionsMap = useRelationOptions(columns, rows.length, { relations, groupByColumn, summary: tableSummary });
 
   // Grouping: groupedRows (null when no grouping) + displayColumns (columns minus the group column)
   const { groupedRows, displayColumns } = useGroupedRows(
@@ -230,7 +235,7 @@ export const TableGrid = ({
     relationOptionsMap
   );
 
-  const columnSummaries = useColumnSummaries(rows, columns, relationOptionsMap);
+  const columnSummaries = useColumnSummaries(tableSummary, columns, relationOptionsMap);
 
   // Whether actions column (add-column / row duplicate / row delete) is present
   const hasActionsColumn = Boolean(onAddColumn || (!readOnly && (onDuplicateRow || onDeleteRow)));
@@ -267,16 +272,6 @@ export const TableGrid = ({
         data-testid="table-grid"
         className="bg-[var(--bg-primary)] relative"
       >
-        {/* Loading overlay when loading more pages */}
-        {isLoadingMore && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-[var(--bg-primary)]/60 backdrop-blur-[2px]">
-            <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] shadow-lg">
-              <div className="w-5 h-5 border-2 border-[var(--color-primary-500)] border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm text-[var(--text-secondary)]">Загрузка...</span>
-            </div>
-          </div>
-        )}
-        
         {/* Selection Summary Bar - shows stats for selected rows */}
         {selectedRowIds && selectedRowIds.size > 0 && onSelectionSortChange && onClearSelection && onSelectAllFiltered && (
           <SelectionSummaryBar
@@ -291,6 +286,7 @@ export const TableGrid = ({
             filteredCount={filteredCount}
             totalCount={totalCount}
             readOnly={readOnly}
+            summary={selectionSummary}
           />
         )}
         
@@ -359,7 +355,7 @@ export const TableGrid = ({
                             {group.label}
                           </span>
                         )}
-                        <span className="text-xs text-[var(--text-tertiary)]">
+                        <span className="text-xs text-[var(--text-secondary)]">
                           {group.rows.length} {group.rows.length === 1 ? 'запись' : group.rows.length < 5 ? 'записи' : 'записей'}
                         </span>
                       </div>
@@ -368,169 +364,45 @@ export const TableGrid = ({
                   {/* Group rows */}
                   {groupTableRows.map((row, rowIndex) => {
                     const expandedForRow = expandedInlineTables?.[row.original.id];
-                    const isSelected = selectedRowIds?.has(row.original.id) ?? false;
-                    
                     return (
-                    <Fragment key={`${row.id}_v${rowsVersion}`}>
-                    <tr
-                      data-testid="table-row"
-                      data-row-id={row.original.id}
-                      className={cn(
-                        "group/row border-b border-[var(--border-secondary)] last:border-none transition-colors"
-                      )}
-                      style={{
-                        minHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${minRowHeight}px`,
-                        maxHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${maxRowHeight}px`,
-                        height: fixedRowHeight ? `${fixedRowHeight}px` : undefined,
-                        overflow: fixedRowHeight ? 'hidden' : undefined,
-                        ...(isSelected ? { backgroundColor: 'rgba(59, 130, 246, 0.2)' } : {}),
-                        ...getRowColorStyle(row.original.data, columns)
-                      }}
-                    >
-                      {/* Selection checkbox cell */}
-                      {onToggleRowSelection && (
-                        <td className="sticky left-0 z-10 w-7 overflow-visible">
-                          <div className={cn(
-                            "flex items-center justify-center h-full transition-opacity",
-                            !isScrolledHorizontally || isSelected
-                              ? "opacity-100"
-                              : "opacity-0 group-hover/row:opacity-100"
-                          )}>
-                            <RowSelectionCheckbox
-                              rowId={row.original.id}
-                              isSelected={isSelected}
-                              onToggle={onToggleRowSelection}
-                              disabled={readOnly}
-                              quickActions={buildRowQuickActions({
-                                onOpenChat: onOpenRowChat ? () => onOpenRowChat(row.original.id) : undefined,
-                                onAttachToChat: onAttachRowToChat ? () => onAttachRowToChat(row.original.id) : undefined,
-                                onAttachToMessage: onAttachRowToMessage ? () => onAttachRowToMessage(row.original.id) : undefined,
-                                onEdit: onEditRow ? () => onEditRow(row.original.id) : undefined,
-                                onDuplicate: onDuplicateRow ? () => onDuplicateRow(row.original.id) : undefined,
-                                onDelete: onDeleteRow ? () => onDeleteRow(row.original.id) : undefined,
-                              })}
-                              quickActionsPosition={rowIndex < 2 ? 'below' : 'above'}
-                            />
-                          </div>
-                        </td>
-                      )}
-                      {row.getVisibleCells().filter(cell => cell.column.id !== groupByColumn).map((cell, cellIndex) => {
-                        const column = columns.find(col => col.id === cell.column.id) 
-                          || columns.find(col => col.name === cell.column.id);
-                        
-                        const isEditing =
-                          editingCell?.rowId === row.original.id && editingCell?.columnId === cell.column.id;
-                        const isExternal = (column as any)?.is_external;
-                        const isIdColumn = column?.name.toLowerCase() === 'id';
-                        const columnColor = column?.config?.appearance?.columnColor;
-                        const cellKey = `${row.original.id}-${cell.column.id}`;
-                        const isSuccessFlash = successCells.has(cellKey);
-                        const cellWidth = cell.column.getSize();
-                        
-                        return (
-                          <td 
-                            data-testid="table-cell" 
-                            key={cell.id}
-                            style={{ 
-                              width: cellWidth,
-                              minWidth: cellWidth,
-                              maxWidth: cellWidth,
-                              ...(columnColor && !isSuccessFlash ? { backgroundColor: `${columnColor}10` } : {}),
-                              color: column?.config?.appearance?.textColor || 'var(--text-primary)',
-                              fontFamily: column?.config?.appearance?.fontFamily || undefined,
-                              fontSize: column?.config?.appearance?.fontSize || undefined
-                            }}
-                            className={`relative border-r border-[var(--border-primary)] px-0 py-0 last:border-r-0 transition-colors duration-300 overflow-hidden ${
-                              cellIndex === 0 ? 'border-l border-l-[var(--border-primary)]' : ''
-                            } ${
-                              isSuccessFlash ? 'bg-green-100/50 dark:bg-green-900/30' : (
-                                columnColor ? '' : (
-                                  isExternal ? 'bg-primary-50/20 dark:bg-primary-950/10' : 
-                                  isIdColumn ? 'bg-gray-50/20 dark:bg-gray-900/10' : ''
-                                )
-                              )
-                            }`}
-                            onDoubleClick={() =>
-                              !isExternal && !isIdColumn && !readOnly &&
-                              onCellDoubleClick(row.original.id, cell.column.id, cell.getValue())
-                            }
-                          >
-                            <div
-                              className={`h-full w-full px-4 py-2 overflow-hidden ${
-                                column?.config?.appearance?.align === 'center' ? 'text-center' :
-                                column?.config?.appearance?.align === 'right' ? 'text-right' : 'text-left'
-                              }`}
-                              style={{
-                                minHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${minRowHeight}px`,
-                                maxHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${maxRowHeight}px`,
-                                height: fixedRowHeight ? `${fixedRowHeight}px` : undefined,
-                                // overflow:hidden (not auto): a per-cell scroll container is a
-                                // composited layer that macOS/Chrome drops on repaint (blank cells);
-                                // clip-to-maxHeight is the only real intent here.
-                                overflowY: 'hidden',
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                ...(column?.config?.appearance?.align === 'center' ? { justifyContent: 'center' } :
-                                   column?.config?.appearance?.align === 'right' ? { justifyContent: 'flex-end' } : {}),
-                                ...(column?.config?.cellFormat?.textWrap === 'nowrap' ? {
-                                  whiteSpace: 'nowrap',
-                                  textOverflow: 'ellipsis'
-                                } : column?.config?.cellFormat?.textWrap === 'wrap' ? {
-                                  whiteSpace: 'pre-wrap',
-                                  wordBreak: 'break-word'
-                                } : column?.config?.cellFormat?.textWrap === 'wrap-ellipsis' ? {
-                                  display: '-webkit-box',
-                                  WebkitLineClamp: 2,
-                                  WebkitBoxOrient: 'vertical' as const,
-                                } : {
-                                  // Default: truncate with ellipsis
-                                  whiteSpace: 'nowrap',
-                                  textOverflow: 'ellipsis'
-                                })
-                              }}
-                            >
-                              <div className="w-full overflow-hidden">
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                              </div>
-                            </div>
-                          </td>
-                        );
-                      })}
-                      {/* Actions column for grouped rows */}
-                      {(onAddColumn || (!readOnly && (onDuplicateRow || onDeleteRow))) && (
-                        <td 
-                          className="sticky right-0 z-20 backdrop-blur-xl bg-white/80 dark:bg-gray-900/60 border-l border-[var(--border-primary)] w-[50px]"
-                          style={{ boxShadow: 'inset 1px 0 0 0 rgba(255, 255, 255, 0.3)' }}
-                        >
-                          <div className="flex items-center justify-center h-full">
-                            {!readOnly && (onEditRow || onDuplicateRow || onDeleteRow) && (
-                              <RowActionsMenu
-                                onEdit={onEditRow ? () => onEditRow(row.original.id) : undefined}
-                                onDuplicate={onDuplicateRow ? () => onDuplicateRow(row.original.id) : undefined}
-                                onDelete={onDeleteRow ? () => onDeleteRow(row.original.id) : undefined}
-                                onOpenChat={onOpenRowChat ? () => onOpenRowChat(row.original.id) : undefined}
-                                onAttachToChat={onAttachRowToChat ? () => onAttachRowToChat(row.original.id) : undefined}
-                                onAttachToMessage={onAttachRowToMessage ? () => onAttachRowToMessage(row.original.id) : undefined}
-                                onToggleSelection={onToggleRowSelection ? () => onToggleRowSelection(row.original.id) : undefined}
-                                isSelected={isSelected}
-                              />
-                            )}
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-
-                    {/* Inline expanded table row for grouped rows */}
-                    {expandedForRow && (
-                      <InlineNestedTable
-                        tableId={expandedForRow.tableId}
-                        filterColumn={expandedForRow.filterColumn}
-                        filterValue={expandedForRow.filterValue}
-                        colSpan={displayColumns.length + (hiddenColumns.length > 0 ? 1 : 0) + ((onAddColumn || (!readOnly && (onDuplicateRow || onDeleteRow))) ? 1 : 0) + (onToggleRowSelection ? 1 : 0)}
-                        onClose={() => onToggleInlineTable?.(row.original.id, expandedForRow.columnId, expandedForRow.tableId, expandedForRow.filterColumn, expandedForRow.filterValue)}
+                      <TableGridRow
+                        key={`${row.original.tableId}:${row.id}`}
+                        row={row}
+                        rowIndex={rowIndex}
+                        columns={columns}
+                        hiddenColumns={hiddenColumns}
+                        editingCell={editingCell}
+                        draftValue={draftValue}
+                        onCellDoubleClick={onCellDoubleClick}
+                        onDraftChange={onDraftChange}
+                        onCommitEdit={onCommitEdit}
+                        onCancelEdit={onCancelEdit}
+                        onAddColumn={onAddColumn}
+                        onCellClick={onCellClick}
+                        onCheckboxToggle={onCheckboxToggle}
+                        onNumberStep={onNumberStep}
+                        onEditRow={onEditRow}
+                        onDuplicateRow={onDuplicateRow}
+                        onDeleteRow={onDeleteRow}
+                        onNavigateToRelatedRow={onNavigateToRelatedRow}
+                        readOnly={readOnly}
+                        rawMode={rawMode}
+                        isScrolledHorizontally={isScrolledHorizontally}
+                        expandedForRow={expandedForRow}
+                        onToggleInlineTable={onToggleInlineTable}
+                        totalColumns={totalColumns}
+                        selectedRowIds={selectedRowIds}
+                        onToggleRowSelection={onToggleRowSelection}
+                        minRowHeight={minRowHeight}
+                        maxRowHeight={maxRowHeight}
+                        fixedRowHeight={fixedRowHeight}
+                        onOpenRowChat={onOpenRowChat}
+                        onAttachRowToChat={onAttachRowToChat}
+                        onAttachRowToMessage={onAttachRowToMessage}
+                        groupByColumn={groupByColumn}
+                        displayColumns={displayColumns}
+                        showHiddenTemporarily={showHiddenTemporarily}
                       />
-                    )}
-                    </Fragment>
                     );
                   })}
                 </Fragment>
@@ -544,14 +416,13 @@ export const TableGrid = ({
 
               return (
                 <TableGridRow
-                  key={`${row.id}_v${rowsVersion}`}
+                  key={`${row.original.tableId}:${row.id}`}
                   row={row}
                   rowIndex={rowIndex}
                   columns={columns}
                   hiddenColumns={hiddenColumns}
                   editingCell={editingCell}
                   draftValue={draftValue}
-                  rowsVersion={rowsVersion}
                   onCellDoubleClick={onCellDoubleClick}
                   onDraftChange={onDraftChange}
                   onCommitEdit={onCommitEdit}
@@ -593,6 +464,7 @@ export const TableGrid = ({
           />
 
           <LoadNextRow
+            key={`${columns[0]?.tableId}:${rowsVersion}:${rowsLimit}`}
             canLoadMore={canLoadMore}
             rowsBelow={rowsBelow}
             isLoadingMore={isLoadingMore}

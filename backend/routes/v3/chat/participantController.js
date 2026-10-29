@@ -115,7 +115,7 @@ export default function registerParticipantRoutes(router) {
         conversations.map(async (conv) => {
           const participants = await dbAll(
             isPostgres()
-              ? `SELECT cp.user_id, cp.role, u.name, u.email, CASE WHEN length(u.avatar) > 2048 THEN '' ELSE COALESCE(u.avatar, '') END as avatar_url FROM conversation_participants cp JOIN users u ON cp.user_id = u.id WHERE cp.conversation_id = $1 ORDER BY cp.joined_at ASC`
+              ? `SELECT cp.user_id, cp.role, u.name, u.email, CASE WHEN length(u.avatar) > 2048 THEN '' ELSE COALESCE(u.avatar, '') END as avatar_url, COALESCE(ar.data->>'color', u.color) AS color, ar.data->>'icon' AS agent_icon FROM conversation_participants cp JOIN users u ON cp.user_id = u.id LEFT JOIN table_rows ar ON ar.id = u.managed_by_agent_row_id AND ar.table_id = u.managed_by_agent_table_id WHERE cp.conversation_id = $1 ORDER BY cp.joined_at ASC`
               : `SELECT cp.user_id, cp.role, u.name, u.email FROM conversation_participants cp JOIN users u ON cp.user_id = u.id WHERE cp.conversation_id = ? ORDER BY cp.joined_at ASC`,
             [conv.id]
           );

@@ -1,11 +1,13 @@
 import { logger } from '@/shared/utils/logger';
 import { X, Loader2, FileText } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useDocumentsContext } from '../DocumentsContext';
 import { flattenSectionTreeV4 } from '../../../../utils/parseMarkdownToAtoms';
 
 export function ToolbarImportModeLeft() {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
 
   const handleCancelCreate = () => {
     ctx.setIsCreatingMode(false);
@@ -20,17 +22,18 @@ export function ToolbarImportModeLeft() {
   return (
     <>
       <button
+        aria-label={t('documents.cancelImport')}
         onClick={handleCancelCreate}
         className={cn(
           "flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)] text-sm border border-[var(--border-primary)] hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-500",
           ctx.isMobile && "px-2 py-1 text-xs"
         )}
       >
-        <X className="w-4 h-4" /> {!ctx.isMobile && 'Отменить импорт'}
+        <X className="w-4 h-4" /> {!ctx.isMobile && t('documents.cancelImport')}
       </button>
       <div className="w-px h-6 bg-[var(--border-primary)]" />
       <span className="text-sm text-[var(--text-secondary)]">
-        {ctx.importFile?.name || 'Новый документ'}
+        {ctx.importFile?.name || t('documents.newDocument')}
       </span>
     </>
   );
@@ -43,6 +46,7 @@ type ToolbarImportModeRightProps = {
 
 export function ToolbarImportModeRight({ importError, setImportError }: ToolbarImportModeRightProps) {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
 
   const handleImport = async () => {
     if (!ctx.newDocName.trim() || ctx.importTree.length === 0) return;
@@ -53,7 +57,6 @@ export function ToolbarImportModeRight({ importError, setImportError }: ToolbarI
 
       // First create the document
       const createResult = await ctx.createDocument({
-        registryTableId: ctx.registryTableId,
         name: ctx.newDocName,
         description: ctx.newDocDescription || undefined,
         category: ctx.newDocCategory || undefined,
@@ -92,17 +95,17 @@ export function ToolbarImportModeRight({ importError, setImportError }: ToolbarI
         ctx.refresh();
       } else {
         logger.error('Create document failed: missing document_id or table_id', createResult);
-        setImportError('Ошибка создания документа');
+        setImportError(t('documents.createFailed'));
       }
     } catch (err: unknown) {
       logger.error('Import failed:', err);
       // Parse error message
-      let errorMessage = 'Ошибка импорта';
+      let errorMessage = t('documents.importFailed');
       try {
         const errStr = err instanceof Error ? err.message : String(err);
         const errData = JSON.parse(errStr);
         if (errData?.error?.code === 'DUPLICATE_SLUG') {
-          errorMessage = `Документ с таким названием уже существует. Измените название.`;
+          errorMessage = t('documents.duplicateName');
         } else if (errData?.error?.message) {
           errorMessage = errData.error.message;
         }
@@ -119,6 +122,7 @@ export function ToolbarImportModeRight({ importError, setImportError }: ToolbarI
           <X className="w-4 h-4 flex-shrink-0" />
           <span>{importError}</span>
           <button
+            aria-label={t('common.close')}
             onClick={() => setImportError(null)}
             className="ml-1 p-0.5 hover:bg-red-500/20 rounded"
           >
@@ -127,6 +131,7 @@ export function ToolbarImportModeRight({ importError, setImportError }: ToolbarI
         </div>
       )}
       <button
+        aria-label={t('documents.import')}
         onClick={handleImport}
         disabled={!ctx.newDocName.trim() || ctx.importTree.length === 0 || ctx.isCreating || ctx.isImporting}
         className={cn(
@@ -135,11 +140,12 @@ export function ToolbarImportModeRight({ importError, setImportError }: ToolbarI
         )}
       >
         {ctx.isCreating || ctx.isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-        {!ctx.isMobile && 'Импорт'}
+        {!ctx.isMobile && t('documents.import')}
       </button>
 
       {/* Language selector for import */}
       <select
+        aria-label={t('documents.importLanguage')}
         value={ctx.importLanguage}
         onChange={(e) => ctx.setImportLanguage(e.target.value as 'en' | 'ru' | 'auto')}
         className={cn(

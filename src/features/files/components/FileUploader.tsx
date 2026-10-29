@@ -153,14 +153,23 @@ export const FileUploader = ({
 
   return (
     <div className={`space-y-4 ${className}`}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple={multiple}
+        accept={accept}
+        onChange={handleFileSelect}
+        hidden
+      />
       {/* Drop zone */}
-      <div
+      <button
+        type="button"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
         className={`
-          relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer
+          relative block w-full border-2 border-dashed rounded-xl p-8 text-center cursor-pointer focus-visible:[outline:auto] focus-visible:outline-offset-2
           transition-all duration-200 ease-in-out
           ${isDragging 
             ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10' 
@@ -168,27 +177,18 @@ export const FileUploader = ({
           }
         `}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple={multiple}
-          accept={accept}
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        
         <Upload className={`w-12 h-12 mx-auto mb-4 ${isDragging ? 'text-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)]'}`} />
         
-        <p className="text-lg font-medium text-[var(--text-primary)] mb-1">
+        <span className="block text-lg font-medium text-[var(--text-primary)] mb-1">
           {isDragging ? 'Отпустите файлы' : 'Перетащите файлы сюда'}
-        </p>
-        <p className="text-sm text-[var(--text-secondary)]">
+        </span>
+        <span className="block text-sm text-[var(--text-secondary)]">
           или <span className="text-[var(--color-primary-500)] hover:underline">выберите файлы</span>
-        </p>
-        <p className="text-xs text-[var(--text-tertiary)] mt-2">
+        </span>
+        <span className="block text-xs text-[var(--text-tertiary)] mt-2">
           Максимальный размер: {maxSize}MB
-        </p>
-      </div>
+        </span>
+      </button>
 
       {/* Uploading files list */}
       {uploadingFiles.length > 0 && (

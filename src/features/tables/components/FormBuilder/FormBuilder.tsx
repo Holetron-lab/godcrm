@@ -18,6 +18,7 @@ import type {
   FormTextBlock,
   FormPageBreak,
   ModalSize,
+  FormAccess,
 } from '../../types/form-config.types';
 import { FieldPreviewEditor } from './FieldPreviewEditor';
 import { RelationFieldWrapper } from './FieldPreviewReadonly';
@@ -62,6 +63,8 @@ export function FormBuilder({
   const [modalSize, setModalSize] = useState<ModalSize>(
     initialConfig?.settings?.modalSize || 'lg'
   );
+  // Form link access (/forms/:tableId) — same scale as space visibility: internal / open / external
+  const [access, setAccess] = useState<FormAccess>(initialConfig?.settings?.access || 'internal');
   const [, setPages] = useState(initialConfig?.pages || 1);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -71,6 +74,13 @@ export function FormBuilder({
   const [formTypes, setFormTypes] = useState<FormTypeValue[]>(
     initialFormTypes || (initialFormType ? [initialFormType] : ['edit_row'])
   );
+
+  // The stored types arrive after mount (server fetch); re-sync so a re-save
+  // keeps `custom` published. Keyed by value, not array identity.
+  const initialFormTypesKey = initialFormTypes?.join(',') ?? '';
+  useEffect(() => {
+    if (initialFormTypesKey) setFormTypes(initialFormTypesKey.split(',') as FormTypeValue[]);
+  }, [initialFormTypesKey]);
 
   // Handle form type toggle (multi-select)
   const handleFormTypeToggle = (type: FormTypeValue) => {
@@ -123,6 +133,7 @@ export function FormBuilder({
       setItems([...fields, ...elements].sort((a, b) => (a.order || 0) - (b.order || 0)));
       setViewMode(initialConfig.settings?.viewMode || 'standard');
       setModalSize(initialConfig.settings?.modalSize || 'lg');
+      setAccess(initialConfig.settings?.access || 'internal');
       setPages(initialConfig.pages || 1);
     }
   }, [initialConfig]);
@@ -304,6 +315,7 @@ export function FormBuilder({
         modalSize,
         labelPosition: 'top',
         spacing: 'normal',
+        access,
       },
     };
 
@@ -574,6 +586,8 @@ export function FormBuilder({
               onViewModeChange={setViewMode}
               modalSize={modalSize}
               onModalSizeChange={setModalSize}
+              access={access}
+              onAccessChange={setAccess}
               stats={{ pages: stats.pages }}
               currentPage={currentPage}
               onPageChange={setCurrentPage}

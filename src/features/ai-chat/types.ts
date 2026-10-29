@@ -1,3 +1,5 @@
+import type { MailMessageRef } from '@/features/mail/types';
+
 export interface AIAgent {
   id: number;
   name: string;
@@ -178,6 +180,8 @@ export interface ChatAttachment {
   };
   // ADR-0031 WP-20+21 (T-141238): present when type === 'widget_embed'.
   widgetEmbed?: WidgetEmbedConfig;
+  // ADR-158 §P5: present when type === 'mail_message_ref' (renders MailMessageChip).
+  mailRef?: MailMessageRef;
 }
 
 // ADR-0031 WP-20+21 (T-141238): narrowed alias for chat attachments that carry

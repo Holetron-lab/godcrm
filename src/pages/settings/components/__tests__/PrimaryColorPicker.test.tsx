@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PrimaryColorPicker } from '../PrimaryColorPicker';
 import { ThemeProvider } from '@/shared/hooks/useTheme';
+import { LanguageProvider } from '@/shared/i18n/LanguageContext';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -31,9 +32,11 @@ Object.defineProperty(window, 'matchMedia', {
 });
 
 const renderWithProvider = (component: React.ReactNode) => {
+  // useLanguage throws without a provider; 'ru' matches the copy this suite asserts.
+  window.localStorage.setItem('god-crm-language', 'ru');
   return render(
     <ThemeProvider>
-      {component}
+      <LanguageProvider>{component}</LanguageProvider>
     </ThemeProvider>
   );
 };

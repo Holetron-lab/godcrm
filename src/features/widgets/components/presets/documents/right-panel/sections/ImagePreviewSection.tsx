@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useId } from 'react';
 import { Link, Upload, Loader2 } from 'lucide-react';
 import { logger } from '@/shared/utils/logger';
 import { cn } from '@/shared/utils/cn';
@@ -6,12 +6,13 @@ import { filesApi } from '@/features/files/api/filesApi';
 import { useDocumentUpdate } from '../hooks/useDocumentUpdate';
 
 interface ImagePreviewSectionProps {
-  item: { id: number; image_url?: string; content?: string; image_max_height?: number };
+  item: { id: number; image_url?: string | null; content?: string; image_max_height?: number };
   tableId: number;
 }
 
 export function ImagePreviewSection({ item, tableId }: ImagePreviewSectionProps) {
   const updateItem = useDocumentUpdate(item.id, tableId);
+  const fieldId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -66,10 +67,10 @@ export function ImagePreviewSection({ item, tableId }: ImagePreviewSectionProps)
 
       {/* URL Input */}
       <div>
-        <label className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+        <label htmlFor={`${fieldId}-url`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
           <Link className="w-3 h-3" /> URL изображения
         </label>
-        <input
+        <input id={`${fieldId}-url`}
           type="text"
           value={currentUrl}
           onChange={(e) => handleUrlChange(e.target.value)}
@@ -80,10 +81,10 @@ export function ImagePreviewSection({ item, tableId }: ImagePreviewSectionProps)
 
       {/* Upload Button */}
       <div>
-        <label className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
+        <label htmlFor={`${fieldId}-file`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1 flex items-center gap-1">
           <Upload className="w-3 h-3" /> Или загрузите файл
         </label>
-        <input
+        <input id={`${fieldId}-file`}
           ref={fileInputRef}
           type="file"
           accept="image/*"
@@ -116,10 +117,10 @@ export function ImagePreviewSection({ item, tableId }: ImagePreviewSectionProps)
 
       {/* Max Height */}
       <div>
-        <label className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">
+        <label htmlFor={`${fieldId}-height`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">
           Макс. высота (px)
         </label>
-        <input
+        <input id={`${fieldId}-height`}
           type="number"
           value={maxHeight}
           onChange={(e) => handleMaxHeightChange(parseInt(e.target.value) || 300)}

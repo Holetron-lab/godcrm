@@ -87,7 +87,7 @@ export default function registerSummaryRoutes(router) {
 
       let summaryText;
 
-      async function tryGenerateSummary(systemPrompt, model) {
+      const tryGenerateSummary = async (systemPrompt, model) => {
         let result = await executeSimpleAI({ input: prompt, systemPrompt, model });
         if (result?.success && result?.content) return result.content;
         apiLogger.warn({ conversationId, error: result?.error, model, success: result?.success }, 'Summary: primary provider failed, trying claude-code fallback');
@@ -95,7 +95,7 @@ export default function registerSummaryRoutes(router) {
         if (result?.success && result?.content) return result.content;
         apiLogger.error({ conversationId, error: result?.error, success: result?.success }, 'Summary: all providers failed');
         return null;
-      }
+      };
 
       if (summaryAgentId) {
         const agentRow = await dbGet(isPostgres() ? `SELECT tr.data FROM table_rows tr WHERE tr.id = $1` : `SELECT tr.data FROM table_rows tr WHERE tr.id = ?`, [summaryAgentId]);

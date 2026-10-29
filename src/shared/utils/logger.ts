@@ -48,11 +48,13 @@ export function createLogger(minLevel: LogLevel): Logger {
   return {
     debug: (...args: unknown[]) => {
       if (shouldLog('debug')) {
+        // eslint-disable-next-line no-console -- ADR-031: the logger owns the console transport.
         console.log('[DEBUG]', ...args);
       }
     },
     info: (...args: unknown[]) => {
       if (shouldLog('info')) {
+        // eslint-disable-next-line no-console -- ADR-031: the logger owns the console transport.
         console.info('[INFO]', ...args);
       }
     },

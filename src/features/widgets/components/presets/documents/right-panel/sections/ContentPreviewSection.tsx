@@ -19,9 +19,9 @@ export function ContentPreviewSection({ item, tableId }: ContentPreviewSectionPr
 
   return (
     <div className="space-y-1.5">
-      <label className="block text-xs font-medium text-[var(--text-secondary)] flex items-center gap-1.5">
+      <p className="block text-xs font-medium text-[var(--text-secondary)] flex items-center gap-1.5">
         <FileText className="w-3.5 h-3.5" /> Содержимое
-      </label>
+      </p>
       <div className="p-2 rounded-lg bg-[var(--bg-tertiary)] overflow-hidden max-h-[120px]">
         <div className="overflow-y-auto max-h-[200px] origin-top-left" style={{ transform: 'scale(0.6)', width: '166.66%' }}>
           <MarkdownPreview

@@ -6,6 +6,8 @@
  */
 
 import { isDesktopApp } from '@/shared/types/electron.types';
+import { getAccessToken } from '@/shared/utils/apiClient';
+import type { FormConfig } from '@/features/tables/types/form-config.types';
 
 const getBaseUrl = (): string => {
   if (isDesktopApp() && window.electronAPI) {
@@ -430,4 +432,44 @@ export const publicApi = {
     }>>(
       `/public/s/${encodeURIComponent(slug)}/widgets/${widgetId}/documents/${encodeURIComponent(docSlug)}/atoms`,
     ),
+
+  // ---------- Published forms (/forms/:tableId, chat 3660) ----------
+  // Auth is optional on the server: a closed form needs a signed-in table
+  // member, so the bearer token is sent when the SPA has one (cookies go too).
+
+  /** Fetch a published form (config + client-facing columns). */
+  getForm: (tableId: number) =>
+    publicFetch<ApiResponse<PublicForm>>(`/public/forms/${tableId}`, { headers: authHeader() }),
+
+  /** Submit a published form; `data` is keyed by column id. */
+  submitForm: (tableId: number, data: Record<string, unknown>) =>
+    publicFetch<ApiResponse<{ id: number; base_id: string }>>(`/public/forms/${tableId}/submit`, {
+      method: 'POST',
+      headers: authHeader(),
+      body: JSON.stringify({ data }),
+    }),
 };
+
+function authHeader(): Record<string, string> {
+  const token = getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export interface PublicFormColumn {
+  id: number;
+  table_id: number;
+  column_name: string;
+  display_name: string;
+  type: string;
+  config: Record<string, unknown>;
+  order_index: number;
+  is_required: boolean;
+  is_readonly: boolean;
+}
+
+export interface PublicForm {
+  table: { id: number; name: string; icon: string | null };
+  config: FormConfig;
+  columns: PublicFormColumn[];
+  viewer: { authenticated: boolean };
+}

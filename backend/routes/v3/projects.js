@@ -1,6 +1,8 @@
 // API v3: Projects Routes
 import express from 'express';
+import { z } from 'zod';
 import { dbAll } from '../../database/connection.js';
+import { deleteProject } from '../../services/ProjectService.js';
 import { apiLogger } from '../../utils/logger.js';
 import { success, created, notFound, badRequest, forbidden, error } from '../../utils/response.js';
 
@@ -189,15 +191,15 @@ router.post('/', async (req, res) => {
     const allowedTypes = ['project', 'system_data', 'ai_agents', 'personal', 'team'];
     const projectType = allowedTypes.includes(type) ? type : 'project';
 
-    const { dbRun } = await import('../../database/connection.js');
-    const result = await dbRun(
+    // QA-20811-B1: dbRun on PostgreSQL reports the id as `lastInsertRowid`
+    // (there is no `lastID`), so the follow-up SELECT by id found nothing and
+    // the 201 carried no project. RETURNING * gives the row in the same call.
+    const [newProject] = await dbAll(
       `INSERT INTO projects (space_id, owner_id, name, description, icon, type, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+       RETURNING *`,
       [finalSpaceId, userId, name.trim(), description?.trim() || null, icon || logo || '📁', projectType]
     );
-
-    // Fetch created project
-    const [newProject] = await dbAll('SELECT * FROM projects WHERE id = ?', [result.lastID]);
 
     created(res, newProject);
   } catch (err) {
@@ -318,7 +320,7 @@ router.put('/:id', async (req, res) => {
  *   delete:
  *     tags: [Projects]
  *     summary: Delete project
- *     description: Delete a project (only owner or admin). Cannot delete system projects.
+ *     description: Delete an empty project (only owner or admin). Remove tables and dashboards first. Cannot delete system projects.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -334,12 +336,16 @@ router.put('/:id', async (req, res) => {
  *         description: Forbidden
  *       404:
  *         description: Project not found
+ *       409:
+ *         description: Project still contains tables or dashboards (PROJECT_NOT_EMPTY)
  */
 router.delete('/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     const userRole = req.user.role;
-    const projectId = parseInt(req.params.id);
+    const parsedId = z.coerce.number().int().positive().safe().safeParse(req.params.id);
+    if (!parsedId.success) return badRequest(res, 'Invalid project ID');
+    const projectId = parsedId.data;
 
     // Get project
     const projects = await dbAll('SELECT * FROM projects WHERE id = ?', [projectId]);
@@ -359,11 +365,11 @@ router.delete('/:id', async (req, res) => {
       return forbidden(res, 'Cannot delete system projects');
     }
 
-    const { dbRun } = await import('../../database/connection.js');
-    await dbRun('DELETE FROM projects WHERE id = ?', [projectId]);
+    await deleteProject(projectId);
 
     success(res, { message: 'Project deleted successfully' });
   } catch (err) {
+    if (err.code === 'PROJECT_NOT_EMPTY') return error(res, err.code, err.message, 409);
     apiLogger.error('Error deleting project:', err);
     error(res, 'DELETE_ERROR', err.message, 500);
   }

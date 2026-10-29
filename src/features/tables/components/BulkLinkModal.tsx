@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useId } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { Modal, Button, Switch } from '@/shared/components/ui';
 import { Link2, ChevronDown, ChevronRight, Database, Save, Loader2, Settings2 } from 'lucide-react';
@@ -39,6 +39,7 @@ interface ColumnConfig {
 }
 
 export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: BulkLinkModalProps) => {
+  const id = useId();
   const queryClient = useQueryClient();
   const [columns, setColumns] = useState<ColumnConfig[]>([]);
   const [expandedColumns, setExpandedColumns] = useState<Set<string>>(new Set());
@@ -200,6 +201,7 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
 
   // Column settings component
   const ColumnSettings = ({ col }: { col: ColumnConfig }) => {
+    const columnId = `${id}-${col.columnId}`;
     // Get tables for this column's selected projects
     const relationTables = getProjectTables(col.relationProjectId);
     const backLinkTables = getProjectTables(col.backLinkProjectId);
@@ -226,6 +228,7 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Switch
+                id={`${columnId}-relation`}
                 checked={col.relationEnabled}
                 onCheckedChange={(checked) => {
                   updateColumn(col.columnId, { 
@@ -235,15 +238,16 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                 }}
               />
               <Database className="w-4 h-4 text-primary-400" />
-              <span className="text-sm font-medium text-[var(--text-primary)]">Источник данных</span>
+              <label htmlFor={`${columnId}-relation`} className="text-sm font-medium text-[var(--text-primary)]">Источник данных</label>
             </div>
             
             {col.relationEnabled && (
               <div className="ml-8 space-y-2 p-3 rounded-lg bg-primary-500/5 border border-primary-500/20">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs text-[var(--text-secondary)] mb-1 block">Проект</label>
+                    <label htmlFor={`${columnId}-relation-project`} className="text-xs text-[var(--text-secondary)] mb-1 block">Проект</label>
                     <select
+                      id={`${columnId}-relation-project`}
                       value={col.relationProjectId ? String(col.relationProjectId) : ''}
                       onChange={(e) => updateColumn(col.columnId, { 
                         relationProjectId: e.target.value ? Number(e.target.value) : null,
@@ -262,8 +266,9 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-[var(--text-secondary)] mb-1 block">Связанная таблица</label>
+                    <label htmlFor={`${columnId}-relation-table`} className="text-xs text-[var(--text-secondary)] mb-1 block">Связанная таблица</label>
                     <select
+                      id={`${columnId}-relation-table`}
                       value={col.relationTableId}
                       onChange={(e) => updateColumn(col.columnId, { 
                         relationTableId: e.target.value,
@@ -286,12 +291,13 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                 {col.relationTableId && relationColumns.length > 0 && (
                   <>
                     <div className="text-xs text-primary-300/70 mb-2">
-                      Значения будут связаны с записями таблицы "{relationTable?.displayName}" по row_id
+                      Значения будут связаны с записями таблицы &quot;{relationTable?.displayName}&quot; по row_id
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs text-[var(--text-secondary)] mb-1 block">Колонка значения (ID)</label>
+                        <label htmlFor={`${columnId}-relation-value`} className="text-xs text-[var(--text-secondary)] mb-1 block">Колонка значения (ID)</label>
                         <select
+                          id={`${columnId}-relation-value`}
                           value={col.relationValueColumn}
                           onChange={(e) => updateColumn(col.columnId, { relationValueColumn: e.target.value })}
                           className="w-full px-2 py-1.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -305,8 +311,9 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs text-[var(--text-secondary)] mb-1 block">Колонка отображения</label>
+                        <label htmlFor={`${columnId}-relation-label`} className="text-xs text-[var(--text-secondary)] mb-1 block">Колонка отображения</label>
                         <select
+                          id={`${columnId}-relation-label`}
                           value={col.relationLabelColumn}
                           onChange={(e) => updateColumn(col.columnId, { relationLabelColumn: e.target.value })}
                           className="w-full px-2 py-1.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -330,6 +337,7 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Switch
+                id={`${columnId}-backlink`}
                 checked={col.backLinkEnabled}
                 onCheckedChange={(checked) => {
                   updateColumn(col.columnId, { 
@@ -339,15 +347,16 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                 }}
               />
               <Link2 className="w-4 h-4 text-purple-400" />
-              <span className="text-sm font-medium text-[var(--text-primary)]">Обратная связь</span>
+              <label htmlFor={`${columnId}-backlink`} className="text-sm font-medium text-[var(--text-primary)]">Обратная связь</label>
             </div>
             
             {col.backLinkEnabled && (
               <div className="ml-8 space-y-2 p-3 rounded-lg bg-purple-500/5 border border-purple-500/20">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs text-[var(--text-secondary)] mb-1 block">Проект</label>
+                    <label htmlFor={`${columnId}-backlink-project`} className="text-xs text-[var(--text-secondary)] mb-1 block">Проект</label>
                     <select
+                      id={`${columnId}-backlink-project`}
                       value={col.backLinkProjectId ? String(col.backLinkProjectId) : ''}
                       onChange={(e) => updateColumn(col.columnId, { 
                         backLinkProjectId: e.target.value ? Number(e.target.value) : null,
@@ -366,8 +375,9 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-[var(--text-secondary)] mb-1 block">Целевая таблица</label>
+                    <label htmlFor={`${columnId}-backlink-table`} className="text-xs text-[var(--text-secondary)] mb-1 block">Целевая таблица</label>
                     <select
+                      id={`${columnId}-backlink-table`}
                       value={col.backLinkTableId}
                       onChange={(e) => updateColumn(col.columnId, { 
                         backLinkTableId: e.target.value,
@@ -390,8 +400,9 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                 {col.backLinkTableId && backLinkColumns.length > 0 && (
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs text-[var(--text-secondary)] mb-1 block">Целевая колонка</label>
+                      <label htmlFor={`${columnId}-backlink-column`} className="text-xs text-[var(--text-secondary)] mb-1 block">Целевая колонка</label>
                       <select
+                        id={`${columnId}-backlink-column`}
                         value={col.backLinkColumnId}
                         onChange={(e) => updateColumn(col.columnId, { backLinkColumnId: e.target.value })}
                         className="w-full px-2 py-1.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -405,8 +416,9 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs text-[var(--text-secondary)] mb-1 block">Колонка отображения</label>
+                      <label htmlFor={`${columnId}-backlink-display`} className="text-xs text-[var(--text-secondary)] mb-1 block">Колонка отображения</label>
                       <select
+                        id={`${columnId}-backlink-display`}
                         value={col.backLinkDisplayColumn}
                         onChange={(e) => updateColumn(col.columnId, { backLinkDisplayColumn: e.target.value })}
                         className="w-full px-2 py-1.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -443,8 +455,9 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
         <div className="flex-shrink-0 pb-4 border-b border-[var(--border-primary)]">
           <div className="flex items-center gap-4">
             <div className="flex-1">
-              <label className="text-xs text-[var(--text-secondary)] mb-1 block">Проект для связей</label>
+              <label htmlFor={`${id}-project`} className="text-xs text-[var(--text-secondary)] mb-1 block">Проект для связей</label>
               <select
+                id={`${id}-project`}
                 value={selectedProjectId ? String(selectedProjectId) : ''}
                 onChange={(e) => setSelectedProjectId(e.target.value ? Number(e.target.value) : null)}
                 className="w-full px-3 py-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -502,6 +515,9 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                     <div className="flex items-center gap-2 p-2">
                       {/* Expand button */}
                       <button
+                        type="button"
+                        aria-label={`Настройки колонки ${col.displayName}`}
+                        aria-expanded={isExpanded}
                         onClick={() => toggleColumn(col.columnId)}
                         className="p-1 hover:bg-[var(--bg-tertiary)] rounded"
                       >
@@ -515,6 +531,7 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                       {/* Column key */}
                       <input
                         type="text"
+                        aria-label="Ключ колонки"
                         value={col.name}
                         disabled
                         className="w-32 px-2 py-1.5 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-xs font-mono text-[var(--text-secondary)]"
@@ -523,6 +540,7 @@ export const BulkLinkModal = ({ isOpen, onClose, tableId, currentProjectId }: Bu
                       {/* Display name */}
                       <input
                         type="text"
+                        aria-label="Название колонки"
                         value={col.displayName}
                         disabled
                         className="flex-1 px-3 py-1.5 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"

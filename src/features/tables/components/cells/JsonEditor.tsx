@@ -1,3 +1,4 @@
+import * as Dialog from '@radix-ui/react-dialog';
 /**
  * ADR-0017 Phase 3-4 — JSON cell editor.
  *
@@ -10,8 +11,7 @@
  * not anchored to the originating cell.
  */
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import type { JsonColumnConfig } from '../../types/table.types';
 import {
@@ -27,6 +27,7 @@ import {
   type MutateAPI,
 } from './JsonEditor.helpers';
 import { FormNode, TreeNode } from './JsonEditor.parts';
+import { useBundledMonaco } from '@/shared/hooks/useBundledMonaco';
 
 interface JsonEditorProps {
   value: string;
@@ -37,10 +38,12 @@ interface JsonEditorProps {
 }
 
 export const JsonEditor = ({ value, config, onChange, onCommit, onCancel }: JsonEditorProps) => {
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const initial = useMemo(() => seedInitial(value, config), [value, config]);
   const [draft, setDraft] = useState<string>(initial);
   const initialMode: Mode = (config?.defaultMode as Mode) ?? DEFAULT_MODE;
   const [mode, setMode] = useState<Mode>(initialMode);
+  const monacoReady = useBundledMonaco();
 
   useEffect(() => {
     onChange(initial);
@@ -91,20 +94,6 @@ export const JsonEditor = ({ value, config, onChange, onCommit, onCancel }: Json
     }
   }, [draft, parseError, config?.prettyInCell, onCommit]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onCancel();
-      } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
-        handleSave();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onCancel, handleSave]);
-
   const handleFormatPretty = () => {
     if (parseError) return;
     if (!draft.trim()) return;
@@ -118,7 +107,7 @@ export const JsonEditor = ({ value, config, onChange, onCommit, onCancel }: Json
 
   const renderCodeMode = () => (
     <div className="h-full border border-[var(--border-secondary)] rounded overflow-hidden">
-      <Editor
+      {monacoReady && <Editor
         height="100%"
         defaultLanguage="json"
         value={draft}
@@ -136,13 +125,13 @@ export const JsonEditor = ({ value, config, onChange, onCommit, onCancel }: Json
           lineDecorationsWidth: 8,
           lineNumbersMinChars: 3,
         }}
-      />
+      />}
     </div>
   );
 
   const renderEmpty = () => (
     <div className="p-6 flex flex-col items-center gap-3">
-      <div className="text-sm text-[var(--text-tertiary)]">Пусто. Создать:</div>
+      <div className="text-sm text-[var(--text-secondary)]">Пусто. Создать:</div>
       <div className="flex gap-2">
         <button
           type="button"
@@ -210,33 +199,44 @@ export const JsonEditor = ({ value, config, onChange, onCommit, onCancel }: Json
     );
   };
 
-  const modal = (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center"
-      onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
-    >
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onCancel} />
-
-      {/* Modal — full screen on mobile, centered on desktop */}
-      <div
-        className="relative bg-[var(--bg-primary)] text-[var(--text-primary)] w-[100vw] h-[100vh] sm:w-[90vw] sm:max-w-3xl sm:h-[80vh] sm:rounded-lg shadow-2xl border border-[var(--border-primary)] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+  return (
+    <Dialog.Root open onOpenChange={(open) => { if (!open) onCancel(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm" />
+        <Dialog.Content
+          onClick={(event) => event.stopPropagation()}
+          aria-modal="true"
+          aria-describedby={undefined}
+          onOpenAutoFocus={() => {
+            returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          onKeyDownCapture={(event) => {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+              event.preventDefault();
+              handleSave();
+            }
+          }}
+          className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-[var(--bg-primary)] text-[var(--text-primary)] w-[100vw] h-[100dvh] sm:w-[90vw] sm:max-w-3xl sm:h-[80vh] sm:rounded-lg shadow-2xl border border-[var(--border-primary)] flex flex-col overflow-hidden"
+        >
         {/* Header — title + tabs + format */}
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--border-secondary)] bg-[var(--bg-secondary)]">
-          <span className="text-sm font-medium text-[var(--text-primary)] mr-2">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-[var(--border-secondary)] bg-[var(--bg-secondary)]">
+          <Dialog.Title className="text-sm font-medium text-[var(--text-primary)] mr-2">
             Редактирование JSON
-          </span>
+          </Dialog.Title>
           <div className="flex items-center">
             {(['code', 'tree', 'form'] as Mode[]).map((m) => (
               <button
                 key={m}
                 type="button"
+                aria-pressed={mode === m}
                 onClick={() => setMode(m)}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors rounded ${
                   mode === m
-                    ? 'text-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10'
+                    ? 'text-[var(--text-primary)] bg-[var(--color-primary-500)]/10'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
@@ -279,7 +279,7 @@ export const JsonEditor = ({ value, config, onChange, onCommit, onCancel }: Json
                 ⚠️ {parseError}
               </span>
             ) : (
-              <span className="text-[var(--text-tertiary)]">
+              <span className="text-[var(--text-secondary)]">
                 ⌘/Ctrl+Enter — сохранить · Esc — отмена
               </span>
             )}
@@ -295,14 +295,13 @@ export const JsonEditor = ({ value, config, onChange, onCommit, onCancel }: Json
             type="button"
             onClick={handleSave}
             disabled={Boolean(parseError)}
-            className="px-3 py-1.5 text-xs rounded bg-[var(--color-primary-500)] text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 text-xs rounded bg-[var(--color-primary-800)] text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Сохранить
           </button>
         </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
-
-  return createPortal(modal, document.body);
 };

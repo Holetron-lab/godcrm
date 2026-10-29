@@ -4,6 +4,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import express from 'express';
 import request from 'supertest';
 import widgetLibraryRoutes from '../widget-library.js';
@@ -293,7 +294,7 @@ describe('Widget Library Routes - ADR-073', () => {
 
     test('should return 404 for non-existent widget', async () => {
       const res = await request(app)
-        .post('/api/v3/widget-library/99999/favorite')
+        .post(`/api/v3/widget-library/${NON_EXISTENT_ID}/favorite`)
         .set('x-test-user-id', userId)
         .expect(404);
 
@@ -388,7 +389,7 @@ describe('Widget Library Routes - ADR-073', () => {
       await registerWidget(widget.id, spaceId);
 
       const res = await request(app)
-        .post('/api/v3/dashboards/99999/widgets/from-library')
+        .post(`/api/v3/dashboards/${NON_EXISTENT_ID}/widgets/from-library`)
         .set('x-test-user-id', userId)
         .send({
           source_widget_id: widget.id,
@@ -405,7 +406,7 @@ describe('Widget Library Routes - ADR-073', () => {
         .post(`/api/v3/dashboards/${dashboardId}/widgets/from-library`)
         .set('x-test-user-id', userId)
         .send({
-          source_widget_id: 99999,
+          source_widget_id: NON_EXISTENT_ID,
           mode: 'reference',
           position: { x: 0, y: 0, w: 6, h: 4 }
         })

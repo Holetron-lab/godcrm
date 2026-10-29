@@ -1,7 +1,7 @@
 import { Modal, Button } from '@/shared/components/ui';
 import { logger } from '@/shared/utils/logger';
 import { Download, FileJson2, AlertTriangle, Check, Shield, FileCode } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useId, useState, useMemo } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { useQuery } from '@tanstack/react-query';
 
@@ -22,6 +22,7 @@ export const ExportJSONModal = ({
   tableName,
   rowsCount,
 }: ExportJSONModalProps) => {
+  const fieldId = useId();
   const [mode, setMode] = useState<ExportMode>('full');
   const [isExporting, setIsExporting] = useState(false);
 
@@ -151,10 +152,10 @@ export const ExportJSONModal = ({
         )}
 
         {/* Mode selector */}
-        <div>
-          <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+        <div role="group" aria-labelledby={`${fieldId}-label-0`}>
+          <span id={`${fieldId}-label-0`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
             Режим экспорта:
-          </label>
+          </span>
           <div className="space-y-2">
             {modeOptions.map(option => {
               const Icon = option.icon;

@@ -1,0 +1,26 @@
+{
+  "mode": "review-only",
+  "target": "<DEV_IP>",
+  "machine_id": "REQUIRED_FROM_PRIVATE_INVENTORY",
+  "nginx_uid": 33,
+  "nginx_sha256": "REQUIRED_FULL_NGINX_T_STDOUT_DIGEST",
+  "state_dir": "/root/backups/temp/REQUIRED_NEW_PRIVATE_SESSION_DIRECTORY",
+  "prerequisites_verified": false,
+  "candidate": "9ac8301d05ae623c27f8e97d7fe423abb4509ea7",
+  "recovery_infrastructure": "5b5fc0b851b20d5ffcd0c8f556ee10e928d65d18",
+  "ingress_unit": "godcrm-staging-ingress.service",
+  "installation": "BLOCKED_CHANNEL",
+  "retirement_applied": false,
+  "quiet_window_proven": false,
+  "unresolved": [
+    "Separate main integration, registry provisioning, installation authorization and final seal",
+    "Live nginx worker UIDs and complete config recheck; current/next app DB identity",
+    "Firewall ordering, DNAT/flowtable/routing bypass and listener identity at installation",
+    "Fresh cron retirement receipt; new recovery baseline must exclude retired sync",
+    "Cleanup self-SIGKILL policy: failed is not inactive; no reset/restart as diagnosis",
+    "Drain cron descendants, cleanup-stuck-vite and manual editor/SSH writers",
+    "Integrate control status readback into recovery adapter; systemd active alone is insufficient",
+    "Stable full payload fingerprints, coherent backup and isolated restore",
+    "Live rehearsal, restart/reboot behavior and alert delivery"
+  ]
+}

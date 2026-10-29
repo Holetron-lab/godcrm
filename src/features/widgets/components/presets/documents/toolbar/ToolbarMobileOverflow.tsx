@@ -13,12 +13,14 @@ import {
   Trash2,
 } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useDocumentsContext } from '../DocumentsContext';
 import { printDocument } from './utils/printDocument';
 import { copyDocumentAsMarkdown, exportDocumentAsMarkdown } from './utils/markdownExport';
 
 export function ToolbarMobileOverflow() {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
@@ -57,7 +59,7 @@ export function ToolbarMobileOverflow() {
     if (!ctx.selectedDocumentId || !ctx.selectedDocument) return;
 
     const docName = ctx.selectedDocument.name;
-    if (!confirm(`Удалить документ "${docName}"? Это действие нельзя отменить.`)) return;
+    if (!confirm(t('documents.deleteConfirmation', { name: docName }))) return;
 
     try {
       await ctx.deleteDocument({ documentId: ctx.selectedDocumentId });
@@ -74,7 +76,7 @@ export function ToolbarMobileOverflow() {
       <button
         onClick={() => setOpen(!open)}
         className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] min-h-[44px] min-w-[44px] flex items-center justify-center"
-        title="More options"
+        title={t('documents.moreOptions')}
       >
         <MoreHorizontal className="w-5 h-5" />
       </button>
@@ -86,7 +88,7 @@ export function ToolbarMobileOverflow() {
             onClick={() => { ctx.refresh(); setOpen(false); }}
             className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--bg-tertiary)] min-h-[44px]"
           >
-            <RefreshCw className="w-4 h-4" /> Refresh
+            <RefreshCw className="w-4 h-4" /> {t('common.refresh')}
           </button>
 
           {ctx.selectedDocument && (
@@ -97,12 +99,12 @@ export function ToolbarMobileOverflow() {
                   onClick={() => { ctx.setStructureMode(!ctx.structureMode); setOpen(false); }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--bg-tertiary)] min-h-[44px]"
                 >
-                  <Layers className="w-4 h-4" /> {ctx.structureMode ? 'View mode' : 'Structure mode'}
+                  <Layers className="w-4 h-4" /> {ctx.structureMode ? t('documents.viewMode') : t('documents.structureMode')}
                 </button>
               )}
 
               {/* View mode */}
-              <div className="px-4 py-2 text-xs text-[var(--text-tertiary)] uppercase">View mode</div>
+              <div className="px-4 py-2 text-xs text-[var(--text-tertiary)] uppercase">{t('documents.viewMode')}</div>
               <div className="flex items-center gap-1 px-4 pb-2">
                 {(['strip', 'pages', 'none'] as const).map(mode => (
                   <button
@@ -115,15 +117,16 @@ export function ToolbarMobileOverflow() {
                         : 'bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)]'
                     )}
                   >
-                    {mode === 'strip' ? 'Strip' : mode === 'pages' ? 'Pages' : 'Clean'}
+                    {t(mode === 'strip' ? 'documents.previewStrip' : mode === 'pages' ? 'documents.previewPages' : 'documents.previewNone')}
                   </button>
                 ))}
               </div>
 
               {/* Scale controls */}
               <div className="px-4 py-2 flex items-center gap-2">
-                <span className="text-xs text-[var(--text-tertiary)]">Scale</span>
+                <span className="text-xs text-[var(--text-tertiary)]">{t('documents.scale')}</span>
                 <button
+                  aria-label={t('documents.decreaseText')}
                   onClick={() => ctx.setContentScale(Math.max(50, ctx.contentScale - 10))}
                   className="p-1.5 rounded hover:bg-[var(--bg-tertiary)] min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
@@ -131,6 +134,7 @@ export function ToolbarMobileOverflow() {
                 </button>
                 <span className="text-xs min-w-[36px] text-center">{ctx.contentScale}%</span>
                 <button
+                  aria-label={t('documents.increaseText')}
                   onClick={() => ctx.setContentScale(Math.min(150, ctx.contentScale + 10))}
                   className="p-1.5 rounded hover:bg-[var(--bg-tertiary)] min-h-[44px] min-w-[44px] flex items-center justify-center"
                 >
@@ -145,7 +149,7 @@ export function ToolbarMobileOverflow() {
                 onClick={() => { handleExportMarkdown(); setOpen(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--bg-tertiary)] min-h-[44px]"
               >
-                <Download className="w-4 h-4" /> Export MD
+                <Download className="w-4 h-4" /> {t('documents.exportMarkdown')}
               </button>
 
               {/* Copy MD */}
@@ -153,7 +157,7 @@ export function ToolbarMobileOverflow() {
                 onClick={() => { handleCopyAsMarkdown(); setOpen(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--bg-tertiary)] min-h-[44px]"
               >
-                <Copy className="w-4 h-4" /> Copy as MD
+                <Copy className="w-4 h-4" /> {t('documents.copyMarkdown')}
               </button>
 
               {/* Print */}
@@ -161,7 +165,7 @@ export function ToolbarMobileOverflow() {
                 onClick={() => { handlePrint(); setOpen(false); }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--bg-tertiary)] min-h-[44px]"
               >
-                <Printer className="w-4 h-4" /> Print
+                <Printer className="w-4 h-4" /> {t('documents.print')}
               </button>
 
               {/* AI Agents — hidden in read-only (ADR-0060 P6/P) */}
@@ -170,7 +174,7 @@ export function ToolbarMobileOverflow() {
                   onClick={() => { ctx.setShowAgentsModal(true); setOpen(false); }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-[var(--bg-tertiary)] min-h-[44px]"
                 >
-                  <Bot className="w-4 h-4" /> AI Agents
+                  <Bot className="w-4 h-4" /> {t('documents.aiAgents')}
                 </button>
               )}
 
@@ -183,7 +187,7 @@ export function ToolbarMobileOverflow() {
                     disabled={ctx.isDeleting}
                     className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-500/10 min-h-[44px]"
                   >
-                    <Trash2 className="w-4 h-4" /> Delete document
+                    <Trash2 className="w-4 h-4" /> {t('documents.deleteDocument')}
                   </button>
                 </>
               )}

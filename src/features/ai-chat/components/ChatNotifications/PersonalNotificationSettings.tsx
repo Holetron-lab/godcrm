@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 // PersonalNotificationSettings.tsx — ADR-0064 WP-C.
 //
 // Personal/Notifications sub-tab. Reads + writes
@@ -21,6 +22,7 @@ const DEFAULT_PREFS: PrefsValue = {
 interface ApiEnvelope<T> { data?: T; success?: boolean }
 
 export function PersonalNotificationSettings() {
+  const { t } = useLanguage();
   const [value, setValue] = useState<PrefsValue>(DEFAULT_PREFS);
   const [initial, setInitial] = useState<PrefsValue>(DEFAULT_PREFS);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,9 +53,9 @@ export function PersonalNotificationSettings() {
     try {
       await apiClient.put('/chat/notification-prefs/personal', { prefs: value });
       setInitial(value);
-      showToast('Сохранено', 'success');
+      showToast(t('aiChat.ui.saved'), 'success');
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Не удалось сохранить', 'error');
+      showToast(err instanceof Error ? err.message : t('aiChat.ui.couldNotSave'), 'error');
     } finally {
       setIsSaving(false);
     }
@@ -70,8 +72,7 @@ export function PersonalNotificationSettings() {
   return (
     <div className="space-y-3">
       <p className="text-xs text-[var(--text-tertiary)]">
-        Личные настройки уведомлений. Перекрывают значения по умолчанию пространства и приложения,
-        но могут быть переопределены настройками отдельного чата.
+        {t('aiChat.ui.personalNotificationHelp')}
       </p>
       <NotificationMatrix value={value} onChange={setValue} triState={false} showTestButtons />
       {dirty && (
@@ -82,8 +83,7 @@ export function PersonalNotificationSettings() {
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-600)] disabled:opacity-50 transition-colors"
         >
           {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          Сохранить
-        </button>
+          {t('aiChat.ui.save')}</button>
       )}
     </div>
   );

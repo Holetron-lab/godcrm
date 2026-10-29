@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 /**
  * Component to highlight template variables in text
@@ -13,6 +14,7 @@ interface TemplateHighlightProps {
 const SYSTEM_VARIABLES = new Set(['row_id', 'value']);
 
 export const TemplateHighlight: React.FC<TemplateHighlightProps> = ({ text, availableColumns }) => {
+  const { t } = useLanguage();
   if (!text) return null;
   
   const parts: React.ReactNode[] = [];
@@ -41,7 +43,7 @@ export const TemplateHighlight: React.FC<TemplateHighlightProps> = ({ text, avai
               : 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' // Column vars in green
             : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400' // Invalid in red
         }`}
-        title={isSystemVar ? 'Системная переменная' : isValid ? 'Колонка' : 'Не найдено'}
+        title={t(isSystemVar ? 'columnSettings.template.systemVariable' : isValid ? 'columnSettings.template.column' : 'columnSettings.template.missing')}
       >
         {match[0]}
       </code>

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ToolApprovalBubble.tsx
  * Ticket #74077: Inline tool approval bubble for AI Chat.
@@ -41,17 +42,18 @@ function formatCountdown(totalSeconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
-function formatTimeAgo(isoString: string): string {
+function formatTimeAgo(isoString: string, language: string): string {
   const then = new Date(isoString).getTime();
   const now = Date.now();
   const diffSeconds = Math.floor((now - then) / 1000);
 
-  if (diffSeconds < 5) return 'just now';
-  if (diffSeconds < 60) return `${diffSeconds} seconds ago`;
+  const relative = new Intl.RelativeTimeFormat(language, { numeric: 'auto' });
+  if (diffSeconds < 5) return relative.format(0, 'second');
+  if (diffSeconds < 60) return relative.format(-diffSeconds, 'second');
   const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+  if (diffMinutes < 60) return relative.format(-diffMinutes, 'minute');
   const diffHours = Math.floor(diffMinutes / 60);
-  return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  return relative.format(-diffHours, 'hour');
 }
 
 function prettyPrintArgs(args: Record<string, unknown>): string {
@@ -89,6 +91,7 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
   onApprove,
   onReject,
 }) => {
+  const { t, language } = useLanguage();
   // ── Local state ──────────────────────────────────────────────────────────
   const [status, setStatus] = useState<ApprovalStatus>(approvalStatus);
   const [remaining, setRemaining] = useState<number>(timeoutSeconds);
@@ -184,12 +187,12 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
         <div className="flex items-center gap-2">
           <Check className={cn('w-4 h-4', styles.icon)} />
           <span className={cn('text-sm font-medium', styles.icon)}>
-            Tool Approved: {toolName}
+            {t('aiChat.ui.toolApproved')}{' '}{toolName}
           </span>
         </div>
         <div className="text-xs text-[var(--text-tertiary)] mt-1">
-          {localApprovedBy ? `Approved by ${localApprovedBy}` : 'Approved'}
-          {localApprovedAt ? ` \u2022 ${formatTimeAgo(localApprovedAt)}` : ''}
+          {localApprovedBy ? t('aiChat.ui.approvedBy', { name: localApprovedBy }) : t('aiChat.ui.approved')}
+          {localApprovedAt ? ` \u2022 ${formatTimeAgo(localApprovedAt, language)}` : ''}
         </div>
       </div>
     );
@@ -204,12 +207,12 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
         <div className="flex items-center gap-2">
           <X className={cn('w-4 h-4', styles.icon)} />
           <span className={cn('text-sm font-medium', styles.icon)}>
-            Tool Rejected: {toolName}
+            {t('aiChat.ui.toolRejected')}{' '}{toolName}
           </span>
         </div>
         <div className="text-xs text-[var(--text-tertiary)] mt-1">
-          {localApprovedBy ? `Rejected by ${localApprovedBy}` : 'Rejected'}
-          {localApprovedAt ? ` \u2022 ${formatTimeAgo(localApprovedAt)}` : ''}
+          {localApprovedBy ? t('aiChat.ui.rejectedBy', { name: localApprovedBy }) : t('aiChat.ui.rejected')}
+          {localApprovedAt ? ` \u2022 ${formatTimeAgo(localApprovedAt, language)}` : ''}
         </div>
       </div>
     );
@@ -224,11 +227,11 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
         <div className="flex items-center gap-2">
           <Clock className={cn('w-4 h-4', styles.icon)} />
           <span className={cn('text-sm font-medium', styles.icon)}>
-            Tool Timed Out: {toolName}
+            {t('aiChat.ui.toolTimedOut')}{' '}{toolName}
           </span>
         </div>
         <div className="text-xs text-[var(--text-tertiary)] mt-1">
-          No response within {Math.floor(timeoutSeconds / 60)} minute{Math.floor(timeoutSeconds / 60) !== 1 ? 's' : ''}
+          {t('aiChat.ui.approvalTimeout', { minutes: Math.floor(timeoutSeconds / 60) })}
         </div>
       </div>
     );
@@ -262,18 +265,17 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-yellow-400" />
           <span className="text-sm font-medium text-yellow-400">
-            Tool Approval Required
-          </span>
+            {t('aiChat.ui.approvalRequired')}</span>
         </div>
         <div className="flex items-center gap-1 text-xs text-yellow-400/80">
           <Clock className="w-3 h-3" />
-          <span>{formatCountdown(remaining)} remaining</span>
+          <span>{t('aiChat.ui.timeRemaining', { time: formatCountdown(remaining) })}</span>
         </div>
       </div>
 
       {/* Tool name */}
       <div className="text-sm text-[var(--text-secondary)] mb-2">
-        Agent wants to execute:{' '}
+        {t('aiChat.ui.agentWantsExecute')}{' '}
         <span className="font-mono font-medium text-[var(--text-primary)]">{toolName}</span>
       </div>
 
@@ -289,7 +291,7 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
             ) : (
               <ChevronRight className="w-3 h-3" />
             )}
-            <span>View arguments</span>
+            <span>{t('aiChat.ui.viewArguments')}</span>
           </button>
           {argsExpanded && (
             <pre className="mt-1.5 p-2 rounded bg-[var(--bg-tertiary)] text-[11px] text-[var(--text-secondary)] overflow-x-auto whitespace-pre-wrap break-all max-h-[200px] overflow-y-auto font-mono">
@@ -302,7 +304,7 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
       {/* Warning for dangerous tools */}
       <div className="flex items-start gap-1.5 mb-3 text-[11px] text-yellow-500/70">
         <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-        <span>This tool requires explicit approval before execution.</span>
+        <span>{t('aiChat.ui.approvalExplanation')}</span>
       </div>
 
       {/* Action buttons */}
@@ -317,8 +319,7 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
           )}
         >
           <Check className="w-3.5 h-3.5" />
-          Allow
-        </button>
+          {t('aiChat.ui.allow')}</button>
 
         <button
           onClick={handleReject}
@@ -330,8 +331,7 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
           )}
         >
           <X className="w-3.5 h-3.5" />
-          Deny
-        </button>
+          {t('aiChat.ui.deny')}</button>
 
         <button
           onClick={() => handleApprove(true)}
@@ -341,11 +341,10 @@ export const ToolApprovalBubble: React.FC<ToolApprovalBubbleProps> = ({
             'bg-yellow-600/80 hover:bg-yellow-500/80 text-white',
             isSubmitting && 'opacity-50 cursor-not-allowed',
           )}
-          title="Create a permanent rule to always allow this tool without future prompts"
+          title={t('aiChat.ui.alwaysAllowHint')}
         >
           <Unlock className="w-3.5 h-3.5" />
-          Always Allow
-        </button>
+          {t('aiChat.ui.alwaysAllow')}</button>
       </div>
     </div>
   );

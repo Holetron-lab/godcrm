@@ -6,12 +6,34 @@
  *          analyze_table_data
  */
 
-import { dbGet, dbRun, dbAll, isPostgres, sqlNow } from '../../database/connection.js';
+import { dbGet, dbRun, dbAll, isPostgres, sqlNow, toBool, withTransactionAsync } from '../../database/connection.js';
+import { z } from 'zod';
+import { tableKeySchema } from '../../utils/tableKeySchema.js';
+import { VALID_COLUMN_TYPES, persistColumnType } from '../ColumnService.js';
 import { generateBaseId } from '../../utils/baseId.js';
 import { resolveSelectValues, validateAllColumns } from '../SelectValueResolver.js';
+import { guardRowKeys, unknownKeysMessage } from '../row-schema-guard.js';
+import { mergeRowData } from '../mergeRowData.js';
+import { normalizeTypedCells } from '../cellNormalizers.js';
 import { applyAtomVersioning, isAtomsV2Table } from '../atoms-archive.js';
 import { coerceDataObject } from './coerceDataInput.js';
 import { fireRowCreateTriggers, fireRowUpdateTriggers } from '../AutomationTriggerService.js';
+import { notifyRowChange } from '../realtime/rowEvents.js';
+
+/** ADR-0035-A: typed-cell normalizer over the table's columns (create path has no column list yet). */
+async function normalizeTypedCellsForTable(tableId, data) {
+  const columns = await dbAll('SELECT id, column_name, type FROM table_columns WHERE table_id = ?', [tableId]);
+  return normalizeTypedCells(columns, data);
+}
+
+/** Tool-result shape for a failed typed-cell normalization — mirrors `validateAllColumns` rejections. */
+function typedCellsResult(check) {
+  return {
+    error: check.message,
+    rejected_fields: [{ column: check.meta.column, code: check.code }],
+    hint: 'geo_point expects "lat, lng"; address expects a string or { formatted, … }',
+  };
+}
 
 /**
  * Safe parse data - handles both PostgreSQL (object) and SQLite (string)
@@ -120,6 +142,15 @@ export function pickFields(data, fields) {
 /**
  * Data tool handlers
  */
+/** QA-20816-01 — same shape as the select/type rejections above. */
+function unknownKeysResult(unknown) {
+  return {
+    error: unknownKeysMessage(unknown),
+    rejected_fields: unknown.map(column => ({ column, reason: 'unknown_column' })),
+    hint: 'Call get_table_schema and use only declared column keys (name or id)'
+  };
+}
+
 export const dataToolHandlers = {
   // === CONSULTING ===
   async get_workspace_info({ space_id }) {
@@ -230,45 +261,58 @@ export const dataToolHandlers = {
   },
 
   // === TABLE MANAGEMENT ===
-  async create_table({ project_id, name, icon = '📊', columns }, userId) {
-    // Create table
-    // ADR-0066-B: `userId` was in scope and dropped, which is why 66% of
-    // universal_tables rows have a NULL creator — the column existed, the
-    // agent path just never populated it.
-    const tableResult = await dbRun(`
-      INSERT INTO universal_tables (project_id, name, icon, description, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, '', ?, datetime('now'), datetime('now'))
-    `, [project_id, name, icon, userId ?? null]);
+  async create_table({ project_id, name, display_name, icon = '📊', columns, show_in_nav = true }, userId) {
+    tableKeySchema.parse(name);
+    z.number().int().positive().parse(project_id);
+    z.boolean().parse(show_in_nav);
+    z.string().optional().parse(display_name);
+    z.array(z.object({ name: z.string().min(1), type: z.enum(VALID_COLUMN_TYPES).optional() }).passthrough()).parse(columns);
 
-    const tableId = tableResult.lastInsertRowid;
+    return withTransactionAsync(async (trx) => {
+      // Lock before inserting the table: its project FK also acquires a row lock.
+      if (show_in_nav) {
+        const project = await trx.get(`SELECT id FROM projects WHERE id = ?${isPostgres() ? ' FOR UPDATE' : ''}`, [project_id]);
+        if (!project) throw new Error('Project not found');
+      }
+      const tableResult = await trx.run(`
+        INSERT INTO universal_tables (project_id, name, display_name, icon, description, show_in_nav, created_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, '', ?, ?, ${sqlNow()}, ${sqlNow()})
+      `, [project_id, name, display_name || name, icon, toBool(show_in_nav), userId ?? null]);
+      const tableId = tableResult.lastInsertRowid || tableResult.lastID;
 
-    // Create columns
-    for (let i = 0; i < columns.length; i++) {
-      const col = columns[i];
-      const config = {
-        icon: col.icon || '📝',
-        ...(col.settings || {})
+      for (let i = 0; i < columns.length; i++) {
+        const col = columns[i];
+        await trx.run(`
+          INSERT INTO table_columns (table_id, column_name, display_name, type, config, width, is_required, order_index, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${sqlNow()}, ${sqlNow()})
+        `, [tableId, col.name.toLowerCase().replace(/\s+/g, '_'), col.name, persistColumnType(col.type === undefined ? 'text' : col.type),
+          JSON.stringify({ icon: col.icon || '📝', ...(col.settings || {}) }),
+          col.width || 150, toBool(col.required), i + 1]);
+      }
+
+      let widgetId = null;
+      if (show_in_nav) {
+        let dashboard = await trx.get('SELECT id FROM dashboards WHERE project_id = ? AND is_default = ? LIMIT 1', [project_id, toBool(true)]);
+        if (!dashboard) {
+          const result = await trx.run(`
+            INSERT INTO dashboards (project_id, name, is_default, created_at, updated_at)
+            VALUES (?, 'Main Dashboard', ?, ${sqlNow()}, ${sqlNow()})
+          `, [project_id, toBool(true)]);
+          dashboard = { id: result.lastInsertRowid || result.lastID };
+        }
+        const { createWidget } = await import('../WidgetService.js');
+        const widget = await createWidget({
+          dashboard_id: dashboard.id, widget_type: 'preset', preset_name: 'table_view',
+          title: display_name || name, icon, config: { table_id: tableId },
+          position: { x: 0, y: 0, w: 12, h: 6 }, created_by: userId ?? null,
+        }, { trx });
+        widgetId = widget.id;
+      }
+      return {
+        success: true, table_id: tableId, widget_id: widgetId,
+        message: `Table "${display_name || name}" created with ${columns.length} columns`
       };
-      await dbRun(`
-        INSERT INTO table_columns (table_id, column_name, display_name, type, config, width, is_required, order_index, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
-      `, [
-        tableId,
-        col.name.toLowerCase().replace(/\s+/g, '_'),
-        col.name,
-        col.type || 'text',
-        JSON.stringify(config),
-        col.width || 150,
-        col.required ? 1 : 0,
-        i + 1
-      ]);
-    }
-
-    return {
-      success: true,
-      table_id: tableId,
-      message: `Table "${name}" created with ${columns.length} columns`
-    };
+    });
   },
 
   async get_table_row({ table_id, row_id, fields }) {
@@ -324,6 +368,11 @@ export const dataToolHandlers = {
     catch (e) { return { error: e.message }; }
     if (!data) return { error: 'data is required' };
 
+    // QA-20816-01 — keys the schema does not declare are rejected, not stored.
+    const keyGuard = await guardRowKeys(table_id, data);
+    if (keyGuard.unknown.length > 0) return unknownKeysResult(keyGuard.unknown);
+    data = keyGuard.data;
+
     const { resolvedData, errors, rejections } = await resolveSelectValues(table_id, data);
     if (errors.length > 0) {
       return {
@@ -343,16 +392,22 @@ export const dataToolHandlers = {
       };
     }
 
+    // ADR-0035 / ADR-0035-A: geo_point + address cells — same normalizer as the REST path.
+    const typed = await normalizeTypedCellsForTable(table_id, resolvedData);
+    if (!typed.ok) return typedCellsResult(typed);
+    const insertData = typed.data;
+
     const base_id = generateBaseId();
     const result = await dbRun(`
       INSERT INTO table_rows (table_id, base_id, data, created_by, created_at, updated_at)
       VALUES (?, ?, ?, ?, ${sqlNow()}, ${sqlNow()})
-    `, [table_id, base_id, JSON.stringify(resolvedData), userId || 1]);
+    `, [table_id, base_id, JSON.stringify(insertData), userId || 1]);
 
     const newRowId = result.lastInsertRowid;
+    void notifyRowChange({ tableId: table_id, rowId: newRowId, action: 'created', source: 'agent' });
 
     // Fire row_create automations — parity with the v3 HTTP route. Non-blocking.
-    fireRowCreateTriggers(parseInt(table_id), newRowId, resolvedData).catch(err => {
+    fireRowCreateTriggers(parseInt(table_id), newRowId, insertData).catch(err => {
       console.warn('[AutomationTrigger] add_table_row row_create trigger failed:', err.message);
     });
 
@@ -399,8 +454,14 @@ export const dataToolHandlers = {
 
     const row = await dbGet('SELECT * FROM table_rows WHERE id = ? AND table_id = ?', [row_id, table_id]);
     if (!row) return { error: `Row ${row_id} not found in table ${table_id}` };
+    const existing = parseRowData(row.data);
 
-    const { resolvedData, errors, rejections } = await resolveSelectValues(table_id, data);
+    // QA-20816-01 — a key the schema does not declare is rejected unless the
+    // row already carries it.
+    const keyGuard = await guardRowKeys(table_id, data, existing);
+    if (keyGuard.unknown.length > 0) return unknownKeysResult(keyGuard.unknown);
+
+    const { resolvedData, errors, rejections } = await resolveSelectValues(table_id, keyGuard.data);
     if (errors.length > 0) {
       return {
         error: 'Invalid select values — see rejected_fields for details',
@@ -419,8 +480,11 @@ export const dataToolHandlers = {
       };
     }
 
-    const existing = parseRowData(row.data);
-    let merged = { ...existing, ...resolvedData };
+    const columns = await dbAll('SELECT id, column_name, type FROM table_columns WHERE table_id = ?', [table_id]);
+    // ADR-0035 / ADR-0035-A: geo_point + address cells — same normalizer as the REST path.
+    const typed = normalizeTypedCells(columns, resolvedData);
+    if (!typed.ok) return typedCellsResult(typed);
+    let merged = mergeRowData(columns, existing, typed.data);
 
     // ADR-0001 Wave 1: atoms_v2 versioning hook
     if (isAtomsV2Table(table_id)) {
@@ -446,6 +510,7 @@ export const dataToolHandlers = {
     // Fire row_update automations (e.g. Status→published → public mirror, 3720/177443).
     // Parity with the v3 HTTP route — MCP mutations must trigger the same automations.
     // Watch-field gating in fireRowUpdateTriggers prevents action loops. Non-blocking.
+    void notifyRowChange({ tableId: table_id, rowId: row_id, action: 'updated', source: 'agent' });
     fireRowUpdateTriggers(parseInt(table_id), row_id, merged, existing).catch(err => {
       console.warn('[AutomationTrigger] update_table_row row_update trigger failed:', err.message);
     });
@@ -482,7 +547,11 @@ export const dataToolHandlers = {
       return { error: `field "${field}" holds a non-text value; upsert_section only operates on text fields` };
     }
     const newValue = upsertMarkedSection(existing[field], marker, content);
-    let merged = { ...existing, [field]: newValue };
+    const keyGuard = await guardRowKeys(table_id, { [field]: newValue }, existing);
+    if (keyGuard.unknown.length > 0 || !Object.hasOwn(keyGuard.data, field)) {
+      return unknownKeysResult([field]);
+    }
+    let merged = { ...existing, ...keyGuard.data };
 
     // ADR-0001 Wave 1: atoms_v2 versioning hook — parity with update_table_row.
     if (isAtomsV2Table(table_id)) {
@@ -506,6 +575,7 @@ export const dataToolHandlers = {
     );
 
     // Fire row_update automations — parity with the v3 HTTP route. Non-blocking.
+    void notifyRowChange({ tableId: table_id, rowId: row_id, action: 'updated', source: 'agent' });
     fireRowUpdateTriggers(parseInt(table_id), row_id, merged, existing).catch(err => {
       console.warn('[AutomationTrigger] upsert_section row_update trigger failed:', err.message);
     });
@@ -534,6 +604,7 @@ export const dataToolHandlers = {
     if (!table) return { error: `Table ${table_id} not found` };
 
     const wantFull = response === 'full'; // ADR-182 Tier 1b — opt-in full rows; default stays lean
+    const columns = await dbAll('SELECT id, column_name, type FROM table_columns WHERE table_id = ?', [table_id]);
     const results = { success: [], failed: [] };
     for (const upd of updates) {
       const { row_id } = upd;
@@ -545,7 +616,13 @@ export const dataToolHandlers = {
 
         const row = await dbGet('SELECT data FROM table_rows WHERE id = ? AND table_id = ?', [row_id, table_id]);
         if (!row) { results.failed.push({ row_id, error: 'Not found' }); continue; }
-        const { resolvedData, errors, rejections } = await resolveSelectValues(table_id, data);
+        const oldData = parseRowData(row.data);
+        const keyGuard = await guardRowKeys(table_id, data, oldData);
+        if (keyGuard.unknown.length > 0) {
+          results.failed.push({ row_id, ...unknownKeysResult(keyGuard.unknown) });
+          continue;
+        }
+        const { resolvedData, errors, rejections } = await resolveSelectValues(table_id, keyGuard.data);
         if (errors.length > 0) {
           results.failed.push({ row_id, error: 'Invalid select values', rejected_fields: rejections });
           continue;
@@ -556,8 +633,10 @@ export const dataToolHandlers = {
           results.failed.push({ row_id, error: 'Invalid column values', rejected_fields: colValidation.rejections });
           continue;
         }
-        const oldData = parseRowData(row.data);
-        let merged = { ...oldData, ...resolvedData };
+        // ADR-0035 / ADR-0035-A: geo_point + address cells — a bad value fails this row only.
+        const typed = normalizeTypedCells(columns, resolvedData);
+        if (!typed.ok) { results.failed.push({ row_id, ...typedCellsResult(typed) }); continue; }
+        let merged = mergeRowData(columns, oldData, typed.data);
         // ADR-0001 Wave 1: atoms_v2 versioning hook (per-row in batch)
         if (isAtomsV2Table(table_id)) {
           try {
@@ -578,6 +657,7 @@ export const dataToolHandlers = {
           [JSON.stringify(merged), row_id, table_id]
         );
         // Fire row_update automations — parity with the v3 batch route. Non-blocking.
+        void notifyRowChange({ tableId: table_id, rowId: row_id, action: 'updated', source: 'agent' });
         fireRowUpdateTriggers(parseInt(table_id), row_id, merged, oldData).catch(err => {
           console.warn('[AutomationTrigger] batch_update_rows row_update trigger failed:', err.message);
         });

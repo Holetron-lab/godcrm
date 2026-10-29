@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * useScheduledMessages — React Query hooks for scheduled message CRUD.
  * WP-17: Scheduled messages feature.
@@ -24,7 +25,7 @@ export interface ScheduledMessage {
   updated_at: string;
 }
 
-interface ScheduleMessageParams {
+export interface ScheduleMessageParams {
   conversationId: number;
   content: string;
   scheduled_at: string;
@@ -35,6 +36,7 @@ interface ScheduleMessageParams {
 }
 
 export function useScheduledMessages(conversationId: number | null | undefined) {
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
   const queryKey = ['scheduled-messages', conversationId];
 
@@ -64,10 +66,10 @@ export function useScheduledMessages(conversationId: number | null | undefined) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
-      showToast('Сообщение запланировано', 'success');
+      showToast(t('aiChat.ui.scheduledSuccess'), 'success');
     },
     onError: (err: Error) => {
-      showToast(`Ошибка: ${err.message}`, 'error');
+      showToast(t('aiChat.ui.scheduledError', { message: err.message }), 'error');
     },
   });
 
@@ -79,7 +81,7 @@ export function useScheduledMessages(conversationId: number | null | undefined) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
-      showToast('Запланированное сообщение отменено', 'success');
+      showToast(t('aiChat.ui.scheduledCancelled'), 'success');
     },
   });
 
@@ -94,7 +96,7 @@ export function useScheduledMessages(conversationId: number | null | undefined) 
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey });
-      showToast('Запланированное сообщение обновлено', 'success');
+      showToast(t('aiChat.ui.scheduledUpdated'), 'success');
     },
   });
 

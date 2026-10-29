@@ -1,3 +1,4 @@
+import { ensureAssigneeColumn } from '@/features/widgets/utils/ensureAssigneeColumn';
 import { logger } from '@/shared/utils/logger';
 import { tablesApi } from '@/features/tables/api/tablesApi';
 import type { ColumnModel } from '@/features/tables/types/table.types';
@@ -9,6 +10,7 @@ interface PresetColumnHandlerDeps {
   setColumns: (cols: ColumnModel[]) => void;
   setColorColumn: (v: string) => void;
   setStatusColumn: (v: string) => void;
+  setAssigneeColumn: (v: string) => void;
   setTimelineDependsOnColumn: (v: string) => void;
   setTimelineGroupByColumn: (v: string) => void;
 }
@@ -26,11 +28,18 @@ const defaultColorOptions = [
 ];
 
 export function createHandleCreatePresetColumn(deps: PresetColumnHandlerDeps) {
-  return async (preset: 'color' | 'priority' | 'status' | 'dependency' | 'flow') => {
+  return async (preset: 'color' | 'priority' | 'status' | 'dependency' | 'flow' | 'assignee') => {
     if (!deps.selectedTableId) return;
 
     deps.setCreatingColumn(true);
     try {
+      if (preset === 'assignee') {
+        const name = await ensureAssigneeColumn(deps.selectedTableId);
+        const { columns } = await tablesApi.getColumns(deps.selectedTableId);
+        deps.setColumns(columns);
+        deps.setAssigneeColumn(name);
+        return;
+      }
       let columnData: { name: string; displayName: string; type: string; config: Record<string, unknown> };
 
       switch (preset) {
@@ -469,7 +478,7 @@ interface SaveHandlerDeps {
   ticketsColPriority: string;
   updateWidgetMutation: {
     mutateAsync: (args: {
-      widgetId: string | number;
+      widgetId: number;
       updates: { title: string; description?: string; icon: string; config: WidgetConfig };
     }) => Promise<unknown>;
   };

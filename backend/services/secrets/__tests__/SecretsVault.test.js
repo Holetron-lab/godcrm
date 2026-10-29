@@ -57,7 +57,12 @@ async function applyMigration(adapter) {
     },
   };
   await migModule.up(knexShim);
+  const scopedMigration = await import('../../../database/migrations/knex/093_space_secrets.js');
+  await scopedMigration.up(knexShim);
 }
+
+const { lockSecretsSuite } = await import('../../../tests/helpers/secrets-suite.js');
+let releaseSuite;
 
 async function dropTable(adapter) {
   await adapter.query(`DROP TABLE IF EXISTS ${TABLE} CASCADE`);
@@ -68,22 +73,25 @@ describe('SecretsVault — AC2/AC3/AC5 (integration against godcrm_test)', () =>
   let vault;
 
   beforeAll(async () => {
+    releaseSuite = await lockSecretsSuite();
     adapter = await makeAdapter();
     await dropTable(adapter);
     await applyMigration(adapter);
     const mod = await import('../SecretsVault.js');
     vault = mod.default;
     await vault.init({ adapter });
-  });
+  }, 120_000);
 
   afterAll(async () => {
     try { await vault.shutdown(); } catch { /* ignore */ }
-    try { await dropTable(adapter); } catch { /* ignore */ }
+    // Leave `_secrets` in place: sibling suites (and the next run) expect it.
     try { await adapter.close?.(); } catch { /* ignore */ }
+    await releaseSuite?.();
   });
 
   beforeEach(async () => {
-    await adapter.query(`TRUNCATE TABLE ${TABLE} RESTART IDENTITY`);
+    // Space-scoped wipe: `_secrets` is shared by every suite on godcrm_test (ADR-0009).
+    await adapter.query(`DELETE FROM ${TABLE} WHERE space_id IN (11, 773)`);
     vault._cache.clear();
   });
 
@@ -95,7 +103,7 @@ describe('SecretsVault — AC2/AC3/AC5 (integration against godcrm_test)', () =>
     );
     const names = cols.rows.map((r) => r.column_name);
     expect(names).toEqual(expect.arrayContaining([
-      'id', 'key', 'encrypted_payload', 'description',
+      'id', 'space_id', 'key', 'encrypted_payload', 'description',
       'created_by', 'created_at', 'updated_at',
       'last_revealed_at', 'last_revealed_by',
     ]));
@@ -105,9 +113,51 @@ describe('SecretsVault — AC2/AC3/AC5 (integration against godcrm_test)', () =>
       [TABLE]
     );
     const hasUniqueKey = idx.rows.some((r) =>
-      /UNIQUE/i.test(r.indexdef) && /\(key\)/.test(r.indexdef)
+      /UNIQUE/i.test(r.indexdef) && /\(space_id, key\)/.test(r.indexdef)
     );
     expect(hasUniqueKey).toBe(true);
+  });
+
+  it('migration preserves legacy ciphertext in space 11 and refuses lossy rollback', async () => {
+    const migration = await import('../../../database/migrations/knex/093_space_secrets.js');
+    const shim = { raw: (sql, params = []) => adapter.query(sql, params) };
+    await migration.down(shim);
+    const blob = JSON.stringify(vault._encrypt('legacy-test-value'));
+    await adapter.query(`INSERT INTO _secrets (key, encrypted_payload) VALUES ($1, $2)`, ['legacy', blob]);
+    await migration.up(shim);
+    await migration.up(shim); // repeatable after a schema snapshot
+    const row = (await adapter.query(`SELECT space_id, encrypted_payload FROM _secrets WHERE key = 'legacy'`)).rows[0];
+    expect(row.space_id).toBe(11);
+    expect(row.encrypted_payload).toEqual(JSON.parse(blob));
+    expect(await vault.getSecret('legacy')).toBe('legacy-test-value');
+    await vault.putSecret('legacy', 'scoped-test-value', { spaceId: 773 });
+    await expect(migration.down(shim)).rejects.toThrow('Cannot roll back');
+    expect(await vault.getSecret('legacy', { spaceId: 773 })).toBe('scoped-test-value');
+  });
+
+  it('does not confuse a legacy key containing a colon with a scoped cache entry', async () => {
+    const listeners = vault._listener.listeners('notification');
+    vault._listener.removeAllListeners('notification');
+    try {
+      await vault.putSecret('773:same_name', 'development');
+      await vault.putSecret('same_name', 'other-space', { spaceId: 773 });
+      expect(await vault.getSecret('773:same_name')).toBe('development');
+      expect(await vault.getSecret('same_name', { spaceId: 773 })).toBe('other-space');
+    } finally {
+      for (const listener of listeners) vault._listener.on('notification', listener);
+    }
+  });
+
+  it('NOTIFY invalidates cached same-name keys across spaces', async () => {
+    await vault.putSecret('SCOPED_NOTIFY', 'dev');
+    await vault.putSecret('SCOPED_NOTIFY', 'other', { spaceId: 773 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await vault.getSecret('SCOPED_NOTIFY', { spaceId: 773 })).toBe('other');
+    await adapter.query(`UPDATE _secrets SET encrypted_payload = $1 WHERE key = $2 AND space_id = 773`,
+      [JSON.stringify(vault._encrypt('rotated')), 'SCOPED_NOTIFY']);
+    await vi.waitFor(() => expect(vault._cache.has('773:SCOPED_NOTIFY')).toBe(false));
+    expect(await vault.getSecret('SCOPED_NOTIFY', { spaceId: 773 })).toBe('rotated');
+    expect(await vault.getSecret('SCOPED_NOTIFY')).toBe('dev');
   });
 
   it('AC2: putSecret stores v:1 AES-GCM blob — never plaintext at rest', async () => {
@@ -147,7 +197,7 @@ describe('SecretsVault — AC2/AC3/AC5 (integration against godcrm_test)', () =>
   it('AC5: pg_notify("secrets_changed", key) evicts the cache entry', async () => {
     await vault.putSecret('NOTIFY_KEY', 'v1-value', { actor: 1 });
     expect(await vault.getSecret('NOTIFY_KEY')).toBe('v1-value');
-    expect(vault._cache.has('NOTIFY_KEY')).toBe(true);
+    expect(vault._cache.has('11:NOTIFY_KEY')).toBe(true);
 
     // Simulate out-of-band update by another process, then NOTIFY.
     const newBlob = vault._encrypt('v2-value');
@@ -159,7 +209,7 @@ describe('SecretsVault — AC2/AC3/AC5 (integration against godcrm_test)', () =>
 
     // Wait for LISTEN async dispatch.
     await new Promise((r) => setTimeout(r, 200));
-    expect(vault._cache.has('NOTIFY_KEY')).toBe(false);
+    expect(vault._cache.has('11:NOTIFY_KEY')).toBe(false);
 
     const v2 = await vault.getSecret('NOTIFY_KEY');
     expect(v2).toBe('v2-value');
@@ -187,10 +237,10 @@ describe('SecretsVault — AC2/AC3/AC5 (integration against godcrm_test)', () =>
   it('deleteSecret removes the row + evicts cache', async () => {
     await vault.putSecret('TO_DELETE', 'gone-soon', { actor: 1 });
     await vault.getSecret('TO_DELETE'); // warm cache
-    expect(vault._cache.has('TO_DELETE')).toBe(true);
+    expect(vault._cache.has('11:TO_DELETE')).toBe(true);
 
     await vault.deleteSecret('TO_DELETE', { actor: 1 });
-    expect(vault._cache.has('TO_DELETE')).toBe(false);
+    expect(vault._cache.has('11:TO_DELETE')).toBe(false);
 
     const row = await adapter.query(`SELECT 1 FROM ${TABLE} WHERE key = $1`, ['TO_DELETE']);
     expect(row.rowCount).toBe(0);

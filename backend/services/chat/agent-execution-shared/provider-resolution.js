@@ -87,9 +87,16 @@ export async function resolveAgentProvider(agentConfig, options = {}) {
   // 'copilot' runs through the GitHub Copilot CLI binary (OAuth token in ~/.config/gh),
   // so it never carries an api_key — without this it falls into the space fallback below
   // and silently inherits another operator's key AND provider.
+  // 'codex' runs through the OpenAI Codex CLI on the owner's ChatGPT
+  // subscription (device-auth token in ~/.codex/auth.json) — like 'copilot' it
+  // carries no api_key, so without it here the same silent-inherit happens.
+  // 'kimi-code' runs through the Kimi Code CLI on the box's Moonshot
+  // subscription (managed OAuth in ~/.kimi-code) — same no-api_key seat.
   const isLocal = operatorData?.provider === 'claude-code'
     || operatorData?.provider === 'local'
     || operatorData?.provider === 'copilot'
+    || operatorData?.provider === 'codex'
+    || operatorData?.provider === 'kimi-code'
     || operatorData?.is_local === true;
 
   // Step 3: Fallback — find any operator with api_key in the same space
@@ -176,13 +183,20 @@ export async function resolveAgentProvider(agentConfig, options = {}) {
  *
  * @param {string} providerName - Provider identifier (e.g. 'openai', 'anthropic', 'claude-code')
  * @param {string} model - Model identifier (e.g. 'claude-sonnet-4', 'gpt-4-turbo')
- * @returns {{ isClaudeCode: boolean, isCopilot: boolean, isAnthropic: boolean }}
+ * @returns {{ isClaudeCode: boolean, isCopilot: boolean, isCodex: boolean, isKimi: boolean, isCliAgent: boolean, isAnthropic: boolean }}
  */
 export function detectProvider(providerName, model) {
   const isClaudeCode = providerName === 'claude-code';
   const isCopilot = providerName === 'copilot';
-  const isAnthropic = !isClaudeCode && !isCopilot
+  // OpenAI Codex CLI on the ChatGPT subscription (see executeCodexCli).
+  const isCodex = providerName === 'codex';
+  // Kimi Code CLI on the box's Moonshot subscription (see executeKimiCli).
+  const isKimi = providerName === 'kimi-code';
+  const isAnthropic = !isClaudeCode && !isCopilot && !isCodex && !isKimi
     && (model.includes('claude') || providerName === 'anthropic');
 
-  return { isClaudeCode, isCopilot, isAnthropic };
+  // claude-code, codex and kimi-code are full agentic CLIs: same async-job dispatch,
+  // same stream-json event shape, same tool loop. Callers that only need
+  // "is this a CLI agent?" should read isCliAgent instead of listing providers.
+  return { isClaudeCode, isCopilot, isCodex, isKimi, isCliAgent: isClaudeCode || isCodex || isKimi, isAnthropic };
 }

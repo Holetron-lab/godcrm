@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * AgentsPanel — extracted from AIChatPanel.renderAgentsPanel()
  * Displays a list of AI agents with search, favorites, and vector search.
@@ -56,6 +57,7 @@ export function AgentsPanel({
   currentSpace,
   createTablesMutation,
 }: AgentsPanelProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar: Search + Favorites + AI search */}
@@ -70,7 +72,7 @@ export function AgentsPanel({
               setAgentsSearch(e.target.value);
               if (!e.target.value) setVectorSearchResults(null);
             }}
-            placeholder="Поиск агентов..."
+            placeholder={t('aiChat.ui.searchAgents')}
             className="w-full pl-7 pr-2 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/50"
           />
           {agentsSearch && (
@@ -91,7 +93,7 @@ export function AgentsPanel({
               ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/30"
               : "text-[var(--text-tertiary)] border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]"
           )}
-          title={showFavoriteAgents ? "Показать всех" : "Только избранные"}
+          title={showFavoriteAgents ? t('aiChat.ui.showAll') : t('aiChat.ui.favoritesOnly')}
         >
           <Star className={cn("w-3.5 h-3.5", showFavoriteAgents && "fill-current")} />
         </button>
@@ -106,7 +108,7 @@ export function AgentsPanel({
               : "text-[var(--text-tertiary)] border-[var(--border-secondary)] hover:bg-purple-500/10 hover:text-purple-400 hover:border-purple-500/30",
             (!agentsSearch || isVectorSearching) && "opacity-50 cursor-not-allowed"
           )}
-          title={vectorSearchResults ? "AI поиск активен" : "Семантический поиск"}
+          title={vectorSearchResults ? t('aiChat.ui.aISearchIsActive') : t('aiChat.ui.semanticSearch')}
         >
           {isVectorSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
         </button>
@@ -117,13 +119,12 @@ export function AgentsPanel({
         {filteredAgents.length === 0 ? (
           agentsSearch ? (
             <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-              Не найдено
-            </div>
+              {t('aiChat.contacts.notFound')}</div>
           ) : isLoadingAgents ? (
             /* Ticket #81428: Show spinner while agents are loading instead of "не настроены" */
             <div className="py-8 flex flex-col items-center gap-3">
               <Loader2 className="w-6 h-6 animate-spin text-[var(--color-primary-500)]" />
-              <span className="text-sm text-[var(--text-tertiary)]">Загрузка агентов...</span>
+              <span className="text-sm text-[var(--text-tertiary)]">{t('aiChat.ui.loadingAgents')}</span>
             </div>
           ) : (
             <div className="p-6 text-center">
@@ -131,11 +132,9 @@ export function AgentsPanel({
                 <Bot className="w-7 h-7 text-[var(--color-primary-500)]" />
               </div>
               <h3 className="font-medium text-[var(--text-primary)] mb-2">
-                AI агенты не настроены
-              </h3>
+                {t('aiChat.ui.aIAgentsAreNotConfigured')}</h3>
               <p className="text-sm text-[var(--text-tertiary)] mb-4">
-                Создайте AI таблицы в System Data для работы с агентами
-              </p>
+                {t('aiChat.ui.createAITablesInSystemDataToWorkWithAgents')}</p>
               <button
                 onClick={() => {
                   logger.debug('[Chat v2] Create tables clicked, currentSpace:', currentSpace);
@@ -147,17 +146,15 @@ export function AgentsPanel({
                 {createTablesMutation.isPending ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Создание...
-                  </>
+                    {t('aiChat.ui.creating')}</>
                 ) : (
                   <>
                     <Plus className="w-4 h-4" />
-                    Создать AI таблицы
-                  </>
+                    {t('aiChat.ui.createAITables')}</>
                 )}
               </button>
               {createTablesMutation.isError && (
-                <p className="text-sm text-red-500 mt-2">Ошибка создания таблиц</p>
+                <p className="text-sm text-red-500 mt-2">{t('aiChat.ui.couldNotCreateTables')}</p>
               )}
             </div>
           )
@@ -190,7 +187,7 @@ export function AgentsPanel({
                         ? "text-yellow-500 border-yellow-500/30 bg-yellow-500/10"
                         : "text-[var(--text-tertiary)] border-[var(--border-secondary)] hover:text-yellow-500 hover:border-yellow-500/30"
                     )}
-                    title={isFavorite ? "Убрать из избранного" : "В избранное"}
+                    title={isFavorite ? t('aiChat.ui.removeFromFavorites') : t('aiChat.ui.addToFavorites')}
                   >
                     <Star className={cn("w-3.5 h-3.5", isFavorite && "fill-current")} />
                   </button>
@@ -215,8 +212,7 @@ export function AgentsPanel({
                         <span className="text-sm font-medium text-[var(--text-primary)] truncate">{agent.name}</span>
                         {currentAgent?.id === agent.id && (
                           <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--color-primary-500)]/30 text-[var(--color-primary-400)] flex-shrink-0">
-                            активен
-                          </span>
+                            {t('aiChat.ui.activeLower')}</span>
                         )}
                       </div>
                       {agent.description && (
@@ -236,7 +232,7 @@ export function AgentsPanel({
                         setActivePanel('none');
                       }}
                       className="p-1.5 rounded border border-[var(--border-secondary)] text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)] hover:border-[var(--color-primary-500)]/30 hover:bg-[var(--color-primary-500)]/10 transition-colors"
-                      title="Новый чат"
+                      title={t('aiChat.ui.newChat')}
                     >
                       <MessageSquare className="w-3.5 h-3.5" />
                     </button>

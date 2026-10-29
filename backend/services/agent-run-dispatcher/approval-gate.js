@@ -333,7 +333,7 @@ export async function awaitApproval(ticketId, { pollMs = DEFAULT_POLL_MS, timeou
   const startedAt = Date.now();
   let lastAttempts = 0;
 
-  while (true) {
+  for (;;) {
     const view = await readApprovalState(ticketId);
     lastAttempts = view.attempts;
 

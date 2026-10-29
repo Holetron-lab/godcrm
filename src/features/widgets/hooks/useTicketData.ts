@@ -85,10 +85,11 @@ export type KanbanColumnOption = ColumnOption;
 
 // Column info for widgets
 export interface ColumnInfo {
+  id?: string;
   name: string;
   displayName: string;
   type: string;
-  config: unknown;
+  config: ColumnModel['config'];
   isVisible: boolean;
   orderIndex: number;
   width?: number;
@@ -221,7 +222,7 @@ export function useTicketData({ widgetId, widget: externalWidget, tableId: exter
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: tableColumnsRaw = [], isLoading: isLoadingColumns } = useQuery({
+  const { data: tableColumnsRaw, isLoading: isLoadingColumns } = useQuery({
     queryKey: publicSlug
       ? (['table-columns', tableId, 'public', publicSlug] as const)
       : (['table-columns', tableId] as const),
@@ -231,14 +232,12 @@ export function useTicketData({ widgetId, widget: externalWidget, tableId: exter
         return publicTable ? publicColumnsToColumnModels(publicTable.columns) : [];
       }
       const result = await tablesApi.getColumns(String(tableId));
-      if (Array.isArray(result)) return result;
-      const columns = (result as { columns?: unknown[] })?.columns;
-      return Array.isArray(columns) ? columns : [];
+      return result.columns;
     },
     enabled: enabled && !!tableId && (!publicSlug || !!publicTable),
   });
 
-  const tableColumns = Array.isArray(tableColumnsRaw) ? tableColumnsRaw : [];
+  const tableColumns = useMemo(() => Array.isArray(tableColumnsRaw) ? tableColumnsRaw : [], [tableColumnsRaw]);
 
   // Fetch table info (for config: row height, etc.)
   const { data: tableInfo } = useQuery({
@@ -416,7 +415,7 @@ export function useTicketData({ widgetId, widget: externalWidget, tableId: exter
   // Build group column options from relation data or column config
   const groupColumnOptions = useMemo((): ColumnOption[] => {
     // Priority 1: Explicitly configured options in widget config
-    if (widget?.config?.category_options?.length > 0) {
+    if (widget?.config?.category_options?.length) {
       return widget.config.category_options;
     }
     
@@ -442,7 +441,7 @@ export function useTicketData({ widgetId, widget: externalWidget, tableId: exter
     
     // Priority 3: Use column's own options (for regular select columns)
     // Options can be either strings (legacy) or {value,label,color} objects.
-    if (groupColumn?.config?.options?.length > 0) {
+    if (groupColumn?.config?.options?.length) {
       return groupColumn.config.options.map((opt: string | { value: string; label?: string; color?: string }) => {
         if (typeof opt === 'string') {
           return { value: opt, label: opt };
@@ -462,6 +461,7 @@ export function useTicketData({ widgetId, widget: externalWidget, tableId: exter
   const columnsInfo = useMemo((): ColumnInfo[] => {
     return tableColumns
       .map((col: ColumnModel) => ({
+        id: col.id,
         name: col.name,
         displayName: col.displayName || col.name,
         type: col.type,

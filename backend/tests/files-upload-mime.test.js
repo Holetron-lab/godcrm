@@ -1,4 +1,4 @@
-// ADR-194 §B1/B2 — MIME allowlist + itemised rejection contract on
+// General attachments — unrestricted MIME acceptance and batch limits on
 // POST /api/v3/files/upload. Boots a minimal Express app around the real
 // files router and drives the real multer path against the test DB
 // (ADR-0009 — never a combat master; the boot guard in backend/test/setup.js
@@ -7,14 +7,14 @@
 // UPLOAD_PATH is redirected to a temp dir BEFORE the router is imported,
 // because files.js captures UPLOAD_BASE_PATH at module load time.
 
-import { describe, test, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { dbAll, dbRun } from '../database/connection.js';
-import { fileLogger } from '../utils/logger.js';
+import jwt from 'jsonwebtoken';
+import { dbAll, dbGet, dbRun } from '../database/connection.js';
 
 const UPLOAD_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'adr194-uploads-'));
 process.env.UPLOAD_PATH = UPLOAD_ROOT;
@@ -24,7 +24,6 @@ const MARKER = `adr194-test-${Date.now()}`;
 
 const EPUB = Buffer.from('PK\x03\x04 fake-epub');
 const PDF = Buffer.from('%PDF-1.4 fake');
-const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>');
 
 const tempFiles = () => {
   const dir = path.join(UPLOAD_ROOT, '.temp');
@@ -34,7 +33,7 @@ const tempFiles = () => {
 const uploadedRows = () => dbAll('SELECT * FROM files WHERE description = ?', [MARKER]);
 const clearRows = () => dbRun('DELETE FROM files WHERE description = ?', [MARKER]);
 
-describe('POST /api/v3/files/upload — MIME allowlist (ADR-194 B1/B2)', () => {
+describe('POST /api/v3/files/upload — general files', () => {
   let app;
 
   const post = (files) => {
@@ -46,8 +45,12 @@ describe('POST /api/v3/files/upload — MIME allowlist (ADR-194 B1/B2)', () => {
   };
 
   beforeAll(async () => {
+    expect((await dbGet('SELECT current_database() AS name')).name).toBe('godcrm_test');
     const { default: filesRouter } = await import('../routes/v3/files.js');
+    const { default: uploadStatic } = await import('../middleware/uploadStatic.js');
+    const { uploadsFileGuard } = await import('../middleware/fileGuard.js');
     app = express();
+    app.use('/uploads', uploadsFileGuard, uploadStatic);
     app.use(
       '/api/v3',
       (req, _res, next) => {
@@ -95,66 +98,104 @@ describe('POST /api/v3/files/upload — MIME allowlist (ADR-194 B1/B2)', () => {
     await clearRows();
   });
 
-  // AC-B1.2 / AC-B2.2 / AC-B2.3 — the SEC-3 carve-out stays load-bearing,
-  // and the refusal is now itemised instead of a bare sentence.
-  test('single .svg is still rejected, with an itemised 400 and a warn line', async () => {
-    const warn = vi.spyOn(fileLogger, 'warn');
+  test.each([
+    ['voice.webm', 'audio/webm'],
+    ['voice.m4a', 'audio/mp4'],
+    ['voice.ogg', 'audio/ogg']
+  ])('voice recording %s preserves its MIME and chat space', async (filename, type) => {
+    const res = await post([[Buffer.from('audio-fixture'), filename, type]])
+      .field('spaceId', '11');
 
-    const res = await post([[SVG, 'evil.svg', 'image/svg+xml']]);
-
-    expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('FILE_TYPE_NOT_ALLOWED');
-    // filesApi.ts:94 reads exactly error.error.message — it must stay a human string.
-    expect(typeof res.body.error.message).toBe('string');
-    expect(res.body.error.message).toContain('evil.svg');
-    expect(res.body.error.rejected).toEqual([
-      { name: 'evil.svg', type: 'image/svg+xml', reason: 'type_not_allowed' }
-    ]);
-
-    expect(warn).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'evil.svg', mimetype: 'image/svg+xml' }),
-      expect.any(String)
-    );
-    warn.mockRestore();
-
-    expect(await uploadedRows()).toHaveLength(0);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ originalName: filename, mimeType: type, spaceId: '11' });
+    expect(res.body.data.url).toMatch(/^\/uploads\/spaces\/11\//);
+    const rows = await uploadedRows();
+    expect(rows).toHaveLength(1);
+    expect(Number(rows[0].space_id)).toBe(11);
+    expect(rows[0].mime_type).toBe(type);
+    expect(fs.readFileSync(rows[0].path)).toEqual(Buffer.from('audio-fixture'));
+    await clearRows();
   });
 
-  test('text/html is still rejected (SEC-3)', async () => {
-    const res = await post([[SVG, 'evil.html', 'text/html']]);
-
-    expect(res.status).toBe(400);
-    expect(await uploadedRows()).toHaveLength(0);
+  test.each([
+    ['clip.mp4', 'video/mp4'],
+    ['clip.webm', 'video/webm'],
+    ['clip.mov', 'video/quicktime'],
+    ['archive.zip', 'application/x-zip-compressed'],
+    ['script.py', 'text/x-python'],
+    ['unknown.custom', 'application/x-custom-format'],
+    ['no-extension', 'application/octet-stream'],
+    ['page.html', 'text/html'],
+    ['image.svg', 'image/svg+xml'],
+    ['clip.mp4', 'application/octet-stream']
+  ])('%s accepts browser MIME %s and preserves bytes/visibility', async (filename, type) => {
+    const res = await post([[EPUB, filename, type]]).field('visibility', 'private');
+    expect(res.status).toBe(200);
+    expect(res.body.data.mimeType).toBe(type);
+    const rows = await uploadedRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ original_name: filename, mime_type: type, visibility: 'private' });
+    expect(fs.readFileSync(rows[0].path)).toEqual(EPUB);
+    await clearRows();
   });
 
-  // AC-B2.1 — all-or-nothing survives: one bad file kills the batch, but the
-  // body names which one. (The ADR example was epub+pdf; epub is allowed after
-  // B1, so svg stands in as the disallowed member.)
-  test('mixed batch is rejected wholesale and names only the offending file', async () => {
+  test('mixed media, code and unknown files are all retained', async () => {
     const res = await post([
-      [SVG, 'evil.svg', 'image/svg+xml'],
-      [PDF, 'report.pdf', 'application/pdf']
+      [EPUB, 'clip.mp4', 'video/mp4'],
+      [PDF, 'script.py', 'text/x-python'],
+      [EPUB, 'unknown.custom', 'application/x-custom-format']
     ]);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(3);
+    expect(await uploadedRows()).toHaveLength(3);
+    expect(tempFiles()).toHaveLength(0);
+    await clearRows();
+  });
 
+  test.each([
+    ['clip.mp4', 'application/octet-stream', 'inline', 'video/mp4'],
+    ['page.html', 'image/png', 'attachment', 'application/octet-stream'],
+    ['image.svg', 'application/octet-stream', 'attachment', 'application/octet-stream']
+  ])('upload → guarded download of %s ignores spoofed MIME for delivery', async (name, mime, disposition, servedMime) => {
+    const upload = await post([[EPUB, name, mime]]);
+    expect(upload.status).toBe(200);
+    const url = upload.body.data.url;
+    expect((await request(app).get(url)).status).toBe(401);
+    expect((await request(app).get(url).set('Authorization', 'Bearer invalid')).status).toBe(401);
+    const token = jwt.sign({ id: 1, role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '1m' });
+    const download = await request(app).get(url).set('Authorization', `Bearer ${token}`);
+    expect(download.status).toBe(200);
+    expect(download.headers['content-disposition']).toMatch(new RegExp(`^${disposition};`));
+    expect(download.headers['content-type']).toBe(servedMime);
+    expect(download.headers['content-length']).toBe(String(EPUB.length));
+    await clearRows();
+    expect((await request(app).get(url)).status).toBe(404);
+  });
+
+  test('browser file without a MIME is accepted as generic binary', async () => {
+    const res = await post([[EPUB, 'unknown.extension', undefined]]);
+    expect(res.status).toBe(200);
+    expect(res.body.data.mimeType).toBe('application/octet-stream');
+    await clearRows();
+  });
+
+  test('eleven files reject the whole batch without rows or temp files', async () => {
+    const res = await post(Array.from({ length: 11 }, (_, i) => [PDF, `file-${i}.pdf`, 'application/pdf']));
     expect(res.status).toBe(400);
-    expect(res.body.error.rejected.map((f) => f.name)).toEqual(['evil.svg']);
-
-    // The allowed PDF must not survive — not in the DB, not as a temp leftover.
     expect(await uploadedRows()).toHaveLength(0);
     expect(tempFiles()).toHaveLength(0);
   });
 
-  test('every rejected file in a batch is named, not just the first', async () => {
+  test('oversized file rejects the whole mixed batch without leftovers', async () => {
     const res = await post([
-      [SVG, 'a.svg', 'image/svg+xml'],
-      [SVG, 'b.html', 'text/html'],
-      [PDF, 'report.pdf', 'application/pdf']
+      [PDF, 'small.pdf', 'application/pdf'],
+      [Buffer.alloc(100 * 1024 * 1024 + 1), 'large.bin', 'application/octet-stream']
     ]);
-
     expect(res.status).toBe(400);
-    expect(res.body.error.rejected.map((f) => f.name)).toEqual(['a.svg', 'b.html']);
+    expect(res.body.error.message).toContain('100 MB');
     expect(await uploadedRows()).toHaveLength(0);
-  });
+    expect(tempFiles()).toHaveLength(0);
+  }, 30000);
 
   test('a fully allowed batch still uploads every file', async () => {
     const res = await post([

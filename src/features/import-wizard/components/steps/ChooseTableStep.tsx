@@ -81,31 +81,31 @@ export function ChooseTableStep({
       </h3>
       
       {tables.map((table) => (
-        <div
+        <button type="button" aria-pressed={selectedTable === table.name}
           key={table.name}
           onClick={() => onSelect(table.name, table)}
           className={`
-            p-4 border-2 rounded-lg cursor-pointer transition-all
+            w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 text-left p-4 border-2 rounded-lg cursor-pointer transition-all
             ${selectedTable === table.name
               ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
               : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
             }
           `}
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-gray-100 font-mono">
+          <span className="flex items-center justify-between">
+            <span className="block">
+              <span className="block font-semibold text-gray-900 dark:text-gray-100 font-mono">
                 {table.name}
-              </h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              </span>
+              <span className="block text-sm text-gray-600 dark:text-gray-400">
                 {table.row_count.toLocaleString()} {language === 'ru' ? 'строк' : 'rows'} • {table.columns.length} {language === 'ru' ? 'колонок' : 'columns'}
-              </p>
-            </div>
+              </span>
+            </span>
             {selectedTable === table.name && (
-              <span className="text-2xl">✓</span>
+              <span className="block text-2xl">✓</span>
             )}
-          </div>
-        </div>
+          </span>
+        </button>
       ))}
     </div>
   );

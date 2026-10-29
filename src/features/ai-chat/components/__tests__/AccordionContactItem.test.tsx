@@ -4,7 +4,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AccordionContactItem } from '../AccordionContactItem';
 
@@ -191,6 +192,7 @@ describe('AccordionContactItem', () => {
     // Click on chat
     fireEvent.click(screen.getByText('Chat 1'));
     
-    expect(mockOnSelectChat).toHaveBeenCalledWith(10);
+    expect(mockOnSelectChat).toHaveBeenCalledTimes(1);
+    expect(mockOnSelectChat).toHaveBeenCalledWith(mockSharedChats[0]);
   });
 });

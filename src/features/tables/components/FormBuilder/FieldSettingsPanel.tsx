@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import {
   ArrowUp,
   ArrowDown,
@@ -32,6 +32,7 @@ export function FieldSettingsPanel({
   onToggleVisibility: () => void;
   onClose: () => void;
 }) {
+  const fieldId = useId();
   const displayName = field.label || column?.displayName || column?.name || '';
 
   return (
@@ -125,10 +126,11 @@ export function FieldSettingsPanel({
         <div className="grid grid-cols-3 gap-4">
           {/* Column 1: Label */}
           <div>
-            <label className="block text-xs text-[var(--text-tertiary)] mb-1.5">
+            <label htmlFor={`${fieldId}-0`} className="block text-xs text-[var(--text-tertiary)] mb-1.5">
               Название поля
             </label>
             <input
+              id={`${fieldId}-0`}
               type="text"
               value={field.label || ''}
               onChange={(e) => onUpdate({ label: e.target.value })}
@@ -165,10 +167,10 @@ export function FieldSettingsPanel({
           </div>
 
           {/* Column 3: Width */}
-          <div>
-            <label className="block text-xs text-[var(--text-tertiary)] mb-1.5">
+          <div role="group" aria-labelledby={`${fieldId}-group-171`}>
+            <span id={`${fieldId}-group-171`} className="block text-xs text-[var(--text-tertiary)] mb-1.5">
               Ширина
-            </label>
+            </span>
             <div className="flex gap-1">
               {WIDTH_OPTIONS.map(opt => (
                 <button
@@ -190,10 +192,11 @@ export function FieldSettingsPanel({
 
         {/* Description / Hint row */}
         <div className="mt-4">
-          <label className="block text-xs text-[var(--text-tertiary)] mb-1.5">
+          <label htmlFor={`${fieldId}-1`} className="block text-xs text-[var(--text-tertiary)] mb-1.5">
             Описание / Подсказка
           </label>
           <textarea
+            id={`${fieldId}-1`}
             value={field.description || ''}
             onChange={(e) => onUpdate({ description: e.target.value })}
             placeholder="Поддержка: {{column_name}}, **жирный**, *курсив*, `код`, [ссылка](url)"
@@ -222,6 +225,19 @@ export function FieldSettingsPanel({
               className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-[var(--color-primary-500)] focus:ring-[var(--color-primary-500)]"
             />
             <span className="text-xs text-[var(--text-secondary)]">Только чтение</span>
+          </label>
+
+          <label
+            className="flex items-center gap-1.5 cursor-pointer"
+            title={`Значение можно передать в ссылке формы: ?${column?.name || 'ключ'}=…`}
+          >
+            <input
+              type="checkbox"
+              checked={field.urlParam || false}
+              onChange={(e) => onUpdate({ urlParam: e.target.checked })}
+              className="w-3.5 h-3.5 rounded border-[var(--border-primary)] text-[var(--color-primary-500)] focus:ring-[var(--color-primary-500)]"
+            />
+            <span className="text-xs text-[var(--text-secondary)]">В URL</span>
           </label>
 
           {/* Text field specific options - inline with other checkboxes */}

@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as widgetsApi from '../api/widgetsApi';
+import type { CreateWidgetRequest } from '../types/widget.types';
 import { apiClient } from '@/shared/utils/apiClient';
 
 // Mock the apiClient
@@ -56,12 +57,13 @@ describe('widgetsApi', () => {
 
   describe('createWidget', () => {
     it('should create widget with valid config', async () => {
-      const newWidget = {
+      const newWidget: CreateWidgetRequest = {
         dashboard_id: 1,
-        type: 'kanban_board' as const,
+        widget_type: 'preset',
+        preset_name: 'kanban_board',
         title: 'New Kanban',
-        settings: { statusColumn: 'status' },
-        layout: { x: 0, y: 0, w: 4, h: 4 },
+        config: { group_by_column: 'status' },
+        position: { x: 0, y: 0, w: 4, h: 4 },
       };
       const createdWidget = { id: 1, ...newWidget };
       mockApiClient.request.mockResolvedValue({ data: createdWidget });
@@ -71,10 +73,11 @@ describe('widgetsApi', () => {
       expect(mockApiClient.request).toHaveBeenCalledWith('/dashboards/1/widgets', {
         method: 'POST',
         body: JSON.stringify({
-          type: 'kanban_board',
+          widget_type: 'preset',
+          preset_name: 'kanban_board',
           title: 'New Kanban',
-          settings: { statusColumn: 'status' },
-          layout: { x: 0, y: 0, w: 4, h: 4 },
+          config: { group_by_column: 'status' },
+          position: { x: 0, y: 0, w: 4, h: 4 },
         }),
       });
       expect(result).toEqual(createdWidget);
@@ -87,7 +90,7 @@ describe('widgetsApi', () => {
 
   describe('updateWidget', () => {
     it('should update widget settings', async () => {
-      const updates = { title: 'Updated Title', settings: { newSetting: true } };
+      const updates = { title: 'Updated Title', config: { newSetting: true } };
       const updatedWidget = { id: 1, ...updates };
       mockApiClient.request.mockResolvedValue({ data: updatedWidget });
 

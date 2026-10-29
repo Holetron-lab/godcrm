@@ -6,8 +6,9 @@
 import express from 'express';
 import { dbAll, dbGet, safeJsonParse } from '../../../database/connection.js';
 import { apiLogger } from '../../../utils/logger.js';
-import { success, notFound, forbidden, error } from '../../../utils/response.js';
-import { checkTableAccess } from './helpers.js';
+import { isMysqlSource, openMysqlConnection } from '../../../services/data-source/mysql.js';
+import { notFound, forbidden, error } from '../../../utils/response.js';
+import { checkTableAccess, respondRows } from './helpers.js';
 
 const router = express.Router();
 
@@ -19,6 +20,7 @@ const router = express.Router();
 router.get('/tables/:tableId/rows/base/:baseId', async (req, res) => {
   try {
     const { tableId, baseId } = req.params;
+    const sendRows = (payload) => respondRows(res, payload, { tableId, include: req.query.include, user: req.user });
 
     if (req.user?.projectId) {
       const access = await checkTableAccess(tableId, req.user);
@@ -43,7 +45,7 @@ router.get('/tables/:tableId/rows/base/:baseId', async (req, res) => {
       if (!row) {
         return notFound(res, 'Row');
       }
-      return success(res, { row });
+      return await sendRows({ row });
     }
 
     // External data source
@@ -71,7 +73,7 @@ router.get('/tables/:tableId/rows/base/:baseId', async (req, res) => {
           }
         });
 
-        return success(res, {
+        return await sendRows({
           row: {
             id: sourceRow[idColumn] || baseId,
             table_id: Number(tableId),
@@ -83,15 +85,8 @@ router.get('/tables/:tableId/rows/base/:baseId', async (req, res) => {
         });
       }
 
-      if (dataSource.type === 'local_mysql') {
-        const mysql = await import('mysql2/promise');
-        const connection = await mysql.createConnection({
-          host: dataSource.db_host,
-          port: dataSource.db_port,
-          database: dataSource.db_name,
-          user: dataSource.db_username,
-          password: ''
-        });
+      if (isMysqlSource(dataSource)) {
+        const connection = await openMysqlConnection(dataSource);
 
         try {
           const idColumn = table.source_id_column || 'id';
@@ -104,7 +99,7 @@ router.get('/tables/:tableId/rows/base/:baseId', async (req, res) => {
             return notFound(res, 'Row');
           }
 
-          return success(res, {
+          return await sendRows({
             row: {
               id: baseId,
               table_id: Number(tableId),
@@ -136,7 +131,7 @@ router.get('/tables/:tableId/rows/base/:baseId', async (req, res) => {
       [tableId]
     );
 
-    success(res, {
+    return await sendRows({
       row: {
         id: row.id,
         base_id: row.base_id,
@@ -167,6 +162,7 @@ router.get('/tables/:tableId/rows/base/:baseId', async (req, res) => {
 router.get('/tables/:tableId/rows/:rowId', async (req, res) => {
   try {
     const { tableId, rowId } = req.params;
+    const sendRows = (payload) => respondRows(res, payload, { tableId, include: req.query.include, user: req.user });
 
     if (req.user?.projectId) {
       const access = await checkTableAccess(tableId, req.user);
@@ -191,7 +187,7 @@ router.get('/tables/:tableId/rows/:rowId', async (req, res) => {
       if (!row) {
         return notFound(res, 'Row');
       }
-      return success(res, { row });
+      return await sendRows({ row });
     }
 
     // External data source (internal type)
@@ -227,7 +223,7 @@ router.get('/tables/:tableId/rows/:rowId', async (req, res) => {
           }
         });
 
-        return success(res, {
+        return await sendRows({
           row: {
             id: rowId,
             table_id: Number(tableId),
@@ -246,21 +242,16 @@ router.get('/tables/:tableId/rows/:rowId', async (req, res) => {
         });
       }
 
-      if (dataSource.type === 'local_mysql') {
-        const mysql = await import('mysql2/promise');
-        const connection = await mysql.createConnection({
-          host: dataSource.db_host,
-          port: dataSource.db_port,
-          database: dataSource.db_name,
-          user: dataSource.db_username,
-          password: ''
-        });
+      if (isMysqlSource(dataSource)) {
+        const connection = await openMysqlConnection(dataSource);
 
         try {
           const idColumn = table.source_id_column || 'id';
+          // List rows emits `ext_<table>_<index>_<mysqlId>`; the last segment is the real key.
+          const realRowId = rowId.startsWith('ext_') ? rowId.split('_').pop() : rowId;
           const [rows] = await connection.execute(
             `SELECT * FROM \`${table.source_table_name}\` WHERE \`${idColumn}\` = ? LIMIT 1`,
-            [rowId]
+            [realRowId]
           );
 
           if (!rows.length) {
@@ -269,7 +260,7 @@ router.get('/tables/:tableId/rows/:rowId', async (req, res) => {
 
           const columns = await dbAll('SELECT * FROM table_columns WHERE table_id = ? ORDER BY order_index', [tableId]);
 
-          return success(res, {
+          return await sendRows({
             row: {
               id: rowId,
               table_id: Number(tableId),
@@ -292,7 +283,9 @@ router.get('/tables/:tableId/rows/:rowId', async (req, res) => {
     }
 
     // Default: internal table_rows
-    let row = await dbGet('SELECT * FROM table_rows WHERE id = ? AND table_id = ?', [rowId, tableId]);
+    let row = /^\d+$/.test(rowId) && Number.isSafeInteger(Number(rowId))
+      ? await dbGet('SELECT * FROM table_rows WHERE id = ? AND table_id = ?', [rowId, tableId])
+      : null;
 
     if (!row) {
       row = await dbGet('SELECT * FROM table_rows WHERE base_id = ? AND table_id = ?', [rowId, tableId]);
@@ -312,7 +305,7 @@ router.get('/tables/:tableId/rows/:rowId', async (req, res) => {
       [tableId]
     );
 
-    success(res, {
+    return await sendRows({
       row: {
         id: row.id,
         base_id: row.base_id,

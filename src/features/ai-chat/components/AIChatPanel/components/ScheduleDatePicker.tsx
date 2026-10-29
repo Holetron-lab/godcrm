@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ScheduleDatePicker — Inline datetime picker for scheduling messages.
  * WP-17: Ported from DateEditor (tables), simplified for chat use.
@@ -13,19 +14,20 @@ interface ScheduleDatePickerProps {
   isScheduling?: boolean;
 }
 
-const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const MONTHS_RU = ["dateSettings.months.jan", "dateSettings.months.feb", "dateSettings.months.mar", "dateSettings.months.apr", "dateSettings.months.may", "dateSettings.months.jun", "dateSettings.months.jul", "dateSettings.months.aug", "dateSettings.months.sep", "dateSettings.months.oct", "dateSettings.months.nov", "dateSettings.months.dec"];
+const WEEKDAYS = ["dateSettings.weekdays.mon", "dateSettings.weekdays.tue", "dateSettings.weekdays.wed", "dateSettings.weekdays.thu", "dateSettings.weekdays.fri", "dateSettings.weekdays.sat", "dateSettings.weekdays.sun"];
 
 // Quick schedule options
 const QUICK_OPTIONS = [
-  { label: 'Через 30 мин', minutes: 30 },
-  { label: 'Через 1 час', minutes: 60 },
-  { label: 'Через 3 часа', minutes: 180 },
-  { label: 'Завтра 9:00', getDate: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; } },
-  { label: 'Завтра 12:00', getDate: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(12, 0, 0, 0); return d; } },
+  { label: "aiChat.ui.in30Minutes", minutes: 30 },
+  { label: "aiChat.ui.in1Hour", minutes: 60 },
+  { label: "aiChat.ui.in3Hours", minutes: 180 },
+  { label: "aiChat.ui.tomorrowAt900", getDate: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; } },
+  { label: "aiChat.ui.tomorrowAt1200", getDate: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(12, 0, 0, 0); return d; } },
 ];
 
 export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: ScheduleDatePickerProps) {
+  const { t } = useLanguage();
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -122,8 +124,7 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
       <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-secondary)]">
         <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-primary)]">
           <Clock className="w-3.5 h-3.5 text-[var(--color-primary-500)]" />
-          Запланировать отправку
-        </div>
+          {t('aiChat.ui.scheduleSend')}</div>
         <button onClick={onCancel} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
           <X className="w-3.5 h-3.5" />
         </button>
@@ -132,11 +133,11 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
       <div className="flex">
         {/* Quick options */}
         <div className="w-36 border-r border-[var(--border-secondary)] py-1.5">
-          <div className="px-2 py-1 text-[10px] text-[var(--text-tertiary)] uppercase font-medium">Быстрый выбор</div>
+          <div className="px-2 py-1 text-[10px] text-[var(--text-tertiary)] uppercase font-medium">{t('aiChat.ui.quickSelection')}</div>
           {QUICK_OPTIONS.map((opt) => (
-            <button key={opt.label} onClick={() => handleQuickOption(opt)} disabled={isScheduling}
+            <button key={t(opt.label)} onClick={() => handleQuickOption(opt)} disabled={isScheduling}
               className="w-full px-3 py-1.5 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors">
-              {opt.label}
+              {t(opt.label)}
             </button>
           ))}
         </div>
@@ -149,7 +150,7 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
               <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="text-xs font-medium text-[var(--text-primary)]">
-              {MONTHS_RU[viewMonth]} {viewYear}
+              {t(MONTHS_RU[viewMonth])} {viewYear}
             </span>
             <button onClick={() => goMonth(1)} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
               <ChevronRight className="w-4 h-4" />
@@ -159,7 +160,7 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
           {/* Weekday headers */}
           <div className="grid grid-cols-7 gap-0">
             {WEEKDAYS.map(w => (
-              <div key={w} className="text-center text-[10px] text-[var(--text-tertiary)] py-0.5">{w}</div>
+              <div key={w} className="text-center text-[10px] text-[var(--text-tertiary)] py-0.5">{t(w)}</div>
             ))}
           </div>
 
@@ -203,7 +204,7 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
                   : "bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] cursor-not-allowed"
               )}>
               <Send className="w-3 h-3" />
-              {isScheduling ? 'Сохраняю...' : 'Запланировать'}
+              {isScheduling ? t('aiChat.ui.saving') : t('aiChat.ui.schedule')}
             </button>
           </div>
         </div>

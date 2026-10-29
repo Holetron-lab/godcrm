@@ -202,7 +202,7 @@ export function ProjectContent({
     );
     const isOverInFolder = overFolderIndex !== -1;
 
-    let newOrg = { ...organization };
+    const newOrg = { ...organization };
 
     // CASE 0: Dropped on folder drop line - add widget to folder
     if (isFolderDropLine && folderIdFromDropLine && typeof activeIdVal === 'number') {

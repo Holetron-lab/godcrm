@@ -168,7 +168,7 @@ export function ConvertToTicketModal() {
             <div className="text-center py-12 text-[var(--text-tertiary)]">
               <AlertCircle className="w-10 h-10 mx-auto mb-3 opacity-50" />
               <p className="text-sm mb-1">Таблица тикетов не найдена</p>
-              <p className="text-xs">Создайте таблицу "Tickets" или "Tasks" в проекте</p>
+              <p className="text-xs">Создайте таблицу &quot;Tickets&quot; или &quot;Tasks&quot; в проекте</p>
             </div>
           ) : (
             <>

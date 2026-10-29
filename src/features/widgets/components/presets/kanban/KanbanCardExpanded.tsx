@@ -1,8 +1,9 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { Plus, RefreshCw, FileText, Tag, X, Check, Edit2, Users } from 'lucide-react';
-import { createPortal } from 'react-dom';
+import * as Popover from '@radix-ui/react-popover';
 import { hexToRgba, formatDateForInput } from './kanban-utils';
 import { MiniFileUploader } from './MiniFileUploader';
-import type { ColumnInfo, RelationDataMap } from './kanban-types';
+import type { ColumnInfo, RelationDataMap, FieldValue, KanbanCardData } from './kanban-types';
 
 // Helper to render field values (JSX — must live in .tsx)
 export function renderFieldValue(value: unknown): React.ReactNode {
@@ -32,7 +33,7 @@ interface ExpandedFieldsProps {
   getColumnInfo: (name: string) => ColumnInfo | undefined;
   lookupRelation: (tableId: string | number | undefined, value: unknown) => { label: string; color?: string } | null;
   relationData?: RelationDataMap;
-  onQuickEdit?: (field: string, value: unknown) => void;
+  onQuickEdit?: (field: string, value: FieldValue) => void;
   translations: { moreFields: string };
 }
 
@@ -119,20 +120,21 @@ interface SystemDatesProps {
 }
 
 export function SystemDatesRow({ createdAt, updatedAt }: SystemDatesProps) {
+  const { t, language } = useLanguage();
   return (
     <div className="flex items-center gap-3 px-2 py-0.5 text-[10px] text-[var(--text-quaternary)] border-t border-[var(--border-secondary)]">
-      {createdAt && (
+      {Boolean(createdAt) && (
         <span className="flex items-center gap-1">
           <Plus className="w-2.5 h-2.5 rotate-45 opacity-60" />
-          <span>Создан:</span>
-          <span className="text-[var(--text-tertiary)]">{new Date(createdAt as string).toLocaleDateString('ru-RU')}</span>
+          <span>{t('kanban.createdAt')}:</span>
+          <span className="text-[var(--text-tertiary)]">{new Date(createdAt as string).toLocaleDateString(language)}</span>
         </span>
       )}
-      {updatedAt && (
+      {Boolean(updatedAt) && (
         <span className="flex items-center gap-1 ml-auto">
           <RefreshCw className="w-2.5 h-2.5 opacity-60" />
-          <span>Изменён:</span>
-          <span className="text-[var(--text-tertiary)]">{new Date(updatedAt as string).toLocaleDateString('ru-RU')}</span>
+          <span>{t('kanban.updatedAt')}:</span>
+          <span className="text-[var(--text-tertiary)]">{new Date(updatedAt as string).toLocaleDateString(language)}</span>
         </span>
       )}
     </div>
@@ -142,7 +144,7 @@ export function SystemDatesRow({ createdAt, updatedAt }: SystemDatesProps) {
 // ── Status bar (bottom of card) ──────────────────────────────────
 
 interface StatusBarProps {
-  itemId: string | number;
+  itemId: KanbanCardData['id'];
   adrLabel: string | null;
   adrRelTableId?: string | number;
   adrValue: unknown;
@@ -152,8 +154,8 @@ interface StatusBarProps {
   typeRelOptions: Array<{ value: string; label: string; color?: string }>;
   showTypeSelect: boolean;
   setShowTypeSelect: (v: boolean) => void;
-  typeButtonRef: React.RefObject<HTMLButtonElement | null>;
-  onQuickEdit?: (field: string, value: unknown) => void;
+  typeButtonRef: React.RefObject<HTMLButtonElement>;
+  onQuickEdit?: (field: string, value: FieldValue) => void;
 }
 
 export function CardStatusBar({
@@ -161,6 +163,7 @@ export function CardStatusBar({
   typeLabel, typeValue, typeRelation, typeRelOptions,
   showTypeSelect, setShowTypeSelect, typeButtonRef, onQuickEdit,
 }: StatusBarProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex items-center gap-1.5 px-2 py-1 border-t border-[var(--border-secondary)] text-[10px] text-[var(--text-tertiary)] bg-[var(--bg-primary)] rounded-b-lg">
       {/* ADR ref */}
@@ -171,7 +174,7 @@ export function CardStatusBar({
           rel="noopener noreferrer"
           className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full hover:bg-[var(--color-primary-500)]/20 transition cursor-pointer"
           style={{ backgroundColor: 'var(--bg-tertiary)' }}
-          title={`ADR: ${adrLabel} (открыть)`}
+          title={`ADR: ${adrLabel} (${t('common.open')})`}
           onClick={(e) => e.stopPropagation()}
         >
           <FileText className="w-2.5 h-2.5" />
@@ -180,59 +183,56 @@ export function CardStatusBar({
       )}
 
       {/* Ticket type (select) */}
-      <div className="relative">
-        <button
-          ref={typeButtonRef}
-          onClick={(e) => { e.stopPropagation(); if (typeRelOptions.length > 0) setShowTypeSelect(!showTypeSelect); }}
-          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full hover:bg-[var(--bg-tertiary)] transition cursor-pointer"
-          style={{ backgroundColor: typeRelation?.color ? hexToRgba(typeRelation.color, 0.15) : 'var(--bg-tertiary)', color: typeRelation?.color || 'var(--text-tertiary)' }}
-          title={typeLabel ? `Тип: ${typeLabel}` : 'Тип тикета'}
-        >
-          <Tag className="w-2.5 h-2.5" />
-          <span className="max-w-[60px] truncate">{typeLabel || '—'}</span>
-        </button>
-        {showTypeSelect && typeRelOptions.length > 0 && createPortal(
-          <div className="fixed inset-0 z-[9998]" onClick={(e) => { e.stopPropagation(); setShowTypeSelect(false); }}>
-          <div
-            className="fixed z-[9999]"
-            style={{
-              top: (typeButtonRef.current?.getBoundingClientRect().top || 0) - (typeRelOptions.length * 24 + 32),
-              left: typeButtonRef.current?.getBoundingClientRect().left || 0,
-            }}
+      <Popover.Root open={showTypeSelect} onOpenChange={setShowTypeSelect}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            ref={typeButtonRef}
+            disabled={typeRelOptions.length === 0}
             onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full hover:bg-[var(--bg-tertiary)] transition cursor-pointer disabled:cursor-default"
+            style={{ backgroundColor: typeRelation?.color ? hexToRgba(typeRelation.color, 0.15) : 'var(--bg-tertiary)', color: typeRelation?.color || 'var(--text-secondary)' }}
+            aria-label={typeLabel ? t('kanban.typeLabel', { label: typeLabel }) : t('kanban.ticketType')}
+            title={typeLabel ? t('kanban.typeLabel', { label: typeLabel }) : t('kanban.ticketType')}
           >
-            <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-1 min-w-[100px]">
+            <Tag className="w-2.5 h-2.5" />
+            <span className="max-w-[60px] truncate">{typeLabel || '—'}</span>
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            aria-label={t('kanban.ticketType')}
+            side="top"
+            align="start"
+            sideOffset={4}
+            collisionPadding={8}
+            onClick={event => event.stopPropagation()}
+            className="z-[9999] bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-1 min-w-[100px] max-w-[calc(100vw-16px)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+          >
+            <button
+              type="button"
+              aria-pressed={typeValue == null || typeValue === ''}
+              onClick={() => { onQuickEdit?.('type', null); setShowTypeSelect(false); }}
+              className="w-full text-left px-2 py-1 text-[11px] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] rounded transition"
+            >
+              {t('kanban.none')}
+            </button>
+            {typeRelOptions.map(opt => (
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onQuickEdit?.('type', null);
-                  setShowTypeSelect(false);
-                }}
-                className="w-full text-left px-2 py-1 text-[11px] text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] rounded transition"
+                key={opt.value}
+                type="button"
+                aria-pressed={String(typeValue) === opt.value}
+                onClick={() => { onQuickEdit?.('type', opt.value); setShowTypeSelect(false); }}
+                className={`w-full text-left px-2 py-1 text-[11px] hover:bg-[var(--bg-tertiary)] rounded transition flex items-center gap-1.5 ${String(typeValue) === opt.value ? 'font-medium' : ''}`}
+                style={opt.color ? { color: opt.color } : undefined}
               >
-                — нет —
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: opt.color || 'var(--text-tertiary)' }} />
+                {opt.label}
               </button>
-              {typeRelOptions.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onQuickEdit?.('type', opt.value);
-                    setShowTypeSelect(false);
-                  }}
-                  className={`w-full text-left px-2 py-1 text-[11px] hover:bg-[var(--bg-tertiary)] rounded transition flex items-center gap-1.5 ${String(typeValue) === opt.value ? 'font-medium' : ''}`}
-                  style={opt.color ? { color: opt.color } : undefined}
-                >
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: opt.color || 'var(--text-tertiary)' }} />
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          </div>,
-          document.body
-        )}
-      </div>
+            ))}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -254,9 +254,9 @@ interface AssignedUsersProps {
   setShowAssignedEditor: (v: boolean) => void;
   showAssignedAddSelect: boolean;
   setShowAssignedAddSelect: (v: boolean) => void;
-  assignedButtonRef: React.RefObject<HTMLDivElement | null>;
-  itemId: string | number;
-  onQuickEdit?: (field: string, value: unknown) => void;
+  assignedButtonRef: React.RefObject<HTMLDivElement>;
+  itemId: KanbanCardData['id'];
+  onQuickEdit?: (field: string, value: FieldValue) => void;
   onOpenChat?: () => void;
 }
 
@@ -265,71 +265,74 @@ export function AssignedUsersRow({
   showAssignedEditor, setShowAssignedEditor, showAssignedAddSelect, setShowAssignedAddSelect,
   assignedButtonRef, itemId, onQuickEdit, onOpenChat,
 }: AssignedUsersProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex items-center gap-1 px-2 py-1 text-[11px] border-t border-[var(--border-secondary)]" ref={assignedButtonRef}>
       <Users className="w-3 h-3 text-[var(--text-tertiary)] flex-shrink-0" />
-      {showAssignedEditor ? (
+      {showAssignedEditor && onQuickEdit ? (
         <div className="flex-1 flex items-center gap-1 flex-wrap min-w-0">
           {assignedResolved.map(user => (
             <span key={user.value} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">
               <span className="truncate max-w-[60px]">{user.label}</span>
               <button
+                type="button"
+                aria-label={t('kanban.removeAssignee', { name: user.label })}
                 onClick={(e) => {
                   e.stopPropagation();
                   const newArr = assignedArray.filter(v => v !== user.value);
                   onQuickEdit?.(assignedFieldName, newArr.length > 0 ? newArr : null);
                 }}
-                className="text-red-400 hover:text-red-300 ml-0.5"
+                className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] ml-0.5"
               >
                 <X className="w-2.5 h-2.5" />
               </button>
             </span>
           ))}
-          <div className="relative">
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowAssignedAddSelect(!showAssignedAddSelect); }}
-              className="w-5 h-5 rounded-full border border-dashed border-[var(--color-primary-500)]/40 bg-[var(--color-primary-500)]/5 flex items-center justify-center text-[var(--color-primary-400)] hover:text-[var(--color-primary-500)] hover:border-[var(--color-primary-500)] transition"
-              title="Добавить"
-            >
-              <Plus className="w-3 h-3" />
-            </button>
-            {showAssignedAddSelect && allAssignedOptions.length > 0 && createPortal(
-              <div className="fixed inset-0 z-[9998]" onClick={(e) => { e.stopPropagation(); setShowAssignedAddSelect(false); }}>
-                <div
-                  className="fixed z-[9999]"
-                  style={{
-                    top: (assignedButtonRef.current?.getBoundingClientRect().bottom || 0) + 2,
-                    left: (assignedButtonRef.current?.getBoundingClientRect().left || 0),
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-1 w-[140px] max-h-[150px] overflow-y-auto">
-                    {allAssignedOptions
-                      .filter(opt => !assignedArray.includes(opt.value))
-                      .map(opt => (
-                        <button
-                          key={opt.value}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const newArr = [...assignedArray, opt.value];
-                            onQuickEdit?.(assignedFieldName, newArr);
-                            setShowAssignedAddSelect(false);
-                          }}
-                          className="w-full text-left px-2 py-1 text-[11px] hover:bg-[var(--bg-tertiary)] rounded transition truncate"
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    {allAssignedOptions.filter(opt => !assignedArray.includes(opt.value)).length === 0 && (
-                      <div className="px-2 py-1 text-[11px] text-[var(--text-tertiary)] italic">Все добавлены</div>
-                    )}
-                  </div>
-                </div>
-              </div>,
-              document.body
-            )}
-          </div>
+          <Popover.Root open={showAssignedAddSelect} onOpenChange={setShowAssignedAddSelect}>
+            <Popover.Trigger asChild>
+              <button
+                type="button"
+                disabled={allAssignedOptions.length === 0}
+                onClick={(e) => e.stopPropagation()}
+                className="w-5 h-5 rounded-full border border-dashed border-[var(--color-primary-500)]/40 bg-[var(--color-primary-500)]/5 flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--color-primary-500)] transition"
+                title={t('common.add')}
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                aria-label={t('kanban.addAssignee')}
+                align="start"
+                sideOffset={4}
+                collisionPadding={8}
+                onClick={event => event.stopPropagation()}
+                className="z-[9999] bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-1 w-[140px] max-h-[min(150px,var(--radix-popover-content-available-height))] overflow-y-auto"
+              >
+                {allAssignedOptions
+                  .filter(opt => !assignedArray.includes(opt.value))
+                  .map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        onQuickEdit?.(assignedFieldName, [...assignedArray, opt.value]);
+                        setShowAssignedAddSelect(false);
+                      }}
+                      className="w-full text-left px-2 py-1 text-[11px] hover:bg-[var(--bg-tertiary)] rounded transition truncate"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                {allAssignedOptions.every(opt => assignedArray.includes(opt.value)) && (
+                  <div className="px-2 py-1 text-[11px] text-[var(--text-secondary)] italic">{t('kanban.allAdded')}</div>
+                )}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
           <button
+            type="button"
+            aria-label={t('kanban.finishAssignees')}
             onClick={(e) => { e.stopPropagation(); setShowAssignedEditor(false); setShowAssignedAddSelect(false); }}
             className="ml-auto p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
           >
@@ -341,34 +344,37 @@ export function AssignedUsersRow({
           {assignedResolved.length > 0 ? (
             assignedResolved.map((user, idx) => (
               <button
+                type="button"
                 key={user.value}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (onOpenChat) onOpenChat();
                   try {
                     window.dispatchEvent(new CustomEvent('kanban-mention-user', { detail: { userId: user.value, userName: user.label, rowId: String(itemId) } }));
-                  } catch {}
+                  } catch { /* The chat is already open; an unavailable mention event must not undo that action. */ }
                 }}
                 className="text-[var(--text-secondary)] hover:text-[var(--color-primary-500)] transition truncate px-1 py-0.5 rounded hover:bg-[var(--color-primary-500)]/10"
-                title={`Открыть чат и упомянуть @${user.label}`}
+                title={t('kanban.mentionAssignee', { name: user.label })}
               >
                 {user.label}{idx < assignedResolved.length - 1 ? ',' : ''}
               </button>
             ))
-          ) : (
+          ) : onQuickEdit ? (
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); setShowAssignedEditor(true); }}
-              className="w-4 h-4 rounded-full flex items-center justify-center text-[var(--text-quaternary)] opacity-0 group-hover:opacity-100 hover:!text-[var(--color-primary-500)] transition"
-              title="Назначить ответственного"
+              className="w-4 h-4 rounded-full flex items-center justify-center text-[var(--text-quaternary)] opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:!text-[var(--color-primary-500)] transition"
+              title={t('kanban.assign')}
             >
               <Plus className="w-2.5 h-2.5" />
             </button>
-          )}
+          ) : <span>—</span>}
           {onQuickEdit && (
             <button
+              type="button"
               onClick={(e) => { e.stopPropagation(); setShowAssignedEditor(true); }}
               className="ml-auto p-0.5 text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)] transition"
-              title="Редактировать"
+              title={t('kanban.edit')}
             >
               <Edit2 className="w-3 h-3" />
             </button>

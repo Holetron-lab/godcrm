@@ -46,7 +46,7 @@ export const useNavTreeData = () => {
     // Build external tables from nodes (not in tree API)
     const external: NavTreeNode[] = [];
     nodes.forEach((node) => {
-      if (node.data.isExternal) {
+      if (node.type === 'tableNode' && node.data.isExternal) {
         external.push({
           id: `table:${node.data.tableId}`,
           type: 'table' as const,
@@ -71,17 +71,20 @@ export const useNavTreeData = () => {
       return node.children.reduce((sum, child) => sum + countItems(child), 0);
     };
 
-    // Helper to enrich nodes with edge/pending status
-    const enrichNode = (node: NavTreeNode): NavTreeNode => {
+    // Helper to enrich nodes with edge/pending status. Tables under the virtual "External" folder are
+    // data-source tables: they get the grey "External" indicator even when they have relations.
+    const enrichNode = (node: NavTreeNode, inExternalFolder = false): NavTreeNode => {
       if (node.type === 'table') {
         return {
           ...node,
           hasEdge: tablesWithEdges.has(node.numericId),
           hasPending: tablesWithPending.has(node.numericId),
+          isExternal: node.isExternal || inExternalFolder,
         };
       }
 
-      const enrichedChildren = node.children.map(enrichNode);
+      const nextInExternal = inExternalFolder || (node.type === 'folder' && node.id.includes('virtual:external'));
+      const enrichedChildren = node.children.map((child) => enrichNode(child, nextInExternal));
       return {
         ...node,
         children: enrichedChildren,
@@ -90,7 +93,7 @@ export const useNavTreeData = () => {
     };
 
     // Use navTree from store, enriched with edge/pending status
-    const enrichedTree = storeNavTree.map(enrichNode);
+    const enrichedTree = storeNavTree.map((node) => enrichNode(node));
 
     return { navTree: enrichedTree, externalTables: external };
   }, [storeNavTree, nodes, tablesWithEdges, tablesWithPending]);

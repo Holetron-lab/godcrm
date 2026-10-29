@@ -26,16 +26,22 @@ done
 # reproducible from the knex migration chain, so self-host ships the real schema
 # (structure only, no data). Detect "already initialised" via the users table.
 INITIALISED="$(psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDB" -tAc \
-  "SELECT to_regclass('public.users') IS NOT NULL;" 2>/dev/null || echo f)"
+  "SELECT to_regclass('public.users') IS NOT NULL;")"
 
 if [ "$INITIALISED" = "t" ]; then
   echo "[entrypoint] schema already present — skipping load"
 else
   echo "[entrypoint] empty database — loading schema snapshot ..."
   psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDB" \
-    -v ON_ERROR_STOP=1 -q -f "$SCHEMA_FILE"
+    -v ON_ERROR_STOP=1 --single-transaction -q -f "$SCHEMA_FILE"
   echo "[entrypoint] schema loaded"
+fi
 
+# Upgrade both fresh and previously published snapshots before seed or server.
+# The separate ledger records actual snapshot upgrades, never fake core history.
+node /app/run-migrations.mjs --selfhost
+
+if [ "$INITIALISED" != "t" ]; then
   # ADR-165-F Track A — seed the SC-SIM demo on first run so a fresh clean-room boot
   # opens on a WORKING, pre-run simulator (public space /s/sc-sim + project + the 8
   # pack tables + scheme/config + a COMPLETED run @ ~96% sorter utilization) instead

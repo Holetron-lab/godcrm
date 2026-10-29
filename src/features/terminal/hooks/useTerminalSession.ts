@@ -3,7 +3,7 @@
  * Hook for managing a terminal session with TanStack Query polling.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   createSession,
@@ -99,20 +99,20 @@ export function useTerminalSession() {
     },
   });
 
-  // Approve mutation
+  // Approve / reject: the pending row lives in the session query (the poll only
+  // returns ids above the pending one), so refresh the session too — otherwise
+  // the row stays 'pending' client-side and the approval dialog re-arms forever.
+  const refreshCommands = () => {
+    queryClient.invalidateQueries({ queryKey: ['terminal', 'commands', sessionId] });
+    queryClient.invalidateQueries({ queryKey: ['terminal', 'session', sessionId] });
+  };
   const approveMutation = useMutation({
     mutationFn: (commandId: number) => apiApprove(commandId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['terminal', 'commands', sessionId] });
-    },
+    onSettled: refreshCommands,
   });
-
-  // Reject mutation
   const rejectMutation = useMutation({
     mutationFn: (commandId: number) => apiReject(commandId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['terminal', 'commands', sessionId] });
-    },
+    onSettled: refreshCommands,
   });
 
   // --- Actions ---
@@ -169,14 +169,18 @@ export function useTerminalSession() {
     lastCommandIdRef.current = 0;
   }, []);
 
-  // Merge session commands with polled commands
-  const allCommands: TerminalCommand[] = [
-    ...(sessionQuery.data?.commands ?? []),
-    ...(commandsQuery.data ?? []),
+  // Merge session commands with polled commands. Memoized: consumers key
+  // effects on this array, and a fresh array per render re-fired them on
+  // every render (the approval dialog looped on setState).
+  const sessionCommands = sessionQuery.data?.commands;
+  const polledCommands = commandsQuery.data;
+  const allCommands = useMemo<TerminalCommand[]>(() => [
+    ...(sessionCommands ?? []),
+    ...(polledCommands ?? []),
   ].reduce<TerminalCommand[]>((acc, cmd) => {
     if (!acc.find(c => c.id === cmd.id)) acc.push(cmd);
     return acc;
-  }, []);
+  }, []), [sessionCommands, polledCommands]);
 
   // Track last command ID for polling
   if (allCommands.length > 0) {

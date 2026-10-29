@@ -14,6 +14,7 @@ VIOLATIONS=0
 # Legacy/pet-project files exempt from the line limit.
 # Mirror .git/hooks/pre-commit so local hook and quality gate agree.
 IGNORE_PATTERNS=(
+  "src/features/public/VspomilLanding.tsx"
   "src/pages/help/HelpPage.tsx"
   "src/pages/help/HelpPageEn.tsx"
   "src/shared/i18n/translations.ts"

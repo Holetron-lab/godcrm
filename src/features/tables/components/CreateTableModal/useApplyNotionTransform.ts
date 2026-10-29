@@ -57,7 +57,7 @@ export function useApplyNotionTransform(params: UseApplyNotionTransformParams) {
 
       try {
         // Track if first column should be notion_id
-        let hasNotionIdColumn = false;
+        const hasNotionIdColumn = false;
         const firstColName = file.headers[0]?.toLowerCase() || '';
 
         logger.debug(`[applyNotionTransform] ${file.tableDisplayName}: Starting data transformation...`);
@@ -190,6 +190,7 @@ export function useApplyNotionTransform(params: UseApplyNotionTransformParams) {
           // Add notion_id column definition
           finalColDefs = [
             {
+              colIndex: -1, // Synthetic column; preserve original source indices.
               csvColumn: 'notion_id',
               name: 'notion_id',
               displayName: 'Notion ID',
@@ -325,11 +326,11 @@ export function useApplyNotionTransform(params: UseApplyNotionTransformParams) {
 
         // Find the best match (most occurrences)
         let bestMatch: { fileId: string; count: number } | null = null;
-        matchedFiles.forEach((count, fileId) => {
+        for (const [fileId, count] of matchedFiles) {
           if (!bestMatch || count > bestMatch.count) {
             bestMatch = { fileId, count };
           }
-        });
+        }
 
         // If we have at least 2 matches, mark as relation
         if (bestMatch !== null && bestMatch.count >= 2) {

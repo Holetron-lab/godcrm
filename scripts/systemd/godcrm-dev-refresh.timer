@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly refresh of .72 staging from master A (04:00 MSK)
+
+[Timer]
+# 04:00 box time (Europe/Moscow) — after the 03:20 local pg backup, before the
+# working day. Staging is unavailable for ~1 s during the DB swap.
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

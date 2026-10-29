@@ -1,6 +1,8 @@
 import React from 'react';
 import { Upload, AlertCircle } from 'lucide-react';
 
+export const IMPORT_FILE_ACCEPT = '.csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
 interface CsvUploadSectionProps {
   handleCsvDragOver: (e: React.DragEvent) => void;
   handleCsvDrop: (e: React.DragEvent) => void;
@@ -25,7 +27,7 @@ export const CsvUploadSection = ({
       >
         <input
           type="file"
-          accept=".csv"
+          accept={IMPORT_FILE_ACCEPT}
           multiple
           onChange={handleCsvFileUpload}
           className="hidden"
@@ -34,7 +36,7 @@ export const CsvUploadSection = ({
         <label htmlFor="csv-create-upload" className="cursor-pointer flex flex-col items-center">
           <Upload className="w-12 h-12 mb-4 text-[var(--text-tertiary)]" />
           <p className="text-lg font-medium text-[var(--text-primary)] mb-2">
-            {t('tables.create.dropCsvHere')}
+            {t('tables.create.dropFilesHere')}
           </p>
           <p className="text-sm text-[var(--text-secondary)]">
             {t('tables.create.orClickToSelect')}
@@ -43,7 +45,7 @@ export const CsvUploadSection = ({
       </div>
 
       <div className="text-sm text-[var(--text-tertiary)] text-center flex-shrink-0">
-        {t('tables.create.autoStructure')}
+        {t('tables.create.autoStructureFile')}
       </div>
 
       {!targetProjectId && (

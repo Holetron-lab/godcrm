@@ -21,8 +21,7 @@ const DEV_HOST = process.env.DEV_HOST || 'local';
 const PROD_PM2 = process.env.PROD_PM2 || 'godcrm';
 const DEV_PM2 = process.env.DEV_PM2 || 'godcrm';
 const PROD_CODE = process.env.PROD_CODE || '/root/production/business-crm';
-// rsync target for /deploy_dev. Empty/local → DEV is this same box, rsync is skipped.
-const DEV_RSYNC_TARGET = process.env.DEV_RSYNC_TARGET || '';
+// /deploy_dev uses make dev; its destination is scripts/deploy.local.env.
 
 // --- Ring 0 promote target (Constitution v4.2) -----------------------------
 // CRITICAL: on .128 the SERVED Ring 0 artifact is PROD_LIVE (/srv/godcrm/live),
@@ -54,17 +53,17 @@ const RUN_MIGRATIONS = process.env.RUN_MIGRATIONS !== '0';
 //   * the artifact is built HERE (.128) and shipped — NL is a 2-core box and a
 //     vite build there would stall the site under load ([[dev72-build-load-spike]]).
 // Constitution note: §3 wants Ring 1 to move only via a soaked tag through gate 2.
-// This command is the owner-triggered executor path (A4) for when the owner asks
-// for the update explicitly — it still deploys only COMMITTED main, never WIP.
+// The owner-triggered path enforces a tag/SHA pair and a protected gate-2 receipt.
+// A per-release owner waiver can replace duration only, never the other gates.
 const RING1_HOST = process.env.RING1_HOST || 'newbox';
 const RING1_TREE = process.env.RING1_TREE || '/root/production/business-crm';
 const RING1_DOCROOT = process.env.RING1_DOCROOT || '/var/www/business-crm';
 const RING1_PM2 = process.env.RING1_PM2 || 'godcrm';
 const RING1_STAGE = process.env.RING1_STAGE || '/root/ring1-artifact';   // staging dir ON NL
 const RING1_WORKTREE = process.env.RING1_WORKTREE || '/root/wt-deploy-ring1';  // build dir on .128
-const RING1_HEALTH = process.env.RING1_HEALTH || 'https://crm.hltrn.cc/health';
+const RING1_HEALTH = process.env.RING1_HEALTH || 'https://crm.hltrn.cc/api/health';
 const RING1_URL = process.env.RING1_URL || 'https://crm.hltrn.cc/';
-const RING1_BACKUPS = process.env.RING1_BACKUPS || '/root/backups';
+const RING1_BACKUPS = process.env.RING1_BACKUPS || '/root/backups/temp';
 
 // --- DB swap (ADR-A: this box mirrors the live master; local copy is a warm standby) ---
 // Named DB targets so a broken PROD app/DB can be swapped in seconds without editing files by hand.
@@ -154,6 +153,12 @@ async function applyDbTarget(conf) {
 }
 
 const bot = new TelegramBot(TOKEN, { polling: true });
+
+// Separate fail-closed owner-only history transport; never receives edited_message.
+bot.on('message', msg => {
+  if (typeof msg.text !== 'string' || !msg.text.startsWith('/history3496')) return;
+  require('./history3496.cjs').handleHistory3496(bot, msg, OWNER_ID).catch(() => {});
+});
 
 // Guard against duplicate command triggers (Telegram polling can deliver the same update twice)
 const activeLocks = new Set();        // active deploy operations
@@ -287,9 +292,9 @@ bot.onText(/\/start/, (msg) => {
     '/restart_prod — restart PROD PM2',
     '/pull_prod — git pull + restart PROD with --update-env',
     '/deploy_dev — build & restart DEV',
-    '/deploy_prod — full Ring 0 deploy (clean build → migrate master A → sync /srv/godcrm/live → restart)',
-    '/deploy_ring1_check — Ring 1 (crm.hltrn.cc) pre-flight, read-only',
-    '/deploy_ring1 — full Ring 1 deploy (build → backup master B → migrate → sync → restart → health gate → publish FE)',
+    '/deploy_prod [full SHA] — Ring 0 deploy with isolated lockfile dependencies (default: committed HEAD)',
+    '/deploy_ring1_check &lt;tag&gt; &lt;SHA&gt; — read-only Ring 1 pre-flight',
+    '/deploy_ring1 &lt;tag&gt; &lt;SHA&gt; — approved Ring 1 release (gate-2 receipt required)',
     '/logs — last 50 lines PROD logs',
     '/logs_dev — last 50 lines DEV logs',
     '',
@@ -362,7 +367,9 @@ bot.onText(/\/restart_prod/, (msg) => {
           const apps = JSON.parse(jsonLine);
           const app = apps.find(a => a.name === PROD_PM2);
           if (app) status = app.pm2_env.status;
-        } catch {}
+        } catch {
+          // PM2 can emit non-JSON output; retain the fallback status above.
+        }
       }
       await bot.editMessageText(`✅ PROD restarted — status: <b>${status}</b>`, {
         chat_id: msg.chat.id,
@@ -431,41 +438,25 @@ bot.onText(/\/pull_prod/, (msg) => {
   })();
 });
 
-// /deploy_dev
-bot.onText(/\/deploy_dev/, (msg) => {
+// /deploy_dev — use the same staging pipeline as the administrator runbook.
+bot.onText(/^\/deploy_dev(?:@[A-Za-z0-9_]+)?\s*$/, (msg) => {
   if (!isAuthorized(msg)) return denied(msg);
   if (!acquireLock('deploy_dev', msg.message_id)) {
     return bot.sendMessage(msg.chat.id, '⚠️ DEV deploy already in progress, skipping duplicate.');
   }
   (async () => {
     try {
-      // Single-box mode (DEV == this host, no separate rsync target): skip the sync step.
-      const syncing = !!DEV_RSYNC_TARGET && !isLocal(DEV_HOST);
-      const sent = await bot.sendMessage(msg.chat.id,
-        syncing ? '⏳ Deploying DEV...\n1️⃣ Syncing code from PROD...'
-                : '⏳ Deploying DEV...\n1️⃣ Building locally (single-box mode)...');
-
-      // Step 1: rsync PROD→DEV (only when DEV is a separate host)
-      if (syncing) {
-        await runSSH(
-          `rsync -avz --delete --exclude='node_modules' --exclude='.git' --exclude='.env' --exclude='dist' --exclude='deploy-bot' ${PROD_CODE}/ ${DEV_RSYNC_TARGET}:${PROD_CODE}/`,
-          180000
-        );
-        await bot.editMessageText('⏳ Deploying DEV...\n✅ Code synced\n2️⃣ Building on DEV...', {
-          chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML'
-        });
+      // deploy.sh has a fixed canonical source. Do not silently build a different
+      // checkout (or fall back to restarting the bot's local application).
+      if (PROD_CODE !== '/root/production/business-crm') {
+        throw new Error('make dev requires PROD_CODE=/root/production/business-crm');
       }
-
-      // Step 2: build on DEV (self-healing: reinstalls devDeps if vite/toolchain was stripped)
-      await buildWithSelfHeal(runDEV, PROD_CODE, (note) =>
-        bot.sendMessage(msg.chat.id, note));
-      await bot.editMessageText(`⏳ Deploying DEV...\n${syncing ? '✅ Code synced\n' : ''}✅ Built\n3️⃣ Restarting PM2...`, {
-        chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML'
-      });
-
-      // Step 3: restart DEV PM2
-      await runDEV(`pm2 restart ${DEV_PM2}`);
-      await bot.editMessageText('✅ <b>DEV deployed!</b>\n\n✅ Code synced\n✅ Built\n✅ PM2 restarted\n\n🔗 https://devcrm.hltrn.cc', {
+      const sent = await bot.sendMessage(msg.chat.id,
+        '⏳ Deploying DEV via make dev...\nSync, build and staging restart may take several minutes.');
+      // Run on the source host, never on DEV. make propagates deploy.sh failures;
+      // do not pipe through tail, retry with self-heal, or restart separately.
+      await runSSH('make -C /root/production/business-crm dev', 900000);
+      await bot.editMessageText('✅ <b>make dev completed.</b>\n\nGate 1 and real API smoke still required.\n\n🔗 https://dev.godcrm.ai', {
         chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML'
       });
     } catch (e) {
@@ -489,32 +480,51 @@ bot.onText(/\/deploy_prod/, (msg) => {
     const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
     let sent;
     let worktreeMade = false;
+    let evidence;
+    let evidenceSealed = false;
+    let outcome = 'failed';
+    let runEvidence = runSSH;
     try {
+      const { requestedRevision, buildIsolated, recoverRuntime } = await import('./build-inputs.mjs');
+      const revision = requestedRevision(msg.text);
       sent = await bot.sendMessage(msg.chat.id, '⏳ Deploying PROD (Ring 0 → /srv/godcrm/live)...\n1️⃣ Materializing clean artifact from committed HEAD...');
 
       // We deploy what's COMMITTED — never the (possibly dirty) edit-tree working dir.
-      const sha = (await runSSH(`git -C ${PROD_CODE} rev-parse --short HEAD`)).trim();
-      const dirty = (await runSSH(`git -C ${PROD_CODE} status --porcelain | wc -l`)).trim();
+      const shaFull = (await runSSH(`git -C ${PROD_CODE} rev-parse --verify ${revision}^{commit}`)).trim();
+      if (!/^[a-f0-9]{40}$/.test(shaFull)) throw new Error('Invalid resolved commit');
+      const sha = shaFull.slice(0, 8);
+      const { startReleaseEvidence } = await import('./release-evidence.mjs');
+      evidence = await startReleaseEvidence(runSSH, {
+        source: PROD_CODE, worktree: DEPLOY_WORKTREE, appSha: shaFull,
+        botFile: __filename, root: process.env.DEPLOY_EVIDENCE_ROOT,
+      });
+      runEvidence = evidence.run;
+      await runEvidence('node --version && npm --version');
 
-      // Step 1: (re)create a throwaway worktree at HEAD, isolated from WIP. node_modules is
-      //   symlinked from the edit-tree so the build toolchain is present without a full install;
-      //   the worktree is never git-added and rsync excludes node_modules, so the symlink is inert.
-      await runSSH(
-        `git -C ${PROD_CODE} worktree remove --force ${DEPLOY_WORKTREE} 2>/dev/null; ` +
-        `rm -rf ${DEPLOY_WORKTREE}; git -C ${PROD_CODE} worktree prune; ` +
-        `git -C ${PROD_CODE} worktree add --detach ${DEPLOY_WORKTREE} HEAD && ` +
-        `ln -sfn ${PROD_CODE}/node_modules ${DEPLOY_WORKTREE}/node_modules`,
+      const dirty = (await runEvidence(`git -C ${PROD_CODE} status --porcelain | wc -l`)).trim();
+
+      // Refuse an occupied path: it may belong to another deployment. Resolve HEAD
+      // once above, then use that exact commit even if main advances while building.
+      // The edit checkout's hook links shared modules. Suppress hooks for this
+      // command only; buildIsolated still rejects any pre-existing node_modules.
+      await runEvidence(
+        `test ! -e ${DEPLOY_WORKTREE} && test ! -L ${DEPLOY_WORKTREE} && ` +
+        `git -c core.hooksPath=/dev/null -C ${PROD_CODE} worktree add --detach ${DEPLOY_WORKTREE} ${shaFull}`,
         120000
       );
       worktreeMade = true;
+      const materializedSha = (await runEvidence(`git -C ${DEPLOY_WORKTREE} rev-parse HEAD`)).trim();
+      if (materializedSha !== shaFull) throw new Error('Materialized commit differs from requested commit');
 
-      // Step 2: build the artifact (self-healing if vite/devDeps were stripped under NODE_ENV=production).
+      // Step 2: install and verify this revision's private dependencies, then build.
       await bot.editMessageText(`⏳ Deploying PROD (Ring 0)...\n✅ Clean artifact @ ${sha}${dirty !== '0' ? ` (${dirty} WIP files in edit-tree — <b>excluded</b>)` : ''}\n2️⃣ Building artifact...`, {
         chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML'
       });
-      await buildWithSelfHeal(runSSH, DEPLOY_WORKTREE, (note) => bot.sendMessage(msg.chat.id, note));
-      const builtBundle = await servedBundle(runSSH, DEPLOY_WORKTREE);
-      const hasDist = (await runSSH(`test -f ${DEPLOY_WORKTREE}/dist/index.html && echo OK || echo MISSING`)).includes('OK');
+      const inputs = await buildIsolated(runEvidence, DEPLOY_WORKTREE, `${PROD_CODE}/deploy-bot/build-inputs.mjs`, { productionFrontend: true });
+      await bot.sendMessage(msg.chat.id, `📦 <b>Verified build inputs:</b>\n<pre>${esc(inputs.slice(0, 2500))}</pre>`, { parse_mode: 'HTML' });
+      const builtBundle = await servedBundle(runEvidence, DEPLOY_WORKTREE);
+      await runEvidence(`cd ${DEPLOY_WORKTREE} && find dist -type f -exec sha256sum {} \\;`);
+      const hasDist = (await runEvidence(`test -f ${DEPLOY_WORKTREE}/dist/index.html && echo OK || echo MISSING`)).includes('OK');
       if (!hasDist) throw new Error('build produced no dist/index.html — aborting before touching live');
 
       // Step 3: MIGRATIONS FIRST (master A, local; additive/idempotent, zero-downtime).
@@ -525,7 +535,7 @@ bot.onText(/\/deploy_prod/, (msg) => {
         await bot.editMessageText(`⏳ Deploying PROD (Ring 0)...\n✅ Built <code>${esc(builtBundle)}</code>\n3️⃣ Migrating master A (knex migrate:latest)...`, {
           chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML'
         });
-        const mig = await runSSH(
+        const mig = await runEvidence(
           `cd ${DEPLOY_WORKTREE} && NODE_ENV=production DOTENV_CONFIG_PATH=${PROD_LIVE}/.env ` +
           `node -r dotenv/config node_modules/.bin/knex migrate:latest --knexfile ${KNEXFILE} 2>&1`,
           300000
@@ -534,35 +544,43 @@ bot.onText(/\/deploy_prod/, (msg) => {
       }
 
       // Step 4: CODE SWAP — rsync clean artifact → live. NO --delete; preserve mutable state
-      //   (.env, uploads/, docs/.snapshots/, node_modules) exactly as the validated runbook.
-      const liveBefore = await servedBundle(runSSH, PROD_LIVE);
-      const lockBefore = (await runSSH(`sha1sum ${PROD_LIVE}/package-lock.json 2>/dev/null | cut -d' ' -f1 || true`)).trim();
+      //   Preserve PES SQLite/WAL/state and data even when tracked in the artifact.
+      const liveBefore = await servedBundle(runEvidence, PROD_LIVE);
       await bot.editMessageText(`⏳ Deploying PROD (Ring 0)...\n✅ Built\n${RUN_MIGRATIONS ? '✅ Migrations applied\n' : ''}4️⃣ Syncing artifact → ${PROD_LIVE}...`, {
         chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML'
       });
-      await runSSH(
+      await runEvidence(
         `rsync -a --exclude='.env' --exclude='uploads/' --exclude='node_modules' ` +
-        `--exclude='.git' --exclude='docs/.snapshots/' --exclude='deploy-bot' ` +
+        `--exclude='.git' --exclude='docs/.snapshots/' --exclude='deploy-bot' --exclude='/.mcp.json' ` +
+        `--exclude='/pes-core/pes-data/***' --exclude='/data/***' ` +
         `${DEPLOY_WORKTREE}/ ${PROD_LIVE}/`,
         300000
       );
-      const liveAfter = await servedBundle(runSSH, PROD_LIVE);
-      const lockAfter = (await runSSH(`sha1sum ${PROD_LIVE}/package-lock.json 2>/dev/null | cut -d' ' -f1 || true`)).trim();
+      const liveAfter = await servedBundle(runEvidence, PROD_LIVE);
 
-      // Step 4b: if runtime deps changed, refresh live node_modules (prod-only) — the artifact
-      //   ships no node_modules, so a lockfile delta means live needs `npm ci --omit=dev`.
-      if (lockBefore && lockAfter && lockBefore !== lockAfter) {
-        await bot.sendMessage(msg.chat.id, '📦 package-lock changed → <code>npm ci --omit=dev</code> on live...', { parse_mode: 'HTML' });
-        await runSSH(`cd ${PROD_LIVE} && NODE_ENV=production npm ci --omit=dev 2>&1`, 300000);
-      }
+      // Reinstall and verify even when lock hashes match: an earlier failed
+      // npm ci may already have copied this lock and destroyed node_modules.
+      await bot.sendMessage(msg.chat.id, '📦 Rebuilding and verifying live runtime dependencies...');
+      await recoverRuntime(runEvidence, PROD_LIVE, `${PROD_CODE}/deploy-bot/build-inputs.mjs`);
+
+      // Step 4c: stamp the promoted SHA into the live tree. /srv/godcrm/live has no .git,
+      //   so without this marker the only way to tell what Ring 0 is running is a file-by-file
+      //   diff against the edit-tree — which is how every promote audit has started so far.
+      //   Written AFTER the rsync (the artifact carries no such file) and BEFORE the restart,
+      //   so a crash between the two still leaves the tree correctly labelled. Not in .git,
+      //   and rsync runs without --delete, so nothing later removes it.
+      await runEvidence(
+        `printf '%s %s %s\\n' ${shaFull} "$(date -Is)" ${JSON.stringify(liveAfter)} > ${PROD_LIVE}/.promoted-sha`
+      ).catch(() => {});
 
       // Step 5: restart godcrm. The BOT is the executor (A4) — this is exactly the step the
       //   agent cannot do (IRON RULE 2). Restart last, after code + schema are in place.
       await bot.editMessageText(`⏳ Deploying PROD (Ring 0)...\n✅ Built\n${RUN_MIGRATIONS ? '✅ Migrations\n' : ''}✅ Synced <code>${esc(liveBefore)}</code> → <code>${esc(liveAfter)}</code>\n5️⃣ Restarting PM2 ${PROD_PM2}...`, {
         chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML'
       });
-      await runSSH(`pm2 restart ${PROD_PM2}`);
+      await runEvidence(`pm2 restart ${PROD_PM2}`);
 
+      outcome = 'completed';
       const swapOk = liveAfter !== '(none)' && liveAfter === builtBundle;
       await bot.editMessageText(
         `✅ <b>PROD deployed (Ring 0)!</b>\n\n` +
@@ -578,8 +596,18 @@ bot.onText(/\/deploy_prod/, (msg) => {
       if (sent) bot.editMessageText(tail, { chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML' }).catch(() => bot.sendMessage(msg.chat.id, tail, { parse_mode: 'HTML' }));
       else bot.sendMessage(msg.chat.id, tail, { parse_mode: 'HTML' });
     } finally {
-      // Always reap the throwaway worktree so a failed run leaves no stale checkout.
-      if (worktreeMade) {
+      // Evidence must seal before cleanup. If persistence fails, preserve the
+      // worktree for administrator recovery; never silently discard diagnostics.
+      if (evidence) {
+        try {
+          const archive = await evidence.finish(outcome);
+          evidenceSealed = true;
+          await bot.sendMessage(msg.chat.id, `Evidence: ${archive.dir}\nSHA256SUMS: ${archive.manifestSha256}`);
+        } catch {
+          await bot.sendMessage(msg.chat.id, 'Evidence seal failed; worktree retained for investigation.').catch(() => {});
+        }
+      }
+      if (worktreeMade && evidenceSealed) {
         await runSSH(`git -C ${PROD_CODE} worktree remove --force ${DEPLOY_WORKTREE} 2>/dev/null; git -C ${PROD_CODE} worktree prune`, 60000).catch(() => {});
       }
       releaseLock('deploy_prod');
@@ -587,195 +615,41 @@ bot.onText(/\/deploy_prod/, (msg) => {
   })();
 });
 
-// /deploy_ring1 — promote committed main onto Ring 1 (NL, crm.hltrn.cc, master B).
-//   Order is LOAD-BEARING and differs from Ring 0 by one extra step at the end:
-//     build here → ship to NL staging → backup → migrate master B → sync tree →
-//     restart → HEALTH GATE → publish FE to the nginx docroot.
-//   The health gate is the point: if the new backend does not come up, the OLD
-//   frontend keeps being served and users see a working site while we roll back.
-//   /deploy_ring1_check runs everything read-only (no writes, no restart).
+// Ring 1 requires an explicit tag/SHA pair and a reviewed gate-2 receipt.
+// The owner may waive soak duration in that receipt; other gates still apply.
 function ring1Deploy(msg, dryRun) {
-  const lockKey = dryRun ? 'deploy_ring1_check' : 'deploy_ring1';
   if (!isAuthorized(msg)) return denied(msg);
-  if (!acquireLock(lockKey, msg.message_id)) {
-    return bot.sendMessage(msg.chat.id, '⚠️ Ring 1 deploy already in progress, skipping duplicate.');
+  if (!acquireLock('deploy_ring1', msg.message_id)) {
+    return bot.sendMessage(msg.chat.id, '⚠️ Ring 1 operation already in progress.');
   }
   (async () => {
-    const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const runNL = (cmd, t = 120000) => runOn(RING1_HOST, cmd, t);
-    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '').slice(0, 13); // YYYYMMDD_HHMM
-    const backupDir = `${RING1_BACKUPS}/ring1-${stamp}`;
-    let sent;
-    let worktreeMade = false;
-    const step = (text) => sent
-      ? bot.editMessageText(text, { chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML' }).catch(() => {})
-      : Promise.resolve();
     try {
-      sent = await bot.sendMessage(msg.chat.id,
-        `⏳ Ring 1 ${dryRun ? 'PRE-FLIGHT' : 'deploy'} (${RING1_HOST} → crm.hltrn.cc)...\n1️⃣ Pre-flight...`,
-        { parse_mode: 'HTML' });
-
-      // --- Pre-flight: everything read-only, aborts before a single write ---
-      const sha = (await runSSH(`git -C ${PROD_CODE} rev-parse --short HEAD`)).trim();
-      const dirty = (await runSSH(`git -C ${PROD_CODE} status --porcelain | wc -l`)).trim();
-      const nlEnv = (await runNL(`test -f ${RING1_TREE}/.env && echo OK || echo MISSING`, 60000)).trim();
-      if (!nlEnv.includes('OK')) throw new Error(`${RING1_HOST}:${RING1_TREE}/.env missing — refusing to touch Ring 1`);
-      const nlDocroot = (await runNL(`test -d ${RING1_DOCROOT} && echo OK || echo MISSING`, 60000)).trim();
-      if (!nlDocroot.includes('OK')) throw new Error(`${RING1_HOST}:${RING1_DOCROOT} missing — nginx docroot not found`);
-      const servedNow = (await run(`curl -s --max-time 20 ${RING1_URL} | grep -oE 'assets/index-[A-Za-z0-9_-]+\\.js' | head -1 || true`, 40000)).trim() || '(unknown)';
-      const healthNow = (await run(`curl -s -o /dev/null -w '%{http_code}' --max-time 20 ${RING1_HEALTH} || true`, 40000)).trim();
-      const free = (await runNL(`df -h / | tail -1 | awk '{print $4}'`, 60000)).trim();
-
-      await bot.sendMessage(msg.chat.id,
-        `🔎 <b>Ring 1 pre-flight</b>\n` +
-        `main HEAD: <code>${esc(sha)}</code>${dirty !== '0' ? ` (${dirty} WIP files — <b>excluded</b>)` : ''}\n` +
-        `serving now: <code>${esc(servedNow)}</code>\n` +
-        `health: <code>${esc(healthNow)}</code> · free disk: <code>${esc(free)}</code>`,
-        { parse_mode: 'HTML' });
-
-      // --- Step 1: clean artifact from committed HEAD, built HERE (.128) ---
-      await step(`⏳ Ring 1 ${dryRun ? 'PRE-FLIGHT' : 'deploy'}...\n2️⃣ Building clean artifact @ ${esc(sha)} on .128...`);
-      await runSSH(
-        `git -C ${PROD_CODE} worktree remove --force ${RING1_WORKTREE} 2>/dev/null; ` +
-        `rm -rf ${RING1_WORKTREE}; git -C ${PROD_CODE} worktree prune; ` +
-        `git -C ${PROD_CODE} worktree add --detach ${RING1_WORKTREE} HEAD && ` +
-        `ln -sfn ${PROD_CODE}/node_modules ${RING1_WORKTREE}/node_modules`,
-        120000
-      );
-      worktreeMade = true;
-      await buildWithSelfHeal(runSSH, RING1_WORKTREE, (note) => bot.sendMessage(msg.chat.id, note));
-      const builtBundle = await servedBundle(runSSH, RING1_WORKTREE);
-      const hasDist = (await runSSH(`test -f ${RING1_WORKTREE}/dist/index.html && echo OK || echo MISSING`)).includes('OK');
-      if (!hasDist) throw new Error('build produced no dist/index.html — aborting before touching Ring 1');
-
-      // --- Step 2: ship artifact to a STAGING dir on NL (never straight onto the tree) ---
-      await step(`⏳ Ring 1 ${dryRun ? 'PRE-FLIGHT' : 'deploy'}...\n✅ Built <code>${esc(builtBundle)}</code>\n3️⃣ Shipping artifact → ${RING1_HOST}:${RING1_STAGE}...`);
-      // pushed from the box that holds the worktree (PROD_HOST), not from wherever the bot sits
-      await runSSH(
-        `rsync -az --delete -e "ssh -o BatchMode=yes -o ConnectTimeout=15" ` +
-        `--exclude='node_modules' --exclude='.git' --exclude='.env' ` +
-        `${RING1_WORKTREE}/ ${RING1_HOST}:${RING1_STAGE}/`,
-        600000
-      );
-      // knex + runtime deps come from the tree's node_modules; the staging dir only needs to see them
-      await runNL(`ln -sfn ${RING1_TREE}/node_modules ${RING1_STAGE}/node_modules`, 60000);
-
-      // Runtime deps changed? Then the tree needs npm ci BEFORE the restart, or the new code boots
-      // against the old dependency set.
-      const depsSame = await runNL(
-        `node -e 'const a=require("${RING1_TREE}/package.json"),b=require("${RING1_STAGE}/package.json");` +
-        `console.log(JSON.stringify([a.dependencies,a.devDependencies])===JSON.stringify([b.dependencies,b.devDependencies])?"SAME":"DIFF")'`,
-        60000
-      ).then(o => o.includes('SAME')).catch(() => false);
-
-      // --- Migration preview (read-only, both modes) ---
-      const migStatus = await runNL(
-        `cd ${RING1_STAGE} && set -a && eval "$(grep -E '^POSTGRES_' ${RING1_TREE}/.env)" && set +a && ` +
-        `NODE_ENV=production ./node_modules/.bin/knex migrate:status --knexfile ${KNEXFILE} 2>&1 | tail -20`,
-        180000
-      ).catch(e => `status failed: ${e.message}`);
-      await bot.sendMessage(msg.chat.id,
-        `🗄 <b>master B migration status</b> (deps ${depsSame ? 'identical' : '<b>CHANGED → npm ci</b>'}):\n<pre>${esc(migStatus.slice(-1200))}</pre>`,
-        { parse_mode: 'HTML' });
-
-      if (dryRun) {
-        await step(
-          `✅ <b>Ring 1 pre-flight OK</b> — nothing was written.\n\n` +
-          `commit: <code>${esc(sha)}</code>\nbuilt: <code>${esc(builtBundle)}</code>\n` +
-          `serving now: <code>${esc(servedNow)}</code>\n\nRun /deploy_ring1 to apply.`
-        );
-        return;
-      }
-
-      // --- Step 3: BACKUP master B + the current docroot (rollback material) ---
-      await step(`⏳ Ring 1 deploy...\n✅ Built\n✅ Artifact staged\n4️⃣ Backing up master B + docroot...`);
-      await runNL(
-        `mkdir -p ${backupDir} && ` +
-        `set -a && eval "$(grep -E '^POSTGRES_' ${RING1_TREE}/.env)" && set +a && ` +
-        `PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc ` +
-        `-f ${backupDir}/masterB.dump && ` +
-        `tar czf ${backupDir}/docroot.tgz -C ${RING1_DOCROOT} . && ` +
-        `du -sh ${backupDir}`,
-        900000
-      );
-
-      // --- Step 4: MIGRATIONS on master B (before the new code boots) ---
-      if (RUN_MIGRATIONS) {
-        await step(`⏳ Ring 1 deploy...\n✅ Backups in <code>${esc(backupDir)}</code>\n5️⃣ Migrating master B...`);
-        const mig = await runNL(
-          `cd ${RING1_STAGE} && set -a && eval "$(grep -E '^POSTGRES_' ${RING1_TREE}/.env)" && set +a && ` +
-          `NODE_ENV=production ./node_modules/.bin/knex migrate:latest --knexfile ${KNEXFILE} 2>&1`,
-          600000
-        );
-        await bot.sendMessage(msg.chat.id, `🗄 <b>Migrations (master B):</b>\n<pre>${esc(mig.slice(-1500))}</pre>`, { parse_mode: 'HTML' });
-      }
-
-      // --- Step 5: CODE SWAP into the tree. No --delete; .env/uploads/snapshots untouched ---
-      await step(`⏳ Ring 1 deploy...\n✅ Migrations\n6️⃣ Syncing artifact → ${RING1_HOST}:${RING1_TREE}...`);
-      await runNL(
-        `rsync -a --exclude='.env' --exclude='uploads/' --exclude='node_modules' ` +
-        `--exclude='.git' --exclude='docs/.snapshots/' ${RING1_STAGE}/ ${RING1_TREE}/`,
-        600000
-      );
-      if (!depsSame) {
-        await bot.sendMessage(msg.chat.id, '📦 deps changed → <code>npm ci --omit=dev</code> on Ring 1...', { parse_mode: 'HTML' });
-        await runNL(`cd ${RING1_TREE} && NODE_ENV=production npm ci --omit=dev 2>&1 | tail -5`, 900000);
-      }
-
-      // --- Step 6: restart. The BOT is the executor (A4) — an agent must never do this ---
-      await step(`⏳ Ring 1 deploy...\n✅ Code synced\n7️⃣ Restarting ${RING1_PM2} on ${RING1_HOST}...`);
-      await runNL(`pm2 restart ${RING1_PM2} --update-env`, 180000);
-
-      // --- Step 7: HEALTH GATE. Old FE is still being served, so a failure here is invisible to users ---
-      let health = '';
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 3000));
-        health = (await run(`curl -s -o /dev/null -w '%{http_code}' --max-time 15 ${RING1_HEALTH} || true`, 30000)).trim();
-        if (health === '200') break;
-      }
-      if (health !== '200') {
-        throw new Error(
-          `backend did NOT come up after restart (health=${health}). Frontend was NOT published — ` +
-          `users still see the old, working bundle. Roll back:\n` +
-          `  ssh ${RING1_HOST} "cd ${RING1_TREE} && pm2 logs ${RING1_PM2} --lines 50"\n` +
-          `  DB dump + docroot tar: ${backupDir}`
-        );
-      }
-
-      // --- Step 8: publish the frontend LAST (nginx docroot). No --delete: in-flight sessions
-      //     keep resolving their old hashed chunks. ---
-      await step(`⏳ Ring 1 deploy...\n✅ Restarted, health 200\n8️⃣ Publishing frontend → ${RING1_DOCROOT}...`);
-      await runNL(`rsync -a ${RING1_STAGE}/dist/ ${RING1_DOCROOT}/`, 300000);
-
-      const servedAfter = (await run(`curl -s --max-time 20 ${RING1_URL} | grep -oE 'assets/index-[A-Za-z0-9_-]+\\.js' | head -1 || true`, 40000)).trim() || '(unknown)';
-      const swapOk = servedAfter === builtBundle;
-
-      await step(
-        `✅ <b>Ring 1 deployed (crm.hltrn.cc)!</b>\n\n` +
-        `commit: <code>${esc(sha)}</code>\n` +
-        `bundle: <code>${esc(servedNow)}</code> → <code>${esc(servedAfter)}</code>\n` +
-        `${swapOk ? '✅ live serves the freshly-built artifact' : '⚠️ served bundle ≠ built bundle — CDN/cache or docroot mismatch'}\n` +
-        `${RUN_MIGRATIONS ? '✅ migrations applied (master B)\n' : ''}` +
-        `✅ health 200 before FE publish\n` +
-        `💾 rollback material: <code>${esc(backupDir)}</code>\n\n🔗 ${RING1_URL}`
-      );
-    } catch (e) {
-      const errSafe = String(e.message || e).replace(/</g, '&lt;').replace(/>/g, '&gt;').slice(-2500);
-      const tail = `❌ <b>Ring 1 ${dryRun ? 'pre-flight' : 'deploy'} failed:</b>\n<pre>${errSafe}</pre>`;
-      if (sent) bot.editMessageText(tail, { chat_id: msg.chat.id, message_id: sent.message_id, parse_mode: 'HTML' })
-        .catch(() => bot.sendMessage(msg.chat.id, tail, { parse_mode: 'HTML' }));
-      else bot.sendMessage(msg.chat.id, tail, { parse_mode: 'HTML' });
+      if (!isLocal(PROD_HOST)) throw Error('Ring 1 requires the build host to be local to this bot');
+      const { deployRing1 } = await import('./ring1-release.mjs');
+      await deployRing1({
+        text: msg.text, dryRun, runLocal: runSSH,
+        runRemote: (command, timeout) => runOn(RING1_HOST, command, timeout),
+        report: text => bot.sendMessage(msg.chat.id, text),
+        config: {
+          source: PROD_CODE, worktree: RING1_WORKTREE, host: RING1_HOST,
+          tree: RING1_TREE, stage: RING1_STAGE, docroot: RING1_DOCROOT,
+          pm2: RING1_PM2, health: RING1_HEALTH, url: RING1_URL,
+          backups: RING1_BACKUPS, knexfile: KNEXFILE, botFile: __filename,
+          evidenceRoot: process.env.DEPLOY_EVIDENCE_ROOT || '/var/lib/godcrm/deploy-evidence',
+          approvalRoot: process.env.RING1_APPROVAL_ROOT || '/var/lib/godcrm/ring1-approvals',
+        },
+      });
+    } catch (error) {
+      const { clean } = await import('./release-evidence.mjs');
+      await bot.sendMessage(msg.chat.id, `❌ Ring 1 failed: ${clean(error.message).slice(-2500)}`);
     } finally {
-      if (worktreeMade) {
-        await runSSH(`git -C ${PROD_CODE} worktree remove --force ${RING1_WORKTREE} 2>/dev/null; git -C ${PROD_CODE} worktree prune`, 60000).catch(() => {});
-      }
-      releaseLock(lockKey);
+      releaseLock('deploy_ring1');
     }
   })();
 }
 
-bot.onText(/\/deploy_ring1_check/, (msg) => ring1Deploy(msg, true));
-bot.onText(/\/deploy_ring1(?!_check)/, (msg) => ring1Deploy(msg, false));
+bot.onText(/^\/deploy_ring1_check(?:@\w+)?(?:\s|$)/, msg => ring1Deploy(msg, true));
+bot.onText(/^\/deploy_ring1(?:@\w+)?(?:\s|$)/, msg => ring1Deploy(msg, false));
 
 // /sync_edit_db — refresh the design-preview copy DB (godcrm_edit) from master A (local pg_dump).
 //   Copy #2 of the v4.0 pipeline: reads master A on THIS box, drop+recreates godcrm_edit, restores.
@@ -990,5 +864,5 @@ bot.onText(/\/swap_db(?:\s+(\S+))?/, (msg, match) => {
 console.log('🤖 Deploy bot started');
 console.log(`   PROD target: ${isLocal(PROD_HOST) ? 'local (this box)' : PROD_HOST}`);
 console.log(`   DEV target:  ${isLocal(DEV_HOST) ? 'local (this box)' : DEV_HOST}`);
-console.log(`   DEV rsync:   ${DEV_RSYNC_TARGET && !isLocal(DEV_HOST) ? DEV_RSYNC_TARGET : 'disabled (single-box)'}`);
+console.log('   DEV deploy: make dev (destination: scripts/deploy.local.env on source host)');
 console.log(`   code path:   ${PROD_CODE}`);

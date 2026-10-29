@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * AgentsPanelInline — Agents panel render extracted from AIChatPanel.tsx renderAgentsPanel().
  */
@@ -33,6 +34,7 @@ export function AgentsPanelInline({
   isVectorSearching, vectorSearchResults, setVectorSearchResults, handleVectorSearch,
   handleAgentSelect, clearMessages, setActivePanel, currentSpaceId, createTablesMutation,
 }: AgentsPanelInlineProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -40,7 +42,7 @@ export function AgentsPanelInline({
         <div className="flex-1 relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-tertiary)]" />
           <input type="text" value={agentsSearch} onChange={(e) => { setAgentsSearch(e.target.value); if (!e.target.value) setVectorSearchResults(null); }}
-            placeholder="Поиск агентов..." className="w-full pl-7 pr-2 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/50" />
+            placeholder={t('aiChat.ui.searchAgents')} className="w-full pl-7 pr-2 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/50" />
           {agentsSearch && (
             <button onClick={() => { setAgentsSearch(''); setVectorSearchResults(null); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
               <X className="w-3 h-3" />
@@ -49,12 +51,12 @@ export function AgentsPanelInline({
         </div>
         <button onClick={() => setShowFavoriteAgents(!showFavoriteAgents)}
           className={cn("p-1.5 rounded-lg border transition-colors", showFavoriteAgents ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/30" : "text-[var(--text-tertiary)] border-[var(--border-secondary)] hover:bg-[var(--bg-tertiary)]")}
-          title={showFavoriteAgents ? "Показать всех" : "Только избранные"}>
+          title={showFavoriteAgents ? t('aiChat.ui.showAll') : t('aiChat.ui.favoritesOnly')}>
           <Star className={cn("w-3.5 h-3.5", showFavoriteAgents && "fill-current")} />
         </button>
         <button onClick={handleVectorSearch} disabled={isVectorSearching || !agentsSearch}
           className={cn("p-1.5 rounded-lg border transition-colors", vectorSearchResults ? "bg-green-500/20 text-green-400 border-green-500/30" : "text-[var(--text-tertiary)] border-[var(--border-secondary)] hover:bg-purple-500/10 hover:text-purple-400", (!agentsSearch || isVectorSearching) && "opacity-50 cursor-not-allowed")}
-          title={vectorSearchResults ? "AI поиск активен" : "Семантический поиск"}>
+          title={vectorSearchResults ? t('aiChat.ui.aISearchIsActive') : t('aiChat.ui.semanticSearch')}>
           {isVectorSearching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
         </button>
       </div>
@@ -63,22 +65,22 @@ export function AgentsPanelInline({
       <div className="flex-1 overflow-y-auto">
         {filteredAgents.length === 0 ? (
           agentsSearch ? (
-            <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">Не найдено</div>
+            <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{t('aiChat.contacts.notFound')}</div>
           ) : isLoadingAgents ? (
             <div className="py-8 flex flex-col items-center gap-3">
               <Loader2 className="w-6 h-6 animate-spin text-[var(--color-primary-500)]" />
-              <span className="text-sm text-[var(--text-tertiary)]">Загрузка агентов...</span>
+              <span className="text-sm text-[var(--text-tertiary)]">{t('aiChat.ui.loadingAgents')}</span>
             </div>
           ) : (
             <div className="p-6 text-center">
               <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500/20 to-primary-500/20 flex items-center justify-center mb-4 mx-auto">
                 <Bot className="w-7 h-7 text-[var(--color-primary-500)]" />
               </div>
-              <h3 className="font-medium text-[var(--text-primary)] mb-2">AI агенты не настроены</h3>
-              <p className="text-sm text-[var(--text-tertiary)] mb-4">Создайте AI таблицы в System Data для работы с агентами</p>
+              <h3 className="font-medium text-[var(--text-primary)] mb-2">{t('aiChat.ui.aIAgentsAreNotConfigured')}</h3>
+              <p className="text-sm text-[var(--text-tertiary)] mb-4">{t('aiChat.ui.createAITablesInSystemDataToWorkWithAgents')}</p>
               <button onClick={() => createTablesMutation.mutate()} disabled={createTablesMutation.isPending || !currentSpaceId}
                 className="px-4 py-2 bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)] disabled:opacity-50 transition-colors flex items-center gap-2 font-medium mx-auto">
-                {createTablesMutation.isPending ? (<><Loader2 className="w-4 h-4 animate-spin" />Создание...</>) : (<><Plus className="w-4 h-4" />Создать AI таблицы</>)}
+                {createTablesMutation.isPending ? (<><Loader2 className="w-4 h-4 animate-spin" />{t('aiChat.ui.creating')}</>) : (<><Plus className="w-4 h-4" />{t('aiChat.ui.createAITables')}</>)}
               </button>
             </div>
           )
@@ -97,14 +99,14 @@ export function AgentsPanelInline({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-medium text-[var(--text-primary)] truncate">{agent.name}</span>
-                        {currentAgent?.id === agent.id && <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--color-primary-500)]/30 text-[var(--color-primary-400)] flex-shrink-0">активен</span>}
+                        {currentAgent?.id === agent.id && <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--color-primary-500)]/30 text-[var(--color-primary-400)] flex-shrink-0">{t('aiChat.ui.activeLower')}</span>}
                       </div>
                       {agent.description && <p className="text-[10px] text-[var(--text-tertiary)] truncate">{agent.description}</p>}
                     </div>
                   </button>
                   <div className="flex items-center gap-1">
                     <button onClick={(e) => { e.stopPropagation(); handleAgentSelect(agent); clearMessages(); setActivePanel('none'); }}
-                      className="p-1.5 rounded border border-[var(--border-secondary)] text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)] hover:border-[var(--color-primary-500)]/30 hover:bg-[var(--color-primary-500)]/10 transition-colors" title="Новый чат">
+                      className="p-1.5 rounded border border-[var(--border-secondary)] text-[var(--text-tertiary)] hover:text-[var(--color-primary-500)] hover:border-[var(--color-primary-500)]/30 hover:bg-[var(--color-primary-500)]/10 transition-colors" title={t('aiChat.ui.newChat')}>
                       <MessageSquare className="w-3.5 h-3.5" />
                     </button>
                   </div>

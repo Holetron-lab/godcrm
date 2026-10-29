@@ -8,8 +8,12 @@ import { dbAll, dbGet, dbRun, sqlNow, safeJsonParse } from '../../../database/co
 import { apiLogger } from '../../../utils/logger.js';
 import { success, notFound, badRequest, forbidden, error } from '../../../utils/response.js';
 import { resolveSelectValues } from '../../../services/SelectValueResolver.js';
-import { checkTableAccess } from './helpers.js';
+import { guardRowKeys, unknownKeysMessage } from '../../../services/row-schema-guard.js';
+import { mergeRowData } from '../../../services/mergeRowData.js';
+import { normalizeTypedCells } from '../../../services/cellNormalizers.js';
+import { checkTableAccess, requireTableWriteAccess } from './helpers.js';
 import { fireRowUpdateTriggers } from '../../../services/AutomationTriggerService.js';
+import { notifyRowChanges } from '../../../services/realtime/rowEvents.js';
 
 const router = express.Router();
 
@@ -18,7 +22,7 @@ const router = express.Router();
  * Batch update multiple rows at once
  * Useful for bulk replace and mass updates
  */
-router.post('/tables/:tableId/rows/batch-update', async (req, res) => {
+router.post('/tables/:tableId/rows/batch-update', requireTableWriteAccess, async (req, res) => {
   try {
     const { tableId } = req.params;
     const { updates } = req.body;
@@ -63,7 +67,7 @@ router.post('/tables/:tableId/rows/batch-update', async (req, res) => {
 
     // Get columns for this table
     const columns = await dbAll(`
-      SELECT id, column_name
+      SELECT id, column_name, type
       FROM table_columns
       WHERE table_id = ?
     `, [tableId]);
@@ -121,12 +125,26 @@ router.post('/tables/:tableId/rows/batch-update', async (req, res) => {
               }
             }
 
+            const existingData = safeJsonParse(existingRow.data) || {};
+            const keyGuard = await guardRowKeys(tableId, normalizedData, existingData);
+            if (keyGuard.unknown.length > 0) {
+              results.errors.push({ rowId: String(rowId), code: 'UNKNOWN_COLUMN',
+                error: unknownKeysMessage(keyGuard.unknown), unknown_fields: keyGuard.unknown });
+              continue;
+            }
+
             // ADR-098: Resolve select column text values -> numeric IDs before merge
-            const { resolvedData: validatedBatchData } = await resolveSelectValues(tableId, normalizedData);
+            const { resolvedData: validatedBatchData } = await resolveSelectValues(tableId, keyGuard.data);
+
+            // ADR-0035 S1.4 / ADR-0035-A: geo_point + address cells — a bad value fails this row only.
+            const geoCheck = normalizeTypedCells(columns, validatedBatchData);
+            if (!geoCheck.ok) {
+              results.errors.push({ rowId: String(rowId), code: geoCheck.code, error: geoCheck.message });
+              continue;
+            }
 
             // Merge data
-            const existingData = safeJsonParse(existingRow.data) || {};
-            const mergedData = { ...existingData, ...validatedBatchData };
+            const mergedData = mergeRowData(columns, existingData, geoCheck.data);
 
             await dbRun(
               `UPDATE table_rows SET data = ?, updated_at = ${sqlNow()} WHERE id = ?`,
@@ -172,6 +190,8 @@ router.post('/tables/:tableId/rows/batch-update', async (req, res) => {
       throw txError;
     }
 
+    notifyRowChanges(tableId, pendingTriggers.map((t) => t.rowId), 'updated', 'api');
+
     for (const t of pendingTriggers) {
       fireRowUpdateTriggers(parseInt(tableId), t.rowId, t.newData, t.oldData).catch(err => {
         apiLogger.warn({ err, tableId, rowId: t.rowId }, 'Batch row update trigger failed (non-blocking)');
@@ -195,7 +215,7 @@ router.post('/tables/:tableId/rows/batch-update', async (req, res) => {
  * Batch delete multiple rows at once
  * Body: { rowIds: string[] }
  */
-router.post('/tables/:tableId/rows/batch-delete', async (req, res) => {
+router.post('/tables/:tableId/rows/batch-delete', requireTableWriteAccess, async (req, res) => {
   try {
     const { tableId } = req.params;
     const { rowIds } = req.body;
@@ -256,6 +276,7 @@ router.post('/tables/:tableId/rows/batch-delete', async (req, res) => {
 
       await dbRun('COMMIT');
 
+      notifyRowChanges(tableId, rowIds, 'deleted', 'api');
       apiLogger.info({ deleted: result.changes }, "BATCH DELETE completed");
 
       success(res, { deleted: result.changes });

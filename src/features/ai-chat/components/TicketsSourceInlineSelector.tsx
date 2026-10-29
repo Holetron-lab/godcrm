@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useState, useMemo } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { useAllTables } from '@/features/tables/hooks/useAllTables';
@@ -63,6 +64,7 @@ export function TicketsSourceInlineSelector({
   onCancel,
   showHeader = true
 }: TicketsSourceInlineSelectorProps) {
+  const { t } = useLanguage();
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<number | null>(null);
 
@@ -155,7 +157,7 @@ export function TicketsSourceInlineSelector({
       {/* Header with close button */}
       {showHeader && (
         <div className="flex items-center justify-between">
-          <label className="text-xs text-[var(--text-tertiary)]">Проект</label>
+          <label className="text-xs text-[var(--text-tertiary)]">{t('columnSettings.relation.project')}</label>
           <button
             onClick={onCancel}
             className="p-1 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
@@ -166,7 +168,7 @@ export function TicketsSourceInlineSelector({
       )}
 
       {/* Project selector with label if no header */}
-      {!showHeader && <label className="block text-xs text-[var(--text-tertiary)]">Проект</label>}
+      {!showHeader && <label className="block text-xs text-[var(--text-tertiary)]">{t('columnSettings.relation.project')}</label>}
       {/* Project selector */}
       <select
         value={selectedProjectId || ''}
@@ -176,7 +178,7 @@ export function TicketsSourceInlineSelector({
         }}
         className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30"
       >
-        <option value="">— Выберите проект —</option>
+        <option value="">{t('columnSettings.relation.selectProject')}</option>
         {filteredSpaces.map(space => (
           <optgroup key={space.id} label={`${space.icon || '📁'} ${space.name}`}>
             {space.projects.map(project => (
@@ -190,14 +192,14 @@ export function TicketsSourceInlineSelector({
 
       {/* Table selector */}
       <div>
-        <label className="block text-xs text-[var(--text-tertiary)] mb-1">Таблица</label>
+        <label className="block text-xs text-[var(--text-tertiary)] mb-1">{t('columnSettings.relation.table')}</label>
         <select
           value={selectedTableId || ''}
           onChange={(e) => setSelectedTableId(e.target.value ? Number(e.target.value) : null)}
           disabled={!selectedProjectId}
           className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-secondary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30 disabled:opacity-50"
         >
-          <option value="">— Выберите таблицу —</option>
+          <option value="">{t('columnSettings.relation.selectTable')}</option>
           {projectTables.map(table => (
             <option key={table.id} value={table.id}>
               {table.icon || '📋'} {table.displayName || table.name}
@@ -209,11 +211,11 @@ export function TicketsSourceInlineSelector({
       {/* Auto-mapped columns preview */}
       {autoMapped && (
         <div className="text-[10px] text-[var(--text-tertiary)] space-y-0.5">
-          <p className="font-medium">Автомаппинг:</p>
-          {autoMapped.displayColumn && <p>Название: <span className="text-green-400">{autoMapped.displayColumn}</span></p>}
-          {autoMapped.descriptionColumn && <p>Описание: <span className="text-green-400">{autoMapped.descriptionColumn}</span></p>}
-          {autoMapped.statusColumn && <p>Статус: <span className="text-green-400">{autoMapped.statusColumn}</span></p>}
-          {autoMapped.priorityColumn && <p>Приоритет: <span className="text-green-400">{autoMapped.priorityColumn}</span></p>}
+          <p className="font-medium">{t('aiChat.ui.automaticMapping')}</p>
+          {autoMapped.displayColumn && <p>{t('aiChat.ui.name')}<span className="text-green-400">{autoMapped.displayColumn}</span></p>}
+          {autoMapped.descriptionColumn && <p>{t('aiChat.ui.description')}<span className="text-green-400">{autoMapped.descriptionColumn}</span></p>}
+          {autoMapped.statusColumn && <p>{t('aiChat.ui.status')}<span className="text-green-400">{autoMapped.statusColumn}</span></p>}
+          {autoMapped.priorityColumn && <p>{t('aiChat.ui.priority')}<span className="text-green-400">{autoMapped.priorityColumn}</span></p>}
         </div>
       )}
 
@@ -224,8 +226,7 @@ export function TicketsSourceInlineSelector({
           disabled={!selectedTableId}
           className="px-3 py-1.5 text-xs bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          Сохранить
-        </button>
+          {t('aiChat.ui.save')}</button>
       </div>
     </div>
   );

@@ -33,11 +33,13 @@ function ProjectSection({
   slug,
   expanded,
   onToggle,
+  onNavigate,
 }: {
   project: PublicTreeProject;
   slug: string;
   expanded: boolean;
   onToggle: () => void;
+  onNavigate?: () => void;
 }) {
   return (
     <div className="space-y-1">
@@ -45,6 +47,8 @@ function ProjectSection({
         <button
           type="button"
           onClick={onToggle}
+          aria-label={`${expanded ? 'Collapse' : 'Expand'} project ${project.name}`}
+          aria-expanded={expanded}
           className="p-1 hover:bg-[rgba(255,255,255,0.1)] rounded transition"
         >
           <span className="text-xs text-[var(--text-tertiary)]">
@@ -53,6 +57,7 @@ function ProjectSection({
         </button>
         <NavLink
           to={`/s/${slug}/projects/${project.id}`}
+          onClick={onNavigate}
           className={({ isActive }) =>
             cn(
               'flex-1 flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors',
@@ -79,6 +84,7 @@ function ProjectSection({
                   <NavLink
                     key={dashboard.id}
                     to={`/s/${slug}/dashboards/${dashboard.id}`}
+                    onClick={onNavigate}
                     className={({ isActive }) =>
                       cn(
                         'block rounded px-3 py-1.5 text-xs transition',
@@ -105,6 +111,7 @@ function ProjectSection({
                   <NavLink
                     key={widget.id}
                     to={`/s/${slug}/widgets/${widget.id}`}
+                    onClick={onNavigate}
                     className={({ isActive }) =>
                       cn(
                         'block rounded px-3 py-1.5 text-xs transition',
@@ -200,14 +207,14 @@ function SidebarBody({
               </p>
             ) : (
               tree.projects.map((project) => (
-                <div key={project.id} onClick={onNavigate}>
-                  <ProjectSection
-                    project={project}
-                    slug={slug}
-                    expanded={expandedProjects.has(project.id)}
-                    onToggle={() => toggleProject(project.id)}
-                  />
-                </div>
+                <ProjectSection
+                  key={project.id}
+                  project={project}
+                  slug={slug}
+                  expanded={expandedProjects.has(project.id)}
+                  onToggle={() => toggleProject(project.id)}
+                  onNavigate={onNavigate}
+                />
               ))
             )}
           </div>

@@ -1,10 +1,9 @@
-import { useState, useCallback } from 'react';
+import { cloneElement, isValidElement, useId, useState, useCallback, type ReactElement } from 'react';
 import { logger } from '@/shared/utils/logger';
-import { useQuery } from '@tanstack/react-query';
 import { EyeOff, RefreshCw, Copy, Check, Eye, ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { Input } from '@/shared/components/ui';
-import { apiClient } from '@/shared/utils/apiClient';
-import type { ColumnModel, ColumnOption } from '../../types/table.types';
+import type { ColumnModel, ColumnOption, ColumnRelationConfig } from '../../types/table.types';
+import { useRelationOptions } from '../../hooks/useRelationOptions';
 import { FileUploaderField } from './FileUploaderField';
 
 // Helper to format ISO date to YYYY-MM-DD for input[type="date"]
@@ -175,27 +174,32 @@ interface FieldRendererProps {
   highlighted?: boolean;
   showLabel?: boolean; // Show label above input
   inline?: boolean; // For checkbox - render inline without wrapper
+  multiline?: boolean; // Text column as a resizable textarea (form builder "Расширяемое")
+  rows?: number; // Visible rows for the multiline textarea
 }
 
 /**
  * Renders appropriate input control based on column type
  */
-export function FieldRenderer({ 
-  column, 
-  value, 
-  onChange, 
+export function FieldRenderer({
+  column,
+  value,
+  onChange,
   disabled = false,
   highlighted = false,
   showLabel = true,
-  inline = false
+  inline = false,
+  multiline = false,
+  rows,
 }: FieldRendererProps) {
+  const fieldId = useId();
   const baseInputClass = `w-full px-3 py-2 rounded-lg border bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] ${
     disabled ? 'opacity-50 cursor-not-allowed' : ''
   } ${highlighted ? 'border-[var(--color-primary-500)] ring-2 ring-[var(--color-primary-500)]' : 'border-[var(--border-primary)]'}`;
 
   // Skip system columns that shouldn't be edited
   const isSystemColumn = ['created_at', 'updated_at'].includes(column.name);
-  
+
   const label = column.displayName || column.name;
 
   // Wrapper for label + input
@@ -209,61 +213,46 @@ export function FieldRenderer({
         </label>
       );
     }
+    const labelable = isValidElement(input) && (input.type === Input || ['input', 'select', 'textarea'].includes(String(input.type)));
+    const labelledInput = labelable
+      ? cloneElement(input as ReactElement<{ id?: string; 'aria-required'?: boolean }>, { id: fieldId, 'aria-required': column.isRequired || undefined })
+      : input;
     return (
       <div className="space-y-1">
-        <label className="block text-sm font-medium text-[var(--text-primary)]">
-          {label}
+        <label htmlFor={labelable ? fieldId : undefined} className="block text-sm font-medium text-[var(--text-primary)]">
+          {label}{column.isRequired && <span aria-hidden="true" className="ml-1 text-red-500">*</span>}
         </label>
-        {input}
+        {labelledInput}
       </div>
     );
   };
-  
-  switch (column.type) {
+
+  const relation = column.config?.relation;
+  const staticOptions = column.config?.options || [];
+  const isRelationColumn = column.type === 'relation';
+  const valueColumn = relation?.valueColumn || (isRelationColumn ? 'id' : undefined);
+  const labelColumn = relation?.labelColumn || (isRelationColumn ? 'name' : undefined);
+
+  // Options from the related table (ADR-205 D4: shared lookup). Relation-type columns
+  // default to id/name even without an explicit relation config.
+  const wantsRelationOptions = Boolean(
+    relation?.tableId && valueColumn && labelColumn &&
+    (isRelationColumn || ((column.type === 'select' || column.type === 'multi-select') && relation?.enabled)),
+  );
+  const lensRelation: ColumnRelationConfig | undefined = wantsRelationOptions && relation
+    ? { ...relation, enabled: true, valueColumn, labelColumn }
+    : undefined;
+  const { options: lookupOptions } = useRelationOptions(lensRelation);
+  // A relation row without a label still needs something to pick: fall back to its key.
+  const relationOptions = isRelationColumn ? lookupOptions.map((opt) => (opt.label ? opt : { ...opt, label: opt.value })) : lookupOptions;
+
+  // Persisted schemas can still contain legacy names such as textarea.
+  const displayType: string = column.type;
+  switch (displayType) {
     case 'select': {
-      const relation = column.config?.relation;
-      const staticOptions = column.config?.options || [];
-      
-      // Load options from related table if relation is enabled
-      const { data: relationOptions = [] } = useQuery({
-        queryKey: ['field-renderer-relation', relation?.tableId, relation?.valueColumn, relation?.labelColumn],
-        queryFn: async () => {
-          if (!relation?.enabled || !relation.tableId || !relation.valueColumn || !relation.labelColumn) {
-            return [];
-          }
-          
-          const response = await apiClient.request<{ 
-            data: { rows: Array<Record<string, unknown>> } | Array<Record<string, unknown>>
-          }>(`/tables/${relation.tableId}/rows?limit=5000`);
-          
-          const rows = Array.isArray(response.data) ? response.data : response.data.rows || [];
-          
-          return rows.map((row) => {
-            const rowData = row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : row;
-            const rowId = (row as { id?: string | number }).id;
-            const originalId = (row as { originalId?: string | number }).originalId;
-            
-            let val: string;
-            if (relation.valueColumn === 'id') {
-              val = String(originalId ?? rowData['id'] ?? rowId ?? '');
-            } else {
-              val = String(rowData[relation.valueColumn] ?? '');
-            }
-              
-            return {
-              value: val,
-              label: String(rowData[relation.labelColumn] ?? ''),
-              color: relation.colorColumn ? String(rowData[relation.colorColumn] ?? '') || undefined : undefined
-            } as ColumnOption;
-          });
-        },
-        enabled: Boolean(relation?.enabled && relation?.tableId && relation?.valueColumn && relation?.labelColumn),
-        staleTime: 60000,
-      });
-      
       // Use relation options if available, otherwise static options
       const options = relation?.enabled && relationOptions.length > 0 ? relationOptions : staticOptions;
-      
+
       // Find current option color for styling
       const currentOption = options.find((opt: ColumnOption) => String(opt.value) === String(value || ''));
       const selectColor = currentOption?.color || undefined;
@@ -291,50 +280,10 @@ export function FieldRenderer({
     }
 
     case 'multi-select': {
-      const relation = column.config?.relation;
-      const staticOptions = column.config?.options || [];
-      
-      // Load options from related table if relation is enabled
-      const { data: relationOptions = [] } = useQuery({
-        queryKey: ['field-renderer-relation', relation?.tableId, relation?.valueColumn, relation?.labelColumn],
-        queryFn: async () => {
-          if (!relation?.enabled || !relation.tableId || !relation.valueColumn || !relation.labelColumn) {
-            return [];
-          }
-          
-          const response = await apiClient.request<{ 
-            data: { rows: Array<Record<string, unknown>> } | Array<Record<string, unknown>>
-          }>(`/tables/${relation.tableId}/rows?limit=5000`);
-          
-          const rows = Array.isArray(response.data) ? response.data : response.data.rows || [];
-          
-          return rows.map((row) => {
-            const rowData = row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : row;
-            const rowId = (row as { id?: string | number }).id;
-            const originalId = (row as { originalId?: string | number }).originalId;
-            
-            let val: string;
-            if (relation.valueColumn === 'id') {
-              val = String(originalId ?? rowData['id'] ?? rowId ?? '');
-            } else {
-              val = String(rowData[relation.valueColumn] ?? '');
-            }
-              
-            return {
-              value: val,
-              label: String(rowData[relation.labelColumn] ?? ''),
-              color: relation.colorColumn ? String(rowData[relation.colorColumn] ?? '') || undefined : undefined
-            } as ColumnOption;
-          });
-        },
-        enabled: Boolean(relation?.enabled && relation?.tableId && relation?.valueColumn && relation?.labelColumn),
-        staleTime: 60000,
-      });
-      
       // Use relation options if available, otherwise static options
       const options = relation?.enabled && relationOptions.length > 0 ? relationOptions : staticOptions;
       const selected = Array.isArray(value) ? value : (value ? [value] : []);
-      
+
       return withLabel(
         <div className="flex flex-wrap gap-2 p-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] min-h-[42px]">
           {options.map((opt: ColumnOption) => {
@@ -345,14 +294,14 @@ export function FieldRenderer({
                 type="button"
                 disabled={disabled || isSystemColumn}
                 onClick={() => {
-                  const newValue = isSelected 
+                  const newValue = isSelected
                     ? selected.filter((v: string) => v !== opt.value)
                     : [...selected, opt.value];
                   onChange(newValue);
                 }}
                 className={`px-2 py-1 rounded text-xs font-medium transition ${
-                  isSelected 
-                    ? 'bg-[var(--color-primary-500)] text-white' 
+                  isSelected
+                    ? 'bg-[var(--color-primary-500)] text-white'
                     : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'
                 } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                 style={opt.color && !isSelected ? { backgroundColor: `${opt.color}20`, color: opt.color } : {}}
@@ -515,46 +464,6 @@ export function FieldRenderer({
 
     // Ticket #81436: Support relation column type in EditRowModal
     case 'relation': {
-      const relation = column.config?.relation;
-
-      // Load options from related table
-      // eslint-disable-next-line react-hooks/rules-of-hooks
-      const { data: relationOptions = [] } = useQuery({
-        queryKey: ['field-renderer-relation-type', relation?.tableId, relation?.valueColumn, relation?.labelColumn],
-        queryFn: async () => {
-          if (!relation?.tableId) return [];
-          const valueCol = relation.valueColumn || 'id';
-          const labelCol = relation.labelColumn || 'name';
-
-          const response = await apiClient.request<{
-            data: { rows: Array<Record<string, unknown>> } | Array<Record<string, unknown>>
-          }>(`/tables/${relation.tableId}/rows?limit=5000`);
-
-          const rows = Array.isArray(response.data) ? response.data : (response.data as { rows?: Array<Record<string, unknown>> }).rows || [];
-
-          return rows.map((row) => {
-            const rowData = row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : row;
-            const rowId = (row as { id?: string | number }).id;
-            const originalId = (row as { originalId?: string | number }).originalId;
-
-            let val: string;
-            if (valueCol === 'id') {
-              val = String(originalId ?? rowData['id'] ?? rowId ?? '');
-            } else {
-              val = String(rowData[valueCol] ?? '');
-            }
-
-            return {
-              value: val,
-              label: String(rowData[labelCol] ?? rowData['title'] ?? rowData['name'] ?? val),
-              color: relation.colorColumn ? String(rowData[relation.colorColumn] ?? '') || undefined : undefined
-            } as ColumnOption;
-          });
-        },
-        enabled: Boolean(relation?.tableId),
-        staleTime: 60000,
-      });
-
       if (relation?.tableId && relationOptions.length > 0) {
         const currentRelOption = relationOptions.find((opt: ColumnOption) => String(opt.value) === String(value || ''));
         const relColor = currentRelOption?.color || undefined;
@@ -596,6 +505,18 @@ export function FieldRenderer({
 
     case 'text':
     default:
+      if (multiline) {
+        return withLabel(
+          <textarea
+            value={String(value || '')}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled || isSystemColumn}
+            rows={rows && rows > 0 ? rows : 3}
+            placeholder={label}
+            className={`${baseInputClass} resize-y`}
+          />
+        );
+      }
       return withLabel(
         <Input
           type="text"

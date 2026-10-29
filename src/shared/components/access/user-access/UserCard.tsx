@@ -5,11 +5,11 @@
  * Owns no persistent state; parent passes handlers + loading flags.
  */
 
-import React from 'react';
+import React, { useId } from 'react';
+import { Avatar } from '@/shared/components/ui/Avatar';
 import {
   Trash2,
   ChevronDown,
-  Settings,
   Ban,
   Info,
   Loader2,
@@ -19,12 +19,11 @@ import type {
   PermissionEntityType,
 } from '@/shared/types/user-access.types';
 import {
-  ACCESS_LEVEL_LABELS,
   ACCESS_LEVEL_COLORS,
 } from '@/shared/types/user-access.types';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import type { UserTableRow } from './types';
-import { ENTITY_LEVEL_LABELS, ENTITY_LEVEL_ICONS } from './constants';
+import { ENTITY_LEVEL_ICONS } from './constants';
 import { computeEffectiveRoles } from './helpers';
 import { PermissionLevelBadge, InheritanceBadge } from './PermissionBadges';
 
@@ -69,9 +68,14 @@ export const UserCard = ({
   onDeleteUserFromTable,
   onUpdateGranularAccess,
 }: UserCardProps) => {
-  const { language } = useLanguage();
+  const { language, t: translate } = useLanguage();
   const t = (ru: string, en: string) => (language === 'ru' ? ru : en);
+  const detailsId = useId();
   const roleColor = ACCESS_LEVEL_COLORS[user.role as UserAccessLevel] || '#6b7280';
+  const isAgent = user.managed_by_agent_table_id != null || user.user_type === 'agent';
+  const isService = user.user_type === 'service';
+  const typeLabel = isAgent ? translate('aiChat.ui.agent') : isService ? translate('aiChat.ui.service') : translate('aiChat.ui.person');
+  const avatarColor = user.color || (isAgent ? '#a855f7' : isService ? '#fb923c' : '#3b82f6');
 
   // Count granular access entries
   const projectCount =
@@ -110,91 +114,104 @@ export const UserCard = ({
   return (
     <React.Fragment>
       <div
-        className={`p-3 rounded-lg bg-[var(--bg-secondary)] border ${isExpanded ? 'border-[var(--accent-primary)]' : 'border-[var(--border-primary)]'}`}
+        style={{ boxShadow: user.color ? `inset 3px 0 0 ${user.color}` : undefined }}
+        className={`group px-3 py-2 transition-colors ${isExpanded ? 'bg-[var(--bg-tertiary)]' : 'hover:bg-[var(--bg-tertiary)]'}`}
       >
         {/* User header */}
-        <div className="flex items-center gap-3 mb-2">
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0"
-            style={{ backgroundColor: roleColor }}
-          >
-            {String(user.name || '?').charAt(0).toUpperCase()}
-          </div>
+        <div className="flex items-center gap-2">
+          <Avatar url={user.avatar} emoji={user.agent_icon || (isService ? '🔧' : null)} name={user.name} color={avatarColor} size={40} />
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-medium text-[var(--text-primary)] truncate">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-medium text-[var(--text-primary)] truncate select-text" title={user.name}>
                 {user.name}
               </span>
-              {/* Role selector */}
-              <div className="relative">
-                <select
-                  value={user.role || 'viewer'}
-                  onChange={(e) => onUpdateUserRole(user.row_id, e.target.value as UserAccessLevel)}
-                  disabled={updatingRoleRowId === user.row_id}
-                  className="appearance-none px-2 py-0.5 pr-6 text-xs rounded border-0 bg-transparent cursor-pointer focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)]"
-                  style={{
-                    backgroundColor: `${roleColor}20`,
-                    color: roleColor,
-                  }}
-                >
-                  {availableLevels.map((level) => (
-                    <option
-                      key={level.value}
-                      value={level.value}
-                      style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
-                    >
-                      {level.label}
-                    </option>
-                  ))}
-                </select>
-                {updatingRoleRowId === user.row_id ? (
-                  <Loader2
-                    className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 animate-spin"
-                    style={{ color: roleColor }}
-                  />
-                ) : (
-                  <ChevronDown
-                    className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
-                    style={{ color: roleColor }}
-                  />
-                )}
-              </div>
+              <span className="text-[10px] text-[var(--text-secondary)] shrink-0 select-text">(#{user.system_user_id ?? 'N/A'})</span>
               {!user.active && (
-                <span className="px-1.5 py-0.5 text-xs rounded bg-red-500/20 text-red-400">
+                <span className="px-1.5 py-0.5 text-[10px] rounded bg-red-500/20 text-[var(--text-primary)] shrink-0">
                   {t('Неактивен', 'Inactive')}
                 </span>
               )}
             </div>
-            <span className="text-xs text-[var(--text-tertiary)]">
-              {user.email} • ID: {user.system_user_id || 'N/A'}
-            </span>
-          </div>
-          {/* Action buttons */}
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => onToggleExpanded(user.row_id)}
-              className={`p-1.5 rounded-md transition-colors ${isExpanded ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:bg-[var(--bg-tertiary)]'}`}
-              title={t('Редактировать доступы', 'Edit permissions')}
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onDeleteUserFromTable(user.row_id, user.name)}
-              disabled={isDeletingUser === user.row_id}
-              className="p-1.5 text-[var(--text-secondary)] hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors disabled:opacity-50"
-              title={t('Удалить пользователя', 'Delete user')}
-            >
-              {isDeletingUser === user.row_id ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4" />
-              )}
-            </button>
+            <div className="mt-0.5 flex items-center gap-1 min-w-0 flex-wrap">
+              <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium shrink-0 text-[var(--text-primary)] ${isAgent ? 'bg-purple-500/20' : isService ? 'bg-orange-500/20' : 'bg-blue-500/20'}`}>
+                {typeLabel}
+              </span>
+              <span className="text-[10px] text-[var(--text-secondary)] truncate flex-[1_1_5rem] min-w-0 select-text" title={user.email || undefined}>
+                {user.email}
+              </span>
+              <div className="ml-auto flex items-center gap-1 shrink-0">
+                {/* Role selector */}
+                <div className="relative">
+                  <select
+                    aria-label={`${t('Роль', 'Role')}: ${user.name}`}
+                    value={user.role || 'viewer'}
+                    onChange={(e) => onUpdateUserRole(user.row_id, e.target.value as UserAccessLevel)}
+                    disabled={updatingRoleRowId === user.row_id}
+                    className="appearance-none max-w-32 px-2 py-0.5 pr-5 text-[10px] rounded border-0 bg-transparent cursor-pointer focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)] disabled:opacity-50"
+                    style={{
+                      backgroundColor: `${roleColor}20`,
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    {availableLevels.map((level) => (
+                      <option
+                        key={level.value}
+                        value={level.value}
+                        style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                      >
+                        {level.label}
+                      </option>
+                    ))}
+                  </select>
+                  {updatingRoleRowId === user.row_id ? (
+                    <Loader2
+                      className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 animate-spin"
+                      style={{ color: roleColor }}
+                    />
+                  ) : (
+                    <ChevronDown
+                      className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
+                      style={{ color: roleColor }}
+                    />
+                  )}
+                </div>
+                {/* Action buttons */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onToggleExpanded(user.row_id)}
+                    aria-expanded={isExpanded}
+                    aria-controls={isExpanded ? detailsId : undefined}
+                    aria-label={`${t('Карта доступов', 'Access map')}: ${user.name}`}
+                    className={`p-1.5 rounded-md transition-colors ${isExpanded ? 'text-[var(--accent-primary)] bg-[var(--accent-primary)]/10' : 'text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:bg-[var(--bg-tertiary)]'}`}
+                    title={t('Карта доступов', 'Access map')}
+                  >
+                    <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteUserFromTable(user.row_id, user.name)}
+                    disabled={isDeletingUser === user.row_id}
+                    className="p-1.5 text-[var(--text-secondary)] hover:text-red-500 hover:bg-red-500/10 rounded-md transition-colors disabled:opacity-50"
+                    title={t('Удалить пользователя', 'Delete user')}
+                    aria-label={`${t('Удалить пользователя', 'Delete user')}: ${user.name}`}
+                  >
+                    {isDeletingUser === user.row_id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+      </div>
 
+      {/* Expanded edit section - full width outside the card */}
+      {isExpanded && (
+        <div id={detailsId} className="p-3 bg-[var(--bg-tertiary)] border-t border-[var(--border-secondary)] space-y-3">
         {/* Level + Inheritance indicators (ADR-105 AC6) */}
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           {/* Permission level badge */}
@@ -209,11 +226,11 @@ export const UserCard = ({
           />
           {/* If user has both direct and inherited roles, show effective role info */}
           {directRole && inheritedRole && directRole.level !== inheritedRole.level && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/10 text-[var(--text-primary)] border border-amber-500/30">
               <Info className="w-2.5 h-2.5" />
-              {ACCESS_LEVEL_LABELS[inheritedRole.level]} @ {ENTITY_LEVEL_LABELS[inheritedRole.source]}
+              {translate(`userAccess.roles.${inheritedRole.level}`)} @ {translate(`userAccess.panel.levels.${inheritedRole.source}`)}
               {' -> '}
-              {ACCESS_LEVEL_LABELS[directRole.level]} @ {ENTITY_LEVEL_LABELS[directRole.source]}
+              {translate(`userAccess.roles.${directRole.level}`)} @ {translate(`userAccess.panel.levels.${directRole.source}`)}
             </span>
           )}
         </div>
@@ -221,34 +238,29 @@ export const UserCard = ({
         {/* Granular access summary */}
         <div className="flex flex-wrap gap-1 text-xs">
           {projectCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400">
+            <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-[var(--text-primary)]">
               {ENTITY_LEVEL_ICONS.project} {projectCount} {t('проектов', 'projects')}
             </span>
           )}
           {tableCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-400">
+            <span className="px-1.5 py-0.5 rounded bg-primary-500/10 text-[var(--text-primary)]">
               {ENTITY_LEVEL_ICONS.table} {tableCount} {t('таблиц', 'tables')}
             </span>
           )}
           {columnCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-green-400">
+            <span className="px-1.5 py-0.5 rounded bg-green-500/10 text-[var(--text-primary)]">
               {ENTITY_LEVEL_ICONS.column} {columnCount} {t('колонок', 'columns')}
             </span>
           )}
           {deniedCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+            <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-[var(--text-primary)]">
               <Ban className="w-3 h-3 inline" /> {deniedCount} {t('запрещено', 'denied')}
             </span>
           )}
           {projectCount === 0 && tableCount === 0 && columnCount === 0 && deniedCount === 0 && (
-            <span className="text-[var(--text-tertiary)]">{t('Гранулярный доступ не настроен', 'Granular access not configured')}</span>
+            <span className="text-[var(--text-secondary)]">{t('Гранулярный доступ не настроен', 'Granular access not configured')}</span>
           )}
         </div>
-      </div>
-
-      {/* Expanded edit section - full width outside the card */}
-      {isExpanded && (
-        <div className="col-span-full p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--accent-primary)]/30 space-y-3">
           <h5 className="text-xs font-medium text-[var(--text-secondary)]">
             {t('Гранулярный доступ для', 'Granular access for')} {user.name}
           </h5>
@@ -266,6 +278,7 @@ export const UserCard = ({
               <div className="flex items-center gap-3">
                 <span className="text-xs text-[var(--text-secondary)]">{t('Роль:', 'Role:')}</span>
                 <select
+                  aria-label={`${t('Роль в объекте', 'Entity role')}: ${user.name}`}
                   value={(() => {
                     // Find current role for this entity
                     const entityIdStr = String(entityId);
@@ -328,7 +341,7 @@ export const UserCard = ({
                     </option>
                   ))}
                 </select>
-                <span className="text-[10px] text-[var(--text-tertiary)]">
+                <span className="text-[10px] text-[var(--text-secondary)]">
                   {t('(пустое = наследуется с верхнего уровня)', '(empty = inherited from parent level)')}
                 </span>
               </div>
@@ -340,25 +353,25 @@ export const UserCard = ({
             <>
               {/* Project access grid */}
               <div className="space-y-2">
-                <h6 className="text-xs font-medium text-purple-400">{t('📁 Проекты', '📁 Projects')}</h6>
+                <h6 className="text-xs font-medium text-[var(--text-primary)]">{t('📁 Проекты', '📁 Projects')}</h6>
                 <div className="grid grid-cols-5 gap-1 text-[10px]">
-                  <div className="p-1 rounded bg-yellow-500/10 text-yellow-400">
+                  <div className="p-1 rounded bg-yellow-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Owner</div>
                     <div className="text-[9px] break-all">{user.project_owner?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-purple-500/10 text-purple-400">
+                  <div className="p-1 rounded bg-purple-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Admin</div>
                     <div className="text-[9px] break-all">{user.project_admin?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-primary-500/10 text-primary-400">
+                  <div className="p-1 rounded bg-primary-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Editor</div>
                     <div className="text-[9px] break-all">{user.project_editor?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-green-500/10 text-green-400">
+                  <div className="p-1 rounded bg-green-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Viewer</div>
                     <div className="text-[9px] break-all">{user.project_viewer?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-red-500/10 text-red-400">
+                  <div className="p-1 rounded bg-red-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Denied</div>
                     <div className="text-[9px] break-all">{user.project_denied?.join(', ') || '—'}</div>
                   </div>
@@ -367,25 +380,25 @@ export const UserCard = ({
 
               {/* Table access grid */}
               <div className="space-y-2">
-                <h6 className="text-xs font-medium text-primary-400">{t('📋 Таблицы', '📋 Tables')}</h6>
+                <h6 className="text-xs font-medium text-[var(--text-primary)]">{t('📋 Таблицы', '📋 Tables')}</h6>
                 <div className="grid grid-cols-5 gap-1 text-[10px]">
-                  <div className="p-1 rounded bg-yellow-500/10 text-yellow-400">
+                  <div className="p-1 rounded bg-yellow-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Owner</div>
                     <div className="text-[9px] break-all">{user.table_owner?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-purple-500/10 text-purple-400">
+                  <div className="p-1 rounded bg-purple-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Admin</div>
                     <div className="text-[9px] break-all">{user.table_admin?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-primary-500/10 text-primary-400">
+                  <div className="p-1 rounded bg-primary-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Editor</div>
                     <div className="text-[9px] break-all">{user.table_editor?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-green-500/10 text-green-400">
+                  <div className="p-1 rounded bg-green-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Viewer</div>
                     <div className="text-[9px] break-all">{user.table_viewer?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-red-500/10 text-red-400">
+                  <div className="p-1 rounded bg-red-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Denied</div>
                     <div className="text-[9px] break-all">{user.table_denied?.join(', ') || '—'}</div>
                   </div>
@@ -394,25 +407,25 @@ export const UserCard = ({
 
               {/* Column access grid */}
               <div className="space-y-2">
-                <h6 className="text-xs font-medium text-green-400">{t('📊 Колонки', '📊 Columns')}</h6>
+                <h6 className="text-xs font-medium text-[var(--text-primary)]">{t('📊 Колонки', '📊 Columns')}</h6>
                 <div className="grid grid-cols-5 gap-1 text-[10px]">
-                  <div className="p-1 rounded bg-yellow-500/10 text-yellow-400">
+                  <div className="p-1 rounded bg-yellow-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Owner</div>
                     <div className="text-[9px] break-all">{user.column_owner?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-purple-500/10 text-purple-400">
+                  <div className="p-1 rounded bg-purple-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Admin</div>
                     <div className="text-[9px] break-all">{user.column_admin?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-primary-500/10 text-primary-400">
+                  <div className="p-1 rounded bg-primary-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Editor</div>
                     <div className="text-[9px] break-all">{user.column_editor?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-green-500/10 text-green-400">
+                  <div className="p-1 rounded bg-green-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Viewer</div>
                     <div className="text-[9px] break-all">{user.column_viewer?.join(', ') || '—'}</div>
                   </div>
-                  <div className="p-1 rounded bg-red-500/10 text-red-400">
+                  <div className="p-1 rounded bg-red-500/10 text-[var(--text-primary)]">
                     <div className="font-medium">Denied</div>
                     <div className="text-[9px] break-all">{user.column_denied?.join(', ') || '—'}</div>
                   </div>
@@ -421,7 +434,7 @@ export const UserCard = ({
             </>
           )}
 
-          <p className="text-xs text-[var(--text-tertiary)]">
+          <p className="text-xs text-[var(--text-secondary)]">
             {t('💡 Редактируйте доступы напрямую в таблице Users', '💡 Edit permissions directly in the Users table')}
           </p>
         </div>

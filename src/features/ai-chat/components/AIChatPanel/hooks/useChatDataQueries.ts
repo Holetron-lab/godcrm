@@ -11,7 +11,7 @@ import type { PanelTab, TasksSourceConfig, FilesSourceConfig, ApiResponse, Inbox
 
 interface UseChatDataQueriesParams {
   activePanel: PanelTab;
-  effectiveSpaceId: number | string | undefined;
+  effectiveSpaceId: number | undefined;
   showAllContacts: boolean;
   tasksSource: TasksSourceConfig | undefined;
   filesSource: FilesSourceConfig | undefined;

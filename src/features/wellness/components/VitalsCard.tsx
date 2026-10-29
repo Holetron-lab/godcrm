@@ -40,6 +40,7 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 export function VitalsCard({ vitals, onLogVital, className }: VitalsCardProps) {
+  const VitalContainer = onLogVital ? 'button' : 'div';
   return (
     <div className={cn(
       'rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-4',
@@ -51,8 +52,9 @@ export function VitalsCard({ vitals, onLogVital, className }: VitalsCardProps) {
         </h3>
         {onLogVital && (
           <button 
+            type="button"
             onClick={() => onLogVital('weight')}
-            className="text-xs text-blue-500 hover:text-blue-400"
+            className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
           >
             + Добавить замер
           </button>
@@ -75,22 +77,24 @@ export function VitalsCard({ vitals, onLogVital, className }: VitalsCardProps) {
             };
             
             return (
-              <div 
+              <VitalContainer
                 key={vital.vital_type}
-                className="p-3 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] cursor-pointer transition-colors"
-                onClick={() => onLogVital?.(vital.vital_type)}
+                type={onLogVital ? 'button' : undefined}
+                className={cn('p-3 rounded-lg bg-[var(--bg-tertiary)] text-left transition-colors',
+                  onLogVital && 'hover:bg-[var(--bg-hover)] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary-500)]')}
+                onClick={onLogVital ? () => onLogVital(vital.vital_type) : undefined}
               >
-                <div className="flex items-center gap-2 mb-1">
+                <span className="flex items-center gap-2 mb-1">
                   <span className="text-lg">{info.emoji}</span>
                   <span className="text-xs text-[var(--text-muted)]">{info.label}</span>
-                </div>
-                <div className="text-lg font-bold text-[var(--text-primary)]">
+                </span>
+                <span className="block text-lg font-bold text-[var(--text-primary)]">
                   {vital.value} <span className="text-xs font-normal text-[var(--text-muted)]">{vital.unit}</span>
-                </div>
-                <div className="text-xs text-[var(--text-muted)] mt-1">
+                </span>
+                <span className="block text-xs text-[var(--text-muted)] mt-1">
                   {formatTimeAgo(vital.recorded_at)}
-                </div>
-              </div>
+                </span>
+              </VitalContainer>
             );
           })}
         </div>

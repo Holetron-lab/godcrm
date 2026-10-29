@@ -1,6 +1,5 @@
 import { Settings2, Eye, EyeOff, ArrowLeftRight } from 'lucide-react';
 import type { WidgetPresetOption, TableInfo, ColumnInfo, WizardStep } from './types';
-import type { UseMutationResult } from '@tanstack/react-query';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 interface ConfigStepProps {
@@ -19,7 +18,7 @@ interface ConfigStepProps {
   dashboard: { id: number } | undefined;
   dashboardLoading: boolean;
   dashboardError: Error | null;
-  createWidget: UseMutationResult<unknown, Error, unknown>;
+  createWidget: { isPending: boolean };
   handleCreateWidget: () => Promise<void>;
   setStep: (step: WizardStep) => void;
   onCancel: () => void;
@@ -253,9 +252,9 @@ function VisibleColumnsEditor({ columns, visibleColumns, setVisibleColumns }: Vi
             const isLink = col.type === 'link';
             const isBacklink = col.type === 'backlink' || (col.config && col.config.isBacklink);
             return (
-              <div
+              <button type="button" aria-pressed={isVisible}
                 key={col.id}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition ${
+                className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition ${
                   isVisible
                     ? 'bg-[var(--bg-tertiary)]'
                     : 'hover:bg-[var(--bg-tertiary)] opacity-50'
@@ -297,7 +296,7 @@ function VisibleColumnsEditor({ columns, visibleColumns, setVisibleColumns }: Vi
                     {col.type}
                   </span>
                 </div>
-              </div>
+              </button>
             );
           })}
       </div>

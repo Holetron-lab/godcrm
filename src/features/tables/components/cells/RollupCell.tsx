@@ -1,4 +1,6 @@
 import React from 'react';
+import type { ColumnConfig } from '../../types/table.types';
+import { DateCell } from './DateCell';
 
 interface RollupField {
   id: string;
@@ -18,6 +20,7 @@ interface RollupCellProps {
     rollup?: RollupConfig;
   };
   rowData?: Record<string, unknown>;
+  columns?: { name: string; type: string; config?: ColumnConfig }[];
   rawMode?: boolean;
 }
 
@@ -30,7 +33,7 @@ const evaluateFormula = (formula: string, rowData: Record<string, unknown>): str
   let hasEmptyValue = false;
   
   // Replace {{column_key}} with actual values
-  let processed = formula.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+  const processed = formula.replace(/\{\{(\w+)\}\}/g, (match, key) => {
     if (key === 'row_id') {
       const rowId = rowData['id'] ?? rowData['row_id'] ?? rowData['_id'];
       return rowId !== undefined && rowId !== null ? String(rowId) : '0';
@@ -51,7 +54,7 @@ const evaluateFormula = (formula: string, rowData: Record<string, unknown>): str
   // Try to evaluate as math expression
   try {
     // Check if it contains math operators
-    if (/[\+\-\*\/\(\)]/.test(processed)) {
+    if (/[+\-*/()]/.test(processed)) {
       // Safe eval for simple math expressions only
       const result = Function(`'use strict'; return (${processed})`)();
       return String(result);
@@ -67,6 +70,7 @@ export const RollupCell: React.FC<RollupCellProps> = ({
   value,
   config,
   rowData = {},
+  columns = [],
   rawMode = false,
 }) => {
   const rollupConfig = config?.rollup;
@@ -91,13 +95,29 @@ export const RollupCell: React.FC<RollupCellProps> = ({
   const displayItems = rollupConfig.fields
     .map(field => {
       const label = field.label || 'Поле';
-      const formulaValue = evaluateFormula(field.formula, rowData);
+      const sourceKey = field.formula.trim().match(/^\{\{([^{}]+)\}\}$/)?.[1];
+      const sourceColumn = columns.find(column => column.name === sourceKey);
+      const dateColumn = sourceColumn?.type === 'date' || sourceColumn?.type === 'datetime' ? sourceColumn : undefined;
+      // Direct date references use the source cell renderer, never the arithmetic evaluator.
+      const formulaValue = dateColumn ? rowData[dateColumn.name] : evaluateFormula(field.formula, rowData);
       const prefix = field.prefix || '';
       const suffix = field.suffix || '';
       
       // Если значения нет (пустое), показываем прочерк. Ноль показываем как есть.
       const isEmpty = formulaValue === EMPTY_MARKER || formulaValue === '' || formulaValue === null || formulaValue === undefined;
-      const fullValue = isEmpty ? '—' : `${prefix}${formulaValue}${suffix}`;
+      const fullValue = isEmpty ? '—' : dateColumn ? (
+        <>
+          {prefix}
+          <DateCell
+            value={formulaValue}
+            showTime={dateColumn.type === 'datetime'}
+            displayFormat={dateColumn.config?.date?.displayFormat}
+            storageFormat={dateColumn.config?.date?.storageFormat}
+            mode={dateColumn.config?.date?.mode}
+          />
+          {suffix}
+        </>
+      ) : `${prefix}${formulaValue}${suffix}`;
       
       return { 
         label, 

@@ -1,30 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useId, useMemo } from 'react';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { Input, Select } from '@/shared/components/ui';
 import { ColumnSettingsProps } from './types';
 import { TemplateHighlight } from './TemplateHighlight';
 import type { ColumnFileVisibility } from '@/features/tables/types/table.types';
 
-const VISIBILITY_OPTIONS: ReadonlyArray<{
-  value: ColumnFileVisibility;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: 'private',
-    label: '🔒 Private — только участники этого спейса',
-    description: 'По умолчанию. Файл доступен только пользователям, входящим в space этой таблицы.',
-  },
-  {
-    value: 'internal',
-    label: '🔓 Internal — любой залогиненный в CRM',
-    description: 'Файл доступен любому авторизованному пользователю CRM (требуется JWT).',
-  },
-  {
-    value: 'public',
-    label: '🌍 Public — открытая ссылка',
-    description: 'Файл отдаётся без авторизации. Прямая ссылка работает в incognito.',
-  },
-];
+const VISIBILITY_VALUES = ['private', 'internal', 'public'] as const;
 
 const isVisibilityValue = (value: string): value is ColumnFileVisibility =>
   value === 'private' || value === 'internal' || value === 'public';
@@ -38,6 +19,8 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
   setDraft,
   allColumns = [],
 }) => {
+  const { t } = useLanguage();
+  const fieldId = useId();
   const availableColumns = useMemo(() =>
     new Set(allColumns?.map(c => c.name) || []),
     [allColumns]
@@ -45,24 +28,24 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
 
   // ADR-0016 Phase 2: missing visibility on legacy columns falls back to 'private'.
   const visibility: ColumnFileVisibility = draft.config?.visibility ?? 'private';
-  const visibilityHint = VISIBILITY_OPTIONS.find((opt) => opt.value === visibility)?.description;
+  const visibilityHint = t(`columnSettings.file.visibility.${visibility}.description`);
 
   return (
-    <div className="space-y-4 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-4 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
-        📎 Настройки файла
+        📎 {t('columnSettings.file.title')}
       </h4>
 
-      <div className="p-3 bg-primary-50 dark:bg-primary-100 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
+      <div className="p-3 bg-primary-50 dark:bg-primary-900 rounded-lg text-sm border border-primary-200 dark:border-primary-800">
         <p className="text-primary-600 dark:text-primary-300">
-          💡 Используйте <code className="bg-primary-100 dark:bg-primary-800 px-1 rounded">{'{{column_key}}'}</code> для подстановки значений из других колонок
+          💡 {t('columnSettings.file.templateBefore')} <code className="bg-primary-100 dark:bg-primary-800 px-1 rounded">{'{{column_key}}'}</code> {t('columnSettings.file.templateAfter')}
         </p>
       </div>
 
       {/* ADR-0016 Phase 2: per-column visibility (private / internal / public). */}
       <div>
         <Select
-          label="Кто видит файлы"
+          label={t('columnSettings.file.visibilityLabel')}
           value={visibility}
           onChange={(value) => {
             if (!isVisibilityValue(value)) return;
@@ -74,7 +57,7 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
               },
             }));
           }}
-          options={VISIBILITY_OPTIONS.map(({ value, label }) => ({ value, label }))}
+          options={VISIBILITY_VALUES.map(value => ({ value, label: t(`columnSettings.file.visibility.${value}.label`) }))}
         />
         {visibilityHint && (
           <p className="text-xs text-[var(--text-tertiary)] mt-1">{visibilityHint}</p>
@@ -82,7 +65,7 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
       </div>
 
       <Select
-        label="Формат сохранения (RAW)"
+        label={t('columnSettings.file.saveFormat')}
         value={draft.config?.file?.saveFormat ?? 'url'}
         onChange={(value) => setDraft(prev => ({
           ...prev,
@@ -92,15 +75,16 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
           }
         }))}
         options={[
-          { label: '🔗 Полная ссылка (https://...)', value: 'url' },
-          { label: '📄 Только имя файла (document.pdf)', value: 'filename' },
-          { label: '📂 Путь + имя (/files/document.pdf)', value: 'path' }
+          { label: t('columnSettings.file.formats.url'), value: 'url' },
+          { label: t('columnSettings.file.formats.filename'), value: 'filename' },
+          { label: t('columnSettings.file.formats.path'), value: 'path' }
         ]}
       />
 
       <div>
         <Input
-          label="Формула (необязательно)"
+          id={`${fieldId}-formula`}
+          label={t('columnSettings.file.formula')}
           placeholder="{{folder}}/{{filename}}"
           value={draft.config?.file?.formula ?? ''}
           onChange={(event) => setDraft(prev => ({
@@ -113,14 +97,15 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
         />
         <TemplateHighlight text={draft.config?.file?.formula || ''} availableColumns={availableColumns} />
         <p className="text-xs text-[var(--text-tertiary)] mt-1">
-          Если указана, значение ячейки игнорируется и вычисляется по формуле
+          {t('columnSettings.file.formulaHint')}
         </p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Input
-            label="Префикс"
+            id={`${fieldId}-prefix`}
+            label={t('columnSettings.file.prefix')}
             placeholder="https://cdn.example.com/"
             value={draft.config?.file?.prefix ?? ''}
             onChange={(event) => setDraft(prev => ({
@@ -136,7 +121,8 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
 
         <div>
           <Input
-            label="Суффикс"
+            id={`${fieldId}-suffix`}
+            label={t('columnSettings.file.suffix')}
             placeholder="?v={{version}}"
             value={draft.config?.file?.suffix ?? ''}
             onChange={(event) => setDraft(prev => ({
@@ -153,10 +139,10 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
 
       {(draft.config?.file?.formula || draft.config?.file?.prefix || draft.config?.file?.suffix) && (
         <div className="p-2 bg-[var(--bg-tertiary)] rounded text-sm text-[var(--text-secondary)]">
-          <span className="font-medium">Превью: </span>
+          <span className="font-medium">{t('columnSettings.file.preview')}: </span>
           <span className="font-mono">
             {draft.config?.file?.prefix || ''}
-            {draft.config?.file?.formula || '[файл]'}
+            {draft.config?.file?.formula || t('columnSettings.file.placeholder')}
             {draft.config?.file?.suffix || ''}
           </span>
         </div>
@@ -164,7 +150,7 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
 
       <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-sm border border-amber-200 dark:border-amber-800">
         <p className="font-medium text-amber-800 dark:text-amber-200 flex items-center gap-2 mb-2">
-          📋 Примеры использования
+          📋 {t('columnSettings.file.examples')}
         </p>
         <div className="space-y-2 text-xs text-amber-700 dark:text-amber-300">
           <div>
@@ -174,13 +160,13 @@ export const FileColumnSettings: React.FC<ColumnSettingsProps> = ({
             </div>
           </div>
           <div>
-            <span className="font-medium">Версионирование:</span>
+            <span className="font-medium">{t('columnSettings.file.versioning')}:</span>
             <div className="font-mono bg-amber-100 dark:bg-amber-800/50 px-2 py-1 rounded mt-1">
               suffix: ?v={'{{version}}'} → file.pdf?v=1.2.3
             </div>
           </div>
           <div>
-            <span className="font-medium">Динамический путь:</span>
+            <span className="font-medium">{t('columnSettings.file.dynamicPath')}:</span>
             <div className="font-mono bg-amber-100 dark:bg-amber-800/50 px-2 py-1 rounded mt-1">
               formula: /uploads/{'{{category}}'}/{'{{filename}}'} → /uploads/docs/report.pdf
             </div>

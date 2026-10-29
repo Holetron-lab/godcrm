@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useId, useEffect, useState } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { Input } from '@/shared/components/ui';
 import { ColumnSettingsProps, renderTypeCellPreview } from './types';
@@ -21,6 +21,7 @@ export const VectorColumnSettings: React.FC<ColumnSettingsProps> = ({
   setDraft,
   firstRow,
 }) => {
+  const fieldId = useId();
   const [agents, setAgents] = useState<EmbeddingAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const currentSpace = useCurrentSpace();
@@ -55,10 +56,10 @@ export const VectorColumnSettings: React.FC<ColumnSettingsProps> = ({
 
       {/* Agent selector */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
+        <label htmlFor={`${fieldId}-agent`} className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
           🤖 Агент для эмбеддингов
         </label>
-        <select
+        <select id={`${fieldId}-agent`}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-primary)]"
           value={draft.config?.vector?.agent_id ?? ''}
           onChange={(event) => setDraft(prev => ({
@@ -92,10 +93,10 @@ export const VectorColumnSettings: React.FC<ColumnSettingsProps> = ({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
+        <label htmlFor={`${fieldId}-formula`} className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
           Формула (необязательно)
         </label>
-        <textarea
+        <textarea id={`${fieldId}-formula`}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-primary)] resize-y min-h-[80px] font-mono text-sm"
           placeholder={`{{title}} {{articul}}
 {{description}}
@@ -117,7 +118,7 @@ export const VectorColumnSettings: React.FC<ColumnSettingsProps> = ({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Input
+          <Input id={`${fieldId}-input-1`}
             label="Префикс"
             placeholder="📄 "
             value={draft.config?.vector?.prefix ?? ''}
@@ -132,7 +133,7 @@ export const VectorColumnSettings: React.FC<ColumnSettingsProps> = ({
         </div>
 
         <div>
-          <Input
+          <Input id={`${fieldId}-input-2`}
             label="Суффикс"
             placeholder=" (векторизовано)"
             value={draft.config?.vector?.suffix ?? ''}

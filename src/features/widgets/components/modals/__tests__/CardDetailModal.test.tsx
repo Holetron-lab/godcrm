@@ -54,13 +54,21 @@ vi.mock('@/shared/utils/cn', () => ({
 
 // ====== Test Data Helpers ======
 
+const columnDefaults = {
+  tableId: '1',
+  isRequired: false,
+  isReadonly: false,
+  width: 150,
+  isVisible: true,
+};
+
 const baseColumns: ColumnModel[] = [
-  { id: 1, name: 'title', type: 'text', displayName: 'Title', position: 0, config: {} } as ColumnModel,
-  { id: 2, name: 'status', type: 'select', displayName: 'Status', position: 1, config: { options: [{ value: 'open', label: 'Open', color: '#22c55e' }, { value: 'closed', label: 'Closed', color: '#ef4444' }] } } as ColumnModel,
-  { id: 3, name: 'due_date', type: 'date', displayName: 'Due Date', position: 2, config: {} } as ColumnModel,
-  { id: 4, name: 'done', type: 'checkbox', displayName: 'Done', position: 3, config: {} } as ColumnModel,
-  { id: 5, name: 'description', type: 'rich_text', displayName: 'Description', position: 4, config: {} } as ColumnModel,
-  { id: 6, name: 'website', type: 'url', displayName: 'Website', position: 5, config: {} } as ColumnModel,
+  { id: '1', name: 'title', type: 'text', displayName: 'Title', orderIndex: 0, ...columnDefaults, config: {} } satisfies ColumnModel,
+  { id: '2', name: 'status', type: 'select', displayName: 'Status', orderIndex: 1, ...columnDefaults, config: { options: [{ value: 'open', label: 'Open', color: '#22c55e' }, { value: 'closed', label: 'Closed', color: '#ef4444' }] } } satisfies ColumnModel,
+  { id: '3', name: 'due_date', type: 'datetime', displayName: 'Due Date', orderIndex: 2, ...columnDefaults, config: {} } satisfies ColumnModel,
+  { id: '4', name: 'done', type: 'checkbox', displayName: 'Done', orderIndex: 3, ...columnDefaults, config: {} } satisfies ColumnModel,
+  { id: '5', name: 'description', type: 'text', displayName: 'Description', orderIndex: 4, ...columnDefaults, config: {} } satisfies ColumnModel,
+  { id: '6', name: 'website', type: 'url', displayName: 'Website', orderIndex: 5, ...columnDefaults, config: {} } satisfies ColumnModel,
 ];
 
 const mockCard = {
@@ -327,10 +335,10 @@ describe('CardDetailModal', () => {
 
   // ========== COLUMN TYPES RENDERING ==========
   describe('column type rendering', () => {
-    it('should render date field formatted in Russian locale', () => {
+    it('should render datetime field formatted in Russian locale', () => {
       render(<CardDetailModal {...defaultProps} />);
-      // Date 2026-03-15 in ru-RU locale: 15.03.2026
-      expect(screen.getByText('15.03.2026')).toBeInTheDocument();
+      const expected = new Date(mockCard.data.due_date).toLocaleString('ru-RU');
+      expect(screen.getByText(expected)).toBeInTheDocument();
     });
 
     it('should render checkbox as checked when true', () => {
@@ -347,7 +355,7 @@ describe('CardDetailModal', () => {
     it('should render multi-select values as badges', () => {
       const multiSelectColumns = [
         ...baseColumns,
-        { id: 7, name: 'tags', type: 'multi-select', displayName: 'Tags', position: 6, config: { options: [] } } as ColumnModel,
+        { id: '7', name: 'tags', type: 'multi-select', displayName: 'Tags', orderIndex: 6, ...columnDefaults, config: { options: [] } } satisfies ColumnModel,
       ];
       const cardWithTags = { ...mockCard, data: { ...mockCard.data, tags: ['bug', 'urgent'] } };
       render(<CardDetailModal {...defaultProps} columns={multiSelectColumns} card={cardWithTags} />);
@@ -359,7 +367,7 @@ describe('CardDetailModal', () => {
   // ========== FILES ==========
   describe('file handling', () => {
     it('should display attached files from card data', () => {
-      const fileColumn = { id: 10, name: 'attachments', type: 'file', displayName: 'Attachments', position: 10, config: {} } as ColumnModel;
+      const fileColumn = { id: '10', name: 'attachments', type: 'file', displayName: 'Attachments', orderIndex: 10, ...columnDefaults, config: {} } satisfies ColumnModel;
       const columnsWithFile = [...baseColumns, fileColumn];
       const cardWithFile = {
         ...mockCard,
@@ -370,7 +378,7 @@ describe('CardDetailModal', () => {
     });
 
     it('should display multiple files separated by comma', () => {
-      const fileColumn = { id: 10, name: 'attachments', type: 'file', displayName: 'Attachments', position: 10, config: {} } as ColumnModel;
+      const fileColumn = { id: '10', name: 'attachments', type: 'file', displayName: 'Attachments', orderIndex: 10, ...columnDefaults, config: {} } satisfies ColumnModel;
       const columnsWithFile = [...baseColumns, fileColumn];
       const cardWithFiles = {
         ...mockCard,
@@ -391,13 +399,13 @@ describe('CardDetailModal', () => {
   describe('relation select', () => {
     it('should render relation data from relationData map', () => {
       const relationColumn: ColumnModel = {
-        id: 8,
+        id: '8',
         name: 'assignee',
         type: 'select',
         displayName: 'Assignee',
-        position: 7,
-        config: { relation: { table_id: 100 } },
-      } as ColumnModel;
+        orderIndex: 7, ...columnDefaults,
+        config: { relation: { tableId: '100' } },
+      } satisfies ColumnModel;
 
       const relationData = new Map<number, Map<string, { label: string; color?: string }>>([
         [100, new Map([
@@ -427,7 +435,7 @@ describe('CardDetailModal', () => {
   describe('layout', () => {
     it('should split into two columns when text columns exist', () => {
       render(<CardDetailModal {...defaultProps} />);
-      // Description is rich_text, so text columns exist and description label appears in right panel
+      // Description is text, so text columns exist and description label appears in right panel
       const descLabel = screen.getByText('Description');
       expect(descLabel).toBeInTheDocument();
       // The markdown preview for the description should also be present
@@ -436,8 +444,8 @@ describe('CardDetailModal', () => {
 
     it('should render single column when no text columns', () => {
       const structuredOnly: ColumnModel[] = [
-        { id: 1, name: 'title', type: 'text', displayName: 'Title', position: 0, config: {} } as ColumnModel,
-        { id: 2, name: 'status', type: 'select', displayName: 'Status', position: 1, config: { options: [] } } as ColumnModel,
+        { id: '1', name: 'title', type: 'text', displayName: 'Title', orderIndex: 0, ...columnDefaults, config: {} } satisfies ColumnModel,
+        { id: '2', name: 'status', type: 'select', displayName: 'Status', orderIndex: 1, ...columnDefaults, config: { options: [] } } satisfies ColumnModel,
       ];
       // Title is text but excluded from right panel as it's the title field
       // Status is structured

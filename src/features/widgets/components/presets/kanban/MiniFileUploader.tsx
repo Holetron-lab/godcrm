@@ -46,7 +46,6 @@ export function MiniFileUploader({ value, fieldName, displayName, onUpdate }: Mi
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
         className={`
           relative min-h-[48px] rounded border-2 border-dashed transition-all cursor-pointer p-2 overflow-hidden
           ${isDragOver
@@ -55,11 +54,17 @@ export function MiniFileUploader({ value, fieldName, displayName, onUpdate }: Mi
           }
         `}
       >
+        <button
+          type="button"
+          aria-label={`${fileUrls.length ? 'Добавить ещё' : 'Перетащите файлы или нажмите'}: ${displayName}`}
+          onClick={() => fileInputRef.current?.click()}
+          className="absolute inset-0 z-10 rounded focus-visible:[outline:auto] focus-visible:-outline-offset-2"
+        />
         <input
           ref={fileInputRef}
           type="file"
           multiple
-          className="hidden"
+          hidden
           onChange={(e) => handleUpload(e.target.files)}
         />
 
@@ -85,15 +90,17 @@ export function MiniFileUploader({ value, fieldName, displayName, onUpdate }: Mi
                     href={fullUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 text-xs text-primary-500 hover:underline truncate min-w-0"
+                    className="relative z-20 flex-1 text-xs text-primary-500 hover:underline truncate min-w-0"
                     onClick={(e) => e.stopPropagation()}
                     title={fileName}
                   >
                     {fileName}
                   </a>
                   <button
+                    type="button"
+                    aria-label={`Удалить ${fileName}`}
                     onClick={(e) => handleRemove(idx, e)}
-                    className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-500/10 text-red-500 transition"
+                    className="relative z-20 flex-shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:[outline:auto] p-0.5 rounded hover:bg-red-500/10 text-red-500 transition"
                   >
                     <X className="w-3 h-3" />
                   </button>

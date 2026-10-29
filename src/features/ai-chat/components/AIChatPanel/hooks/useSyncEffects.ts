@@ -4,9 +4,11 @@
  */
 import { useEffect, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
-import { apiClient } from '@/shared/utils/apiClient';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import type { AIAgent } from '../../../types';
+import type { ConversationResponse } from '../../../hooks/conversationMessages.types';
+
+import type { ChatActions } from '../types';
 
 interface UseSyncEffectsParams {
   // Agent sync
@@ -23,7 +25,7 @@ interface UseSyncEffectsParams {
   setProcessingAgentName: (name: string) => void;
   // Mark as read on load
   userConversationId: number | null;
-  userConversationData: { id?: number; participants?: unknown[]; bound_table_id?: number | null; bound_row_id?: number | null } | null | undefined;
+  userConversationData: Pick<ConversationResponse, 'id' | 'participants' | 'bound_table_id' | 'bound_row_id'> | null | undefined;
   markAsRead: () => void;
   refetchUnread: () => void;
   // Default agent auto-select
@@ -43,7 +45,7 @@ interface UseSyncEffectsParams {
   // Pending task chat
   pendingTaskChat: { tableId: number; rowId: number; rowTitle?: string; conversationId: number; multi?: boolean; conversations?: Array<{ id: number }> } | null;
   clearPendingTaskChat: () => void;
-  setChatMode: (mode: string) => void;
+  setChatMode: ChatActions['setChatMode'];
   setBoundRows: (rows: Array<{ table_id: number; table_name: string; row_id: number; row_title: string }>) => void;
   setShowBoundRowsBar: (show: boolean) => void;
   setActivePanel: (panel: string) => void;
@@ -52,8 +54,6 @@ interface UseSyncEffectsParams {
   currentConversationId: number | null;
   // Participants restore
   setChatParticipants: (participants: Array<{ id: number; name: string; type: 'user' | 'agent' }>) => void;
-  userParticipantsCount: number;
-  aiParticipantsCount: number;
   // Processing timer
   processingStartedAt: number | null;
   setProcessingElapsed: (elapsed: number) => void;
@@ -69,7 +69,7 @@ export function useSyncEffects(params: UseSyncEffectsParams) {
     isMobile, chatPartner, setChatPartner, setUserConversationId,
     pendingTaskChat, clearPendingTaskChat, setChatMode, setBoundRows, setShowBoundRowsBar, setActivePanel,
     aiConversationData, currentConversationId,
-    setChatParticipants, userParticipantsCount, aiParticipantsCount,
+    setChatParticipants,
     processingStartedAt, setProcessingElapsed,
   } = params;
 
@@ -194,16 +194,18 @@ export function useSyncEffects(params: UseSyncEffectsParams) {
     }
   }, [chatPartner?.type, currentConversationId, userConversationId, aiConversationData, userConversationData]);
 
-  // Restore chatParticipants from conversation data
+  // Follow the active server snapshot, including changes within the same chat.
   useEffect(() => {
-    const convData = userConversationData || aiConversationData;
-    if (!convData?.participants || !Array.isArray(convData.participants)) return;
+    const isAgent = chatPartner?.type === 'agent';
+    const activeId = isAgent ? currentConversationId : userConversationId;
+    const convData = isAgent ? aiConversationData : userConversationData;
+    if (!activeId || convData?.id !== activeId || !convData.participants) return;
     const currentUserId = useAuthStore.getState().user?.id;
-    const otherParticipants = (convData.participants as Array<{ user_id: number; name: string; user_type?: string }>)
-      .filter(p => currentUserId && p.user_id !== Number(currentUserId))
+    const otherParticipants = convData.participants
+      .filter(p => p.user_id !== Number(currentUserId))
       .map(p => ({ id: p.user_id, name: p.name, type: (p.user_type === 'agent' ? 'agent' : 'user') as 'user' | 'agent' }));
-    if (otherParticipants.length > 0) setChatParticipants(otherParticipants);
-  }, [userConversationData?.id, aiConversationData?.id, userParticipantsCount, aiParticipantsCount]);
+    setChatParticipants(otherParticipants);
+  }, [chatPartner?.type, currentConversationId, userConversationId, userConversationData, aiConversationData, setChatParticipants]);
 
   // Focus input when opening
   // (Handled in main component since it needs inputRef)

@@ -229,16 +229,20 @@ export const FileBrowser = ({
           {filteredFiles.map((file) => (
             <div
               key={file.id}
-              onClick={() => {
-                if (onFileSelect) { onFileSelect(file); }
-                else if (canPreview(file)) { setPreviewFile(file); }
-              }}
               className={`
                 group relative rounded-xl border border-[var(--border-primary)] overflow-hidden
                 hover:border-[var(--color-primary-500)] hover:shadow-lg transition-all cursor-pointer
                 ${selectedFile?.id === file.id ? 'ring-2 ring-[var(--color-primary-500)]' : ''}
               `}
             >
+              {(onFileSelect || canPreview(file)) && (
+                <button
+                  type="button"
+                  aria-label={`${onFileSelect ? 'Выбрать' : 'Просмотр'} ${getFileName(file)}`}
+                  onClick={() => onFileSelect ? onFileSelect(file) : setPreviewFile(file)}
+                  className="absolute inset-0 z-10 rounded-xl focus-visible:[outline:auto] focus-visible:-outline-offset-2"
+                />
+              )}
               {/* Preview */}
               <div className="aspect-square bg-[var(--bg-tertiary)] flex items-center justify-center">
                 {isImage(file) ? (
@@ -263,7 +267,7 @@ export const FileBrowser = ({
               </div>
 
               {/* Hover actions */}
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+              <div className="absolute top-2 right-2 z-20 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex gap-1">
                 {canPreview(file) && (
                   <button
                     onClick={(e) => { e.stopPropagation(); setPreviewFile(file); }}
@@ -398,7 +402,7 @@ export const FileBrowser = ({
         {deleteConfirmFile && (
           <div>
             <p className="text-[var(--text-secondary)] mb-4">
-              Вы уверены, что хотите удалить файл "{getFileName(deleteConfirmFile)}"? Это действие нельзя отменить.
+              Вы уверены, что хотите удалить файл &quot;{getFileName(deleteConfirmFile)}&quot;? Это действие нельзя отменить.
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="secondary" onClick={() => setDeleteConfirmFile(null)}>

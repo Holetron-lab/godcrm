@@ -2,7 +2,7 @@
  * DetailsPanel - Shows details of focused/selected item with inline editing
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSpaceManagerStore, parseItemId } from '../../store/spaceManagerStore';
 import { useBatchOperations } from '../../hooks/useBatchOperations';
@@ -73,6 +73,10 @@ export const DetailsPanel = ({ spaceId, tree, onRefresh }: DetailsPanelProps) =>
   
   // Edit state
   const [isEditing, setIsEditing] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (isEditing) nameRef.current?.focus();
+  }, [isEditing]);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editIcon, setEditIcon] = useState('');
@@ -105,7 +109,7 @@ export const DetailsPanel = ({ spaceId, tree, onRefresh }: DetailsPanelProps) =>
       setEditDescription(String(data.description || ''));
       setEditIcon(String(focusedNode.icon || '📁'));
       // Get privacy for tables
-      const configPrivacy = (data.config as { privacy?: string })?.privacy;
+      const configPrivacy = (data.config as { privacy?: 'shared' | 'personal' | 'owner_admin' })?.privacy;
       setEditPrivacy((configPrivacy as 'shared' | 'personal' | 'owner_admin') || 'shared');
     }
   }, [focusedItem, focusedNode?.name]);
@@ -129,7 +133,7 @@ export const DetailsPanel = ({ spaceId, tree, onRefresh }: DetailsPanelProps) =>
   
   // Update table mutation
   const updateTableMutation = useMutation({
-    mutationFn: async (data: { id: number; displayName: string; description: string | null; icon: string; privacy?: string }) => {
+    mutationFn: async (data: { id: number; displayName: string; description: string | null; icon: string; privacy?: 'shared' | 'personal' | 'owner_admin' }) => {
       return tablesApi.updateTable(String(data.id), {
         displayName: data.displayName,
         description: data.description || undefined,
@@ -221,7 +225,7 @@ export const DetailsPanel = ({ spaceId, tree, onRefresh }: DetailsPanelProps) =>
       setEditName(focusedNode.name);
       setEditDescription(String(data.description || ''));
       setEditIcon(String(focusedNode.icon || '📁'));
-      const configPrivacy = (data.config as { privacy?: string })?.privacy;
+      const configPrivacy = (data.config as { privacy?: 'shared' | 'personal' | 'owner_admin' })?.privacy;
       setEditPrivacy((configPrivacy as 'shared' | 'personal' | 'owner_admin') || 'shared');
     }
     setIsEditing(false);
@@ -345,7 +349,8 @@ export const DetailsPanel = ({ spaceId, tree, onRefresh }: DetailsPanelProps) =>
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 className="font-medium text-sm text-[var(--text-primary)] bg-transparent border-b border-[var(--accent-primary)] focus:outline-none px-0 py-0.5 w-40"
-                autoFocus
+                ref={nameRef}
+                aria-label="Name"
               />
             ) : (
               <p className="font-medium text-sm text-[var(--text-primary)] truncate max-w-[180px]">
@@ -452,6 +457,7 @@ export const DetailsPanel = ({ spaceId, tree, onRefresh }: DetailsPanelProps) =>
                 variant="ghost"
                 size="sm"
                 onClick={handleCancel}
+                aria-label="Cancel"
                 disabled={isSaving}
                 className="h-7"
               >
@@ -475,6 +481,7 @@ export const DetailsPanel = ({ spaceId, tree, onRefresh }: DetailsPanelProps) =>
                 variant="ghost"
                 size="sm"
                 onClick={() => openDuplicateModal(focusedNode.id)}
+                aria-label="Duplicate"
                 className="gap-1 text-xs h-7"
               >
                 <Copy className="w-3.5 h-3.5" />
@@ -483,6 +490,7 @@ export const DetailsPanel = ({ spaceId, tree, onRefresh }: DetailsPanelProps) =>
                 variant="ghost"
                 size="sm"
                 onClick={() => openDeleteConfirm([focusedNode.id])}
+                aria-label="Delete"
                 className="gap-1 text-xs h-7 text-red-500 hover:text-red-400"
               >
                 <Trash2 className="w-3.5 h-3.5" />

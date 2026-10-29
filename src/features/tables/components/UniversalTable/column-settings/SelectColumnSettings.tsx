@@ -80,7 +80,7 @@ export const SelectColumnSettings: React.FC<ColumnSettingsProps> = ({
 
       {/* Вкладка Формула */}
       {optionsSubTab === 'formula' && (
-        <div className="space-y-3 p-3 border border-[var(--border-color)] rounded-lg">
+        <div className="space-y-3 p-3 border border-[var(--border-primary)] rounded-lg">
           <Input
             label="Формула для вычисления значения"
             placeholder="Например: CONCAT(name, '-', status)"

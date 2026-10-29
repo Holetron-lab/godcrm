@@ -6,8 +6,10 @@ import {
   guardMutation,
   useIsPublicReadOnly,
 } from '@/features/public/PublicViewContext';
+import { logger } from '@/shared/utils/logger';
+import type { RelationsMap } from '../utils/resolveLens';
 
-interface RowUpdateVariables {
+export interface RowUpdateVariables {
   rowId: string;
   columnId: string;
   value: unknown;
@@ -30,8 +32,44 @@ export const getPendingValue = (tableId: string, rowId: string, columnId: string
   return pendingUpdates.get(key)?.value;
 };
 
+/** True while a debounced edit for this cell has not reached the server yet. */
+export const hasPendingCellUpdate = (tableId: string, rowId: string, columnId: string): boolean =>
+  pendingUpdates.has(`${tableId}-${rowId}-${columnId}`);
+
 // Debounce delay - 1 second
 const DEBOUNCE_MS = 1000;
+
+interface ServerRowResponse {
+  row?: { id: string | number; data?: Record<string, unknown> } | null;
+  columns?: Array<{ id: string | number; column_name: string }>;
+  /** ADR-205 D2: lens entries for this row's keys, merged into the table map. */
+  relations?: RelationsMap;
+}
+
+/**
+ * Pull one row from the server and merge it into the store. Used after a cell
+ * save (so formulas / server-side defaults land in the same row at once) and by
+ * the live-sync stream (other users, agents, automations). Cells with an edit
+ * still in the debounce window keep their local value — the server copy would
+ * be older than what the user is typing.
+ */
+export const refreshRowFromServer = async (tableId: string, rowId: string): Promise<boolean> => {
+  const result = (await tablesApi.getRow(tableId, rowId, { includeRelations: true })) as ServerRowResponse | null;
+  if (!result?.row) return false;
+  if (result.relations) useTablesStore.getState().setRelations(tableId, result.relations, 'merge');
+  const columnNameById = new Map<string, string>();
+  for (const col of result.columns ?? []) columnNameById.set(String(col.id), col.column_name);
+  const data: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(result.row.data ?? {})) {
+    // Legacy rows keep numeric column ids as keys; the list endpoint maps them
+    // to column names and the grid expects the same shape.
+    const name = columnNameById.get(key) ?? key;
+    if (hasPendingCellUpdate(tableId, rowId, name)) continue;
+    data[name] = value;
+  }
+  useTablesStore.getState().updateRow(tableId, rowId, data);
+  return true;
+};
 
 export const useRowMutations = (tableId: string | null) => {
   const readOnly = useIsPublicReadOnly();
@@ -48,6 +86,13 @@ export const useRowMutations = (tableId: string | null) => {
       flashCellSuccess(rowId, columnId);
       // Invalidate after successful API call
       queryClient.invalidateQueries({ queryKey: ['inline-nested-table-rows'] });
+      // One cell went out, the whole row comes back: formulas and other
+      // server-computed columns of this row update without a page reload.
+      try {
+        await refreshRowFromServer(tId, rowId);
+      } catch (refreshError) {
+        logger.debug('[useRowMutations] row refresh after save failed', refreshError);
+      }
     } catch (error) {
       const err = error as Error & { code?: string; details?: Record<string, unknown> };
       // ADR-0011: intercept 409 VERIFICATION_REQUIRED / 403 VERIFICATION_IMMUTABLE

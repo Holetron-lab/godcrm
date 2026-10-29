@@ -61,18 +61,27 @@ export function InlineTicketRow({ ticketRef, indent }: { ticketRef: number | str
 
   return (
     <div
-      className="flex items-center gap-2 py-1 px-2 rounded text-xs hover:bg-[var(--bg-tertiary)] cursor-pointer border-l-2 border-blue-500/30 group"
+      className="relative flex items-center gap-2 py-1 px-2 rounded text-xs hover:bg-[var(--bg-tertiary)] cursor-pointer border-l-2 border-blue-500/30 group"
       style={{ marginLeft: indent }}
-      onClick={openTicketChat}
     >
       <span className="text-sm">{getTypeIcon(typeVal as number, types)}</span>
-      <span className="flex-1 truncate text-[var(--text-secondary)]">{titleVal || 'Без названия'}</span>
+      <span className="flex-1 truncate text-[var(--text-secondary)]">
+        <button
+          type="button"
+          onClick={openTicketChat}
+          aria-label={`Открыть чат тикета ${titleVal || `#${ticket.id}`}`}
+          className="text-left after:absolute after:inset-0 after:rounded focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-blue-500"
+        >
+          {titleVal || 'Без названия'}
+        </button>
+      </span>
       <span className={cn('px-1 py-0.5 rounded text-[9px]', getStateColor(stateVal as number, states))}>
         {getStateName(stateVal as number, states)}
       </span>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
         <MessageCircle className="w-3 h-3 text-blue-400 shrink-0" />
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             if (ticketConfig?.table_id) {
@@ -85,7 +94,7 @@ export function InlineTicketRow({ ticketRef, indent }: { ticketRef: number | str
               });
             }
           }}
-          className="p-0.5 rounded hover:bg-green-500/20"
+          className="relative z-10 p-0.5 rounded hover:bg-green-500/20"
           title="Прикрепить к сообщению"
         >
           <Paperclip className="w-3 h-3 text-green-400 shrink-0" />

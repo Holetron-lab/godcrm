@@ -228,6 +228,8 @@ export function DynamicFormRenderer({
           onChange={(value) => onChange(field.columnId, value)}
           disabled={isDisabled}
           showLabel={false}
+          multiline={column.type === 'text' && Boolean(field.expandable)}
+          rows={field.rows}
         />
 
         {/* Help Text (below field) */}
@@ -259,7 +261,7 @@ export function DynamicFormRenderer({
       .replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" class="text-[var(--color-primary-500)] hover:underline" target="_blank">$1</a>');
 
     return (
-      <div key={block.id} className="p-1.5" style={getWidthStyle(block.width || 'full')}>
+      <div key={block.id} className={`${getWidthClass(block.width || 'full')} p-1.5`}>
         <SafeHtml
           html={html || '<span class="text-[var(--text-tertiary)] italic">Пустой текстовый блок</span>'}
           className="p-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)]"

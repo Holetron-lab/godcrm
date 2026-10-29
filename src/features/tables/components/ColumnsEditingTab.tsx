@@ -4,14 +4,14 @@
  */
 
 import { logger } from '@/shared/utils/logger';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useImperativeHandle, type Ref } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
 import { useTableColumns } from '../hooks/useTableColumns';
 import { useAllTables } from '../hooks/useAllTables';
 import { tablesApi } from '../api/tablesApi';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { getColumnTypeOptionsForCSV } from '@/shared/types';
+import { COLUMN_TYPE_METADATA, getColumnTypeOptionsForCSV } from '@/shared/types';
 import type { ColumnModel, RowModel } from '../types/table.types';
 import { ColumnCard, DeleteColumnModal, KeyEditModal, setNestedValue } from './columns-editing';
 import { ColumnSettingsDrawer } from './UniversalTable/ColumnSettingsDrawer';
@@ -23,11 +23,17 @@ export interface ColumnsEditingTabProps {
   tableId: number | string;
   projectId?: number | null;
   isOpen: boolean;
+  /** Lets the host modal flush unsaved column edits from its own Save button. */
+  ref?: Ref<ColumnsEditingTabHandle>;
 }
 
-export const ColumnsEditingTab = ({ tableId, projectId, isOpen }: ColumnsEditingTabProps) => {
+export interface ColumnsEditingTabHandle {
+  savePendingEdits: () => Promise<void>;
+}
+
+export const ColumnsEditingTab = ({ tableId, projectId, isOpen, ref }: ColumnsEditingTabProps) => {
   const queryClient = useQueryClient();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   // Column editing state
   const [expandedColumns, setExpandedColumns] = useState<Set<string>>(new Set());
@@ -94,36 +100,40 @@ export const ColumnsEditingTab = ({ tableId, projectId, isOpen }: ColumnsEditing
   });
 
   // Save column edits (display name, config, type, etc.)
-  const saveColumnsMutation = useMutation({
-    mutationFn: async () => {
-      const entries = Object.entries(columnEdits);
-      if (entries.length === 0) return;
+  const savePendingEdits = useCallback(async () => {
+    const entries = Object.entries(columnEdits);
+    if (entries.length === 0) return;
 
-      for (const [colId, edits] of entries) {
-        const original = tableColumns.find(c => c.id === colId);
-        const payload: Record<string, unknown> = {};
+    for (const [colId, edits] of entries) {
+      const original = tableColumns.find(c => c.id === colId);
+      const payload: Record<string, unknown> = {};
 
-        for (const [key, value] of Object.entries(edits)) {
-          if (key.startsWith('config.')) {
-            const path = key.replace('config.', '').split('.');
-            payload.config = setNestedValue(
-              (payload.config as Record<string, unknown>) || (original?.config as Record<string, unknown>) || {},
-              path,
-              value
-            );
-          } else {
-            payload[key] = value;
-          }
+      for (const [key, value] of Object.entries(edits)) {
+        if (key.startsWith('config.')) {
+          const path = key.replace('config.', '').split('.');
+          payload.config = setNestedValue(
+            (payload.config as Record<string, unknown>) || (original?.config as Record<string, unknown>) || {},
+            path,
+            value
+          );
+        } else {
+          payload[key] = value;
         }
-
-        await tablesApi.updateColumn(String(tableId), colId, payload as Partial<ColumnModel>);
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['table-columns', tableId] });
-      refetchColumns();
-      setColumnEdits({});
-    },
+
+      await tablesApi.updateColumn(String(tableId), colId, payload as Partial<ColumnModel>);
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['table-columns', tableId] });
+    refetchColumns();
+    setColumnEdits({});
+  }, [columnEdits, tableColumns, tableId, queryClient, refetchColumns]);
+
+  // The modal footer Save used to close the dialog and silently drop these edits.
+  useImperativeHandle(ref, () => ({ savePendingEdits }), [savePendingEdits]);
+
+  const saveColumnsMutation = useMutation({
+    mutationFn: savePendingEdits,
     onError: (error: Error) => {
       logger.error('Failed to save column edits:', error);
       alert(`${t('tableEditing.errSaveChanges')}: ${error.message}`);
@@ -177,7 +187,7 @@ export const ColumnsEditingTab = ({ tableId, projectId, isOpen }: ColumnsEditing
   };
 
   // Column types - without emoji
-  const COLUMN_TYPES = useMemo(() => getColumnTypeOptionsForCSV('ru'), []);
+  const COLUMN_TYPES = useMemo(() => getColumnTypeOptionsForCSV(language), [language]);
 
   // Sort columns - visible first, hidden last
   const sortedColumns = useMemo(() => {
@@ -302,6 +312,11 @@ export const ColumnsEditingTab = ({ tableId, projectId, isOpen }: ColumnsEditing
           {sortedColumns.map((col) => {
             const editedCol = getEditedColumn(col);
             const colSamples = getSampleValues(col.name);
+            const meta = COLUMN_TYPE_METADATA[editedCol.type];
+            const columnTypes = COLUMN_TYPES.some(({ value }) => value === editedCol.type) ? COLUMN_TYPES : [
+              ...COLUMN_TYPES,
+              { value: editedCol.type, label: (language === 'en' ? meta?.labelEn : meta?.label) ?? editedCol.type, icon: meta?.emoji ?? '' }
+            ];
             return (
               <ColumnCard
                 key={col.id}
@@ -317,7 +332,7 @@ export const ColumnsEditingTab = ({ tableId, projectId, isOpen }: ColumnsEditing
                 onOpenSettings={() => setSettingsColumn(col as unknown as ColumnModel)}
                 keyEditable={!!editableKeys[col.id]}
                 onDelete={() => handleDeleteColumn(col as unknown as ColumnModel)}
-                columnTypes={COLUMN_TYPES}
+                columnTypes={columnTypes}
                 sampleValues={colSamples}
                 currentSampleIndex={sampleIndexes[col.id] || 0}
                 onSampleNavigate={(delta) => navigateSample(col.id, delta)}
@@ -378,8 +393,8 @@ export const ColumnsEditingTab = ({ tableId, projectId, isOpen }: ColumnsEditing
         onDelete={(columnId) => deleteColumnMutation.mutate(columnId)}
         saving={inlineSettingsMutation.isPending}
         deleting={deleteColumnMutation.isPending}
-        projectId={projectId ?? undefined}
-        tableId={tableId}
+        projectId={projectId != null ? Number(projectId) : undefined}
+        tableId={Number(tableId)}
         rows={drawerRows as unknown as RowModel[]}
         allColumns={tableColumns as ColumnModel[]}
       />

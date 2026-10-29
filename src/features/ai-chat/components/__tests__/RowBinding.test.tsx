@@ -4,7 +4,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RowBinding, BoundRow } from '../RowBinding';
 
@@ -88,7 +89,7 @@ describe('RowBinding', () => {
     
     renderComponent({ boundRows });
     
-    expect(screen.getByText('2 привязка(ок)')).toBeInTheDocument();
+    expect(screen.getByText('Привязок: 2')).toBeInTheDocument();
   });
 
   it('should display bound row titles', () => {
@@ -99,7 +100,7 @@ describe('RowBinding', () => {
     renderComponent({ boundRows });
     
     // Expand panel to see full list
-    fireEvent.click(screen.getByText('1 привязка(ок)'));
+    fireEvent.click(screen.getByText('Привязок: 1'));
     
     // Multiple elements with "Task 1" is expected (header preview + list)
     expect(screen.getAllByText('Task 1').length).toBeGreaterThanOrEqual(1);
@@ -171,7 +172,7 @@ describe('RowBinding', () => {
     
     renderComponent({ boundRows, spaceId: 1 });
     
-    fireEvent.click(screen.getByText('1 привязка(ок)'));
+    fireEvent.click(screen.getByText('Привязок: 1'));
     
     await waitFor(() => {
       expect(screen.getByText('Привязанные записи')).toBeInTheDocument();
@@ -195,7 +196,7 @@ describe('RowBinding', () => {
     
     renderComponent({ boundRows, spaceId: 1, defaultTableId: 10 });
     
-    fireEvent.click(screen.getByText('1 привязка(ок)'));
+    fireEvent.click(screen.getByText('Привязок: 1'));
     
     await waitFor(() => {
       const task1Buttons = screen.getAllByRole('button').filter(
@@ -215,7 +216,7 @@ describe('RowBinding', () => {
     
     renderComponent({ boundRows, maxBindings: 2, spaceId: 1 });
     
-    fireEvent.click(screen.getByText('2 привязка(ок)'));
+    fireEvent.click(screen.getByText('Привязок: 2'));
     
     expect(screen.getByText('Достигнут лимит привязок (2)')).toBeInTheDocument();
   });

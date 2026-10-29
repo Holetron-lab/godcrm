@@ -122,6 +122,7 @@ export const InlineNestedTable = ({
   useEffect(() => {
     if (tableData?.rows) {
       setLocalRows(tableData.rows.map((row, idx) => ({
+        ...row,
         id: row.id || `row_${idx}`,
         data: row.data || row,
       })));

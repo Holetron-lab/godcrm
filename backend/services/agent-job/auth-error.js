@@ -11,16 +11,25 @@
  */
 
 const AUTH_ERROR_PATTERNS = [
-  /Failed to authenticate\. API Error: 401/i,
-  /Invalid authentication credentials/i,
-  /authentication_error/i,
-  /invalid_api_key/i,
-  /OAuth token expired/i,
+  /^Failed to authenticate\. API Error: 401\b/i,
+  /^Invalid authentication credentials(?:[.:][^\r\n]*)?$/i,
+  /^authentication_error(?::[^\r\n]*)?$/i,
+  /^invalid_api_key(?::[^\r\n]*)?$/i,
+  /^OAuth token expired(?:[.:][^\r\n]*)?$/i,
 ];
 
 export function isAuthError(text) {
   if (typeof text !== 'string' || !text) return false;
-  return AUTH_ERROR_PATTERNS.some((re) => re.test(text));
+  // Match the CLI error envelope, not error names quoted in an agent's diagnosis.
+  const content = text.trim().replace(/^API Error: 401\s+/i, '');
+  if (AUTH_ERROR_PATTERNS.some((re) => re.test(content))) return true;
+  try {
+    const payload = JSON.parse(content);
+    return payload?.type === 'error' &&
+      ['authentication_error', 'invalid_api_key'].includes(payload.error?.type);
+  } catch {
+    return false;
+  }
 }
 
 /**

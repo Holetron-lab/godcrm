@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { Select } from '@/shared/components/ui';
 import { ColumnSettingsProps } from './types';
 
@@ -19,6 +19,7 @@ export const EmailColumnSettings: React.FC<ColumnSettingsProps> = ({
   setDraft,
   firstRow,
 }) => {
+  const fieldId = useId();
   const emailConfig = draft.config?.email || {};
 
   const updateConfig = (updates: Partial<typeof emailConfig>) => {
@@ -41,10 +42,10 @@ export const EmailColumnSettings: React.FC<ColumnSettingsProps> = ({
       </h4>
 
       {/* Формат отображения */}
-      <div>
-        <label className="block text-sm font-medium text-[var(--text-primary)] mb-2">
+      <div role="group" aria-labelledby={`${fieldId}-label-0`}>
+        <span id={`${fieldId}-label-0`} className="block text-sm font-medium text-[var(--text-primary)] mb-2">
           Формат отображения
-        </label>
+        </span>
         <div className="grid grid-cols-2 gap-2">
           {displayFormats.map(format => (
             <button
@@ -76,7 +77,7 @@ export const EmailColumnSettings: React.FC<ColumnSettingsProps> = ({
             onChange={(e) => updateConfig({ showMailtoButton: e.target.checked })}
             className="rounded border-[var(--border-primary)]"
           />
-          <span className="text-sm text-[var(--text-secondary)]">Показывать кнопку "Написать"</span>
+          <span className="text-sm text-[var(--text-secondary)]">Показывать кнопку &quot;Написать&quot;</span>
         </label>
 
         <label className="flex items-center gap-2 cursor-pointer">
@@ -99,9 +100,9 @@ export const EmailColumnSettings: React.FC<ColumnSettingsProps> = ({
           ) : emailConfig.displayFormat === 'domain' ? (
             <span className="text-sm text-[var(--text-primary)]">@example.com</span>
           ) : (
-            <a href="#" className="text-sm text-primary-500 hover:underline">
+            <span className="text-sm text-primary-500">
               {String(exampleEmail)}
-            </a>
+            </span>
           )}
           {emailConfig.showMailtoButton !== false && (
             <button className="p-1 rounded bg-primary-50 text-primary-500 text-xs">✉️</button>

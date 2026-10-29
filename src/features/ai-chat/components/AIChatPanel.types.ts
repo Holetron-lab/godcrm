@@ -6,6 +6,7 @@
 
 // Inbox conversation type (local to AIChatPanel render functions)
 export interface InboxConversation {
+  settings?: { description?: string; icon?: string } | string | null;
   id: number;
   title: string | null;
   type: string;
@@ -19,6 +20,7 @@ export interface InboxConversation {
     name: string;
     email?: string;
     avatar_url?: string;
+    user_type?: string;
   }>;
   sub_agents?: Array<{ row_id: number; name: string; icon?: string | null; response_mode?: string }>;
   // Ticket #81438: Enriched bound row fields from backend

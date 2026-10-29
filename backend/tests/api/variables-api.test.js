@@ -122,7 +122,8 @@ describe('API v3: Variables API (ADR-026)', () => {
     });
 
     test('should return 404 for non-existent space', async () => {
-      const res = await request(app).get('/api/v3/spaces/99999/variables');
+      const { id } = await dbGet("SELECT nextval(pg_get_serial_sequence('spaces', 'id')) AS id");
+      const res = await request(app).get(`/api/v3/spaces/${id}/variables`);
 
       expect(res.status).toBe(404);
       expect(res.body.success).toBe(false);
@@ -151,7 +152,8 @@ describe('API v3: Variables API (ADR-026)', () => {
     });
 
     test('should return 404 for non-existent space', async () => {
-      const res = await request(app).post('/api/v3/spaces/99999/variables/recalculate');
+      const { id } = await dbGet("SELECT nextval(pg_get_serial_sequence('spaces', 'id')) AS id");
+      const res = await request(app).post(`/api/v3/spaces/${id}/variables/recalculate`);
 
       expect(res.status).toBe(404);
       expect(res.body.success).toBe(false);

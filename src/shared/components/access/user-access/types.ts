@@ -10,6 +10,11 @@ export interface User {
   name: string;
   email: string;
   avatar?: string | null;
+  color?: string | null;
+  agent_color?: string | null;
+  agent_icon?: string | null;
+  user_type?: string;
+  managed_by_agent_table_id?: number | null;
 }
 
 export interface SpaceTable {
@@ -45,6 +50,10 @@ export interface UserTableRow {
   role: string | null;
   active: boolean;
   avatar: string | null;
+  color?: string | null;
+  agent_icon?: string | null;
+  user_type?: string;
+  managed_by_agent_table_id?: number | null;
   id: number | null;
   // Space level access arrays
   space_owner?: string[];

@@ -3,12 +3,14 @@
  * @see ADR-002: Widget System Architecture
  */
 
+import type { TicketBindingConfig } from './documents.types';
+
 export type WidgetType = 'preset' | 'custom';
 
 /**
  * Registry of preset keys contributed by autonomous modules (MODULE-CONTRACT
  * v1, seam #2). Core exposes it empty and never populates it; each module
- * augments it from inside its own directory (e.g. `<module>.preset.d.ts`) so its
+ * augments it from inside its own directory (e.g. `sc-sim.preset.d.ts`) so its
  * preset key is known to the type system without core naming the module. Delete
  * the module → its augmentation leaves → `keyof ModulePresetRegistry` is `never`
  * and the union below loses its member with no dangling literal.
@@ -31,6 +33,7 @@ export type PresetWidgetName =
   | 'timeline_widget'
   | 'data_sources'
   | 'ai_agents'
+  | 'agent_row'
   | 'documents'
   | 'documents_v4'
   | 'documents_legacy'
@@ -42,7 +45,7 @@ export type PresetWidgetName =
   | 'token_usage'
   | 'autopilot_dashboard'
   | 'pes_dashboard'
-  | '16neo'
+  | 'sc_sim'
   | 'tickets_list'
   | 'welcome_dashboard'
   // Autonomous-module presets plug in here via declaration merging on
@@ -81,10 +84,13 @@ export interface WidgetExternalAPI {
 }
 
 export interface WidgetConfig {
+  procurement?: { supplier_table_id: number };
   // Display options
   show_filters?: boolean; // Show/hide filter bar in dashboard widget
   
   // Data binding
+  workspace_id?: string | number;
+  emojiColumn?: string;
   table_id?: number | null;
   filters?: WidgetFilter[];
   visible_columns?: string[];
@@ -98,6 +104,14 @@ export interface WidgetConfig {
   // External API
   external_api?: WidgetExternalAPI;
 
+  // Numeric summary configuration.
+  aggregation?: 'count' | 'sum' | 'avg' | 'min' | 'max';
+  column?: string;
+  filter?: { column?: string; value?: unknown; values?: unknown[] };
+  prefix?: string;
+  suffix?: string;
+  compareWith?: string;
+
   // Chart specific
   chart_type?: 'bar' | 'line' | 'pie' | 'area' | 'scatter';
   x_column?: string;
@@ -105,10 +119,23 @@ export interface WidgetConfig {
   group_by?: string;
 
   // Kanban specific
+  category_options?: Array<{ value: string; label: string; color?: string; order?: number }>;
   group_by_column?: string;
   card_title_column?: string;
   card_subtitle_column?: string;
   
+  // Column mappings persisted by the settings editor and read by preset views.
+  card_columns?: string[];
+  statusColumn?: string;
+  titleColumn?: string;
+  descriptionColumn?: string;
+  status_column?: string;
+  completed_column?: string;
+  scheduled_date_column?: string;
+  due_date_column?: string;
+  color_column?: string;
+  ticket_binding?: TicketBindingConfig;
+
   // Kanban extended config (NEW)
   kanban?: KanbanConfig;
   
@@ -130,6 +157,7 @@ export interface WidgetConfig {
  * For creating kanban boards from table data
  */
 export interface KanbanConfig {
+  emojiColumn?: string;
   tableId: string;
   statusColumn: string;        // Column for lanes (status)
   titleColumn: string;         // Column for card title
@@ -195,6 +223,14 @@ export interface TimelineConfig {
   colorColumn?: string;        // Item color
   progressColumn?: string;     // Progress percentage (0-100)
   dependsOnColumn?: string;    // Dependencies (comma-separated IDs)
+  calendarProjectId?: string;
+  calendarTableId?: string;
+  calendarDateColumn?: string;
+  calendarTypeColumn?: string;
+  calendarTagsColumn?: string;
+  calendarNoteColumn?: string;
+  calendarBgColorColumn?: string;
+  calendarFontColorColumn?: string;
 }
 
 export type ModuleAccessLevel = 'admin' | 'member' | 'viewer';
@@ -205,6 +241,7 @@ export interface Widget {
   // Derived join fields from getWidgetById (dashboards.project_id / projects.space_id).
   // Present when a widget is fetched by id; null for dashboard-less widgets.
   project_id?: number | null;
+  space_id?: number | null;
   source_widget_id: number | null;
   widget_type: WidgetType;
   preset_name: PresetWidgetName | null;
@@ -311,7 +348,10 @@ export interface WidgetPresetsResponse {
 }
 
 // Generic type for widget data rows
-export type WidgetDataRow = Record<string, unknown>;
+export type WidgetDataRow = Record<string, unknown> & {
+  id?: string | number;
+  data?: Record<string, unknown>;
+};
 
 // Component Props Types
 

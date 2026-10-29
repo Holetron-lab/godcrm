@@ -61,19 +61,19 @@ export function ConfigureSyncStep({ config, onChange }: ConfigureSyncStepProps) 
           </label>
           <div className="grid grid-cols-2 gap-2">
             {intervalOptions.map((option) => (
-              <div
+              <button type="button" aria-pressed={config.interval_minutes === option.value}
                 key={option.value}
                 onClick={() => onChange({ ...config, interval_minutes: option.value })}
                 className={`
-                  p-3 border-2 rounded-lg cursor-pointer text-center transition-all
+                  w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 p-3 border-2 rounded-lg cursor-pointer text-center transition-all
                   ${config.interval_minutes === option.value
                     ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 text-primary-900 dark:text-primary-100'
                     : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                   }
                 `}
               >
-                <span className="text-sm font-medium">{option.label}</span>
-              </div>
+                <span className="block text-sm font-medium">{option.label}</span>
+              </button>
             ))}
           </div>
         </div>

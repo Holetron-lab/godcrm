@@ -19,6 +19,7 @@ export type ColumnType =
   | 'email'
   | 'url'
   | 'phone'
+  | 'date'      // Calendar date without time
   | 'datetime'  // Date and time (specific date)
   | 'time'      // Time-only (HH:MM) with optional day-of-month for schedules, cron format support
   | 'checkbox'
@@ -40,7 +41,9 @@ export type ColumnType =
   | 'json'     // ADR-0017: JSON viewer/editor (object or stringified payload)
   | 'long_text' // ADR-0041: long text with JSON auto-detect renderer
   | 'order'    // ADR-151: typed sort position (P0 integer, ascending; P1 fractional indexing)
-  | 'actor';   // ADR-151: typed provenance { source, actor_ref, at } — supersedes ADR-0009 created_by convention
+  | 'actor'    // ADR-151: typed provenance { source, actor_ref, at } — supersedes ADR-0009 created_by convention
+  | 'geo_point' // ADR-0035 Slice 1: point on the map { lat, lng, …meta }, parsed by shared/geo-point.js only
+  | 'address';  // ADR-0035-A: postal address { formatted, name?, …components } without coordinates, optionally linked to a geo_point column
 
 /**
  * ADR-151: allowed values for an `actor` cell's `source` field.
@@ -75,6 +78,7 @@ export const COLUMN_TYPE_METADATA: Record<ColumnType, {
   email: { label: 'Email', labelEn: 'Email', emoji: '✉️', description: 'Email адрес', descriptionEn: 'Email address' },
   url: { label: 'Ссылка', labelEn: 'URL', emoji: '🔗', description: 'URL адрес', descriptionEn: 'URL address' },
   phone: { label: 'Телефон', labelEn: 'Phone', emoji: '📞', description: 'Номер телефона', descriptionEn: 'Phone number' },
+  date: { label: 'Дата', labelEn: 'Date', emoji: '📅', description: 'Дата без времени', descriptionEn: 'Date without time' },
   datetime: { label: 'Дата и время', labelEn: 'Date & Time', emoji: '📅', description: 'Дата, дата+время, месяц, год, неделя, квартал', descriptionEn: 'Date, date+time, month, year, week, quarter' },
   time: { label: 'Время (крон)', labelEn: 'Time (cron)', emoji: '⏰', description: 'Расписание (HH:MM, день месяца)', descriptionEn: 'Schedule (HH:MM, day of month)' },
   checkbox: { label: 'Чекбокс', labelEn: 'Checkbox', emoji: '☑️', description: 'Да/Нет', descriptionEn: 'Yes/No' },
@@ -95,14 +99,17 @@ export const COLUMN_TYPE_METADATA: Record<ColumnType, {
   verification: { label: 'Верификация', labelEn: 'Verification', emoji: '🛡️', description: 'Подтверждение владения (ADR-0011)', descriptionEn: 'Multi-factor ownership verification (ADR-0011)' },
   json: { label: 'JSON', labelEn: 'JSON', emoji: '🧬', description: 'JSON-объект или строка', descriptionEn: 'JSON object or string' },
   order: { label: 'Порядок', labelEn: 'Order', emoji: '↕️', description: 'Позиция для ручной сортировки (ADR-151)', descriptionEn: 'Manual sort position (ADR-151)' },
-  actor: { label: 'Автор', labelEn: 'Actor', emoji: '🪪', description: 'Источник записи: кто/чем создано (ADR-151)', descriptionEn: 'Provenance: who/what created the row (ADR-151)' }
+  actor: { label: 'Автор', labelEn: 'Actor', emoji: '🪪', description: 'Источник записи: кто/чем создано (ADR-151)', descriptionEn: 'Provenance: who/what created the row (ADR-151)' },
+  // «Гео»: the two geo types sit next to each other in the (flat) picker.
+  geo_point: { label: 'Геоточка', labelEn: 'Geo point', emoji: '📍', description: 'Координаты lat, lng (ADR-0035)', descriptionEn: 'Coordinates lat, lng (ADR-0035)' },
+  address: { label: 'Адрес', labelEn: 'Address', emoji: '📮', description: 'Почтовый адрес, можно связать с Геоточкой (ADR-0035-A)', descriptionEn: 'Postal address, optionally linked to a Geo point (ADR-0035-A)' }
 };
 
 /**
  * Column types that should be hidden from UI selectors
  * These types are deprecated or handled via config (e.g., relation is config on select/multi-select)
  */
-const HIDDEN_COLUMN_TYPES: ColumnType[] = ['relation'];
+const HIDDEN_COLUMN_TYPES: ColumnType[] = ['relation', 'date', 'rollup'];
 
 /**
  * Helper function to get column type options for Select components

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * InputArea — Chat input with expandable toolbar.
  * ADR-119: Extracted from AIChatPanel.tsx JSX.
@@ -28,29 +29,32 @@ import type { FavoritesConfig, AttachTabId } from '../types';
 import type { ChatMessage } from '../../../types';
 import { ScheduleDatePicker } from './ScheduleDatePicker';
 import { QuoteChipStrip } from './QuoteChipStrip';
+import { ImageDraftAttachment } from './ImageDraftAttachment';
+import { AudioDraftAttachment } from './AudioDraftAttachment';
+import { RecordingWaveform } from './RecordingWaveform';
 
 /* ── Emoji data (Telegram-style categories) ───────────────── */
 const EMOJI_CATEGORIES = [
-  { label: 'Часто', icon: '🕐', emojis: ['👍', '❤️', '😂', '🔥', '👀', '✅', '🎉', '💯', '🤔', '😊', '👋', '🙏', '💪', '⭐', '🚀', '💡', '👏', '🤝', '💫', '✨'] },
-  { label: 'Лица', icon: '😀', emojis: ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🥴', '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐', '😤', '😡', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'] },
-  { label: 'Жесты', icon: '👋', emojis: ['👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '👶', '👧', '🧑', '👱'] },
-  { label: 'Животные', icon: '🐶', emojis: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🙈', '🙉', '🙊', '🐔', '🐧', '🐦', '🐤', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🪱', '🐛', '🦋', '🐌', '🐞', '🐜', '🪰', '🪲', '🪳', '🦟', '🦗', '🕷️', '🐢', '🐍', '🦎', '🦂', '🐠', '🐟', '🐡', '🐬', '🐳', '🐋', '🦈', '🐙', '🐚'] },
-  { label: 'Еда', icon: '🍔', emojis: ['🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🥐', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥩', '🍗', '🍖', '🌭', '🍔', '🍟', '🍕', '🫔', '🌮', '🌯', '🫕', '🥗', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🍙', '🍘'] },
-  { label: 'Символы', icon: '❤️', emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '⭐', '🌟', '✨', '💫', '🔥', '💥', '💢', '💦', '💨', '🕳️', '💣', '💬', '👁️‍🗨️', '🗨️', '🗯️', '💭', '❗', '❓', '❕', '❔', '‼️', '⁉️', '💤', '🎵', '🎶', '🔔', '📢', '📣', '💹', '🏷️'] },
-  { label: 'Путешествия', icon: '✈️', emojis: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🛵', '🏍️', '🚲', '🛴', '🛹', '🚁', '✈️', '🛩️', '🚀', '🛸', '🚢', '⛵', '🚤', '🛥️', '⛴️', '🏠', '🏡', '🏢', '🏣', '🏥', '🏦', '🏨', '🏩', '🏪', '🏫', '🏬', '🏭', '🏯', '🏰', '💒', '🗼', '🗽', '⛪', '🕌', '🛕', '🕍', '🗾', '🎑', '🏞️', '🌅', '🌄', '🌠', '🎇', '🎆', '🌇', '🌆'] },
-  { label: 'Предметы', icon: '💻', emojis: ['⌚', '📱', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', '🗜️', '💽', '💾', '💿', '📀', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️', '🧭', '⏱️', '⏲️', '⏰', '🕰️', '⌛', '📡', '🔋', '🔌', '💡', '🔦', '🕯️', '🪔', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', '💳', '🔑', '🗝️', '🔒', '🔓', '🔏', '🔐'] },
+  { label: 'aiChat.ui.frequent', icon: '🕐', emojis: ['👍', '❤️', '😂', '🔥', '👀', '✅', '🎉', '💯', '🤔', '😊', '👋', '🙏', '💪', '⭐', '🚀', '💡', '👏', '🤝', '💫', '✨'] },
+  { label: 'aiChat.ui.faces', icon: '😀', emojis: ['😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '😉', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '😐', '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🥴', '😵', '🤯', '🤠', '🥳', '🥸', '😎', '🤓', '🧐', '😤', '😡', '🤬', '😈', '👿', '💀', '☠️', '💩', '🤡', '👹', '👺', '👻', '👽', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'] },
+  { label: 'aiChat.ui.gestures', icon: '👋', emojis: ['👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🤟', '🤘', '🤙', '👈', '👉', '👆', '🖕', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '👐', '🤲', '🤝', '🙏', '✍️', '💅', '🤳', '💪', '🦾', '🦿', '🦵', '🦶', '👂', '🦻', '👃', '👶', '👧', '🧑', '👱'] },
+  { label: 'aiChat.ui.animals', icon: '🐶', emojis: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🙈', '🙉', '🙊', '🐔', '🐧', '🐦', '🐤', '🦆', '🦅', '🦉', '🦇', '🐺', '🐗', '🐴', '🦄', '🐝', '🪱', '🐛', '🦋', '🐌', '🐞', '🐜', '🪰', '🪲', '🪳', '🦟', '🦗', '🕷️', '🐢', '🐍', '🦎', '🦂', '🐠', '🐟', '🐡', '🐬', '🐳', '🐋', '🦈', '🐙', '🐚'] },
+  { label: 'aiChat.ui.food', icon: '🍔', emojis: ['🍏', '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🍆', '🥑', '🥦', '🥬', '🥒', '🌶️', '🫑', '🌽', '🥕', '🧄', '🧅', '🥔', '🍠', '🥐', '🍞', '🥖', '🥨', '🧀', '🥚', '🍳', '🧈', '🥞', '🧇', '🥩', '🍗', '🍖', '🌭', '🍔', '🍟', '🍕', '🫔', '🌮', '🌯', '🫕', '🥗', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🍙', '🍘'] },
+  { label: 'aiChat.ui.symbols', icon: '❤️', emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '⭐', '🌟', '✨', '💫', '🔥', '💥', '💢', '💦', '💨', '🕳️', '💣', '💬', '👁️‍🗨️', '🗨️', '🗯️', '💭', '❗', '❓', '❕', '❔', '‼️', '⁉️', '💤', '🎵', '🎶', '🔔', '📢', '📣', '💹', '🏷️'] },
+  { label: 'aiChat.ui.travel', icon: '✈️', emojis: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛', '🚜', '🛵', '🏍️', '🚲', '🛴', '🛹', '🚁', '✈️', '🛩️', '🚀', '🛸', '🚢', '⛵', '🚤', '🛥️', '⛴️', '🏠', '🏡', '🏢', '🏣', '🏥', '🏦', '🏨', '🏩', '🏪', '🏫', '🏬', '🏭', '🏯', '🏰', '💒', '🗼', '🗽', '⛪', '🕌', '🛕', '🕍', '🗾', '🎑', '🏞️', '🌅', '🌄', '🌠', '🎇', '🎆', '🌇', '🌆'] },
+  { label: 'aiChat.ui.objects', icon: '💻', emojis: ['⌚', '📱', '💻', '⌨️', '🖥️', '🖨️', '🖱️', '🖲️', '🕹️', '🗜️', '💽', '💾', '💿', '📀', '📷', '📸', '📹', '🎥', '📽️', '🎞️', '📞', '☎️', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️', '🧭', '⏱️', '⏲️', '⏰', '🕰️', '⌛', '📡', '🔋', '🔌', '💡', '🔦', '🕯️', '🪔', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', '💳', '🔑', '🗝️', '🔒', '🔓', '🔏', '🔐'] },
 ];
 
 /* ── Format helpers ────────────────────────────────────────── */
 type FormatAction = 'bold' | 'italic' | 'strike' | 'spoiler' | 'code' | 'codeblock';
 
 const FORMAT_WRAPPERS: Record<FormatAction, { prefix: string; suffix: string; placeholder: string; block?: boolean }> = {
-  bold:      { prefix: '**', suffix: '**', placeholder: 'Bold' },
-  italic:    { prefix: '*', suffix: '*', placeholder: 'Italic' },
-  strike:    { prefix: '~~', suffix: '~~', placeholder: 'Strike' },
-  spoiler:   { prefix: '||', suffix: '||', placeholder: 'Spoiler' },
-  code:      { prefix: '`', suffix: '`', placeholder: 'Code' },
-  codeblock: { prefix: '```\n', suffix: '\n```', placeholder: 'Code block', block: true },
+  bold:      { prefix: '**', suffix: '**', placeholder: 'aiChat.ui.bold' },
+  italic:    { prefix: '*', suffix: '*', placeholder: 'aiChat.ui.italic' },
+  strike:    { prefix: '~~', suffix: '~~', placeholder: 'aiChat.ui.strike' },
+  spoiler:   { prefix: '||', suffix: '||', placeholder: 'aiChat.ui.spoiler' },
+  code:      { prefix: '`', suffix: '`', placeholder: 'aiChat.ui.code' },
+  codeblock: { prefix: '```\n', suffix: '\n```', placeholder: 'aiChat.ui.codeBlock', block: true },
 };
 
 interface InputAreaProps {
@@ -90,9 +94,12 @@ interface InputAreaProps {
   setShowTerminal: (v: boolean | ((prev: boolean) => boolean)) => void;
   // Voice
   isRecording: boolean;
+  recordingDisabled?: boolean;
+  isSendingVoiceNote?: boolean;
   isTranscribing: boolean;
   voiceError: string | null | undefined;
   recordingDuration: number;
+  recordingStream?: MediaStream | null;
   startRecording: () => void;
   stopRecording: () => void;
   cancelRecording: () => void;
@@ -132,6 +139,7 @@ interface InputAreaProps {
 }
 
 export function InputArea(props: InputAreaProps) {
+  const { t, language } = useLanguage();
   const {
     inputValue, setInputValue, attachments, setAttachments, mentionedUsers, setMentionedUsers,
     messageBoundRows, setMessageBoundRows,
@@ -141,7 +149,7 @@ export function InputArea(props: InputAreaProps) {
     chatPartner, hasSlashCommand, thinkingEnabled, setThinkingEnabled,
     agentMode, setAgentMode, markdownEnabled, setMarkdownEnabled,
     showTerminal, setShowTerminal,
-    isRecording, isTranscribing, voiceError, recordingDuration,
+    isRecording, isTranscribing, voiceError, recordingDuration, recordingStream = null, recordingDisabled = false, isSendingVoiceNote = false,
     startRecording, stopRecording, cancelRecording,
     isLoading, isAgentProcessing, stopAgent, handleSubmit, handleFileSelect, fileInputRef,
     availableMentionUsers, availableSlashAgents,
@@ -209,7 +217,7 @@ export function InputArea(props: InputAreaProps) {
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
     const selected = inputValue.slice(start, end);
-    const fill = selected || placeholder;
+    const fill = selected || t(placeholder);
     const wrapped = `${prefix}${fill}${suffix}`;
     const newValue = inputValue.slice(0, start) + wrapped + inputValue.slice(end);
     setInputValue(newValue);
@@ -219,7 +227,7 @@ export function InputArea(props: InputAreaProps) {
       const cursorEnd = selected ? start + wrapped.length : start + prefix.length + fill.length;
       ta.setSelectionRange(cursorPos, cursorEnd);
     });
-  }, [inputValue, setInputValue]);
+  }, [inputValue, setInputValue, t]);
 
   /* ── Insert emoji at cursor ──────────────────────────────── */
   const insertEmoji = useCallback((emoji: string) => {
@@ -233,7 +241,7 @@ export function InputArea(props: InputAreaProps) {
       const newPos = pos + emoji.length;
       ta?.setSelectionRange(newPos, newPos);
     });
-  }, [inputValue, setInputValue]);
+  }, [inputValue, setInputValue, t]);
 
   /* ── Submit: schedule > move-source-guard > normal send.
        If the user has queued moves AND is still in the source chat, refuse
@@ -242,6 +250,7 @@ export function InputArea(props: InputAreaProps) {
        useEventHandlers prepends the move-quote block (like forward). ── */
   const handleActualSubmit = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
+    if (isRecording || isTranscribing) return;
     if (pendingScheduleDate && onScheduleMessage) {
       onScheduleMessage(pendingScheduleDate).then(() => {
         setPendingScheduleDate(null);
@@ -257,7 +266,7 @@ export function InputArea(props: InputAreaProps) {
       }
     }
     handleSubmit(e);
-  }, [pendingScheduleDate, onScheduleMessage, handleSubmit, moveMessages, currentConversationId, onMoveAttempt]);
+  }, [isRecording, isTranscribing, pendingScheduleDate, onScheduleMessage, handleSubmit, moveMessages, currentConversationId, onMoveAttempt]);
 
   if (panelMode === 'fullscreen') return null;
 
@@ -296,10 +305,10 @@ export function InputArea(props: InputAreaProps) {
     const isToday = d.toDateString() === now.toDateString();
     const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1);
     const isTomorrow = d.toDateString() === tomorrow.toDateString();
-    const time = d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
-    if (isToday) return `Сегодня ${time}`;
-    if (isTomorrow) return `Завтра ${time}`;
-    return d.toLocaleString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const time = d.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return t('aiChat.ui.todayAt', { time });
+    if (isTomorrow) return t('aiChat.ui.tomorrowAt', { time });
+    return d.toLocaleString(language, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
 
   const hasContent = inputValue.trim() || attachments.length > 0;
@@ -309,15 +318,19 @@ export function InputArea(props: InputAreaProps) {
       data-chat-input-area
       style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}>
 
+      {voiceError && <p role="alert" className="px-1 pb-2 text-xs text-red-400">{voiceError}</p>}
       {/* Attachments preview */}
       {attachments.length > 0 && (
         <div className="px-1 pb-1">
           <div className="flex flex-wrap gap-2">
-            {attachments.map((file, index) => (
+            {attachments.map((file, index) => file.type.startsWith('audio/') ? (
+              <AudioDraftAttachment key={`${file.name}-${file.lastModified}`} file={file}
+                onRemove={() => setAttachments(prev => prev.filter(item => item !== file))} />
+            ) : (
               <div key={index} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[var(--bg-tertiary)] text-xs">
-                {getFileIcon(file.type)}
+                {file.type.startsWith('image/') ? <ImageDraftAttachment file={file} /> : getFileIcon(file.type)}
                 <span className="max-w-[100px] truncate text-[var(--text-primary)]">{file.name}</span>
-                <button onClick={() => setAttachments(prev => prev.filter((_, i) => i !== index))}
+                <button type="button" aria-label={`${t('aiChat.ui.remove')} ${file.name}`} onClick={() => setAttachments(prev => prev.filter((_, i) => i !== index))}
                   className="text-[var(--text-tertiary)] hover:text-red-400 transition-colors">
                   <X className="w-3 h-3" />
                 </button>
@@ -337,20 +350,19 @@ export function InputArea(props: InputAreaProps) {
                 className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2',
                   attachTab === 'files' ? 'text-[var(--color-primary-500)] border-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)] border-transparent hover:text-[var(--text-primary)]')}>
                 <FolderOpen className="w-3.5 h-3.5" />
-                Файлы
-              </button>
+                {t('aiChat.ui.files')}</button>
               {tasksSource && (
                 <button onClick={() => setAttachTab('tickets')}
                   className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2',
                     attachTab === 'tickets' ? 'text-[var(--color-primary-500)] border-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)] border-transparent hover:text-[var(--text-primary)]')}>
-                  <ListTodo className="w-3.5 h-3.5" />{tasksSource.tableName || 'Тикеты'}
+                  <ListTodo className="w-3.5 h-3.5" />{tasksSource.tableName || t('aiChat.ui.tickets')}
                 </button>
               )}
               {favoritesConfig?.documents && (
                 <button onClick={() => setAttachTab('documents')}
                   className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2',
                     attachTab === 'documents' ? 'text-[var(--color-primary-500)] border-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)] border-transparent hover:text-[var(--text-primary)]')}>
-                  <FileText className="w-3.5 h-3.5" />{favoritesConfig.documents.tableName || 'Documents'}
+                  <FileText className="w-3.5 h-3.5" />{favoritesConfig.documents.tableName || t('aiChat.ui.documents')}
                 </button>
               )}
               {(favoritesConfig?.custom || []).map(c => {
@@ -366,13 +378,13 @@ export function InputArea(props: InputAreaProps) {
             </div>
             {/* ── Right-pinned: Другая таблица + Close (never scroll) ── */}
             <div className="flex items-center flex-shrink-0 border-l border-[var(--border-secondary)]">
-              <button onClick={() => setAttachTab('other')} title="Другая таблица"
+              <button onClick={() => setAttachTab('other')} title={t('aiChat.ui.otherTable')}
                 className={cn('flex items-center px-2 py-1.5 whitespace-nowrap transition-colors border-b-2 self-stretch',
                   attachTab === 'other' ? 'text-[var(--color-primary-500)] border-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)] border-transparent hover:text-[var(--text-primary)]')}>
                 <TableIcon className="w-3.5 h-3.5" />
               </button>
               <button onClick={() => { setShowFilePicker(false); setFilesSearch(''); }}
-                title="Закрыть"
+                title={t('aiChat.ui.close')}
                 className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors">
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -396,7 +408,7 @@ export function InputArea(props: InputAreaProps) {
                   <div className="flex items-center gap-2">
                     <div className="flex-1 relative">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-tertiary)]" />
-                      <input type="text" value={filesSearch} onChange={(e) => setFilesSearch(e.target.value)} placeholder="Поиск файлов..."
+                      <input type="text" value={filesSearch} onChange={(e) => setFilesSearch(e.target.value)} placeholder={t('aiChat.ui.searchFiles')}
                         className="w-full pl-8 pr-8 py-2 text-sm rounded-lg border border-[var(--border-primary)] bg-[var(--bg-tertiary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/30" />
                       {filesSearch && (
                         <button type="button" onClick={() => setFilesSearch('')}
@@ -407,7 +419,7 @@ export function InputArea(props: InputAreaProps) {
                       type="button"
                       onClick={() => sourceUploadInputRef.current?.click()}
                       disabled={isUploadingToSource}
-                      title={`Загрузить файл в «${filesSource.tableName}»`}
+                      title={t('aiChat.ui.uploadTo', { name: filesSource.tableName })}
                       className="p-2 rounded-lg transition-colors flex-shrink-0 border bg-[var(--bg-tertiary)] text-[var(--color-primary-500)] border-[var(--border-primary)] hover:bg-[var(--color-primary-500)]/10 disabled:opacity-50"
                     >
                       {isUploadingToSource
@@ -420,7 +432,7 @@ export function InputArea(props: InputAreaProps) {
                   {isLoadingFiles ? (
                     <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" /></div>
                   ) : projectFiles.length === 0 ? (
-                    <div className="py-4 text-center text-xs text-[var(--text-tertiary)]">Нет файлов</div>
+                    <div className="py-4 text-center text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.noFiles')}</div>
                   ) : (
                     projectFiles.filter(file => {
                       if (!filesSearch.trim()) return true;
@@ -452,7 +464,7 @@ export function InputArea(props: InputAreaProps) {
             ) : (
               <div className="p-3">
                 <div className="flex items-center gap-2 mb-2 text-xs text-[var(--text-tertiary)]">
-                  <FolderOpen className="w-3.5 h-3.5" /><span>Выберите источник</span>
+                  <FolderOpen className="w-3.5 h-3.5" /><span>{t('aiChat.ui.chooseSource')}</span>
                 </div>
                 <FilesSourceInlineSelector defaultSpaceId={effectiveSpaceId}
                   onSelect={(config) => updateFilesSource(config)}
@@ -534,7 +546,7 @@ export function InputArea(props: InputAreaProps) {
           <div className="mt-1 px-2 py-1 rounded border border-amber-500/40 bg-amber-500/10 text-[11px] text-amber-300 flex items-center gap-2">
             <ArrowRightLeft className="w-3 h-3 flex-shrink-0" />
             <span className="flex-1 truncate">
-              Перенос {moveMessages.length} сообщ. — выберите другой чат во входящих
+              {t('aiChat.ui.moveMessages', { count: moveMessages.length })}
             </span>
           </div>
         ) : null}
@@ -557,7 +569,7 @@ export function InputArea(props: InputAreaProps) {
       {/* ═══ Input Box ═══ */}
       <div className="bg-[var(--bg-tertiary)] rounded-xl border border-[var(--border-primary)] overflow-hidden">
         <form onSubmit={handleActualSubmit}>
-          <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" accept="image/*,.pdf,.txt,.md,.json,.csv" />
+          <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" />
 
           {/* ── Expandable Toolbar (ABOVE input) ── */}
           {showToolbar && (
@@ -565,18 +577,18 @@ export function InputArea(props: InputAreaProps) {
               <div className="flex items-center gap-0.5 flex-wrap rounded-lg bg-[var(--bg-secondary)]/60 px-1 py-0.5">
 
                 {/* ── Format group ── */}
-                <FmtBtn icon={<Bold className="w-3.5 h-3.5" />} label="Жирный **" action="bold" />
-                <FmtBtn icon={<Italic className="w-3.5 h-3.5" />} label="Курсив *" action="italic" />
-                <FmtBtn icon={<Strikethrough className="w-3.5 h-3.5" />} label="Зачёркнутый ~~" action="strike" />
-                <FmtBtn icon={<span className="text-[10px] font-bold leading-none">||</span>} label="Спойлер ||" action="spoiler" />
-                <FmtBtn icon={<Code className="w-3.5 h-3.5" />} label="Код `" action="code" />
-                <FmtBtn icon={<Type className="w-3.5 h-3.5" />} label="Блок кода ```" action="codeblock" />
+                <FmtBtn icon={<Bold className="w-3.5 h-3.5" />} label={t('aiChat.ui.boldHint')} action="bold" />
+                <FmtBtn icon={<Italic className="w-3.5 h-3.5" />} label={t('aiChat.ui.italicHint')} action="italic" />
+                <FmtBtn icon={<Strikethrough className="w-3.5 h-3.5" />} label={t('aiChat.ui.strikeHint')} action="strike" />
+                <FmtBtn icon={<span className="text-[10px] font-bold leading-none">||</span>} label={t('aiChat.ui.spoilerHint')} action="spoiler" />
+                <FmtBtn icon={<Code className="w-3.5 h-3.5" />} label={t('aiChat.ui.codeHint')} action="code" />
+                <FmtBtn icon={<Type className="w-3.5 h-3.5" />} label={t('aiChat.ui.codeBlockHint')} action="codeblock" />
 
                 {/* Divider */}
                 <div className="w-px h-4 bg-[var(--border-primary)] mx-0.5" />
 
                 {/* ── Emoji ── */}
-                <TBtn icon={<Smile className="w-3.5 h-3.5" />} label="Эмодзи"
+                <TBtn icon={<Smile className="w-3.5 h-3.5" />} label={t('aiChat.ui.emoji')}
                   active={showEmojiPicker}
                   onClick={() => { setShowEmojiPicker(prev => !prev); setShowFilePicker(false); }} />
 
@@ -584,12 +596,12 @@ export function InputArea(props: InputAreaProps) {
                 <div className="w-px h-4 bg-[var(--border-primary)] mx-0.5" />
 
                 {/* ── Files ── */}
-                <TBtn icon={<Paperclip className="w-3.5 h-3.5" />} label="Прикрепить файл"
+                <TBtn icon={<Paperclip className="w-3.5 h-3.5" />} label={t('aiChat.ui.attachFile')}
                   active={showFilePicker && attachTab === 'files'}
                   onClick={() => { setShowFilePicker(prev => attachTab === 'files' ? !prev : true); setAttachTab('files'); setShowEmojiPicker(false); }} />
 
                 {/* ── Rows (Tickets / Documents / Custom / Other) ── */}
-                <TBtn icon={<Link2 className="w-3.5 h-3.5" />} label="Прикрепить строку"
+                <TBtn icon={<Link2 className="w-3.5 h-3.5" />} label={t('aiChat.ui.attachRow')}
                   active={showFilePicker && attachTab !== 'files'} badge={messageBoundRows.length}
                   onClick={() => {
                     const isRowsTab = attachTab !== 'files';
@@ -621,7 +633,7 @@ export function InputArea(props: InputAreaProps) {
                 )}
 
                 {/* ── Schedule ── */}
-                <TBtn icon={<Clock className="w-3.5 h-3.5" />} label="Отложить сообщение"
+                <TBtn icon={<Clock className="w-3.5 h-3.5" />} label={t('aiChat.ui.scheduleMessage')}
                   active={showSchedulePicker || !!pendingScheduleDate}
                   onClick={() => { setShowSchedulePicker(prev => !prev); setShowEmojiPicker(false); }} />
               </div>
@@ -639,11 +651,11 @@ export function InputArea(props: InputAreaProps) {
                         ? 'text-[var(--color-primary-500)] border-[var(--color-primary-500)]'
                         : 'text-[var(--text-tertiary)] border-transparent hover:text-[var(--text-primary)]')}>
                     <span className="text-sm">{cat.icon}</span>
-                    <span className="text-[11px]">{cat.label}</span>
+                    <span className="text-[11px]">{t(cat.label)}</span>
                   </button>
                 ))}
                 <div className="flex-1" />
-                <button type="button" onClick={() => setShowEmojiPicker(false)}
+                <button type="button" onClick={() => setShowEmojiPicker(false)} aria-label={t('aiChat.ui.close')}
                   className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors flex-shrink-0">
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -661,6 +673,25 @@ export function InputArea(props: InputAreaProps) {
             </div>
           )}
 
+          {isRecording && (
+            <div className="mx-1.5 mt-1.5 flex items-center gap-2 rounded-lg bg-[var(--bg-secondary)]/60 px-2 py-0.5">
+              <span role="timer" className="shrink-0 text-xs text-red-700 dark:text-red-400 tabular-nums whitespace-nowrap">
+                {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+              </span>
+              <RecordingWaveform stream={recordingStream} />
+              <button type="button" onClick={stopRecording}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                title={t('aiChat.ui.stopAndSendVoiceNote')} aria-label={t('aiChat.ui.stopAndSendVoiceNote')}>
+                <Square className="w-3.5 h-3.5 fill-current" />
+              </button>
+              <button type="button" onClick={cancelRecording}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                title={t('aiChat.ui.cancelRecording')} aria-label={t('aiChat.ui.cancelRecording')}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* ── Input row: textarea left + buttons right ── */}
           <div className="flex items-end gap-1 px-1.5 pb-1.5 pt-1">
             {/* Left: textarea (flex-1) */}
@@ -670,7 +701,7 @@ export function InputArea(props: InputAreaProps) {
                 onSubmit={() => handleActualSubmit()}
                 onPasteFiles={onPasteFiles}
                 availableUsers={availableMentionUsers} availableAgents={availableSlashAgents}
-                placeholder={chatPartner?.type === 'agent' ? `Спросить ${chatPartner.name}...` : "Сообщение... (/ вызвать агента)"}
+                placeholder={chatPartner?.type === 'agent' ? t('aiChat.ui.askAgent', { name: chatPartner.name || '' }) : t('aiChat.ui.messagePlaceholder')}
                 disabled={isLoading} className="w-full"
                 inputClassName="px-2 py-1 bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] border-none focus:outline-none resize-none disabled:opacity-50 text-sm leading-5"
                 maxRows={4} />
@@ -692,7 +723,7 @@ export function InputArea(props: InputAreaProps) {
             <div className="grid grid-cols-2 gap-0.5 flex-shrink-0">
               <button type="button" onClick={() => fileInputRef.current?.click()}
                 className="p-1 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
-                title="Прикрепить файл">
+                title={t('aiChat.ui.attachFile')}>
                 <Paperclip className="w-4 h-4" />
               </button>
               <button type="button" onClick={() => { setShowToolbar(prev => !prev); setShowEmojiPicker(false); }}
@@ -701,18 +732,18 @@ export function InputArea(props: InputAreaProps) {
                   showToolbar
                     ? "text-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10 rotate-45"
                     : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
-                )} title={showToolbar ? "Скрыть панель" : "Инструменты"}>
+                )} title={showToolbar ? t('aiChat.ui.hideToolbar') : t('aiChat.ui.tools')}>
                 <Plus className="w-4 h-4 transition-transform duration-200" />
               </button>
 
               {isAgentProcessing ? (
-                <button type="button" onClick={stopAgent} className="p-1 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors" title="Стоп агент">
+                <button type="button" onClick={stopAgent} className="p-1 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors" title={t('aiChat.ui.stopAgentShort')}>
                   <Square className="w-4 h-4 fill-current" />
                 </button>
               ) : (
-                <button type="submit" disabled={isLoading || (!hasContent && !pendingScheduleDate && moveMessages.length === 0)}
+                <button type="submit" aria-label={t('aiChat.ui.send')} disabled={isLoading || isRecording || isTranscribing || (!hasContent && !pendingScheduleDate && moveMessages.length === 0)}
                   className={cn('p-1 rounded-lg transition-colors',
-                    isLoading || (!hasContent && !pendingScheduleDate && moveMessages.length === 0)
+                    isLoading || isRecording || isTranscribing || (!hasContent && !pendingScheduleDate && moveMessages.length === 0)
                       ? 'text-[var(--text-tertiary)] cursor-not-allowed'
                       : pendingScheduleDate
                         ? 'bg-amber-500 text-white hover:bg-amber-600'
@@ -721,27 +752,21 @@ export function InputArea(props: InputAreaProps) {
                 </button>
               )}
               {isRecording ? (
-                <div className="flex items-center gap-0.5">
-                  <span className="text-[9px] text-red-400 tabular-nums">
-                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                  </span>
-                  <button type="button" onClick={stopRecording} className="p-1 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors animate-pulse" title="Стоп">
-                    <Square className="w-4 h-4 fill-current" />
-                  </button>
-                </div>
+                <span className="flex h-6 w-6 items-center justify-center text-red-500" aria-hidden="true"><Mic className="h-4 w-4" /></span>
               ) : isTranscribing ? (
-                <button type="button" disabled className="p-1 rounded-lg text-[var(--text-tertiary)] cursor-wait" title="Транскрибирую...">
+                <button type="button" onClick={cancelRecording} disabled={isSendingVoiceNote} className="p-1 rounded-lg text-[var(--text-tertiary)]" title={t(isSendingVoiceNote ? 'aiChat.ui.sendingVoiceNote' : 'aiChat.ui.cancelTranscription')} aria-label={t(isSendingVoiceNote ? 'aiChat.ui.sendingVoiceNote' : 'aiChat.ui.cancelTranscription')}>
                   <Loader2 className="w-4 h-4 animate-spin" />
                 </button>
               ) : (
-                <button type="button" onClick={startRecording}
-                  className={cn("p-1 rounded-lg transition-colors", voiceError ? "text-red-400 hover:bg-red-500/10" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]")}
-                  title={voiceError || "Голосовой ввод"}>
+                <button type="button" onClick={startRecording} disabled={recordingDisabled}
+                  className={cn("p-1 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed", voiceError ? "text-red-400 hover:bg-red-500/10" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]")}
+                  title={t('aiChat.ui.recordVoice')} aria-label={t('aiChat.ui.recordVoice')}>
                   <Mic className="w-4 h-4" />
                 </button>
               )}
             </div>
           </div>
+
         </form>
       </div>
     </div>

@@ -2,11 +2,11 @@ import type { ColumnDefinitionInput } from '../../types/table.types';
 
 export const defaultColumns: ColumnDefinitionInput[] = [
   {
-    name: 'created_at',
-    displayName: 'Created',
-    type: 'date',
-    isReadonly: true,
+    name: 'date',
+    displayName: 'Date',
+    type: 'datetime',
     config: {
+      date: { mode: 'date' },
       appearance: {
         align: 'left',
         indicator: { type: 'emoji', value: '🕒' }

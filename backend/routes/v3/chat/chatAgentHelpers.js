@@ -170,7 +170,10 @@ async function findAiAgentByCommand(command, spaceId = null) {
     const agentData = safeJsonParse(row.data, {});
     if (!agentData.name || agentData.status === 'inactive') continue;
     const nameSlug = agentData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    if (nameSlug === command) {
+    // Bug 1552/228714: the row's own `slug` (e.g. developer-ralph, marketer)
+    // is what people type after `/`; the name-derived slug stays as fallback.
+    const explicitSlug = typeof agentData.slug === 'string' ? agentData.slug.trim().toLowerCase() : null;
+    if (nameSlug === command || explicitSlug === command) {
       apiLogger.info({ command, foundAgent: agentData.name, rowId: row.row_id }, 'Found AI Agent (exact match)');
       return {
         id: null,

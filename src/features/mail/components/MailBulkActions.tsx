@@ -1,13 +1,18 @@
-import { MailOpen, Mail, Archive, Star, Tag, Check, X } from 'lucide-react';
-import { Popover } from '@/shared/components/ui';
+import { MailOpen, Mail, Archive, Star, Tag, X, FolderInput, Folder } from 'lucide-react';
+import { DropdownMenu, Popover } from '@/shared/components/ui';
 import { cn } from '@/shared/utils/cn';
-import type { MailLabel } from '../types';
+import type { MailFolder, MailFolderId, MailLabel } from '../types';
+import { folderLabel } from './MailFolderRail';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 export interface MailBulkActionsProps {
   /** How many rows are checked — drives the counter and gating. */
   count: number;
   /** Space labels for the "＋ Ярлык" popover. */
   labels: MailLabel[];
+  /** All folders (system + user) for the "В папку" menu. */
+  folders: MailFolder[];
+  onMoveToFolder: (folderId: MailFolderId) => void;
   onMarkRead: () => void;
   onMarkUnread: () => void;
   onArchive: () => void;
@@ -28,6 +33,8 @@ export interface MailBulkActionsProps {
 export function MailBulkActions({
   count,
   labels,
+  folders,
+  onMoveToFolder,
   onMarkRead,
   onMarkUnread,
   onArchive,
@@ -35,31 +42,54 @@ export function MailBulkActions({
   onTagLabel,
   onClear,
 }: MailBulkActionsProps) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-shrink-0 items-center gap-0.5">
       <button
         type="button"
-        aria-label="Снять выделение"
-        title="Снять выделение"
+        aria-label={t('mail.bulk.clear')}
+        title={t('mail.bulk.clear')}
         onClick={onClear}
         className="rounded-md p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
       >
         <X size={16} />
       </button>
       <span className="mr-1 whitespace-nowrap text-xs font-medium text-[var(--text-secondary)]">
-        {count} выбр.
+        {t('mail.bulk.selected', { count })}
       </span>
 
-      <BulkButton label="Пометить прочитанными" onClick={onMarkRead}>
+      <BulkButton label={t('mail.bulk.markRead')} onClick={onMarkRead}>
         <MailOpen size={16} />
       </BulkButton>
-      <BulkButton label="Пометить непрочитанными" onClick={onMarkUnread}>
+      <BulkButton label={t('mail.bulk.markUnread')} onClick={onMarkUnread}>
         <Mail size={16} />
       </BulkButton>
-      <BulkButton label="В архив" onClick={onArchive}>
+      <BulkButton label={t('mail.list.archive')} onClick={onArchive}>
         <Archive size={16} />
       </BulkButton>
-      <BulkButton label="В избранное" onClick={onStar}>
+      {/* Move the selection to any folder (system or user — Spam, …). */}
+      {folders.length > 0 && (
+        <DropdownMenu
+          align="end"
+          items={folders.map((f) => ({
+            label: folderLabel(f, t),
+            value: String(f.id),
+            icon: <Folder size={14} />,
+            onSelect: () => onMoveToFolder(f.id),
+          }))}
+          trigger={
+            <button
+              type="button"
+              aria-label={t('mail.list.moveToFolder')}
+              title={t('mail.list.moveToFolder')}
+              className="rounded-md p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
+            >
+              <FolderInput size={16} />
+            </button>
+          }
+        />
+      )}
+      <BulkButton label={t('mail.list.star')} onClick={onStar}>
         <Star size={16} />
       </BulkButton>
 
@@ -69,8 +99,8 @@ export function MailBulkActions({
           trigger={
             <button
               type="button"
-              aria-label="Добавить ярлык"
-              title="Добавить ярлык"
+              aria-label={t('mail.bulk.addLabel')}
+              title={t('mail.bulk.addLabel')}
               className="rounded-md p-1.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
             >
               <Tag size={16} />

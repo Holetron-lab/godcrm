@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * BindableRowsList — two-line row cards for header panels (Tickets, Documents,
  * Favourites). Visual parity with the attach/bind row picker (RowList) so the
@@ -21,7 +22,7 @@
  *     parse for tableId, alias-based column resolution for sparse configs.
  */
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Loader2, MessageSquare, Paperclip, Pencil, Link2, Table as TableIcon, Settings2, Maximize2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, MessageSquare, Paperclip, Pencil, Eye, Link2, Table as TableIcon, Settings2, Maximize2, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { apiClient } from '@/shared/utils/apiClient';
 import { logger } from '@/shared/utils/logger';
@@ -67,6 +68,8 @@ export interface BindableRowsListProps {
   hasMore?: boolean;
   isLoadingMore?: boolean;
   onLoadMore?: () => void;
+  /** Documents open their content viewer instead of the generic row card. */
+  onViewRow?: (row: BindableRow) => void;
   /** Current chat the user is in. Drives "bind this chat?" branch. */
   currentConversationId: number | null;
   /** Current chat's bound row ref, used to know if it's "free" to be bound. */
@@ -124,6 +127,7 @@ export function BindableRowsList({
   hasMore,
   isLoadingMore,
   onLoadMore,
+  onViewRow,
   currentConversationId,
   currentBoundRowId,
   selectConversation,
@@ -137,7 +141,8 @@ export function BindableRowsList({
   panelMode,
   onTogglePanelMode,
 }: BindableRowsListProps) {
-  const [editorRow, setEditorRow] = useState<{ tableId: number; rowId: number } | null>(null);
+  const { t } = useLanguage();
+  const [editorRow, setEditorRow] = useState<{ tableId: number; rowId: number; mode: 'view' | 'edit' } | null>(null);
   const [pendingPrompt, setPendingPrompt] = useState<{ id: number; title: string } | null>(null);
 
   const { map: rowChats, refetch } = useRowBoundChats(source.tableId);
@@ -338,7 +343,7 @@ export function BindableRowsList({
             <Loader2 className="w-5 h-5 animate-spin text-[var(--text-tertiary)]" />
           </div>
         ) : rows.length === 0 ? (
-          <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">Нет записей</div>
+          <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{t('kanban.noRecords')}</div>
         ) : (
           <>
             {rows.map(row => {
@@ -397,7 +402,8 @@ export function BindableRowsList({
                   stripe={stripe}
                   chat={chat}
                   onOpen={() => handleRowClick(row.id, title)}
-                  onEdit={() => setEditorRow({ tableId: source.tableId, rowId: row.id })}
+                  onView={() => onViewRow ? onViewRow(row) : setEditorRow({ tableId: source.tableId, rowId: row.id, mode: 'view' })}
+                  onEdit={() => setEditorRow({ tableId: source.tableId, rowId: row.id, mode: 'edit' })}
                   onAttach={onAttachToMessage ? () => onAttachToMessage({
                     table_id: source.tableId,
                     row_id: row.id,
@@ -408,7 +414,7 @@ export function BindableRowsList({
                   onBind={currentConversationId ? () => {
                     if (currentBoundRowId) {
                       // eslint-disable-next-line no-alert
-                      if (!window.confirm('У этого чата уже есть привязанная строка. Заменить?')) return;
+                      if (!window.confirm(t('aiChat.ui.thisChatAlreadyHasALinkedRowReplaceIt'))) return;
                     }
                     void bindCurrentChatToRow(row.id, title);
                   } : undefined}
@@ -423,7 +429,7 @@ export function BindableRowsList({
                   disabled={isLoadingMore}
                   className="w-full py-2 text-xs text-[var(--color-primary-500)] hover:bg-[var(--bg-tertiary)] rounded transition-colors disabled:opacity-50"
                 >
-                  {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Загрузить ещё'}
+                  {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : t('aiChat.ui.loadMore')}
                 </button>
               </div>
             )}
@@ -447,7 +453,7 @@ export function BindableRowsList({
             <button
               type="button"
               onClick={onChangeSource}
-              title="Сменить источник"
+              title={t('aiChat.ui.changeSource')}
               className="p-1 rounded hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
             >
               <Settings2 className="w-3 h-3" />
@@ -457,7 +463,7 @@ export function BindableRowsList({
             <button
               type="button"
               onClick={onTogglePanelMode}
-              title={panelMode === 'fullscreen' ? 'Свернуть' : 'Развернуть'}
+              title={panelMode === 'fullscreen' ? t('aiChat.ui.collapse') : t('aiChat.ui.expand')}
               className="p-1 rounded hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]"
             >
               {panelMode === 'fullscreen' ? <ChevronDown className="w-3 h-3" /> :
@@ -480,7 +486,7 @@ export function BindableRowsList({
       {editorRow && (
         <RowViewerModal
           isOpen
-          mode="view"
+          mode={editorRow.mode}
           tableId={editorRow.tableId}
           rowId={editorRow.rowId}
           onClose={() => setEditorRow(null)}
@@ -501,6 +507,7 @@ interface BindableRowCardProps {
   stripe?: string;
   chat?: { conversationId: number; msgCount: number; unread: number };
   onOpen: () => void;
+  onView: () => void;
   onEdit: () => void;
   onAttach?: () => void;
   onBind?: () => void;
@@ -508,8 +515,9 @@ interface BindableRowCardProps {
 
 function BindableRowCard({
   title, emoji, desc, status, priority, category, hasMeta, stripe, chat,
-  onOpen, onEdit, onAttach, onBind,
+  onOpen, onView, onEdit, onAttach, onBind,
 }: BindableRowCardProps) {
+  const { t } = useLanguage();
   // Two-row card. Row 1: emoji + title (clickable, opens chat).
   // Row 2: pills + description (clickable) + per-row toolbar (right-aligned,
   // independent buttons). Toolbar lives in row 2 so the card stays at exactly
@@ -523,7 +531,7 @@ function BindableRowCard({
         type="button"
         onClick={onOpen}
         className="w-full flex items-center gap-2 text-left"
-        title={chat ? `Открыть чат (${chat.msgCount})` : 'Открыть/создать чат'}
+        title={chat ? t('aiChat.ui.openChatCount', { count: chat.msgCount }) : t('aiChat.ui.openOrCreateChat')}
       >
         <span className="flex-shrink-0 leading-none">
           {emoji
@@ -537,7 +545,7 @@ function BindableRowCard({
           type="button"
           onClick={onOpen}
           className="flex-1 min-w-0 flex items-center gap-1 text-left"
-          title={chat ? `Открыть чат (${chat.msgCount})` : 'Открыть/создать чат'}
+          title={chat ? t('aiChat.ui.openChatCount', { count: chat.msgCount }) : t('aiChat.ui.openOrCreateChat')}
         >
           {hasMeta ? (
             <>
@@ -556,21 +564,26 @@ function BindableRowCard({
         </button>
         <div className="flex items-center gap-px flex-shrink-0 opacity-70 group-hover:opacity-100 transition-opacity">
           <RowToolbarBtn
+            icon={<Eye className="w-3 h-3" />}
+            title={t('aiChat.ui.view')}
+            onClick={onView}
+          />
+          <RowToolbarBtn
             icon={<Pencil className="w-3 h-3" />}
-            title="Редактировать"
+            title={t('dashboardPage.edit')}
             onClick={onEdit}
           />
           {onAttach && (
             <RowToolbarBtn
               icon={<Paperclip className="w-3 h-3" />}
-              title="Прикрепить к сообщению"
+              title={t('rowActions.attachToMessage')}
               onClick={onAttach}
             />
           )}
           {onBind && (
             <RowToolbarBtn
               icon={<Link2 className="w-3 h-3" />}
-              title="Привязать текущий чат"
+              title={t('aiChat.ui.linkCurrentChat')}
               onClick={onBind}
             />
           )}
@@ -583,8 +596,8 @@ function BindableRowCard({
                 ? 'text-[var(--color-primary-400)] hover:bg-[var(--color-primary-500)]/15'
                 : 'text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'
             )}
-            title={chat ? `Открыть чат (${chat.msgCount} сообщений)` : 'Открыть/создать чат'}
-            aria-label={chat ? 'Открыть чат' : 'Создать чат'}
+            title={chat ? t('aiChat.ui.openChatMessages', { count: chat.msgCount }) : t('aiChat.ui.openOrCreateChat')}
+            aria-label={chat ? t('rowActions.openChat') : t('aiChat.ui.createChat')}
           >
             <MessageSquare className="w-3 h-3" />
             {chat && chat.msgCount > 0 && <span>{chat.msgCount}</span>}
@@ -604,7 +617,8 @@ function RowToolbarBtn({ icon, title, onClick }: { icon: React.ReactNode; title:
       type="button"
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       title={title}
-      className="inline-flex items-center justify-center w-5 h-5 rounded text-[var(--text-secondary)] hover:text-[var(--color-primary-400)] hover:bg-[var(--bg-secondary)] transition-colors"
+      aria-label={title}
+      className="inline-flex items-center justify-center w-6 h-6 rounded focus-visible:ring-2 text-[var(--text-secondary)] hover:text-[var(--color-primary-400)] hover:bg-[var(--bg-secondary)] transition-colors"
     >
       {icon}
     </button>

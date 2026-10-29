@@ -556,7 +556,7 @@ function VectorColumnDetails() {
               <p className="text-sm text-[var(--text-secondary)]">
                 Текст, добавляемый перед формулой. Используется для контекста.
               </p>
-              <code className="text-xs bg-[var(--bg-primary)] text-emerald-400 px-2 py-1 rounded">"Товар: "</code>
+              <code className="text-xs bg-[var(--bg-primary)] text-emerald-400 px-2 py-1 rounded">&quot;Товар: &quot;</code>
             </div>
 
             <div>
@@ -567,7 +567,7 @@ function VectorColumnDetails() {
               <p className="text-sm text-[var(--text-secondary)]">
                 Текст, добавляемый после формулы.
               </p>
-              <code className="text-xs bg-[var(--bg-primary)] text-emerald-400 px-2 py-1 rounded">" (в наличии)"</code>
+              <code className="text-xs bg-[var(--bg-primary)] text-emerald-400 px-2 py-1 rounded">&quot; (в наличии)&quot;</code>
             </div>
           </div>
         </div>
@@ -575,8 +575,8 @@ function VectorColumnDetails() {
         <div className="mt-4 p-4 bg-primary-500/10 border border-primary-500/30 rounded-lg">
           <h4 className="font-medium text-[var(--text-primary)] mb-2">💡 Пример: Поиск товаров</h4>
           <p className="text-sm text-[var(--text-secondary)] mb-3">
-            Пользователь ищет "синие джинсы мужские". Система найдёт товары с похожим смыслом,
-            даже если слова отличаются: "Брюки деним navy для мужчин".
+            Пользователь ищет &quot;синие джинсы мужские&quot;. Система найдёт товары с похожим смыслом,
+            даже если слова отличаются: &quot;Брюки деним navy для мужчин&quot;.
           </p>
           <div className="flex items-center gap-2 text-xs">
             <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded">Запрос</span>
@@ -647,7 +647,7 @@ function ColumnActionsSection() {
               Скрытие/Показ
             </h4>
             <p className="text-sm text-[var(--text-secondary)]">
-              Правая кнопка на заголовке → Скрыть колонку. Восстановить через меню "Скрытые колонки"
+              Правая кнопка на заголовке → Скрыть колонку. Восстановить через меню &quot;Скрытые колонки&quot;
             </p>
           </div>
 

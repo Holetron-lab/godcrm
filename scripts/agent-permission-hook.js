@@ -31,6 +31,13 @@
  * and they're enforced before the network call. The server-side resolver
  * also keeps an audit trail of every decision — denials remain visible.
  *
+ * Fail-CLOSED mode (opt-in per spawn): AGENT_PERMS_FAIL_CLOSED=1 in the child
+ * env turns every degraded path above (bad stdin, no token, resolver
+ * unreachable / non-2xx / timeout, uncaught error) into a deny. Set by the
+ * launcher for runs whose agent must never gain a tool through an outage —
+ * Neo16 NPC turns (backend/modules/neo16/learning/agentRun.js) are the first.
+ * Fleet workers keep the documented fail-open default.
+ *
  * AGENT_ID / SPACE_ID context: cli-providers.js Phase C3 will set them as
  * env vars when spawning claude. Until C3 lands, both are null and the
  * resolver falls through to global-scope rules only (which is fine — the
@@ -48,7 +55,51 @@ const TOKEN = process.env.AGENT_PERMS_TOKEN || '';
 const AGENT_ID = process.env.AGENT_ID ? Number(process.env.AGENT_ID) : null;
 const SPACE_ID = process.env.SPACE_ID ? Number(process.env.SPACE_ID) : null;
 
+// Which CLI is calling us. cli-providers.js sets AGENT_HOOK_DIALECT=codex when
+// it spawns `codex exec`; unset (or anything else) means Claude Code.
+//
+// Codex CLI 0.153.x implements the same PreToolUse wire contract, with one
+// asymmetry probed on this box (2026-09-07, gpt-6-astra, --approve-for-me):
+//   deny  → honoured verbatim for BOTH shell (tool_name "Bash") and MCP tools
+//           ("mcp__godcrm__*"): "Tool call blocked by PreToolUse hook: <reason>"
+//   allow → NOT understood. Codex logs "PreToolUse Failed" and falls through
+//           to its own approval flow, i.e. our explicit allow degrades to
+//           fail-open noise on every single tool call.
+//   empty stdout → "PreToolUse Completed", tool proceeds. This is the clean
+//           way to say "no objection" to Codex.
+// Kimi Code 2.3.x supports the same deny JSON and silent allow. Never gate this
+// shared hook on KIMI_CRM_MANAGED: Claude/Codex do not set that Kimi-only marker.
+const DIALECT = (process.env.AGENT_HOOK_DIALECT || 'claude').toLowerCase();
+const FAIL_CLOSED = /^(1|true|yes)$/i.test(process.env.AGENT_PERMS_FAIL_CLOSED || '');
+
+/** A degraded path: allow by default (fleet), deny when the launcher asked for fail-closed. */
+function degraded(reason) {
+  return emit(FAIL_CLOSED ? 'deny' : 'allow', `hook: ${reason} — ${FAIL_CLOSED ? 'fail-closed' : 'fail-open'}`);
+}
+
 function emit(decision, reason) {
+  if (DIALECT === 'codex' || DIALECT === 'kimi') {
+    if (decision === 'allow') {
+      // Silence = approved. Emitting the allow JSON here would make Codex log
+      // "PreToolUse Failed" for every call and hide real hook breakage.
+      process.exit(0);
+    }
+    // 'ask' has no meaning in a headless run — there is no human to ask, and
+    // Codex would treat the unknown decision as a hook failure and proceed.
+    // Deny it explicitly so an "ask" rule cannot silently become an allow.
+    const codexReason = decision === 'ask'
+      ? `${reason || 'policy requires approval'} (ask → deny: headless ${DIALECT} run, no approver)`
+      : (reason || '');
+    process.stdout.write(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'deny',
+        permissionDecisionReason: codexReason,
+      },
+    }));
+    process.exit(0);
+  }
+
   // Claude Code hook output schema (PreToolUse).
   const out = {
     hookSpecificOutput: {
@@ -114,7 +165,7 @@ async function main() {
     input = JSON.parse(raw);
   } catch {
     logStderr('bad stdin JSON', { rawLen: raw.length });
-    return emit('allow', 'hook: bad stdin — fail-open');
+    return degraded('bad stdin');
   }
 
   const toolName = String(input.tool_name || '');
@@ -128,13 +179,14 @@ async function main() {
 
   // 2. DB rules via local server.
   if (!TOKEN) {
-    // No token in env → can't even authenticate to local server. fail-open.
-    return emit('allow', 'hook: AGENT_PERMS_TOKEN unset — fail-open');
+    // No token in env → can't even authenticate to local server.
+    return degraded('AGENT_PERMS_TOKEN unset');
   }
 
   const resp = await postCheck({
     tool_name: toolName,
     tool_input: toolInput,
+    cwd: input.cwd || process.cwd(),
     agent_id: AGENT_ID,
     space_id: SPACE_ID,
     session_id: input.session_id || null, // ADR-0181: per-loop holder identity for write-reservations
@@ -142,7 +194,7 @@ async function main() {
   });
 
   if (!resp || !resp.decision) {
-    return emit('allow', 'hook: resolver unreachable — fail-open');
+    return degraded('resolver unreachable');
   }
 
   return emit(resp.decision, resp.reason || '');
@@ -150,6 +202,6 @@ async function main() {
 
 main().catch((err) => {
   logStderr('hook crashed', { err: String(err?.message || err), stack: err?.stack });
-  // Never let an uncaught crash become a deny.
-  emit('allow', 'hook: uncaught error — fail-open');
+  // Fleet default: a crash must not become a deny. Fail-closed launchers get the deny.
+  degraded('uncaught error');
 });

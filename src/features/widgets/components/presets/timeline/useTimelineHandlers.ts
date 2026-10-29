@@ -1,23 +1,24 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
 import {
   format, addDays, addHours, addMinutes, addWeeks, addMonths as addMonthsFn,
   startOfMonth, startOfWeek, startOfDay, startOfHour, parseISO, differenceInDays
 } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import type { TimelineItem, TimeScale, DragState, StepSize } from './types';
+import type { TimelineItem, TimeScale, DragState, StepSize, TimelineWidgetProps } from './types';
 
 interface UseTimelineHandlersParams {
   timeScale: TimeScale;
   viewStartDate: Date;
   setViewStartDate: React.Dispatch<React.SetStateAction<Date>>;
   totalUnits: number;
-  timelineRef: React.RefObject<HTMLDivElement | null>;
+  timelineRef: React.RefObject<HTMLDivElement>;
   startDateColumn: string;
   endDateColumn: string | undefined;
   dependencyColumn: string | undefined;
   displayItems: TimelineItem[];
   onEventUpdate?: (eventId: string, field: string, value: unknown) => void;
+  onEventSave?: TimelineWidgetProps['onEventSave'];
   edgesMode: boolean;
   getPositionForDate: (date: Date) => number;
   currentTime: Date;
@@ -34,10 +35,38 @@ export function useTimelineHandlers({
   dependencyColumn,
   displayItems,
   onEventUpdate,
+  onEventSave,
   edgesMode,
   getPositionForDate,
   currentTime,
 }: UseTimelineHandlersParams) {
+  const saving = useRef(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const saveDates = useCallback(async (item: TimelineItem, start: Date, end: Date, type: DragState['type']) => {
+    if (!onEventSave || saving.current) return;
+    const serialize = (date: Date, column: string) => {
+      const original = item.row.data?.[column] ?? item.row[column];
+      return typeof original === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(original)
+        ? format(date, 'yyyy-MM-dd') : date.toISOString();
+    };
+    const fields: Record<string, unknown> = {};
+    if (type !== 'resize-end') fields[startDateColumn] = serialize(start, startDateColumn);
+    if (type !== 'resize-start' && endDateColumn) fields[endDateColumn] = serialize(end, endDateColumn);
+    saving.current = true;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onEventSave(item.id, fields);
+    } catch {
+      setSaveError('Не удалось сохранить даты. Повторите перемещение.');
+    } finally {
+      saving.current = false;
+      setIsSaving(false);
+    }
+  }, [onEventSave, startDateColumn, endDateColumn]);
+
   // Drag state
   const [dragState, setDragState] = useState<DragState>({
     type: null, item: null, startX: 0, originalStart: new Date(), originalEnd: new Date()
@@ -128,17 +157,17 @@ export function useTimelineHandlers({
 
   // Drag handlers
   const handleMouseDown = useCallback((e: React.MouseEvent, item: TimelineItem, type: 'move' | 'resize-start' | 'resize-end') => {
-    if (!onEventUpdate) return;
+    if (!onEventSave || saving.current || edgesMode) return;
     e.preventDefault();
     e.stopPropagation();
     setDragState({
       type,
-      item,
+      item: { ...item },
       startX: e.clientX,
       originalStart: item.startDate,
       originalEnd: item.endDate
     });
-  }, [onEventUpdate]);
+  }, [onEventSave, edgesMode]);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!dragState.type || !dragState.item || !timelineRef.current) return;
@@ -177,19 +206,20 @@ export function useTimelineHandlers({
   }, [dragState, timeScale, totalUnits, timelineRef]);
 
   const handleMouseUp = useCallback(() => {
-    if (dragState.type && dragState.item && onEventUpdate) {
+    if (dragState.type && dragState.item) {
       const item = dragState.item;
-      if (dragState.type === 'move' || dragState.type === 'resize-start') {
-        onEventUpdate(item.id, startDateColumn, format(item.startDate, 'yyyy-MM-dd'));
-      }
-      if (dragState.type === 'move' || dragState.type === 'resize-end') {
-        if (endDateColumn) {
-          onEventUpdate(item.id, endDateColumn, format(item.endDate, 'yyyy-MM-dd'));
-        }
-      }
+      void saveDates(item, item.startDate, item.endDate, dragState.type);
     }
     setDragState({ type: null, item: null, startX: 0, originalStart: new Date(), originalEnd: new Date() });
-  }, [dragState, onEventUpdate, startDateColumn, endDateColumn]);
+  }, [dragState, saveDates]);
+
+  const handleKeyboardUpdate = (item: TimelineItem, type: 'move' | 'resize-start' | 'resize-end', direction: -1 | 1) => {
+    if (!onEventSave || saving.current || edgesMode) return;
+    const start = type === 'resize-end' ? item.startDate : addDays(item.startDate, direction);
+    const end = type === 'resize-start' ? item.endDate : addDays(item.endDate, direction);
+    if (type !== 'move' && start >= end) return;
+    return saveDates(item, start, end, type);
+  };
 
   // Handle edge connection click
   const handleEdgeClick = useCallback((itemId: string, side: 'left' | 'right') => {
@@ -357,9 +387,12 @@ export function useTimelineHandlers({
   }, []);
 
   return {
+    isSaving,
+    saveError,
     // Drag
     dragState,
     handleMouseDown,
+    handleKeyboardUpdate,
     // Edge connections
     connectingFrom,
     setConnectingFrom,

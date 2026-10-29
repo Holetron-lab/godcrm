@@ -12,6 +12,7 @@
  */
 
 import { useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { Loader2, Trash2, Download, Settings, MessageCircle, Paperclip } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
@@ -58,13 +59,14 @@ export function DocumentTileView({
 }: DocumentTileViewProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
   const { t } = useLanguage();
 
   const hasAnyAction = !!(onChat || onAttach || onDownload || onSettings || onConfirmDelete);
 
   return (
+    <Dialog.Root open={showDeleteConfirm} onOpenChange={open => { if (!isDeleting) { setShowDeleteConfirm(open); setDeleteError(false); } }}>
     <div
-      onClick={onClick}
       className={cn(
         'relative bg-white dark:bg-gray-900 rounded-lg shadow-lg',
         'border border-gray-200 dark:border-gray-700',
@@ -81,7 +83,12 @@ export function DocumentTileView({
         <div className="flex items-center gap-3">
           <span className="text-2xl flex-shrink-0">{doc.icon || '📄'}</span>
           <h3 className="font-medium text-base truncate text-gray-900 dark:text-gray-100 flex-1">
-            {doc.name}
+            {onClick ? (
+              <button type="button" onClick={onClick} aria-label={`Открыть документ ${doc.name}`}
+                className="text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-blue-500">
+                {doc.name}
+              </button>
+            ) : doc.name}
           </h3>
         </div>
       </div>
@@ -100,7 +107,7 @@ export function DocumentTileView({
           {isLoadingPreview ? (
             <span className="italic text-gray-400">{t('documents.tilePreviewLoading')}</span>
           ) : preview ? (
-            <div className="line-clamp-8 prose prose-xs dark:prose-invert max-w-none">
+            <div className="relative z-10 pointer-events-none [&_a]:pointer-events-auto [&_button]:pointer-events-auto line-clamp-8 prose prose-xs dark:prose-invert max-w-none">
               <MarkdownPreview content={preview} />
             </div>
           ) : (
@@ -110,7 +117,7 @@ export function DocumentTileView({
       </div>
 
       {/* Footer */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+      <div className="absolute z-10 bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
         <div className="px-4 py-2.5 flex items-center gap-2">
           {doc.category && (
             <span className="px-2 py-0.5 rounded text-[10px] bg-blue-500/10 text-blue-500 dark:bg-blue-500/20 dark:text-blue-400">
@@ -120,6 +127,7 @@ export function DocumentTileView({
 
           {onStatusChange ? (
             <select
+              aria-label="Статус документа"
               value={currentStatus?.id ?? ''}
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => {
@@ -155,9 +163,10 @@ export function DocumentTileView({
           <div className="flex-1" />
 
           {hasAnyAction && (
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
               {onChat && (
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); onChat(); }}
                   className="p-1.5 rounded bg-blue-500/80 text-white hover:bg-blue-600 transition-colors"
                   title="Открыть чат"
@@ -167,6 +176,7 @@ export function DocumentTileView({
               )}
               {onAttach && (
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); onAttach(); }}
                   className="p-1.5 rounded bg-green-500/80 text-white hover:bg-green-600 transition-colors"
                   title="Прикрепить к сообщению"
@@ -176,6 +186,7 @@ export function DocumentTileView({
               )}
               {onDownload && (
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); onDownload(); }}
                   className="p-1.5 rounded bg-blue-500/80 text-white hover:bg-blue-600 transition-colors"
                   title="Скачать Markdown"
@@ -185,6 +196,7 @@ export function DocumentTileView({
               )}
               {onSettings && (
                 <button
+                  type="button"
                   onClick={(e) => { e.stopPropagation(); onSettings(); }}
                   className="p-1.5 rounded bg-gray-500/80 text-white hover:bg-gray-600 transition-colors"
                   title="Редактировать документ"
@@ -193,13 +205,16 @@ export function DocumentTileView({
                 </button>
               )}
               {onConfirmDelete && (
+                <Dialog.Trigger asChild>
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }}
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
                   className="p-1.5 rounded bg-red-500/80 text-white hover:bg-red-600 transition-colors"
                   title="Удалить документ"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
+                </Dialog.Trigger>
               )}
             </div>
           )}
@@ -208,30 +223,29 @@ export function DocumentTileView({
 
       {/* Delete confirmation */}
       {showDeleteConfirm && onConfirmDelete && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}
-        >
-          <div
-            className="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-primary)] shadow-2xl p-6 max-w-md mx-4"
-            onClick={(e) => e.stopPropagation()}
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+          <Dialog.Content
+            className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-primary)] shadow-2xl p-6 max-w-md"
           >
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
                 <Trash2 className="w-5 h-5 text-red-500" />
               </div>
               <div>
-                <h3 className="font-semibold text-lg">Удалить документ?</h3>
-                <p className="text-sm text-[var(--text-secondary)]">Это действие нельзя отменить</p>
+                <Dialog.Title className="font-semibold text-lg">Удалить документ?</Dialog.Title>
+                <Dialog.Description className="text-sm text-[var(--text-secondary)]">Это действие нельзя отменить</Dialog.Description>
               </div>
             </div>
 
             <p className="text-sm text-[var(--text-secondary)] mb-4">
-              Документ <strong>"{doc.name}"</strong> и все его содержимое будут удалены безвозвратно.
+              Документ <strong>&quot;{doc.name}&quot;</strong> и все его содержимое будут удалены безвозвратно.
             </p>
 
+            {deleteError && <p role="alert" className="text-sm text-red-500 mb-4">Не удалось удалить документ. Попробуйте ещё раз.</p>}
             <div className="flex items-center justify-end gap-3">
               <button
+                type="button"
                 onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}
                 className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 disabled={isDeleting}
@@ -239,12 +253,16 @@ export function DocumentTileView({
                 Отмена
               </button>
               <button
+                type="button"
                 onClick={async (e) => {
                   e.stopPropagation();
                   setIsDeleting(true);
+                  setDeleteError(false);
                   try {
                     await onConfirmDelete();
                     setShowDeleteConfirm(false);
+                  } catch {
+                    setDeleteError(true);
                   } finally {
                     setIsDeleting(false);
                   }
@@ -265,13 +283,14 @@ export function DocumentTileView({
                 )}
               </button>
             </div>
-          </div>
-        </div>
+          </Dialog.Content>
+        </Dialog.Portal>
       )}
 
       {/* Paper stack effect */}
       <div className="absolute -bottom-1 left-1 right-1 h-1 bg-gray-100 dark:bg-gray-800 rounded-b-lg -z-10 opacity-60" />
       <div className="absolute -bottom-2 left-2 right-2 h-1 bg-gray-100 dark:bg-gray-800 rounded-b-lg -z-20 opacity-30" />
     </div>
+    </Dialog.Root>
   );
 }

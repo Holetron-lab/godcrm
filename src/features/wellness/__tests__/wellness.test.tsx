@@ -24,9 +24,11 @@ const createWrapper = () => {
       queries: { retry: false },
     },
   });
-  return ({ children }: { children: React.ReactNode }) => (
+  return function QueryWrapper({ children }: { children: React.ReactNode }) {
+    return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
+  };
 };
 
 // =============================================================================

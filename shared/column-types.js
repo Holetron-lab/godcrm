@@ -63,7 +63,27 @@ export const COLUMN_TYPES = Object.freeze(/** @type {const} */ ([
   'verification',
   // ADR-151 — typed sort position + provenance
   'order', 'actor',
+  // ADR-204 Stage 2 — unified media (`content`: gallery | audio mode) and
+  // unified contact (`contact`: external | linked). New canonical keys only:
+  // image/audio and email/phone/user are deliberately NOT aliases of them —
+  // switching a column needs a value adapter (backend/services/column-adapters/),
+  // not a spelling rewrite. The DB CHECK admits them from migration 104.
+  'content', 'contact',
+  // ADR-0035 Slice 1 — a point on the map: `{lat, lng, …}` JSONB inside
+  // `table_rows.data` (S1.1), parsed/formatted by shared/geo-point.js only.
+  // The DB CHECK admits it from migration 105.
+  'geo_point',
+  // ADR-0035-A — postal address WITHOUT coordinates: `{formatted, name?, …}`
+  // JSONB inside `table_rows.data`, optionally linked to a `geo_point` column
+  // of the same table via `config.address.geo_column_id`. Normalized by
+  // backend/services/geo/address.js. The DB CHECK admits it from migration 106.
+  'address',
 ]));
+
+/** ADR-204: `content` item kinds and column modes; `contact` linked sources. */
+export const CONTENT_KINDS = Object.freeze(/** @type {const} */ (['image', 'video', 'audio']));
+export const CONTENT_MODES = Object.freeze(/** @type {const} */ (['gallery', 'audio']));
+export const CONTACT_SOURCES = Object.freeze(/** @type {const} */ (['system', 'table']));
 
 /**
  * Alias → canonical. Aliases stay permanently admissible (ADR-0041 P0 intent:

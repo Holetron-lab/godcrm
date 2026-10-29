@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
 
@@ -26,6 +27,7 @@ export const AgentChainDivider: React.FC<AgentChainDividerProps> = ({
   agentColor,
   nextTurnId,
 }) => {
+  const { t } = useLanguage();
   const color = agentColor || FALLBACK_COLOR;
 
   const handleScrollToNext = useCallback(() => {
@@ -55,7 +57,7 @@ export const AgentChainDivider: React.FC<AgentChainDividerProps> = ({
       >
         <span>{agentIcon || '\uD83E\uDD16'}</span>
         <span className="font-medium">{agentName}</span>
-        <span className="text-[var(--text-tertiary)]">continues below</span>
+        <span className="text-[var(--text-tertiary)]">{t('aiChat.ui.continuesBelow')}</span>
         <ChevronDown
           className="w-3 h-3 opacity-0 group-hover/divider:opacity-100 transition-opacity"
           style={{ color }}

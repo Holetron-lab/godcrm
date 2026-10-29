@@ -153,7 +153,10 @@ export async function getMessageCount(conversationId) {
       : 'SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?',
     [conversationId]
   );
-  return result?.count || 0;
+  // pg returns COUNT/SUM as a bigint string ('15', not 15). The JSDoc above
+  // promises a number, and `total - summarized - keepRecent` only happened to
+  // work because `-` coerces; anything using `+` or === would not.
+  return Number(result?.count ?? 0) || 0;
 }
 
 /**
@@ -168,7 +171,8 @@ export async function getSummarizedMessageCount(conversationId) {
       : 'SELECT COALESCE(SUM(messages_count), 0) as count FROM conversation_summaries WHERE conversation_id = ?',
     [conversationId]
   );
-  return result?.count || 0;
+  // See getMessageCount — SUM() also arrives as a string from pg.
+  return Number(result?.count ?? 0) || 0;
 }
 
 /**

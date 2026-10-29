@@ -2,12 +2,22 @@
 // Mirrors the planned `mail_messages` row shape so slice 2 can swap mock data
 // for `/api/v3` over the real table without touching the presentational panes.
 
-export type MailFolderId = 'inbox' | 'sent' | 'drafts' | 'archive' | 'trash';
+/** Folders the server always has; `archive` is seeded per space but renamable. */
+export type MailSystemFolderId = 'inbox' | 'sent' | 'drafts' | 'archive' | 'trash';
+/**
+ * A folder key: a system id or a user folder key issued by the server
+ * (`f<id>`, see `mailApi.userFolders`). The `string & NonNullable<unknown>`
+ * intersection keeps autocompletion for the system ids while allowing any
+ * server-issued key.
+ */
+export type MailFolderId = MailSystemFolderId | (string & NonNullable<unknown>);
 
 export interface MailFolder {
   id: MailFolderId;
   label: string;
   unread?: number;
+  /** `false` for user folders (renamable/deletable — Archive, Spam, …). */
+  system?: boolean;
 }
 
 export interface MailMessage {
@@ -29,6 +39,11 @@ export interface MailMessage {
   read: boolean;
   /** Bookmark/flag (backend `starred`). Toggled from the list row. */
   starred?: boolean;
+  /**
+   * ISO-8601 — set server-side when a reply to this message is sent
+   * (`/send` with `in_reply_to_id`). Drives the "Отвечено" mark under the checkbox.
+   */
+  repliedAt?: string | null;
   /** ADR-158 §P5 — attachment metadata (no bytes); [] when none. */
   attachments?: MailAttachmentMeta[];
   /**
@@ -154,6 +169,13 @@ export interface MailAttachmentMeta {
   contentType: string;
   /** Decoded size in bytes. */
   size: number;
+  /**
+   * Once the sync has saved the bytes into the space's files (`files` row),
+   * the file id + its `/uploads/...` url ride here; the UI prefers `url` and
+   * falls back to the per-index attachment endpoint for rows synced earlier.
+   */
+  fileId?: string | null;
+  url?: string | null;
 }
 
 /**

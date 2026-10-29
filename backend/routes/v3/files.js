@@ -26,6 +26,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { resolveUploadScope } from '../../services/file-upload-scope.js';
 import { dbAll, dbGet, dbRun } from '../../database/connection.js';
 import { fileLogger } from '../../utils/logger.js';
 import { success, created, notFound, badRequest, forbidden, error } from '../../utils/response.js';
@@ -91,64 +92,14 @@ const storage = multer.diskStorage({
   }
 });
 
-// File filter - allow common file types
-// SEC-3: Removed image/svg+xml and text/html to prevent XSS attacks
-const fileFilter = (req, file, cb) => {
-  const allowedMimes = [
-    // Images (NO SVG - XSS risk)
-    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-    'image/heic', 'image/heif',
-    // Documents
-    'application/pdf',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'application/vnd.oasis.opendocument.text',
-    'application/vnd.oasis.opendocument.spreadsheet',
-    // Ebooks
-    'application/epub+zip', 'application/x-mobipocket-ebook',
-    // Text (NO HTML - XSS risk)
-    'text/plain', 'text/csv', 'text/markdown',
-    // Archives
-    'application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed',
-    // Mobile apps
-    'application/vnd.android.package-archive', 'application/octet-stream',
-    // Code (text/css and text/javascript are safe as they're served as downloads)
-    'application/json', 'application/xml', 'text/javascript', 'text/css',
-    // 3D models
-    'model/stl', 'application/sla', 'application/vnd.ms-pki.stl',
-    'model/gltf-binary', 'model/gltf+json', 'application/octet-stream',
-    'model/obj', 'model/fbx'
-  ];
-  
-  if (allowedMimes.includes(file.mimetype)) {
-    return cb(null, true);
-  }
-
-  // ADR-194 B2: do NOT throw here. A thrown fileFilter error aborts multer on the
-  // FIRST bad file, so the response could only ever name one of them. Collect every
-  // rejection on the request instead; the route handler turns a non-empty list into
-  // a 400 that names them all. All-or-nothing is preserved there, not here — nothing
-  // is written to the DB when anything was rejected.
-  (req.rejectedFiles ||= []).push({
-    name: file.originalname,
-    type: file.mimetype,
-    reason: 'type_not_allowed'
-  });
-  fileLogger.warn(
-    { name: file.originalname, mimetype: file.mimetype, userId: req.user?.id },
-    'Upload rejected: MIME type not allowed'
-  );
-  cb(null, false);
-};
-
+// General attachments accept every MIME type. Browser-supplied MIME is metadata,
+// not an execution policy: uploadStatic restricts which formats can render inline.
 // Multer upload middleware
 const upload = multer({
   storage,
-  fileFilter,
+  // Browsers send the multipart filename as raw UTF-8 bytes; busboy's default
+  // param charset is latin1, which turned every Cyrillic name into "Ð¿Ð»Ð°Ð³".
+  defParamCharset: 'utf8',
   limits: {
     fileSize: 100 * 1024 * 1024, // 100MB max (temporarily raised for APK upload)
     files: 10 // Max 10 files at once
@@ -188,8 +139,15 @@ const UPLOAD_VISIBILITY_VALUES = ['private', 'internal', 'public'];
 
 router.post('/files/upload', upload.array('files', 10), async (req, res) => {
   try {
-    const { projectId, tableId, rowId, columnId, description } = req.body;
-    const spaceId = req.body.spaceId || req.body.space_id || req.query.spaceId || req.query.space_id || null;
+    const { description } = req.body;
+    const rawSpaceId = req.body.spaceId || req.body.space_id || req.query.spaceId || req.query.space_id || null;
+    const scope = await resolveUploadScope({ ...req.body, spaceId: rawSpaceId }, req.user);
+    if (scope.error) {
+      for (const file of req.files || []) fs.rmSync(file.path, { force: true });
+      return scope.status === 403 ? forbidden(res, scope.error) : badRequest(res, scope.error);
+    }
+    const { projectId, tableId, rowId, columnId } = scope;
+    const spaceId = rawSpaceId || scope.spaceId || null;
     const userId = req.user?.id || null;
 
     // ADR-0016 §Phase 5: accept visibility from body or query. Default is
@@ -208,28 +166,6 @@ router.post('/files/upload', upload.array('files', 10), async (req, res) => {
     const visibility = rawVisibility || 'internal';
 
     fileLogger.debug({ spaceId, projectId, userId, visibility }, 'Upload request received');
-
-    // ADR-194 B2: all-or-nothing, but loud. Anything rejected by fileFilter fails the
-    // whole request — drop the temp files multer already wrote for the accepted ones
-    // and answer with every refused file named. Checked before the "no files" branch:
-    // a batch of only-rejected files leaves req.files empty and must not be reported
-    // as "No files uploaded".
-    const rejected = req.rejectedFiles || [];
-    if (rejected.length > 0) {
-      for (const file of req.files || []) {
-        fs.rmSync(file.path, { force: true });
-      }
-      const message = rejected.length === 1
-        ? `Файл «${rejected[0].name}» отклонён: тип ${rejected[0].type} не поддерживается`
-        : `Отклонено файлов: ${rejected.length} — ${rejected.map((f) => f.name).join(', ')}`;
-      // Same envelope as utils/response.js `error()`, plus `rejected` — the helper only
-      // exposes a `details` key and B3 renders the per-file list from `error.rejected`.
-      return res.status(400).json({
-        success: false,
-        error: { code: 'FILE_TYPE_NOT_ALLOWED', message, rejected },
-        timestamp: new Date().toISOString()
-      });
-    }
 
     if (!req.files || req.files.length === 0) {
       return badRequest(res, 'No files uploaded');
@@ -651,8 +587,6 @@ router.delete('/storage-providers/:providerId', async (req, res) => {
 // Multer limit violations (size / count / unexpected field) surface as MulterError.
 // Without this handler they bubble to the global errorHandler which defaults to 500.
 // We intercept them here and return 400 Bad Request instead.
-// ADR-194 B2: MIME rejections no longer arrive here — fileFilter collects them and
-// the upload handler answers 400 itself, so it can name every rejected file.
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     fileLogger.warn({ code: err.code, field: err.field, userId: req.user?.id }, 'Upload rejected by multer');

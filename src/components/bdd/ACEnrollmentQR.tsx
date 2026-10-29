@@ -11,7 +11,7 @@
  *   → { success: true, recovery_code: "XXXX-XXXX-XXXX-XXXX" }
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useId, useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { Copy, CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
@@ -35,6 +35,7 @@ interface EnrollResponse {
 }
 
 export function ACEnrollmentQR({ criterion, onEnrolled }: ACEnrollmentQRProps) {
+  const fieldId = useId();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [qrReady, setQrReady] = useState(false);
   const [qrError, setQrError] = useState<string | null>(null);
@@ -153,7 +154,7 @@ export function ACEnrollmentQR({ criterion, onEnrolled }: ACEnrollmentQRProps) {
           onClick={onEnrolled}
           className="px-3 py-1.5 rounded-md text-sm font-medium bg-green-600 text-white hover:bg-green-700"
         >
-          I've saved it — continue
+          I&apos;ve saved it — continue
         </button>
       </div>
     );
@@ -188,10 +189,11 @@ export function ACEnrollmentQR({ criterion, onEnrolled }: ACEnrollmentQRProps) {
         )}
       </div>
 
-      <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+      <label htmlFor={`${fieldId}-0`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
         After scanning, enter current 6-digit code
       </label>
       <input
+        id={`${fieldId}-0`}
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"

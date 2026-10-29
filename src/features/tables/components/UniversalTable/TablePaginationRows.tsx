@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { ColumnModel } from '../../types/table.types';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 
@@ -65,9 +66,23 @@ export const LoadNextRow = ({
   onLoadMore,
 }: LoadNextRowProps) => {
   const { t } = useLanguage();
+  const sentinelRef = useRef<HTMLTableRowElement>(null);
+  const requestedBatch = useRef<number | null>(null);
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !canLoadMore || isLoadingMore || !onLoadMore || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting || requestedBatch.current === rowsBelow) return;
+      // A failed request must not become an automatic retry loop. Keep the button as recovery.
+      requestedBatch.current = rowsBelow;
+      onLoadMore();
+    }, { rootMargin: '0px 0px 200px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [canLoadMore, isLoadingMore, onLoadMore, rowsBelow]);
   if (!canLoadMore || rowsBelow <= 0) return null;
   return (
-    <tr className="bg-[var(--bg-secondary)]">
+    <tr ref={sentinelRef} className="bg-[var(--bg-secondary)]">
       <td colSpan={999} className="p-0 border-t border-[var(--border-primary)]">
         <div className="sticky left-0 w-fit">
           <button
@@ -121,7 +136,7 @@ export const LoadingSkeletonRows = ({
           ))}
           {hasActionsColumn && (
             <td
-              className="sticky right-0 z-20 backdrop-blur-xl bg-white/80 dark:bg-gray-900/60 px-2 py-2 border-l border-[var(--border-primary)]"
+              className="sticky right-0 z-20 bg-[var(--bg-primary)] px-2 py-2 border-l border-[var(--border-primary)]"
               style={{ boxShadow: 'inset 1px 0 0 0 rgba(255, 255, 255, 0.3)' }}
             />
           )}

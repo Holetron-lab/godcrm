@@ -4,16 +4,25 @@
  * Handles: manage_columns (create/update/delete columns)
  */
 
-import { dbGet, dbRun, dbAll, sqlNow } from '../../database/connection.js';
+import { dbGet, dbRun, dbAll, sqlNow, safeJsonParse } from '../../database/connection.js';
+import { z } from 'zod';
+import { VALID_COLUMN_TYPES, persistColumnType, validateColumnConfig } from '../ColumnService.js';
 
 export const columnToolHandlers = {
   async manage_columns({ table_id, action, column_id, name, type, config = {} }, userId) {
+    if ((action === 'create' || action === 'update') && type !== undefined) {
+      if (!z.enum(VALID_COLUMN_TYPES).safeParse(type).success) return { error: 'Invalid column type' };
+      type = persistColumnType(type);
+    }
     const table = await dbGet('SELECT id FROM universal_tables WHERE id = ?', [table_id]);
     if (!table) return { error: `Table ${table_id} not found` };
 
     switch (action) {
       case 'create': {
         if (!name || !type) return { error: 'name and type are required for create' };
+        const cfgCheck = validateColumnConfig(type, config); // ADR-204: content/contact config block
+        if (!cfgCheck.ok) return { error: `Invalid ${type} config: ${cfgCheck.error}` };
+        config = cfgCheck.normalized ?? config;
         const columnName = name.toLowerCase().replace(/\s+/g, '_');
         const maxOrder = await dbGet(
           'SELECT COALESCE(MAX(order_index), 0) as max_order FROM table_columns WHERE table_id = ?',
@@ -30,6 +39,12 @@ export const columnToolHandlers = {
         if (!column_id) return { error: 'column_id is required for update' };
         const col = await dbGet('SELECT * FROM table_columns WHERE id = ? AND table_id = ?', [column_id, table_id]);
         if (!col) return { error: `Column ${column_id} not found` };
+        if (type === 'content' || type === 'contact') {
+          // ADR-204: switching to a new key stamps its config block over the existing config.
+          const cfgCheck = validateColumnConfig(type, { ...(safeJsonParse(col.config) || {}), ...config });
+          if (!cfgCheck.ok) return { error: `Invalid ${type} config: ${cfgCheck.error}` };
+          config = cfgCheck.normalized;
+        }
 
         const updates = [];
         const params = [];

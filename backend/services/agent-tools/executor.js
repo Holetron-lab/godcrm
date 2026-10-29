@@ -5,8 +5,10 @@
  */
 
 import { aiLogger } from '../../utils/logger.js';
-import { handleManagePlan } from '../chat/agent-execution-shared.js';
+import { handleManagePlan, handleMcpPlan } from '../chat/agent-execution-shared/processing-state.js';
 import { fileToolHandlers } from './file-tools.js';
+import { csvToolHandlers } from './csv-tools.js';
+import { uiToolHandlers } from './ui-tools.js';
 import { dataToolHandlers } from './data-tools.js';
 import { dashboardToolHandlers } from './dashboard-tools.js';
 import { webToolHandlers } from './web-tools.js';
@@ -18,6 +20,7 @@ import { imageToolHandlers } from './image-tools.js';
 import { memoryToolHandlers } from './memory-tools.js';
 import { columnToolHandlers } from './column-tools.js';
 import { chatToolHandlers } from './chat-tools.js';
+import { guardHistoricalTool, canAccessHistoricalChat } from '../chat/historical-access.js';
 import { documentToolHandlers } from './document-tools.js';
 import { projectToolHandlers } from './project-tools.js';
 import { copyToolHandlers } from './copy-tools.js';
@@ -27,6 +30,7 @@ import { printerToolHandlers } from './printer-tools.js';
 import { bddToolHandlers } from './bdd-tools.js';
 import { connectorToolHandlers, connectorRequirements } from './connector-tools.js';
 import { passportToolHandlers } from './passport-tools.js';
+import { opsToolHandlers } from './ops-tools.js';
 import { getSpaceConnector } from '../connectors/CredentialVault.js';
 import { evaluateToolGate } from './capability-gate.js';
 import { auditToolCall } from '../audit/toolAudit.js';
@@ -55,6 +59,8 @@ export const toolHandlers = {
   ...blueskyToolHandlers,
   ...redditToolHandlers,
   ...fileToolHandlers,
+  ...csvToolHandlers,
+  ...uiToolHandlers,
   ...ticketToolHandlers,
   ...miscToolHandlers,
   ...imageToolHandlers,
@@ -70,6 +76,7 @@ export const toolHandlers = {
   ...bddToolHandlers,
   ...connectorToolHandlers,
   ...passportToolHandlers,
+  ...opsToolHandlers,
 };
 
 /**
@@ -88,7 +95,14 @@ export const toolHandlers = {
 export async function executeTool(toolName, args, userId, context) {
   const startedAt = Date.now();
   try {
+    if (!await guardHistoricalTool(toolName,args,userId,context)) return {error:'Conversation not found'};
     const result = await dispatchTool(toolName, args, userId, context);
+    if (toolName === 'list_conversations' && Array.isArray(result?.conversations)) {
+      const visible = [];
+      for (const c of result.conversations) if (await canAccessHistoricalChat(c.id,userId,context)) visible.push(c);
+      result.conversations = visible;
+      result.total = visible.length;
+    }
     // Fire-and-forget: auditToolCall → writeAudit never throws or rejects, so
     // a broken audit pipeline cannot fail a tool call (ADR-0066 posture).
     void auditToolCall({
@@ -111,9 +125,10 @@ export async function executeTool(toolName, args, userId, context) {
 async function dispatchTool(toolName, args, userId, context) {
   // ADR-113: manage_plan delegates to shared handleManagePlan()
   if (toolName === 'manage_plan') {
-    const { conversationId, agentName, agentId } = context || {};
+    const { conversationId, agentName, agentId, senderId, runId } = context || {};
     try {
-      return await handleManagePlan(args, conversationId || null, agentName || 'unknown', { agentId: agentId || null });
+      if (context?.source === 'mcp') return await handleMcpPlan(args, context);
+      return await handleManagePlan(args, conversationId || null, agentName || 'unknown', { agentId, senderId, runId });
     } catch (error) {
       aiLogger.error({ err: error, toolName }, 'manage_plan execution error');
       return { error: error.message };

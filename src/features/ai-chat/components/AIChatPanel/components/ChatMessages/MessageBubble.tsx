@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useCallback, useState } from 'react';
 import {
   Bot,
@@ -70,6 +71,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
   currentUser,
   onMentionClick
 }) => {
+  const { t, language } = useLanguage();
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
 
@@ -107,14 +109,14 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
     const isToday = date.toDateString() === now.toDateString();
     const isThisYear = date.getFullYear() === now.getFullYear();
     
-    const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const time = date.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' });
     
     if (isToday) {
       return time;
     } else if (isThisYear) {
-      return `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} ${time}`;
+      return `${date.toLocaleDateString(language, { day: 'numeric', month: 'short' })} ${time}`;
     } else {
-      return `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })} ${time}`;
+      return `${date.toLocaleDateString(language, { day: 'numeric', month: 'short', year: 'numeric' })} ${time}`;
     }
   };
   
@@ -176,8 +178,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
               >
                 <Copy className="w-4 h-4" />
-                Копировать
-              </button>
+                {t('settings.profile.referralCopy')}</button>
               {/* ADR-0031 WP-24: «Перенести» — owner-only, hidden (not disabled) for non-owners */}
               {isChatOwner && onMove && (
                 <button
@@ -188,8 +189,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
                 >
                   <ArrowRightLeft className="w-4 h-4" />
-                  Перенести
-                </button>
+                  {t('aiChat.ui.move')}</button>
               )}
               <button
                 onClick={() => {
@@ -199,8 +199,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
                 className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
               >
                 <Forward className="w-4 h-4" />
-                Переслать
-              </button>
+                {t('aiChat.ui.forward')}</button>
               {onAttachLink && (
                 <button
                   onClick={() => {
@@ -210,8 +209,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
                 >
                   <Link2 className="w-4 h-4" />
-                  Прикрепить ссылку
-                </button>
+                  {t('aiChat.ui.attachLink')}</button>
               )}
               {isFromMe && onDelete && message.id && (
                 <button
@@ -222,8 +220,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
-                  Удалить
-                </button>
+                  {t('aiChat.ui.delete')}</button>
               )}
             </div>
           )}
@@ -238,7 +235,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
             )}>
               <div className="flex items-center gap-2 text-sm">
                 <Ban className="w-4 h-4" />
-                <span>Сообщение удалено</span>
+                <span>{t('aiChat.ui.messageDeleted')}</span>
               </div>
             </div>
           ) : (
@@ -248,25 +245,27 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
               ? 'bg-[var(--color-primary-500)] text-white rounded-br-md' 
               : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-bl-md'
           )}>
+          {message.attachments?.some(att => att.type.startsWith('audio/')) && (
+            <ChatAttachmentRenderer attachments={message.attachments.filter(att => att.type.startsWith('audio/'))} className="mb-2" />
+          )}
           {message.content ? (
             // Check for API key error
             message.content.includes('No API key configured') ? (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2 text-red-400">
                   <Key className="w-4 h-4" />
-                  <span className="text-sm">API ключ не настроен</span>
+                  <span className="text-sm">{t('aiChat.ui.aPIKeyIsNotConfigured')}</span>
                 </div>
                 <a
                   href="/tables/232"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-xs font-medium transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  Открыть таблицу API Keys
-                </a>
+                  {t('aiChat.ui.openTheAPIKeysTable')}</a>
               </div>
             ) : (
               markdownEnabled ? (
-                <MarkdownPreview content={message.content} className="text-sm" onCheckboxClick={onCheckboxClick ? handleCheckboxClick : undefined} currentUser={currentUser} />
+                <MarkdownPreview mediaLinks content={message.content} className="text-sm" onCheckboxClick={onCheckboxClick ? handleCheckboxClick : undefined} currentUser={currentUser} />
               ) : (
                 <div className="text-sm whitespace-pre-wrap">
                 <HighlightedText text={message.content} onMentionClick={onMentionClick} />
@@ -285,7 +284,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
             <span className="text-sm opacity-50">—</span>
           )}
           {message.attachments && message.attachments.length > 0 && (
-            <ChatAttachmentRenderer attachments={message.attachments} />
+            <ChatAttachmentRenderer attachments={message.attachments.filter(att => !att.type.startsWith('audio/'))} />
           )}
           
           {/* Tool Results for Agent Mode */}
@@ -293,8 +292,8 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
             <div className="mt-2 pt-2 border-t border-[var(--border-primary)]">
               <div className="flex items-center gap-1 text-xs text-[var(--text-tertiary)] mb-1">
                 <Wrench className="w-3 h-3" />
-                <span>Использовано {message.toolResults.length} инструментов</span>
-                {message.iterations && <span className="ml-1">({message.iterations} итераций)</span>}
+                <span>{t('aiChat.ui.toolsUsedCount', { count: message.toolResults.length })}</span>
+                {message.iterations && <span className="ml-1">({t('aiChat.ui.iterationCount', { count: message.iterations })})</span>}
               </div>
               <div className="space-y-1">
                 {message.toolResults.map((tr: { tool: string; args?: unknown; result?: unknown }, idx: number) => (
@@ -334,7 +333,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
               <button
                 onClick={() => setShowReactionPicker(!showReactionPicker)}
                 className="md:hidden w-5 h-5 rounded-full flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
-                title="Добавить реакцию"
+                title={t('aiChat.ui.addReaction')}
               >
                 <Plus className="w-3 h-3" />
               </button>
@@ -348,7 +347,7 @@ const MessageBubbleImpl: React.FC<MessageBubbleProps> = ({
                     ? 'text-red-500'
                     : 'text-[var(--text-tertiary)] hover:text-red-400'
                 )}
-                title={reactionList.find(r => r.emoji === '❤️')?.users.map(u => u.user_name).join(', ') || 'Нравится'}
+                title={reactionList.find(r => r.emoji === '❤️')?.users.map(u => u.user_name).join(', ') || t('aiChat.ui.like')}
               >
                 {reactionList.some(r => r.emoji === '❤️') ? '❤️' : '🤍'}
                 {reactionList.find(r => r.emoji === '❤️')?.users.length ? (

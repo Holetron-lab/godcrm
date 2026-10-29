@@ -1,5 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent } from '@testing-library/react';
+import { AIChatStubProvider } from '@/features/ai-chat/context/AIChatContext';
+import { ProvidersWrapper } from '@/tests/renderWithProviders';
+
+// ChatMessages calls useAIChat() (selectConversation) and its subtree calls
+// useLanguage(); both throw without a provider, which aborted module load.
+// AIChatStubProvider is the frozen no-op context shape — no API calls, no state.
+const render = (ui: React.ReactElement) =>
+  rtlRender(ui, {
+    wrapper: ({ children }) => (
+      <ProvidersWrapper>
+        <AIChatStubProvider>{children}</AIChatStubProvider>
+      </ProvidersWrapper>
+    ),
+  });
 import { ChatMessages } from '../ChatMessages';
 import type { ChatMessage, ChatPartner } from '../../../types';
 import { getFileIcon } from '@/shared/utils/fileHelpers';
@@ -7,32 +21,9 @@ import { getFileIcon } from '@/shared/utils/fileHelpers';
 type MockIconProps = { className?: string; [key: string]: unknown };
 
 // Mock icons — includes all icons used by ChatMessages + ChatTurn child component
-vi.mock('lucide-react', () => ({
-  Users: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="users-icon" {...props} />,
-  Bot: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="bot-icon" {...props} />,
-  User: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="user-icon" {...props} />,
-  MessageSquare: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="message-square-icon" {...props} />,
-  AlertCircle: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="alert-circle-icon" {...props} />,
-  X: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="x-icon" {...props} />,
-  MoreVertical: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="more-vertical-icon" {...props} />,
-  Copy: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="copy-icon" {...props} />,
-  Forward: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="forward-icon" {...props} />,
-  Trash2: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="trash-icon" {...props} />,
-  Ban: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="ban-icon" {...props} />,
-  Key: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="key-icon" {...props} />,
-  ExternalLink: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="external-link-icon" {...props} />,
-  Wrench: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="wrench-icon" {...props} />,
-  Zap: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="zap-icon" {...props} />,
-  Plus: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="plus-icon" {...props} />,
-  ChevronDown: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="chevron-down-icon" {...props} />,
-  ChevronRight: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="chevron-right-icon" {...props} />,
-  Brain: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="brain-icon" {...props} />,
-  Loader2: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="loader-icon" {...props} />,
-  CheckCircle2: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="check-circle-icon" {...props} />,
-  XCircle: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="x-circle-icon" {...props} />,
-  Terminal: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="terminal-icon" {...props} />,
-  Link2: ({ className, ...props }: MockIconProps) => <div className={className} data-testid="link2-icon" {...props} />
-}));
+// lucide-react is auto-mocked: any icon a component adds resolves to a stub,
+// so a new <Icon/> can no longer fail every test in this file (see src/tests/lucideMock.tsx).
+vi.mock('lucide-react', async () => (await import('@/tests/lucideMock')).lucideMock({ XCircle: 'x-circle-icon' }));
 
 // Mock ChatTurn component — ChatMessages now renders ChatTurn (not MessageBubble)
 vi.mock('../ChatTurn', () => ({

@@ -4,7 +4,7 @@
  *
  * Renders text with 4 token formats:
  *   <<@slug>>  -> MentionPill  (invocation — blue pill with user icon)
- *   @slug      -> MentionPill  (same card as <<@slug>>)
+ *   @slug      -> MentionPill  (outlined reference)
  *   <</slug>>  -> CommandPill  (invocation — purple pill with bot icon)
  *   /slug      -> subtle reference highlight (purple text)
  */
@@ -13,7 +13,9 @@ import React, { useCallback } from 'react';
 import { cn } from '@/shared/utils/cn';
 import { MentionPill, CommandPill } from './InvocationPills';
 import { MentionTooltip } from './MentionTooltip';
+import { useMentionUsers } from './MentionUsersContext';
 import { useValidSlugs } from '../context/ValidSlugsContext';
+import { SocialMediaLink } from '@/shared/components/SocialMediaLink';
 
 interface HighlightedTextProps {
   /** The raw text content to render */
@@ -157,6 +159,7 @@ export const HighlightedText: React.FC<HighlightedTextProps> = ({
   className,
 }) => {
   const { mentionSlugs, commandSlugs } = useValidSlugs();
+  const { getBySlug } = useMentionUsers();
 
   const handleClick = useCallback(
     (token: string, e: React.MouseEvent) => {
@@ -185,16 +188,12 @@ export const HighlightedText: React.FC<HighlightedTextProps> = ({
 
           case 'url':
             return (
-              <a
+              <SocialMediaLink
                 key={idx}
-                href={seg.value.startsWith('http') ? seg.value : `https://${seg.value}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline break-all text-[var(--color-primary-400)] hover:text-[var(--color-primary-300)] transition-colors"
-                onClick={(e) => e.stopPropagation()}
+                href={/^https?:\/\//i.test(seg.value) ? seg.value : `https://${seg.value}`}
               >
                 {seg.value}
-              </a>
+              </SocialMediaLink>
             );
 
           case 'mention-pill':
@@ -220,7 +219,7 @@ export const HighlightedText: React.FC<HighlightedTextProps> = ({
           case 'mention': {
             // Plain @slug — validate against known slugs
             const mentionSlug = seg.value.replace(/^@/, '').toLowerCase();
-            if (mentionSlugs.size > 0 && !mentionSlugs.has(mentionSlug)) {
+            if (mentionSlugs.size > 0 && !mentionSlugs.has(mentionSlug) && !getBySlug(mentionSlug)) {
               // Not a valid user/agent — render as plain text
               return <React.Fragment key={idx}>{seg.value}</React.Fragment>;
             }
@@ -228,7 +227,7 @@ export const HighlightedText: React.FC<HighlightedTextProps> = ({
               <MentionPill
                 key={idx}
                 slug={mentionSlug}
-                onClick={onMentionClick}
+                reference
               />
             );
           }
@@ -236,25 +235,24 @@ export const HighlightedText: React.FC<HighlightedTextProps> = ({
           case 'command': {
             // Plain /slug — validate against known agents
             const cmdSlug = seg.value.replace(/^\//, '').toLowerCase();
-            if (commandSlugs.size > 0 && !commandSlugs.has(cmdSlug)) {
+            if (commandSlugs.size > 0 && !commandSlugs.has(cmdSlug) && getBySlug(cmdSlug)?.type !== 'agent') {
               // Not a valid command — render as plain text
               return <React.Fragment key={idx}>{seg.value}</React.Fragment>;
             }
             return (
               <MentionTooltip key={idx} slug={cmdSlug}>
-                <span
+                <button
+                  type="button"
                   onClick={(e) => handleClick(seg.value, e)}
                   className={cn(
                     'cursor-pointer font-medium transition-colors',
-                    'text-purple-400 hover:text-purple-300',
+                    'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
                     'hover:underline'
                   )}
                   title={`Command ${seg.value}`}
-                  role="button"
-                  tabIndex={0}
                 >
                 {seg.value}
-              </span>
+              </button>
               </MentionTooltip>
             );
           }

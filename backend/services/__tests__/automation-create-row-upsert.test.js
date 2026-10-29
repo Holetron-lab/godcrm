@@ -27,6 +27,8 @@ vi.mock('../../utils/logger.js', () => ({ apiLogger: { info: vi.fn(), warn: vi.f
 vi.mock('../SkillEnrichmentService.js', () => ({ enrichSkill: vi.fn() }));
 vi.mock('../TelegramService.js', () => ({ sendMessage: vi.fn(), sendAdminAlert: vi.fn() }));
 vi.mock('../schedule-trigger/pipeline-executors.js', () => ({ executeTicketRouting: vi.fn() }));
+// Live-grid NOTIFY rides on dbRun too; keep the write-count assertions about table_rows only.
+vi.mock('../realtime/rowEvents.js', () => ({ notifyRowChange: vi.fn(async () => true), notifyRowChanges: vi.fn() }));
 
 const { executeCreateRow } = await import('../AutomationTriggerService.js');
 

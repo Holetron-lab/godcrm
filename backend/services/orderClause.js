@@ -52,5 +52,6 @@ export function buildOrderClause(key, opts = {}) {
 
   // guarded (generic tables): regex-protected numeric, unset/dirty sorts last.
   const txt = `data::jsonb->>'${key}'`;
-  return `(CASE WHEN ${txt} ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN (${txt})::numeric END) ASC NULLS LAST${tail}`;
+  // Avoid '?' in SQL strings: connection.js translates every '?' to a bind.
+  return `(CASE WHEN ${txt} ~ '^-{0,1}[0-9]+([.][0-9]+){0,1}$' THEN (${txt})::numeric END) ASC NULLS LAST${tail}`;
 }

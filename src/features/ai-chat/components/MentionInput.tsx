@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * MentionInput Component
  * ADR-023: Agent-as-User & Infinite Chat Architecture
@@ -9,10 +10,13 @@ import { useState, useRef, useEffect, useImperativeHandle, forwardRef, KeyboardE
 import { createPortal } from 'react-dom';
 import { cn } from '@/shared/utils/cn';
 import { Avatar } from '@/shared/components/ui/Avatar';
+import { getChatSendMode, useChatSendShortcut } from '@/shared/hooks/useChatSendShortcut';
 
 export interface MentionUser {
   id: number;
   name: string;
+  /** Global invocation identity granted by an agent passport. */
+  handle?: string | null;
   email?: string;
   avatar?: string;
   icon?: string;
@@ -49,12 +53,14 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
   onPasteFiles,
   availableUsers,
   availableAgents,
-  placeholder = 'Type @ to mention, / to call agent...',
+  placeholder,
   disabled = false,
   className,
   inputClassName,
   maxRows = 3
 }: MentionInputProps, externalRef) {
+  const { t } = useLanguage();
+  const { preferences } = useChatSendShortcut();
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 256 });
   const [mentionQuery, setMentionQuery] = useState('');
@@ -93,9 +99,15 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
     const query = mentionQuery.toLowerCase();
     return (
       user.name.toLowerCase().includes(query) ||
+      user.handle?.toLowerCase().includes(query) ||
       user.email?.toLowerCase().includes(query)
     );
   });
+
+  // Passport refreshes can remove entries while the picker stays open.
+  useEffect(() => {
+    setSelectedIndex(index => Math.min(index, Math.max(0, filteredUsers.length - 1)));
+  }, [filteredUsers.length]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -168,7 +180,9 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
     const afterMention = value.substring(mentionStartPos + 1 + mentionQuery.length);
 
     // Create slug from name
-    const nameSlug = user.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const nameSlug = currentTrigger === '@' && user.handle
+      ? user.handle.toLowerCase()
+      : user.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     // ADR-116: Wrap in structured invocation token <<@slug>> or <</slug>>
     // This ensures only intentional invocations trigger agent delegation.
     const token = `<<${currentTrigger}${nameSlug}>>`;
@@ -190,6 +204,12 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
 
   // Handle keyboard navigation
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return;
+    if (showDropdown && e.key === 'Escape') {
+      e.preventDefault();
+      setShowDropdown(false);
+      return;
+    }
     // Bug fix #81739: Allow native Ctrl/Cmd shortcuts (Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+Z, etc.)
     // But allow Ctrl+Enter to submit the message
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -213,10 +233,6 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
           e.preventDefault();
           selectUser(filteredUsers[selectedIndex]);
           break;
-        case 'Escape':
-          e.preventDefault();
-          setShowDropdown(false);
-          break;
         case 'Tab':
           e.preventDefault();
           selectUser(filteredUsers[selectedIndex]);
@@ -225,8 +241,7 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
       return;
     }
     
-    // Submit on Enter without shift
-    if (e.key === 'Enter' && !e.shiftKey && !showDropdown) {
+    if (e.key === 'Enter' && e.shiftKey === (getChatSendMode(preferences) === 'shift-enter') && !e.altKey && !showDropdown) {
       e.preventDefault();
       onSubmit?.();
     }
@@ -287,7 +302,8 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('aiChat.ui.mentionInputPlaceholder')}
+        aria-label={placeholder ?? t('aiChat.ui.mentionInputPlaceholder')}
         disabled={disabled}
         rows={1}
         className={cn(
@@ -317,6 +333,7 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
                 key={user.id}
                 data-index={index}
                 onClick={() => selectUser(user)}
+                style={{ boxShadow: `inset 4px 0 0 0 ${user.color || (user.type === 'agent' || user.type === 'bot' ? '#a855f7' : '#3b82f6')}` }}
                 className={cn(
                   'w-full flex items-center gap-2 px-3 py-2 text-left transition-colors',
                   index === selectedIndex 
@@ -339,12 +356,12 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
                   <div className="font-medium text-sm text-[var(--text-primary)] truncate">
                     {user.name}
                   </div>
-                  <div className="text-xs text-[var(--text-tertiary)] truncate">
+                  <div className="text-xs text-[var(--text-secondary)] truncate">
                     {currentTrigger === '/'
-                      ? (user.description || '⚡ Вызвать агента')
+                      ? (user.description || t('aiChat.ui.invokeAnAgent'))
                       : (user.type === 'agent' || user.type === 'bot')
                         ? (user.description || '🤖 AI Agent')
-                        : (user.email || 'User')}
+                        : (user.email || t('aiChat.ui.user'))}
                   </div>
                 </div>
               </button>
@@ -357,7 +374,9 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
       {/* No results - Portal */}
       {showDropdown && filteredUsers.length === 0 && mentionQuery && createPortal(
         <div
-          className="fixed z-[9999] bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-3 text-center text-sm text-[var(--text-tertiary)]"
+          ref={dropdownRef}
+          role="status"
+          className="fixed z-[9999] bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-xl p-3 text-center text-sm text-[var(--text-secondary)]"
           style={{
             top: dropdownPosition.top,
             left: dropdownPosition.left,
@@ -365,7 +384,7 @@ export const MentionInput = forwardRef<HTMLTextAreaElement, MentionInputProps>(f
             transform: 'translateY(-100%)'
           }}
         >
-          No {currentTrigger === '/' ? 'agents' : 'users'} matching "{currentTrigger}{mentionQuery}"
+          {t('aiChat.ui.noMentionMatches', { query: `${currentTrigger}${mentionQuery}` })}
         </div>,
         document.body
       )}

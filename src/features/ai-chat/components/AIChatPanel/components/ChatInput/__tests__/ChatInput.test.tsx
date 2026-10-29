@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ChatInput } from '../ChatInput';
 import type { ChatPartner, BoundRow, FilesSource } from '../../../types';
@@ -72,7 +73,7 @@ vi.mock('@/features/ai-chat/components/MentionInput', () => ({
       value={value}
       onChange={(e) => onChange?.(e.target.value)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && e.shiftKey) {
           e.preventDefault();
           onSubmit?.();
         }
@@ -87,23 +88,9 @@ vi.mock('@/features/ai-chat/components/MentionInput', () => ({
 }));
 
 // Mock icons
-vi.mock('lucide-react', () => ({
-  Link2: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="link2-icon" {...props} />,
-  Eye: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="eye-icon" {...props} />,
-  EyeOff: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="eye-off-icon" {...props} />,
-  Brain: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="brain-icon" {...props} />,
-  Zap: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="zap-icon" {...props} />,
-  Plus: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="plus-icon" {...props} />,
-  Paperclip: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="paperclip-icon" {...props} />,
-  Mic: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="mic-icon" {...props} />,
-  Send: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="send-icon" {...props} />,
-  Loader2: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="loader-icon" {...props} />,
-  X: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="x-icon" {...props} />,
-  Square: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="square-icon" {...props} />,
-  FolderOpen: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="folder-open-icon" {...props} />,
-  Search: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="search-icon" {...props} />,
-  Settings: ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div className={className} data-testid="settings-icon" {...props} />
-}));
+// lucide-react is auto-mocked: any icon a component adds resolves to a stub,
+// so a new <Icon/> can no longer fail every test in this file (see src/tests/lucideMock.tsx).
+vi.mock('lucide-react', async () => (await import('@/tests/lucideMock')).lucideMock());
 
 // Mock utilities
 vi.mock('@/shared/utils/cn', () => ({

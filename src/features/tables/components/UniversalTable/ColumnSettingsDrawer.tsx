@@ -10,6 +10,7 @@ import { useTableColumns } from '../../hooks/useTableColumns';
 import { useAllTables } from '../../hooks/useAllTables';
 import { useTableRows } from '../../hooks/useTableRows';
 import { tablesApi } from '../../api/tablesApi';
+import { normalizeColumnOptions } from '../../utils/normalizeColumnOptions';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 // Import tab components from column-settings
@@ -282,6 +283,9 @@ export const ColumnSettingsDrawer = ({
         width: currentWidth ?? column.width,
         config: {
           ...column.config,
+          ...(Array.isArray(column.config?.options)
+            ? { options: normalizeColumnOptions(column.config.options) }
+            : {}),
           appearance: {
             ...defaultAppearance,
             ...existingAppearance
@@ -357,6 +361,8 @@ export const ColumnSettingsDrawer = ({
     }
 
     const payload = {
+      // Key rename is only sent when edited: the backend re-keys row data for it.
+      ...(draft.name !== column?.name ? { name: draft.name } : {}),
       displayName: draft.displayName,
       type: draft.type,
       config: draft.config,
@@ -478,7 +484,7 @@ export const ColumnSettingsDrawer = ({
               onClick={() => setActiveTab(tab.id)}
               className={`rounded-full px-3 py-1 text-sm font-medium transition whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'bg-[var(--color-primary-500)] text-white'
+                  ? 'bg-[var(--color-primary-700)] text-white'
                   : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'
               }`}
             >
@@ -528,6 +534,7 @@ export const ColumnSettingsDrawer = ({
             allColumns={allColumns}
             firstRow={firstRow}
             rows={rows}
+            spaceId={spaceId}
             relationConfig={relationConfig}
             relationTableId={relationTableId}
             relationTableColumns={relationTableColumns as ColumnModel[]}
@@ -618,6 +625,7 @@ export const ColumnSettingsDrawer = ({
             tableId={tableId}
             projectId={projectId}
             tableName={tableName}
+            language={language}
           />
         )}
 

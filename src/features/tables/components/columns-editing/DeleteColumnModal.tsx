@@ -24,7 +24,7 @@ export const DeleteColumnModal = ({
           <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm text-[var(--text-primary)] mb-2">
-              Вы уверены, что хотите удалить колонку <strong>"{column?.displayName || column?.name}"</strong>?
+              Вы уверены, что хотите удалить колонку <strong>&quot;{column?.displayName || column?.name}&quot;</strong>?
             </p>
             <p className="text-xs text-[var(--text-tertiary)]">
               Это действие необратимо. Все данные в этой колонке будут удалены.

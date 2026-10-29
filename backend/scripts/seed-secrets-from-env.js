@@ -59,7 +59,7 @@ async function main() {
     // Idempotency check via direct adapter query (avoids decrypting just to
     // know existence + sidesteps cache).
     const existing = await adapter.query(
-      `SELECT id FROM _secrets WHERE key = $1 LIMIT 1`,
+      `SELECT id FROM _secrets WHERE key = $1 AND space_id = 11 LIMIT 1`,
       [entry.vaultKey]
     );
     if (existing.rowCount > 0) {

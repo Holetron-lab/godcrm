@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { AiAgentsSettingsProps } from './types';
 
 export function AiAgentsWidgetSettings({
@@ -15,6 +16,7 @@ export function AiAgentsWidgetSettings({
   aiFeedbackTableId,
   setAiFeedbackTableId,
 }: AiAgentsSettingsProps) {
+  const fieldId = useId();
   return (
     <>
       <div className="bg-[var(--bg-tertiary)] rounded-lg p-4 mb-4">
@@ -26,10 +28,11 @@ export function AiAgentsWidgetSettings({
 
       {/* AI Operators Table */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-aiOperatorsTableId`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Таблица операторов (API ключи)
         </label>
         <select
+          id={`${fieldId}-aiOperatorsTableId`}
           value={aiOperatorsTableId}
           onChange={(e) => setAiOperatorsTableId(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -48,10 +51,11 @@ export function AiAgentsWidgetSettings({
 
       {/* AI Agents Table */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-aiAgentsTableId`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Таблица агентов
         </label>
         <select
+          id={`${fieldId}-aiAgentsTableId`}
           value={aiAgentsTableId}
           onChange={(e) => setAiAgentsTableId(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -70,10 +74,11 @@ export function AiAgentsWidgetSettings({
 
       {/* AI Chat History Table */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-aiChatHistoryTableId`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Таблица истории чата
         </label>
         <select
+          id={`${fieldId}-aiChatHistoryTableId`}
           value={aiChatHistoryTableId}
           onChange={(e) => setAiChatHistoryTableId(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -89,10 +94,11 @@ export function AiAgentsWidgetSettings({
 
       {/* AI Run Logs Table */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-aiRunLogsTableId`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Таблица логов запусков
         </label>
         <select
+          id={`${fieldId}-aiRunLogsTableId`}
           value={aiRunLogsTableId}
           onChange={(e) => setAiRunLogsTableId(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -108,10 +114,11 @@ export function AiAgentsWidgetSettings({
 
       {/* AI Analytics Table */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-aiAnalyticsTableId`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Таблица аналитики
         </label>
         <select
+          id={`${fieldId}-aiAnalyticsTableId`}
           value={aiAnalyticsTableId}
           onChange={(e) => setAiAnalyticsTableId(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
@@ -127,10 +134,11 @@ export function AiAgentsWidgetSettings({
 
       {/* AI Feedback Table */}
       <div>
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+        <label htmlFor={`${fieldId}-aiFeedbackTableId`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
           Таблица обратной связи
         </label>
         <select
+          id={`${fieldId}-aiFeedbackTableId`}
           value={aiFeedbackTableId}
           onChange={(e) => setAiFeedbackTableId(e.target.value)}
           className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"

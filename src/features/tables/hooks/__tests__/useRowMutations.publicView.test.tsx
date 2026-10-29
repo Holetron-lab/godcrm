@@ -10,7 +10,7 @@
  * the API never receives a write.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -61,7 +61,7 @@ function makeWrapper(readOnly: boolean) {
 }
 
 describe('useRowMutations — public read-only guard (P5c)', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let warnSpy: MockInstance<typeof console.warn>;
   beforeEach(() => {
     vi.clearAllMocks();
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -128,7 +128,7 @@ describe('useRowMutations — public read-only guard (P5c)', () => {
 });
 
 describe('useColumnMutations — public read-only guard (P5c)', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let warnSpy: MockInstance<typeof console.warn>;
   beforeEach(() => {
     vi.clearAllMocks();
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

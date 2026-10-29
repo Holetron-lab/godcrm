@@ -8,6 +8,7 @@ import { apiLogger } from '../../utils/logger.js';
 import { sendMessage, sendAdminAlert, sendToTopic, sendChannelPost } from '../TelegramService.js';
 import { getSecret } from '../secrets/getSecret.js';
 import { generateBaseId } from '../../utils/baseId.js';
+import { notifyRowChange } from '../realtime/rowEvents.js';
 
 
 const execFileAsync = promisify(execFile);
@@ -206,6 +207,7 @@ async function executeUpdateField(tableId, rowId, config) {
       'UPDATE table_rows SET data = ?, updated_at = ? WHERE id = ?',
       [JSON.stringify(data), new Date().toISOString(), rowId]
     );
+    void notifyRowChange({ tableId, rowId, action: 'updated', source: 'automation' });
     return { success: true, updated: { [column_id]: value } };
   } catch (err) {
     return { success: false, error: err.message };
@@ -663,15 +665,15 @@ Write the two posts now. Two sections each (📦 Сделал, then the second s
     // two posts.") despite the "start directly with 📦" instruction. The post body
     // MUST begin at the first 📦 — strip anything before it so meta-chatter never
     // reaches a channel. If no 📦 is present, leave the body untouched.
-    function stripPreamble(text) {
+    const stripPreamble = (text) => {
       const i = text.indexOf('📦');
       return i > 0 ? text.slice(i).trim() : text;
-    }
+    };
     ruBody = stripPreamble(ruBody);
     enBody = stripPreamble(enBody);
 
     // Sanitize Telegram Markdown v1 — fix unmatched markers to avoid parse errors
-    function sanitizeTgMarkdown(text) {
+    const sanitizeTgMarkdown = (text) => {
       // Remove **double bold** → *single bold*
       text = text.replace(/\*\*(.+?)\*\*/g, '*$1*');
       // Remove __double underline__ → _single italic_
@@ -691,7 +693,7 @@ Write the two posts now. Two sections each (📦 Сделал, then the second s
         }
       }
       return text;
-    }
+    };
 
     ruBody = sanitizeTgMarkdown(ruBody);
     enBody = sanitizeTgMarkdown(enBody);

@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh .72 staging (godcrm_test + uploads mirror) from master A
+Documentation=file:/root/production/business-crm/scripts/dev-refresh.sh
+After=postgresql.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/production/business-crm/scripts/dev-refresh.sh
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=45min

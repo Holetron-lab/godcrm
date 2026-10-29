@@ -651,6 +651,9 @@ router.get('/space/:spaceId/available-users', authenticate, async (req, res) => 
       const systemUsers = await dbAll(`
         SELECT DISTINCT u.id, u.name, u.email, u.avatar, u.avatar as avatar_url, u.user_type,
                u.managed_by_agent_table_id, u.managed_by_agent_row_id,
+               COALESCE((SELECT r.data->>'color' FROM table_rows r
+                  WHERE r.id = u.managed_by_agent_row_id
+                    AND r.table_id = u.managed_by_agent_table_id), u.color) as color,
                (SELECT r.data->>'icon'  FROM table_rows r
                   WHERE r.id = u.managed_by_agent_row_id
                     AND r.table_id = u.managed_by_agent_table_id) as agent_icon,
@@ -727,7 +730,7 @@ router.get('/space/:spaceId/available-users', authenticate, async (req, res) => 
       let systemUser = null;
       if (systemUserId) {
         systemUser = await dbGet(`
-          SELECT u.id, u.name, u.email, u.avatar, u.user_type,
+          SELECT u.id, u.name, u.email, u.avatar, u.user_type, u.color,
                  u.managed_by_agent_table_id, u.managed_by_agent_row_id,
                  (SELECT r.data->>'icon'  FROM table_rows r
                     WHERE r.id = u.managed_by_agent_row_id
@@ -747,6 +750,7 @@ router.get('/space/:spaceId/available-users', authenticate, async (req, res) => 
         active: active,
         avatar: systemUser?.avatar || null,
         avatar_url: systemUser?.avatar || null,
+        color: systemUser?.agent_color || systemUser?.color || null,
         user_type: systemUser?.user_type || 'human',
         managed_by_agent_table_id: systemUser?.managed_by_agent_table_id || null,
         managed_by_agent_row_id: systemUser?.managed_by_agent_row_id || null,

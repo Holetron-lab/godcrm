@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { useState, useId, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   Key, Plus, Trash2, Copy, Check, RefreshCw, Eye, EyeOff, 
@@ -326,6 +327,8 @@ function CreateApiKeyModal({
   language: string;
 }) {
   const t = (ru: string, en: string) => language === 'ru' ? ru : en;
+  const fieldId = useId();
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const [name, setName] = useState('');
   const [selectedScopes, setSelectedScopes] = useState<string[]>(['*']);
   const [expiresIn, setExpiresIn] = useState<string>('never');
@@ -354,29 +357,39 @@ function CreateApiKeyModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div 
-        className="w-full max-w-md bg-[var(--bg-primary)] rounded-2xl shadow-xl border border-[var(--border-primary)]"
-        onClick={e => e.stopPropagation()}
-      >
+    <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+        <Dialog.Content
+          aria-modal="true"
+          aria-describedby={undefined}
+          onOpenAutoFocus={() => {
+            returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-md max-h-[90dvh] overflow-y-auto bg-[var(--bg-primary)] rounded-2xl shadow-xl border border-[var(--border-primary)]"
+        >
         <div className="p-6 border-b border-[var(--border-primary)]">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+          <Dialog.Title className="text-lg font-semibold text-[var(--text-primary)]">
             {t('Создать API ключ', 'Create API Key')}
-          </h3>
+          </Dialog.Title>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
+            <label htmlFor={`${fieldId}-name`} className="block text-sm font-medium text-[var(--text-primary)] mb-1">
               {t('Название', 'Name')}
             </label>
-            <input
+            <input id={`${fieldId}-name`}
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('Например: Интеграция с n8n', 'e.g., n8n Integration')}
-              className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
+              className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]"
               required
             />
           </div>
@@ -401,7 +414,7 @@ function CreateApiKeyModal({
                   <span className="text-sm text-[var(--text-primary)]">
                     {scope.label[language as 'ru' | 'en']}
                   </span>
-                  <code className="text-xs text-[var(--text-tertiary)]">{scope.value}</code>
+                  <code className="text-xs text-[var(--text-secondary)]">{scope.value}</code>
                 </label>
               ))}
             </div>
@@ -409,10 +422,10 @@ function CreateApiKeyModal({
 
           {/* Expiration */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-primary)] mb-1">
+            <label htmlFor={`${fieldId}-expiration`} className="block text-sm font-medium text-[var(--text-primary)] mb-1">
               {t('Срок действия', 'Expiration')}
             </label>
-            <select
+            <select id={`${fieldId}-expiration`}
               value={expiresIn}
               onChange={(e) => setExpiresIn(e.target.value)}
               className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)]"
@@ -443,8 +456,9 @@ function CreateApiKeyModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

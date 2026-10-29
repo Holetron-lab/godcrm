@@ -1,0 +1,420 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-10-23",
+  "source_base_sha": "f4535164f258478ae4ba41fdcd9ed474a6ba2256",
+  "github_head": "d800f339f3680797188c81cacef62d4e8a3554af",
+  "forgejo_head": "065f2edd2371f7f3fbae6bc9283786a3685c93b3",
+  "also_checked_source_sha": "b2cc948ad82177b7cef1307b1fd1ae50e3d2253a",
+  "scope": "The 31 paths in github-divergence.json; not a release approval or a review of every changed public file.",
+  "summary": {
+    "reviewed": 31,
+    "keep": 22,
+    "replace_already_present": 1,
+    "delete": 8,
+    "runtime_fixes_required": 0
+  },
+  "finding": "22 files reported deleted by Git diff are present in the export as untracked files relative to its Forgejo-based index. Git diff against GitHub did not include them. Nine paths are truly absent and reconciled below.",
+  "records": [
+    {
+      "path": "backend/database/migrations/knex/088_adr_0041r_p1_type_ratchet.js",
+      "decision": "keep",
+      "reason": "Frozen migration 088 installs the column-type CHECK after a drift preflight. Byte-identical to GitHub; later migrations 104–106 extend the allowed set without rewriting 088.",
+      "evidence_paths": [
+        "backend/tests/column-types-adr0041r.test.js",
+        "backend/database/migrations/knex/104_adr_0204_s2_content_contact_types.js",
+        "backend/database/migrations/knex/105_adr_0035_s1_geo_point_type.js",
+        "backend/database/migrations/knex/106_adr_0035_a_address_type.js"
+      ],
+      "github_sha256": "4121d3a811b7a7f065c847baa69adb69738f1ec7b5bc96b64ce7f228debc3c00",
+      "source_sha256": "4121d3a811b7a7f065c847baa69adb69738f1ec7b5bc96b64ce7f228debc3c00",
+      "snapshot_sha256": "4121d3a811b7a7f065c847baa69adb69738f1ec7b5bc96b64ce7f228debc3c00",
+      "snapshot_git_status": "?? backend/database/migrations/knex/088_adr_0041r_p1_type_ratchet.js"
+    },
+    {
+      "path": "backend/database/migrations/knex/089_adr_0198_mail_boxes.js",
+      "decision": "keep",
+      "reason": "Frozen migration 089 creates mail_boxes, ensures unique handles and seeds provisioning disabled. Byte-identical to GitHub; retain its filename for existing migration ledgers.",
+      "evidence_paths": [
+        "backend/services/mail/provisionMailbox.js"
+      ],
+      "github_sha256": "31cb6b4074b07904bb66d236660792f1fb7ecdf3c0531d40c283228f39b175b7",
+      "source_sha256": "31cb6b4074b07904bb66d236660792f1fb7ecdf3c0531d40c283228f39b175b7",
+      "snapshot_sha256": "31cb6b4074b07904bb66d236660792f1fb7ecdf3c0531d40c283228f39b175b7",
+      "snapshot_git_status": "?? backend/database/migrations/knex/089_adr_0198_mail_boxes.js"
+    },
+    {
+      "path": "backend/database/migrations/knex/090_adr_0066_b_agent_provenance.js",
+      "decision": "keep",
+      "reason": "Frozen migration 090 adds queryable agent provenance and its index without changing the audit-chain preimage. Byte-identical to GitHub; retain for migration-ledger compatibility.",
+      "evidence_paths": [
+        "backend/services/audit/writeAudit.js",
+        "backend/services/audit/toolAudit.js"
+      ],
+      "github_sha256": "0a3195cb895f775e1434226b62de47eac0c255d84618bf2bbd58c142edeb6af6",
+      "source_sha256": "0a3195cb895f775e1434226b62de47eac0c255d84618bf2bbd58c142edeb6af6",
+      "snapshot_sha256": "0a3195cb895f775e1434226b62de47eac0c255d84618bf2bbd58c142edeb6af6",
+      "snapshot_git_status": "?? backend/database/migrations/knex/090_adr_0066_b_agent_provenance.js"
+    },
+    {
+      "path": "backend/routes/v3/__tests__/agent-users-passport.test.js",
+      "decision": "keep",
+      "reason": "Current test replaces the old hard-coded owner-space policy with passportAuthority (global admin AND admin of the target residence); adds target-derived space and UI authority cases. Preserve current tests, not the obsolete GitHub assertions.",
+      "evidence_paths": [
+        "backend/services/passportAuthority.js",
+        "backend/routes/v3/agent-users.js"
+      ],
+      "github_sha256": "4874dd7adac9723430996e6a103d226c6ab4bf251f66981c52ecc8657ca760b2",
+      "source_sha256": "e65120fc7653740221b900c2b0bc81cd8a0d3ce60913b9811483a5238ca8dc67",
+      "snapshot_sha256": "e65120fc7653740221b900c2b0bc81cd8a0d3ce60913b9811483a5238ca8dc67",
+      "snapshot_git_status": "?? backend/routes/v3/__tests__/agent-users-passport.test.js"
+    },
+    {
+      "path": "backend/routes/v3/__tests__/modules.test.js",
+      "decision": "delete",
+      "reason": "Removed in 68c2d3fe: imported ../modules.js, absent in both GitHub HEAD and current source. This was a test that could not load, not a lost live module endpoint.",
+      "evidence_paths": [],
+      "github_sha256": "1910744f87d210572309eb05312455d2862de85067a4e6e37e3d2b26ce46692d",
+      "source_sha256": null,
+      "snapshot_sha256": null,
+      "deletion_commit": "68c2d3fe27cf72ef3f34b6101a95758c386d32a7"
+    },
+    {
+      "path": "backend/routes/v3/__tests__/public-config.test.js",
+      "decision": "keep",
+      "reason": "Byte-identical public registration-config contract tests: unauthenticated projection exposes only signup_mode and referral_enabled.",
+      "evidence_paths": [
+        "backend/routes/v3/public.js",
+        "backend/services/registrationPolicy.js"
+      ],
+      "github_sha256": "707e87f1bff18d36a54563361d3a25005c7eb07969ea082432c3ae863b3dd529",
+      "source_sha256": "707e87f1bff18d36a54563361d3a25005c7eb07969ea082432c3ae863b3dd529",
+      "snapshot_sha256": "707e87f1bff18d36a54563361d3a25005c7eb07969ea082432c3ae863b3dd529",
+      "snapshot_git_status": "?? backend/routes/v3/__tests__/public-config.test.js"
+    },
+    {
+      "path": "backend/routes/v3/system/__tests__/helpers.test.js",
+      "decision": "keep",
+      "reason": "Byte-identical requireOwnerRole tests preserve the portable role gate, including operation without hard-coded space 11.",
+      "evidence_paths": [
+        "backend/routes/v3/system/helpers.js"
+      ],
+      "github_sha256": "1cf4cc128a357e40fc544c55cf36d787f85d2877651b71ee8a8004ae0fa1d145",
+      "source_sha256": "1cf4cc128a357e40fc544c55cf36d787f85d2877651b71ee8a8004ae0fa1d145",
+      "snapshot_sha256": "1cf4cc128a357e40fc544c55cf36d787f85d2877651b71ee8a8004ae0fa1d145",
+      "snapshot_git_status": "?? backend/routes/v3/system/__tests__/helpers.test.js"
+    },
+    {
+      "path": "backend/scripts/backfill-mailboxes.js",
+      "decision": "keep",
+      "reason": "Byte-identical opt-in mailbox backfill; defaults to a read-only plan, --apply is guarded by the provisioning flag. Keep as operator tooling, do not execute during reconciliation.",
+      "evidence_paths": [
+        "backend/services/mail/provisionMailbox.js"
+      ],
+      "github_sha256": "4c19f99faaa25dd8d48cce2f8dd399caa06de204c83aa936911391246313d6c2",
+      "source_sha256": "4c19f99faaa25dd8d48cce2f8dd399caa06de204c83aa936911391246313d6c2",
+      "snapshot_sha256": "4c19f99faaa25dd8d48cce2f8dd399caa06de204c83aa936911391246313d6c2",
+      "snapshot_git_status": "?? backend/scripts/backfill-mailboxes.js"
+    },
+    {
+      "path": "backend/scripts/mint-agent-handles.js",
+      "decision": "keep",
+      "reason": "Byte-identical handle backfill composes existing normalizers, detects collisions and defaults to dry-run. Retain operator tooling; no invocation in this review.",
+      "evidence_paths": [
+        "backend/services/AuthService.js",
+        "backend/services/agent-users.js"
+      ],
+      "github_sha256": "0bbb4a24cec933d05c31fcd316215b32d950d99b65791872b19e675e22e85a5a",
+      "source_sha256": "0bbb4a24cec933d05c31fcd316215b32d950d99b65791872b19e675e22e85a5a",
+      "snapshot_sha256": "0bbb4a24cec933d05c31fcd316215b32d950d99b65791872b19e675e22e85a5a",
+      "snapshot_git_status": "?? backend/scripts/mint-agent-handles.js"
+    },
+    {
+      "path": "backend/services/agent-tools/__tests__/adr-182-lean-write.test.js",
+      "decision": "keep",
+      "reason": "Current tests retain lean-write behavior and additionally mock the new row-schema guard and realtime notification boundary. Restoring old mocks would conflate row writes with NOTIFY.",
+      "evidence_paths": [
+        "backend/services/agent-tools/data-tools.js",
+        "backend/services/row-schema-guard.js"
+      ],
+      "github_sha256": "755abcefb17a7429474d8e27323dd843f76477106fe8c3c1263a2d9da917c484",
+      "source_sha256": "0e132e80619491abffff43bdc6e06c49b3c97042d9153cd2bc71738f4842021e",
+      "snapshot_sha256": "0e132e80619491abffff43bdc6e06c49b3c97042d9153cd2bc71738f4842021e",
+      "snapshot_git_status": "?? backend/services/agent-tools/__tests__/adr-182-lean-write.test.js"
+    },
+    {
+      "path": "backend/services/agent-tools/__tests__/owner-only-naturalization.test.js",
+      "decision": "keep",
+      "reason": "Byte-identical owner-only tool-path tests retain refusals for agent, MCP and unknown principals and passport audit attribution.",
+      "evidence_paths": [
+        "backend/services/agent-tools/executor.js",
+        "backend/services/agent-tools/passport-tools.js"
+      ],
+      "github_sha256": "d75d8c9c939bf6494d3be8c7866fdd090f1ba05568bcab4404a3deb18345beff",
+      "source_sha256": "d75d8c9c939bf6494d3be8c7866fdd090f1ba05568bcab4404a3deb18345beff",
+      "snapshot_sha256": "d75d8c9c939bf6494d3be8c7866fdd090f1ba05568bcab4404a3deb18345beff",
+      "snapshot_git_status": "?? backend/services/agent-tools/__tests__/owner-only-naturalization.test.js"
+    },
+    {
+      "path": "backend/services/agent-tools/principal.js",
+      "decision": "keep",
+      "reason": "Byte-identical principal resolver; executor and passport auditActor actively consume it. Missing claims, agent contexts and MCP do not acquire owner authority.",
+      "evidence_paths": [
+        "backend/services/agent-tools/executor.js",
+        "backend/services/agent-tools/passport-tools.js"
+      ],
+      "github_sha256": "8533f562b7c2a3a58fb2ba015b58d0e3f379087a8c6e99853c9c752bd621a3a6",
+      "source_sha256": "8533f562b7c2a3a58fb2ba015b58d0e3f379087a8c6e99853c9c752bd621a3a6",
+      "snapshot_sha256": "8533f562b7c2a3a58fb2ba015b58d0e3f379087a8c6e99853c9c752bd621a3a6",
+      "snapshot_git_status": "?? backend/services/agent-tools/principal.js"
+    },
+    {
+      "path": "backend/services/audit/__tests__/toolAudit.test.js",
+      "decision": "keep",
+      "reason": "Byte-identical tool-audit tests preserve read exemptions, default auditing, nested secret redaction and actor attribution for success/error paths.",
+      "evidence_paths": [
+        "backend/services/audit/toolAudit.js"
+      ],
+      "github_sha256": "b52ddecdffc7b40a0bc629dccd0383fbbe21b58f7f2521212b522cebb9b927cc",
+      "source_sha256": "b52ddecdffc7b40a0bc629dccd0383fbbe21b58f7f2521212b522cebb9b927cc",
+      "snapshot_sha256": "b52ddecdffc7b40a0bc629dccd0383fbbe21b58f7f2521212b522cebb9b927cc",
+      "snapshot_git_status": "?? backend/services/audit/__tests__/toolAudit.test.js"
+    },
+    {
+      "path": "backend/services/audit/toolAudit.js",
+      "decision": "keep",
+      "reason": "Current toolAudit retains default audit/redaction/provenance behavior; the only change from GitHub is the read-only ops_grant_info exemption. executeTool still calls auditToolCall on completion and failure.",
+      "evidence_paths": [
+        "backend/services/agent-tools/executor.js",
+        "backend/services/agent-tools/ops-tools.js"
+      ],
+      "github_sha256": "18a819988f0b755ef678b9fe4223452cf179dead34b615f0c748ced73ed8d44c",
+      "source_sha256": "b5f980aa059628c4ff45ac59833ab5044c47f4a55a74d181ffe8bbd19464f75d",
+      "snapshot_sha256": "b5f980aa059628c4ff45ac59833ab5044c47f4a55a74d181ffe8bbd19464f75d",
+      "snapshot_git_status": "?? backend/services/audit/toolAudit.js"
+    },
+    {
+      "path": "backend/services/mail/provisionMailbox.js",
+      "decision": "keep",
+      "reason": "Byte-identical provisioner remains called by registerUser and issuePassport. It gates on the feature flag and mail substrate, provisions Maildir/mail_boxes/private encrypted connector, and repairs incomplete state. No mail or filesystem provisioning performed in this review.",
+      "evidence_paths": [
+        "backend/services/AuthService.js",
+        "backend/services/agent-users.js",
+        "backend/scripts/backfill-mailboxes.js"
+      ],
+      "github_sha256": "36cd5175ab9a487a675980e97e09a9a537eb0215953712321fee1cd50e8910f7",
+      "source_sha256": "36cd5175ab9a487a675980e97e09a9a537eb0215953712321fee1cd50e8910f7",
+      "snapshot_sha256": "36cd5175ab9a487a675980e97e09a9a537eb0215953712321fee1cd50e8910f7",
+      "snapshot_git_status": "?? backend/services/mail/provisionMailbox.js"
+    },
+    {
+      "path": "backend/tests/column-types-adr0041r.test.js",
+      "decision": "keep",
+      "reason": "Current tests extend the ratchet assertions through migrations 104, 105 and 106; old 088 equality alone would reject the intentionally added content/contact/geo_point/address types.",
+      "evidence_paths": [
+        "shared/column-types.js",
+        "backend/services/ColumnService.js"
+      ],
+      "github_sha256": "9b3f7083860985916a3996bd0710f8bf20a756ccb3e18d8e114b340e21ec8ac1",
+      "source_sha256": "87dbbb55e7d423ab6b58f24c954f7ee3ca0dfc757cd757463bf9e614b7501f04",
+      "snapshot_sha256": "87dbbb55e7d423ab6b58f24c954f7ee3ca0dfc757cd757463bf9e614b7501f04",
+      "snapshot_git_status": "?? backend/tests/column-types-adr0041r.test.js"
+    },
+    {
+      "path": "docs/MANIFESTO.md",
+      "decision": "keep",
+      "reason": "Byte-identical public substrate manifesto. No exclusion or replacement is needed.",
+      "evidence_paths": [],
+      "github_sha256": "95f0a8c89c59da6cdbb81f2daf8e4b0e5ade9f1035cba209b2a0749a8b68e67a",
+      "source_sha256": "95f0a8c89c59da6cdbb81f2daf8e4b0e5ade9f1035cba209b2a0749a8b68e67a",
+      "snapshot_sha256": "95f0a8c89c59da6cdbb81f2daf8e4b0e5ade9f1035cba209b2a0749a8b68e67a",
+      "snapshot_git_status": "?? docs/MANIFESTO.md"
+    },
+    {
+      "path": "docs/MCP.md",
+      "decision": "keep",
+      "reason": "Byte-identical public MCP documentation; preserve the published document. Tool-count/content refresh is separate from this deletion review.",
+      "evidence_paths": [
+        "backend/mcp-server.js"
+      ],
+      "github_sha256": "bd97c2074f18e4ea4bd2f86f2091562d92306b933db27ae66b31ddee08d6c1c6",
+      "source_sha256": "bd97c2074f18e4ea4bd2f86f2091562d92306b933db27ae66b31ddee08d6c1c6",
+      "snapshot_sha256": "bd97c2074f18e4ea4bd2f86f2091562d92306b933db27ae66b31ddee08d6c1c6",
+      "snapshot_git_status": "?? docs/MCP.md"
+    },
+    {
+      "path": "glama.json",
+      "decision": "keep",
+      "reason": "Byte-identical Glama maintainer metadata; retain the public registry claim.",
+      "evidence_paths": [],
+      "github_sha256": "15a18583ca6254049fa0d168103717134374140a198aacdc68856057c811bd09",
+      "source_sha256": "15a18583ca6254049fa0d168103717134374140a198aacdc68856057c811bd09",
+      "snapshot_sha256": "15a18583ca6254049fa0d168103717134374140a198aacdc68856057c811bd09",
+      "snapshot_git_status": "?? glama.json"
+    },
+    {
+      "path": "scripts/adr-0198-089-mail-boxes.apply.sql",
+      "decision": "keep",
+      "reason": "Byte-identical historical SQL apply companion for migration 089. Retain as an operator artifact, not as an automatic migration or permission to execute manual SQL.",
+      "evidence_paths": [
+        "backend/database/migrations/knex/089_adr_0198_mail_boxes.js"
+      ],
+      "github_sha256": "b2ddd47cebabf6a28a298ed4e61249ef6ec4bb3d19fac2147a357820c7cc9f3f",
+      "source_sha256": "b2ddd47cebabf6a28a298ed4e61249ef6ec4bb3d19fac2147a357820c7cc9f3f",
+      "snapshot_sha256": "b2ddd47cebabf6a28a298ed4e61249ef6ec4bb3d19fac2147a357820c7cc9f3f",
+      "snapshot_git_status": "?? scripts/adr-0198-089-mail-boxes.apply.sql"
+    },
+    {
+      "path": "scripts/qa/adr198-t3-probe.mjs",
+      "decision": "keep",
+      "reason": "Byte-identical ADR-198 end-to-end probe; it can provision/send mail and is NOT a passive unit test. Preserve but do not run against a live mail substrate in this review.",
+      "evidence_paths": [
+        "backend/services/mail/provisionMailbox.js"
+      ],
+      "github_sha256": "02d37042ebb0efcefc13d6d7fe6e49fe819442950bfd2033b3c28f9f03894d5d",
+      "source_sha256": "02d37042ebb0efcefc13d6d7fe6e49fe819442950bfd2033b3c28f9f03894d5d",
+      "snapshot_sha256": "02d37042ebb0efcefc13d6d7fe6e49fe819442950bfd2033b3c28f9f03894d5d",
+      "snapshot_git_status": "?? scripts/qa/adr198-t3-probe.mjs"
+    },
+    {
+      "path": "shared/column-types.js",
+      "decision": "keep",
+      "reason": "Current shared manifest preserves old types/aliases and adds content/contact, geo_point and address plus related constants; migration 104–106 and ColumnService agree. Export current source, do not revert to GitHub.",
+      "evidence_paths": [
+        "backend/services/ColumnService.js",
+        "backend/tests/column-types-adr0041r.test.js"
+      ],
+      "github_sha256": "75097d9c5b8ab84f642152e54b2ebd6c31c1ec8fe0c6439ba2186342b202387b",
+      "source_sha256": "355279e19ddd03b7e22aa5ad89353ddbdbd5e8c03b19206169bc1c024d321738",
+      "snapshot_sha256": "355279e19ddd03b7e22aa5ad89353ddbdbd5e8c03b19206169bc1c024d321738",
+      "snapshot_git_status": "?? shared/column-types.js"
+    },
+    {
+      "path": "src/features/ai-chat/components/AIChatPanel/hooks/useChatEffects.ts",
+      "decision": "delete",
+      "reason": "8cdc72cf removed the unused shadow hook (zero live importers even before deletion). AIChatPanel already called useSyncEffects and useScrollManagement. Restore neither duplicate nor its polling/scroll effects.",
+      "evidence_paths": [
+        "src/features/ai-chat/components/AIChatPanel/hooks/useAIChatPanelLogic.ts",
+        "src/features/ai-chat/components/AIChatPanel/hooks/useSyncEffects.ts",
+        "src/features/ai-chat/components/AIChatPanel/hooks/useScrollManagement.ts"
+      ],
+      "github_sha256": "9fcc7d3759a1a756631fd075af8e2e155871abae0b85e737e73c4a570be63f25",
+      "source_sha256": null,
+      "snapshot_sha256": null,
+      "deletion_commit": "8cdc72cf994cf59b42e8fd91e535002e65b8139f"
+    },
+    {
+      "path": "src/features/ai-chat/components/AIChatPanel/hooks/useProcessingTimer.ts",
+      "decision": "delete",
+      "reason": "8cdc72cf removed the timer used only by the dead shadow hook. ProcessingStatusBar owns the live one-second tick; restoring panel-root ticking would reintroduce selection/scroll churn.",
+      "evidence_paths": [
+        "src/features/ai-chat/components/AIChatPanel/components/ProcessingStatusBar.tsx"
+      ],
+      "github_sha256": "457ee3194a2c90984e87a6a26d1dab2329a5d0cd610a9fa5b498e2ff698ab99c",
+      "source_sha256": null,
+      "snapshot_sha256": null,
+      "deletion_commit": "8cdc72cf994cf59b42e8fd91e535002e65b8139f"
+    },
+    {
+      "path": "src/features/mail/components/MailLinkBar.tsx",
+      "decision": "replace",
+      "reason": "2be952d4 intentionally replaced the reader record-link chip with attach-to-chat. MailPage now supplies MailReadToolbar.linkSlot through attachRowToMessage; mailApi.link and useMailLink remain available. Replacement already ships in source; no copy-back is needed.",
+      "evidence_paths": [
+        "src/features/mail/MailPage.tsx",
+        "src/features/mail/components/MailReadToolbar.tsx",
+        "src/features/mail/hooks/useMailLink.ts",
+        "src/features/mail/api/mailApi.ts"
+      ],
+      "github_sha256": "9d96b7379687b7d61f4a4236b90bcd0134c2a50ee7dea79d45844929ec999bc7",
+      "source_sha256": null,
+      "snapshot_sha256": null,
+      "deletion_commit": "2be952d4629efcdc8deb6c95b8896b3d4208035b"
+    },
+    {
+      "path": "src/features/public/__tests__/useBlogSeo.test.ts",
+      "decision": "keep",
+      "reason": "Byte-identical blog canonical/metadata lifecycle tests; still exercise the current useBlogSeo hook.",
+      "evidence_paths": [
+        "src/features/public/useBlogSeo.ts"
+      ],
+      "github_sha256": "9bb4da4362e52bf3f71320d965bfd698871e39f2644b245bd22809b08449f73e",
+      "source_sha256": "9bb4da4362e52bf3f71320d965bfd698871e39f2644b245bd22809b08449f73e",
+      "snapshot_sha256": "9bb4da4362e52bf3f71320d965bfd698871e39f2644b245bd22809b08449f73e",
+      "snapshot_git_status": "?? src/features/public/__tests__/useBlogSeo.test.ts"
+    },
+    {
+      "path": "src/features/tables/components/TableFilters/PaginationControls.tsx",
+      "decision": "delete",
+      "reason": "72583d7a removed an unused page-size/page-number dropdown. No current importers; TableFilters uses GoToRowInput/RowPositionBar and TableGrid uses load-previous/load-next rows. This is not a loss of live pagination.",
+      "evidence_paths": [
+        "src/features/tables/components/TableFilters/TableFilters.tsx",
+        "src/features/tables/components/TableFilters/GoToRowInput.tsx",
+        "src/features/tables/components/TableFilters/RowPositionBar.tsx",
+        "src/features/tables/components/UniversalTable/TablePaginationRows.tsx"
+      ],
+      "github_sha256": "14a0a9d7ab1f1b77658616b06f27fea9500cf1024cae712b26eed4ebc069265f",
+      "source_sha256": null,
+      "snapshot_sha256": null,
+      "deletion_commit": "72583d7ae7e46139f2a815d8749211470e916bc6"
+    },
+    {
+      "path": "src/features/tables/components/UniversalTable/TableSummaryBar.tsx",
+      "decision": "delete",
+      "reason": "aec7b824 removed a component behind showSummaryBar=false with no caller enabling it. Live footer and selected-row totals use server-backed useTableSummary/useColumnSummaries/SelectionSummaryBar; do not restore partial-page local aggregates.",
+      "evidence_paths": [
+        "src/features/tables/hooks/useTableSummary.ts",
+        "src/features/tables/components/UniversalTable/useColumnSummaries.tsx",
+        "src/features/tables/components/UniversalTable/SelectionSummaryBar.tsx",
+        "src/features/tables/components/UniversalTable/TableGrid.tsx"
+      ],
+      "github_sha256": "f9762f54b2a3aee3b276972da65388109b1af9a227f20acd745c89f7ddc5466e",
+      "source_sha256": null,
+      "snapshot_sha256": null,
+      "deletion_commit": "aec7b8240260ca0046aabd009b00e363fe6d213f"
+    },
+    {
+      "path": "src/features/tables/components/UniversalTable/__tests__/TableSummaryBar.test.tsx",
+      "decision": "delete",
+      "reason": "aec7b824 removed tests for the unreachable TableSummaryBar with the component. Active server-backed footer/selection behavior has replacement tests, not a skipped copy of the old suite.",
+      "evidence_paths": [
+        "src/features/tables/components/UniversalTable/__tests__/useColumnSummaries.test.tsx",
+        "src/features/tables/components/UniversalTable/__tests__/SelectionSummaryBar.test.tsx"
+      ],
+      "github_sha256": "8d97e377e15b4f09c983d39c9e862a6d1e680aedc85bb6d44ac016b531f81e30",
+      "source_sha256": null,
+      "snapshot_sha256": null,
+      "deletion_commit": "aec7b8240260ca0046aabd009b00e363fe6d213f"
+    },
+    {
+      "path": "src/features/tables/hooks/__tests__/useColumnSummary.test.tsx",
+      "decision": "delete",
+      "reason": "aec7b824 removed tests whose only target was the unused useColumnSummary hook. Current server summary and its selected-row semantics are exercised in useTableSummary tests.",
+      "evidence_paths": [
+        "src/features/tables/hooks/__tests__/useTableSummary.test.tsx"
+      ],
+      "github_sha256": "191862a13543b5af0902fd098191c19030d5ad069101993841e0ff170107ab3a",
+      "source_sha256": null,
+      "snapshot_sha256": null,
+      "deletion_commit": "aec7b8240260ca0046aabd009b00e363fe6d213f"
+    },
+    {
+      "path": "src/features/tables/hooks/useColumnSummary.ts",
+      "decision": "delete",
+      "reason": "aec7b824 removed a hook with no production callers. The active summary flow uses server aggregates. The summary-variable backend endpoint remains mounted; there is no claim that the unused export hook has a new live UI replacement.",
+      "evidence_paths": [
+        "src/features/tables/hooks/useTableSummary.ts",
+        "backend/routes/v3/tables/tableSummaryVariableController.js",
+        "backend/routes/v3/tables/index.js"
+      ],
+      "github_sha256": "2a3046d8110c10af7b5e0305b9e80d78d1319b74b9cd838f12bb899377e22a0b",
+      "source_sha256": null,
+      "snapshot_sha256": null,
+      "deletion_commit": "aec7b8240260ca0046aabd009b00e363fe6d213f"
+    }
+  ],
+  "public_ancestry": {
+    "relationship": "unrelated_histories",
+    "forgejo_root": "f89e074",
+    "github_root": "cca685c",
+    "publication_requirement": "The publishing executor must retain both pinned public heads as ancestors of the reconciled public result (or preserve each remote history separately). No force-push and no private parents. Content reconciliation alone does not reconcile the DAG."
+  }
+}

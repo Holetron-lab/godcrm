@@ -1,3 +1,4 @@
+import { LanguageProvider } from '@/shared/i18n/LanguageContext';
 /**
  * ADR-0005 §C-5 / Phase 5 — toolbar create-menu now lists `widget` between
  * `image` and `divider`. Selecting "Виджет" defers to the existing widget
@@ -65,6 +66,7 @@ const openAddMenu = () => {
 
 describe('ADR-0005 §C-5 / Phase 5 — ToolbarCreateMenu widget level', () => {
   beforeEach(() => {
+    localStorage.setItem('god-crm-language', 'ru');
     mockSetWidgetPickerTarget.mockClear();
     mockAddItem.mockClear();
     mockUpdateItem.mockClear();
@@ -73,7 +75,7 @@ describe('ADR-0005 §C-5 / Phase 5 — ToolbarCreateMenu widget level', () => {
   });
 
   it('lists "Виджет" between Image and Divider in the add menu', () => {
-    render(<ToolbarCreateMenu />);
+    render(<ToolbarCreateMenu />, { wrapper: LanguageProvider });
     openAddMenu();
 
     const menu = screen.getByTestId('documents-add-menu');
@@ -98,7 +100,7 @@ describe('ADR-0005 §C-5 / Phase 5 — ToolbarCreateMenu widget level', () => {
   });
 
   it('clicking "Виджет" opens the widget picker in create mode (no anchor → append)', () => {
-    render(<ToolbarCreateMenu />);
+    render(<ToolbarCreateMenu />, { wrapper: LanguageProvider });
     openAddMenu();
 
     fireEvent.click(screen.getByTestId('documents-add-menu-item-widget'));
@@ -124,7 +126,7 @@ describe('ADR-0005 §C-5 / Phase 5 — ToolbarCreateMenu widget level', () => {
     const original = baseCtx.isReadOnly;
     (baseCtx as { isReadOnly: boolean }).isReadOnly = true;
     try {
-      render(<ToolbarCreateMenu />);
+      render(<ToolbarCreateMenu />, { wrapper: LanguageProvider });
       // The "Добавить" dropdown is not rendered in read-only mode.
       expect(screen.queryByText('Добавить')).toBeNull();
     } finally {
@@ -150,7 +152,12 @@ describe('ADR-0005 §C-5 / Phase 5 — ToolbarCreateMenu widget level', () => {
  */
 describe('ADR-0005 §C-5 / Phase 5 — picker → addItem row shape', () => {
   it('creates an atom with level=widget, widget_ref=<id>, no settings_override', async () => {
-    const addItem = vi.fn(async () => ({ id: 1, tableId: 42 }));
+    const addItem = vi.fn<(params: {
+      documentId: number;
+      tableId: number;
+      item: { order: number; level: 'widget'; widget_ref: number; settings_override?: Record<string, unknown> };
+    }) => Promise<{ id: number; tableId: number }>>()
+      .mockResolvedValue({ id: 1, tableId: 42 });
     const widgetId = 1234;
     const order = 555;
 

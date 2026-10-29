@@ -1,0 +1,14 @@
+[Unit]
+Description=Prepared staging port 5000 ingress fence (not installed)
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+UMask=0077
+ExecStart=/usr/bin/python3 /opt/godcrm-staging/REVIEWED-INGRESS/control.py close /opt/godcrm-staging/REVIEWED-INGRESS/manifest.json
+ExecStop=/usr/bin/python3 /opt/godcrm-staging/REVIEWED-INGRESS/control.py open /opt/godcrm-staging/REVIEWED-INGRESS/manifest.json
+TimeoutStartSec=90
+TimeoutStopSec=30
+# No Install section: enablement/reboot recovery is a separate reviewed step.
+# Failed close deliberately leaves the fence installed. No ExecStopPost cleanup.

@@ -1,3 +1,4 @@
+import { LanguageProvider } from '@/shared/i18n/LanguageContext';
 /**
  * AIChatContext — Unit Tests
  *
@@ -6,8 +7,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor, screen } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
+import { MentionUsersProvider } from '../../components/MentionUsersContext';
+import { HighlightedText } from '../../components/HighlightedText';
+import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
 
 // Mock apiClient before importing context
 const mockPost = vi.fn();
@@ -44,12 +50,13 @@ vi.mock('@/features/files/api/filesApi', () => ({
 import { AIChatProvider, useAIChat } from '../AIChatContext';
 
 function wrapper({ children }: { children: React.ReactNode }) {
-  return <AIChatProvider>{children}</AIChatProvider>;
+  return <LanguageProvider><AIChatProvider>{children}</AIChatProvider></LanguageProvider>;
 }
 
 describe('AIChatContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.setItem('god-crm-language', 'ru');
     // Default mock for loadConversations (called on mount)
     mockGet.mockResolvedValue({ success: true, data: { conversations: [] } });
   });
@@ -60,6 +67,36 @@ describe('AIChatContext', () => {
     expect(result.current.messages).toEqual([]);
     expect(result.current.isAgentProcessing).toBe(false);
     expect(typeof result.current.sendMessage).toBe('function');
+  });
+
+  it('keeps locked agent metadata for mentions without making agents selectable', async () => {
+    const agents = [
+      { id: 31112, name: 'Orchestrator', agent_slug: 'orchestrator', icon: '🎯', is_active: true, visibility: 'default' },
+      { id: 33484, name: 'SysAdmin', agent_slug: 'sysadmin', icon: '🔧', is_active: true, visibility: 'locked' },
+      { id: 33491, name: 'Architect', agent_slug: 'architect', icon: '🏗️', is_active: true, visibility: 'locked' },
+      { id: 31113, name: 'Developer Ralph', agent_slug: 'developer-ralph', icon: '⚙️', is_active: true, visibility: 'locked' },
+    ];
+    mockGet.mockImplementation(async (url: string) => ({
+      success: true, data: url.startsWith('/ai/agents/11?') ? { agents, total: agents.length } : { conversations: [] },
+    }));
+    const { result } = renderHook(() => useAIChat(), {
+      wrapper: ({ children }) => <LanguageProvider><AIChatProvider spaceId={11}>{children}</AIChatProvider></LanguageProvider>,
+    });
+    await waitFor(() => expect(result.current.isLoadingAgents).toBe(false));
+    expect(result.current.agents.map(agent => agent.id)).toEqual([31112]);
+    expect(result.current.mentionAgents).toEqual(agents);
+    const content = agents.map(agent => `<<@${agent.agent_slug}>> @${agent.agent_slug}`).join(' ');
+    render(<MemoryRouter><MentionUsersProvider agents={result.current.mentionAgents}>
+      <HighlightedText text={content} />
+      <MarkdownPreview content={content} />
+    </MentionUsersProvider></MemoryRouter>);
+    for (const agent of agents) {
+      for (const kind of ['Вызов', 'Упоминание']) {
+        const pills = screen.getAllByTitle(`${kind}: @${agent.agent_slug}`);
+        expect(pills).toHaveLength(2);
+        for (const pill of pills) expect(pill).toHaveTextContent(agent.icon);
+      }
+    }
   });
 
   it('opens and closes chat', () => {
@@ -90,6 +127,9 @@ describe('AIChatContext', () => {
       await result.current.sendMessage('hello');
     });
     expect(result.current.error).toBeTruthy();
+    expect(mockPost).not.toHaveBeenCalled();
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.isLoading).toBe(false);
   });
 
   describe('sendMessage with agent', () => {

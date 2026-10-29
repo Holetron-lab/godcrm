@@ -1,9 +1,8 @@
 import { TableGrid } from './TableGrid';
 import { TableSkeleton } from './TableSkeleton';
-import { TableSummaryBar } from './TableSummaryBar';
 import { TableModals } from './TableModals';
 import { useUniversalTableState } from './useUniversalTableState';
-import type { ColumnModel, RowModel } from '../../types/table.types';
+import type { ColumnModel } from '../../types/table.types';
 import type { UniversalTableProps, PaginationInfo } from './types';
 
 // Re-export types for consumers
@@ -19,6 +18,9 @@ export const UniversalTable = (props: UniversalTableProps = {}) => {
     allRows,
     sortedRows,
     rowsVersion,
+    tableSummary,
+    selectionSummary,
+    relations,
     tableInstance,
     editingCell,
     draftValue,
@@ -48,6 +50,7 @@ export const UniversalTable = (props: UniversalTableProps = {}) => {
     rowsLimit,
     totalRowsCount,
     totalRows,
+    fetchAllRows,
     isLoadingMore,
     canLoadMore,
     canLoadPrevious,
@@ -117,7 +120,6 @@ export const UniversalTable = (props: UniversalTableProps = {}) => {
     spaceId,
     spaceName,
     projectName,
-    showSummaryBar,
     addRowModalOpen,
     onCloseAddRowModal,
     groupByColumn,
@@ -148,6 +150,7 @@ export const UniversalTable = (props: UniversalTableProps = {}) => {
           table={tableInstance}
           columns={columns}
           rows={sortedRows}
+          relations={relations}
           rowsVersion={rowsVersion}
           editingCell={editingCell}
           draftValue={draftValue}
@@ -188,6 +191,8 @@ export const UniversalTable = (props: UniversalTableProps = {}) => {
           onDeleteSelected={!readOnly && !isReadOnlyContext ? handleDeleteSelectedClick : undefined}
           filteredCount={filteredRowIds.length}
           totalCount={allRowIds.length}
+          tableSummary={tableSummary}
+          selectionSummary={selectionSummary}
           // Load more
           canLoadMore={canLoadMore}
           onLoadMore={handleLoadMore}
@@ -208,15 +213,6 @@ export const UniversalTable = (props: UniversalTableProps = {}) => {
           onAttachRowToMessage={handleAttachRowToMessage}
         />
       </div>
-
-      {/* Summary Bar (ADR-026) */}
-      {showSummaryBar && rows.length > 0 && (
-        <TableSummaryBar
-          rows={rows as RowModel[]}
-          columns={columns as ColumnModel[]}
-          table={tableInstance}
-        />
-      )}
 
       <TableModals
         table={table}
@@ -264,6 +260,7 @@ export const UniversalTable = (props: UniversalTableProps = {}) => {
         onCloseExportModal={() => setExportModalOpen(false)}
         selectedRowIds={selectedRowIds}
         totalRowsCount={totalRowsCount}
+        fetchAllRows={fetchAllRows}
         importModalOpen={importModalOpen}
         onCloseImportModal={() => setImportModalOpen(false)}
         nestedTableModal={nestedTableModal}

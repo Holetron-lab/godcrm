@@ -10,11 +10,13 @@ import {
   Pencil,
   ArrowRightLeft,
   Trash2,
-  LayoutGrid,
-  Table2,
-  FolderOpen,
+  MoreVertical,
+  Crosshair,
+  Move,
+  ExternalLink,
 } from 'lucide-react';
 import type { NavTreeNode } from '../../types/schema-editor.types';
+import { isTableWidget } from '../widgetIcon';
 
 interface NavTreeItemContextMenuProps {
   node: NavTreeNode;
@@ -29,6 +31,8 @@ const dispatchTableEvent = (eventName: string, tableId: number) => {
 const dispatchProjectEvent = (eventName: string, projectId: number) => {
   window.dispatchEvent(new CustomEvent(eventName, { detail: { projectId } }));
 };
+
+const ITEM_CLASSES = 'w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors';
 
 export const NavTreeItemContextMenu = ({ node, primaryTableId, t }: NavTreeItemContextMenuProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -48,6 +52,9 @@ export const NavTreeItemContextMenu = ({ node, primaryTableId, t }: NavTreeItemC
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [menuOpen]);
 
+  // A table module gets the table menu of its main table (primaryTableId = mainTableId).
+  const tableActions = node.type === 'table' || (node.type === 'widget' && isTableWidget(node.presetName));
+
   const handleContextAction = (action: string) => {
     setMenuOpen(false);
     if (action === 'editProject') {
@@ -56,30 +63,34 @@ export const NavTreeItemContextMenu = ({ node, primaryTableId, t }: NavTreeItemC
       }
       return;
     }
+    if (action === 'openWidget') {
+      window.open(`/widgets/${node.numericId}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
     if (!primaryTableId) return;
     switch (action) {
       case 'addRow':
-        if (node.type === 'table') {
+        if (tableActions) {
           dispatchTableEvent('schema-editor:add-row', primaryTableId);
         }
         break;
       case 'view':
-        if (node.type === 'table') {
+        if (tableActions) {
           window.open(`/tables/${primaryTableId}`, '_blank');
         }
         break;
       case 'edit':
-        if (node.type === 'table') {
+        if (tableActions) {
           dispatchTableEvent('schema-editor:edit-table', primaryTableId);
         }
         break;
       case 'move':
-        if (node.type === 'table') {
+        if (tableActions) {
           dispatchTableEvent('schema-editor:move-table', primaryTableId);
         }
         break;
       case 'delete':
-        if (node.type === 'table') {
+        if (tableActions) {
           dispatchTableEvent('schema-editor:delete-table', primaryTableId);
         }
         break;
@@ -98,66 +109,57 @@ export const NavTreeItemContextMenu = ({ node, primaryTableId, t }: NavTreeItemC
 
   return (
     <div className="relative flex-shrink-0">
+      {/* ⋮ on the right, like the table node header */}
       <button
         ref={menuButtonRef}
+        type="button"
         onClick={(e) => {
           e.stopPropagation();
           setMenuOpen((prev) => !prev);
         }}
-        className={`rounded p-0.5 transition-colors hover:bg-[var(--bg-tertiary)] ${
-          node.type === 'project'
-            ? 'text-[var(--accent-primary)]'
-            : node.type === 'folder'
-            ? 'text-amber-500'
-            : 'text-green-500'
-        }`}
-        title={node.type.toUpperCase()}
+        aria-label={t('schemaEditor.navMenu.actions')}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        className="flex h-5 w-4 items-center justify-center rounded text-[var(--text-tertiary)] opacity-60 transition-colors group-hover:opacity-100 hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] focus-visible:opacity-100"
       >
-        {node.type === 'project' ? (
-          <LayoutGrid className="w-3.5 h-3.5" />
-        ) : node.type === 'folder' ? (
-          <FolderOpen className="w-3.5 h-3.5" />
-        ) : (
-          <Table2 className="w-3.5 h-3.5" />
-        )}
+        <MoreVertical className="w-3.5 h-3.5" aria-hidden="true" />
       </button>
       {menuOpen && (
         <div
           ref={menuRef}
+          role="menu"
           className="absolute right-0 top-full mt-1 w-44 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] shadow-xl z-[120] overflow-hidden"
         >
-          {node.type === 'table' && (
+          {node.type === 'widget' && (
             <>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleContextAction('addRow'); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors"
-              >
+              <button role="menuitem" onClick={(e) => { e.stopPropagation(); handleContextAction('openWidget'); }} className={ITEM_CLASSES}>
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>{t('schemaEditor.navMenu.openWidget')}</span>
+              </button>
+              <div className="border-t border-[var(--border-primary)]" />
+            </>
+          )}
+          {tableActions && primaryTableId && (
+            <>
+              <button role="menuitem" onClick={(e) => { e.stopPropagation(); handleContextAction('addRow'); }} className={ITEM_CLASSES}>
                 <PlusCircle className="w-3.5 h-3.5" />
                 <span>{t('schemaEditor.tableMenu.addRow')}</span>
               </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleContextAction('view'); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors"
-              >
+              <button role="menuitem" onClick={(e) => { e.stopPropagation(); handleContextAction('view'); }} className={ITEM_CLASSES}>
                 <Eye className="w-3.5 h-3.5" />
                 <span>{t('schemaEditor.tableMenu.view')}</span>
               </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleContextAction('edit'); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors"
-              >
+              <button role="menuitem" onClick={(e) => { e.stopPropagation(); handleContextAction('edit'); }} className={ITEM_CLASSES}>
                 <Pencil className="w-3.5 h-3.5" />
                 <span>{t('schemaEditor.tableMenu.edit')}</span>
               </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleContextAction('move'); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors"
-              >
+              <button role="menuitem" onClick={(e) => { e.stopPropagation(); handleContextAction('move'); }} className={ITEM_CLASSES}>
                 <ArrowRightLeft className="w-3.5 h-3.5" />
                 <span>{t('schemaEditor.tableMenu.move')}</span>
               </button>
               <div className="border-t border-[var(--border-primary)]" />
               <button
+                role="menuitem"
                 onClick={(e) => { e.stopPropagation(); handleContextAction('delete'); }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-red-500/10 text-red-500 transition-colors"
               >
@@ -169,31 +171,26 @@ export const NavTreeItemContextMenu = ({ node, primaryTableId, t }: NavTreeItemC
           )}
           {node.type === 'project' && (
             <>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleContextAction('editProject'); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors"
-              >
+              <button role="menuitem" onClick={(e) => { e.stopPropagation(); handleContextAction('editProject'); }} className={ITEM_CLASSES}>
                 <Pencil className="w-3.5 h-3.5" />
-                <span>Редактировать проект</span>
+                <span>{t('schemaEditor.navMenu.editProject')}</span>
               </button>
               <div className="border-t border-[var(--border-primary)]" />
             </>
           )}
           <button
+            role="menuitem"
             onClick={(e) => { e.stopPropagation(); handleContextAction('focus'); }}
-            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-secondary)] disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`${ITEM_CLASSES} disabled:opacity-50 disabled:cursor-not-allowed`}
             disabled={!primaryTableId}
           >
-            <Eye className="w-3.5 h-3.5" />
-            <span>Показать на воркфлоу</span>
+            <Crosshair className="w-3.5 h-3.5" />
+            <span>{t('schemaEditor.navMenu.showOnCanvas')}</span>
           </button>
           {node.type === 'table' && (
-            <button
-              onClick={(e) => { e.stopPropagation(); handleContextAction('center'); }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-[var(--bg-secondary)] text-[var(--text-primary)] transition-colors"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Перенести в центр</span>
+            <button role="menuitem" onClick={(e) => { e.stopPropagation(); handleContextAction('center'); }} className={ITEM_CLASSES}>
+              <Move className="w-3.5 h-3.5" />
+              <span>{t('schemaEditor.navMenu.moveToCenter')}</span>
             </button>
           )}
         </div>

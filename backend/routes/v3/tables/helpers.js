@@ -2,7 +2,94 @@
  * Shared helper functions for tables routes
  */
 import { dbGet } from '../../../database/connection.js';
-import { getUserAccessData } from '../../../services/SpaceService.js';
+import { getUserAccessData, checkUserAccessViaTableV2 } from '../../../services/SpaceService.js';
+import { getEffectiveRole, ACCESS_LEVEL_VALUES } from '../../../services/EffectiveRoleService.js';
+import { forbidden, notFound, success } from '../../../utils/response.js';
+import { attachRelationLens } from '../../../services/RelationLensResolver.js';
+
+/** `?include=relations` (comma list or repeated param) — ADR-205 D2. */
+export function wantsRelations(include) {
+  return [].concat(include ?? [])
+    .flatMap((v) => String(v).split(','))
+    .some((v) => v.trim() === 'relations');
+}
+
+/**
+ * Send a rows / single-row payload, attaching the relation lens map when the caller asked
+ * for it (ADR-205 D2). Without `include=relations` the payload goes out exactly as given —
+ * the response stays byte-identical to the pre-ADR-205 contract (AC1).
+ *
+ * @param {import('express').Response} res
+ * @param {{rows?: Array<object>, row?: object}} payload  `{ rows, pagination }` or `{ row, columns? }`
+ * @param {{tableId: number|string, include?: string|string[], user?: object}} ctx
+ */
+export async function respondRows(res, payload, { tableId, include, user }) {
+  if (!wantsRelations(include)) return success(res, payload);
+  const rows = payload.rows ?? (payload.row ? [payload.row] : []);
+  const lens = await attachRelationLens({ tableId, rows, user });
+  return success(res, { ...payload, ...lens });
+}
+
+/**
+ * Space-membership gate for table WRITES (Bug 1552/229245, Fleet Audit WP-5 BE).
+ *
+ * Before this, every write handler only ran `checkTableAccess` for project-restricted
+ * API keys, so any authenticated user could create/edit/delete rows and tables in a
+ * stranger's `internal` space. The global role is never consulted (ADR-203 D3): a
+ * global `viewer` who owns the space keeps every owner tool; global admin/owner
+ * bypass matches the existing DELETE /tables/:id gate.
+ *
+ * Space role is resolved the two ways the space API already resolves it:
+ *   1. spaces.access_control (UserAccessPanel users table + role_mappings) via
+ *      checkUserAccessViaTableV2 — the only format present on master A;
+ *   2. user_access_permissions (invites, /access API) incl. project ownership via
+ *      EffectiveRoleService.
+ * Writes need `editor` or above.
+ *
+ * @returns {Promise<{allowed: boolean, error?: string, status?: number}>}
+ */
+export async function checkTableWriteAccess(user, { tableId = null, projectId = null } = {}) {
+  if (!user?.id) return { allowed: false, error: 'Authentication required' };
+  if (user.role === 'admin' || user.role === 'owner') return { allowed: true };
+
+  if (tableId) {
+    const table = await dbGet('SELECT project_id FROM universal_tables WHERE id = ?', [tableId]);
+    if (!table) return { allowed: false, error: 'Table not found', status: 404 };
+    projectId = table.project_id;
+  }
+  const project = projectId ? await dbGet('SELECT space_id FROM projects WHERE id = ?', [projectId]) : null;
+  const space = project?.space_id
+    ? await dbGet('SELECT owner_id, access_control FROM spaces WHERE id = ?', [project.space_id])
+    : null;
+
+  const deny = { allowed: false, error: 'You do not have write access to this table' };
+  if (!space) return deny;
+  if (space.owner_id === user.id) return { allowed: true };
+
+  let accessControl = space.access_control;
+  if (typeof accessControl === 'string') {
+    try { accessControl = JSON.parse(accessControl); } catch { accessControl = null; }
+  }
+
+  let level = null;
+  if (accessControl?.enabled && (accessControl.users_table_id || accessControl.usersTableId) && accessControl.role_mappings) {
+    ({ accessLevel: level } = await checkUserAccessViaTableV2(user.id, accessControl));
+  }
+  if (level == null) {
+    ({ effectiveRole: level } = await getEffectiveRole(user.id, { spaceId: project.space_id, projectId, tableId }));
+  }
+  return (ACCESS_LEVEL_VALUES[level] ?? 0) >= ACCESS_LEVEL_VALUES.editor ? { allowed: true } : deny;
+}
+
+/** Express form of checkTableWriteAccess for `/tables/:tableId/...` write routes. */
+export function requireTableWriteAccess(req, res, next) {
+  checkTableWriteAccess(req.user, { tableId: req.params.tableId })
+    .then((access) => {
+      if (access.allowed) return next();
+      return access.status === 404 ? notFound(res, 'Table') : forbidden(res, access.error);
+    })
+    .catch(next);
+}
 
 // Helper function to map SQLite types to internal types
 export function mapSqliteTypeToInternal(sqliteType) {

@@ -4,14 +4,29 @@
  */
 
 import { useMemo } from 'react';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { logger } from '@/shared/utils/logger';
 import { apiClient } from '@/shared/utils/apiClient';
-import { useCurrentSpace } from '@/features/spaces/store/spacesStore';
 import { useAllTables } from '@/features/tables/hooks/useAllTables';
 import { filesApi } from '@/features/files/api/filesApi';
 import type { PanelTab, TasksSourceConfig, FilesSourceConfig, ApiResponse, InboxConversation, PaginatedConversationsResponse } from '../../AIChatPanel.types';
 import { getTaskRowTitle, getTaskRowField } from '../../AIChatPanel.utils';
+
+interface MentionDirectoryUser {
+  id: number;
+  name: string;
+  email?: string;
+  avatar_url?: string;
+  avatar?: string;
+  color?: string | null;
+  handle?: string | null;
+  managed_by_agent_table_id?: number;
+  managed_by_agent_row_id?: number;
+  agent_icon?: string;
+  description?: string;
+  agent_data?: { icon?: string; color?: string; description?: string };
+}
 
 interface UseDataQueriesParams {
   activePanel: PanelTab;
@@ -41,6 +56,7 @@ interface UseDataQueriesParams {
 }
 
 export function useDataQueries(params: UseDataQueriesParams) {
+  const { t } = useLanguage();
   const {
     activePanel,
     effectiveSpaceId,
@@ -65,7 +81,6 @@ export function useDataQueries(params: UseDataQueriesParams) {
     isWideMode,
   } = params;
 
-  const currentSpace = useCurrentSpace();
   const { data: allTablesDataMain } = useAllTables();
 
   // Fetch users for contacts - space members or all
@@ -215,12 +230,12 @@ export function useDataQueries(params: UseDataQueriesParams) {
     if (!tasksSearch.trim()) return taskRows;
     const query = tasksSearch.toLowerCase().trim();
     return taskRows.filter(row => {
-      const title = getTaskRowTitle(row, tasksSource).toLowerCase();
+      const title = getTaskRowTitle(row, tasksSource, t).toLowerCase();
       const desc = (getTaskRowField(row, tasksSource?.descriptionColumn) as string | undefined)?.toLowerCase() || '';
       const idStr = `#${row.id}`;
       return title.includes(query) || desc.includes(query) || idStr.includes(query);
     });
-  }, [taskRows, tasksSearch, tasksSource]);
+  }, [taskRows, tasksSearch, tasksSource, t]);
 
   // Fetch status dictionary for tasks
   const { data: taskStatusDict = [] } = useQuery<Array<{ id: number; name?: string; color?: string }>>({
@@ -278,44 +293,67 @@ export function useDataQueries(params: UseDataQueriesParams) {
 
   // Fetch AI operators (providers)
   const { data: operators = [] } = useQuery({
-    queryKey: ['ai-operators', currentSpace?.id],
+    queryKey: ['ai-operators', effectiveSpaceId],
     queryFn: async () => {
       const response = await apiClient.get<{ success: boolean; data?: { providers: Array<{
         id: number; name: string; base_url?: string; api_key?: string;
-      }> }; providers?: Array<{ id: number; name: string; base_url?: string; api_key?: string }> }>(`/ai/providers?spaceId=${currentSpace?.id || ''}`);
+      }> }; providers?: Array<{ id: number; name: string; base_url?: string; api_key?: string }> }>(`/ai/providers?spaceId=${effectiveSpaceId}`);
       return response.data?.providers || response.providers || [];
     },
-    enabled: activePanel === 'settings' || activePanel === 'ai-agents'
+    enabled: (activePanel === 'settings' || activePanel === 'ai-agents') && !!effectiveSpaceId
   });
 
   // Fetch models for selected operator
   const { data: models = [] } = useQuery({
-    queryKey: ['ai-models', chatOperatorId || currentAgentOperatorId],
+    queryKey: ['ai-models', chatOperatorId || currentAgentOperatorId, effectiveSpaceId],
     queryFn: async () => {
       const opId = chatOperatorId || currentAgentOperatorId;
       if (!opId) return [];
       const response = await apiClient.get<{ success: boolean; data?: { models: Array<{
         id: number; name: string; model_id?: string;
-      }> }; models?: Array<{ id: number; name: string; model_id?: string }> }>(`/ai/providers/${opId}/models`);
+      }> }; models?: Array<{ id: number; name: string; model_id?: string }> }>(`/ai/providers/${opId}/models?spaceId=${effectiveSpaceId}`);
       return response.data?.models || response.models || [];
     },
-    enabled: (activePanel === 'settings' || activePanel === 'ai-agents') && !!(chatOperatorId || currentAgentOperatorId)
+    enabled: (activePanel === 'settings' || activePanel === 'ai-agents') && !!(chatOperatorId || currentAgentOperatorId) && !!effectiveSpaceId
   });
 
   // Fetch users for @mentions
-  const { data: usersForMentions } = useQuery({
+  const { data: localMentionUsers } = useQuery({
     queryKey: ['users-for-mentions', effectiveSpaceId],
     queryFn: async () => {
       if (!effectiveSpaceId) return [];
-      const response = await apiClient.get<{ success: boolean; data: { users: Array<{
-        id: number; name: string; email?: string; avatar_url?: string;
-        managed_by_agent_table_id?: number; managed_by_agent_row_id?: number;
-      }>; source: string; table_id: number | null } }>(`/access/space/${effectiveSpaceId}/available-users`);
+      const response = await apiClient.get<{ success: boolean; data: { users: MentionDirectoryUser[] } }>(`/access/space/${effectiveSpaceId}/available-users`);
       return response.success && response.data?.users ? response.data.users : [];
     },
     enabled: !!effectiveSpaceId,
     staleTime: 60000
   });
+
+  const { data: passportUsers } = useQuery({
+    queryKey: ['agent-roster', 'agent-users'],
+    queryFn: async () => {
+      const response = await apiClient.get<{ success: boolean; data: MentionDirectoryUser[] }>('/users/agents');
+      if (!response.success || !Array.isArray(response.data)) throw new Error(t('aiChat.ui.passportLoadFailed'));
+      return response.data;
+    },
+    enabled: !!effectiveSpaceId,
+    staleTime: 60000,
+  });
+  const usersForMentions = useMemo(() => {
+    const users = new Map((localMentionUsers ?? []).map(user => [user.id, user]));
+    // Passports enrich identities; only space membership makes a user selectable.
+    for (const user of passportUsers ?? []) {
+      if (!user.handle || !users.has(user.id)) continue;
+      users.set(user.id, {
+        ...users.get(user.id), ...user,
+        avatar_url: user.avatar_url || user.avatar,
+        agent_icon: user.agent_data?.icon,
+        color: user.agent_data?.color || user.color,
+        description: user.agent_data?.description,
+      });
+    }
+    return [...users.values()];
+  }, [localMentionUsers, passportUsers]);
 
   // Fetch AI Agents for /commands
   const { data: aiAgentsData } = useQuery({

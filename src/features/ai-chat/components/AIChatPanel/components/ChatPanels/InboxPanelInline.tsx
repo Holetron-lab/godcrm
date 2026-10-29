@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * InboxPanelInline — Inbox panel render extracted from AIChatPanel.tsx renderInboxPanel().
  * Ticket #81443/#81444: Enhanced with filters (search, agent, date).
@@ -29,7 +30,7 @@ export interface InboxPanelInlineProps {
   setInboxRenamingId: (id: number | null) => void;
   inboxRenamingTitle: string;
   setInboxRenamingTitle: (v: string) => void;
-  inboxRenameInputRef: React.RefObject<HTMLInputElement | null>;
+  inboxRenameInputRef: React.RefObject<HTMLInputElement>;
   renameConversation: (id: number, title: string) => void;
   userConversationId: number | null;
   currentConversationId: number | null;
@@ -50,22 +51,26 @@ export function InboxPanelInline({
   chatPartner, onConversationSelect,
   fetchNextInboxPage, hasNextInboxPage, isFetchingNextInboxPage,
 }: InboxPanelInlineProps) {
+  const { t, language } = useLanguage();
   // Collect unique agents from conversations for filter dropdown
   const inboxAgentOptions = useMemo(() => {
     const agentMap = new Map<string, { id: number; name: string; icon?: string | null }>();
     for (const conv of (inboxConversations || [])) {
       if (conv.agent_id) {
         const agentForConv = safeAgents.find(a => a.id === conv.agent_id);
-        const name = conv.agent_name || agentForConv?.name || `Agent #${conv.agent_id}`;
+        const name = conv.agent_name || agentForConv?.name || t('aiChat.ui.agentNumber', { id: conv.agent_id });
         const icon = conv.agent_icon || agentForConv?.icon || null;
         agentMap.set(String(conv.agent_id), { id: conv.agent_id, name, icon });
       }
     }
     return Array.from(agentMap.values());
-  }, [inboxConversations, safeAgents]);
+  }, [inboxConversations, safeAgents, t]);
 
   // Infinite scroll: observe a sentinel element at the bottom of the list
   const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (inboxRenamingId !== null) inboxRenameInputRef.current?.focus({ preventScroll: true });
+  }, [inboxRenamingId, inboxRenameInputRef]);
   const handleLoadMore = useCallback(() => {
     if (hasNextInboxPage && !isFetchingNextInboxPage && fetchNextInboxPage) {
       fetchNextInboxPage();
@@ -90,7 +95,7 @@ export function InboxPanelInline({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
             <Inbox className="w-3.5 h-3.5" />
-            <span>Все чаты</span>
+            <span>{t('aiChat.ui.allChats')}</span>
           </div>
           <div className="flex items-center gap-1">
             {totalUnreadCount > 0 && (
@@ -106,7 +111,7 @@ export function InboxPanelInline({
                   ? "bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]"
                   : "text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
               )}
-              title="Фильтры"
+              title={t('aiChat.ui.filters')}
             >
               <Filter className="w-3.5 h-3.5" />
             </button>
@@ -122,7 +127,7 @@ export function InboxPanelInline({
             type="text"
             value={inboxSearch}
             onChange={(e) => setInboxSearch(e.target.value)}
-            placeholder="Поиск чатов..."
+            placeholder={t('aiChat.ui.searchChats')}
             className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
           />
           {inboxSearch && (
@@ -138,12 +143,12 @@ export function InboxPanelInline({
         <div className="px-3 py-2 border-b border-[var(--border-secondary)] space-y-2 bg-[var(--bg-secondary)]">
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="text-[10px] text-[var(--text-tertiary)] mb-0.5 block">От</label>
+              <label className="text-[10px] text-[var(--text-tertiary)] mb-0.5 block">{t('table.fromDate')}</label>
               <input type="date" value={inboxDateFrom} onChange={(e) => setInboxDateFrom(e.target.value)}
                 className="w-full px-2 py-1 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30" />
             </div>
             <div className="flex-1">
-              <label className="text-[10px] text-[var(--text-tertiary)] mb-0.5 block">До</label>
+              <label className="text-[10px] text-[var(--text-tertiary)] mb-0.5 block">{t('table.toDate')}</label>
               <input type="date" value={inboxDateTo} onChange={(e) => setInboxDateTo(e.target.value)}
                 className="w-full px-2 py-1 text-xs rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30" />
             </div>
@@ -151,8 +156,7 @@ export function InboxPanelInline({
           {hasActiveInboxFilters && (
             <button onClick={() => { setInboxSearch(''); setInboxAgentFilter(''); setInboxDateFrom(''); setInboxDateTo(''); }}
               className="text-[10px] text-[var(--color-primary-500)] hover:underline">
-              Сбросить фильтры
-            </button>
+              {t('aiChat.ui.resetFilters')}</button>
           )}
         </div>
       )}
@@ -162,7 +166,7 @@ export function InboxPanelInline({
         {isLoadingInbox ? (
           <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-tertiary)]" /></div>
         ) : inboxConversations.length === 0 ? (
-          <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{hasActiveInboxFilters ? 'Ничего не найдено' : 'Нет активных бесед'}</div>
+          <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{hasActiveInboxFilters ? t('columnSettings.nothingFound') : t('aiChat.ui.noActiveConversations')}</div>
         ) : (
           <>
           {inboxConversations.map(conv => {
@@ -171,7 +175,7 @@ export function InboxPanelInline({
             const agentForConv = conv.agent_id ? safeAgents.find(a => a.id === conv.agent_id) : null;
             const agentName = conv.agent_name || agentForConv?.name || null;
             const agentIcon = conv.agent_icon || agentForConv?.icon || null;
-            const displayName = conv.title || otherParticipants.map(p => p.name).join(', ') || agentName || 'Беседа';
+            const displayName = conv.title || otherParticipants.map(p => p.name).join(', ') || agentName || t('aiChat.ui.conversation');
 
             return (
               <button
@@ -223,7 +227,6 @@ export function InboxPanelInline({
                         setInboxRenamingId(null);
                       }}
                       className="w-full px-1.5 py-0.5 text-xs bg-[var(--bg-tertiary)] border border-[var(--color-primary-500)]/40 rounded text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/50"
-                      autoFocus
                     />
                   ) : (
                     <div className={cn("text-sm truncate flex items-center gap-1 group/inbox-title", conv.unread_count > 0 ? "font-semibold text-[var(--text-primary)]" : "text-[var(--text-secondary)]")}>
@@ -234,16 +237,16 @@ export function InboxPanelInline({
                       <button
                         onClick={(e) => { e.stopPropagation(); setInboxRenamingId(conv.id); setInboxRenamingTitle(displayName); setTimeout(() => inboxRenameInputRef.current?.select(), 50); }}
                         className="flex-shrink-0 p-0.5 rounded opacity-0 group-hover/inbox-title:opacity-100 hover:bg-[var(--bg-secondary)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all"
-                        title="Переименовать"
+                        title={t('aiChat.ui.rename')}
                       >
                         <Pencil className="w-2.5 h-2.5" />
                       </button>
                     </div>
                   )}
                   <div className="text-[10px] text-[var(--text-tertiary)]">
-                    {agentName ? `🤖 ${agentName}` : conv.type === 'direct' ? 'Личный чат' : `${conv.participants?.length || 0} участников`}
+                    {agentName ? `🤖 ${agentName}` : conv.type === 'direct' ? t('aiChat.ui.directChat') : t('aiChat.ui.participantCount', { count: conv.participants?.length || 0 })}
                     {' • '}
-                    {new Date(conv.updated_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                    {new Date(conv.updated_at).toLocaleDateString(language, { day: 'numeric', month: 'short' })}
                   </div>
                   {conv.bound_row_id && (
                     <div className="flex items-center gap-1 text-[10px] text-blue-400/70 mt-0.5">

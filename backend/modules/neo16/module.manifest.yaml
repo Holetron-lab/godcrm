@@ -1,0 +1,37 @@
+# MODULE-CONTRACT v1 — Neo16 (doc 239900, widget 218) module manifest.
+#
+# Single source of truth for the module's surface. The backend loader
+# (backend/modules/loader.js) reads `backend.routes` / `backend.migrations` and
+# merges `frontend.preset_fragment` into the widget preset registry; `owns_dirs`
+# is the authoritative removal list (delete these → build/boot/tsc stay green).
+#
+# W2-S3: the module contributes its authenticated command router under /api/v3/neo16
+# (routes.js). No migrations — tables come from blueprint.js via the core ModuleInstaller.
+# The legacy `/neo16` Socket.IO namespace in server.js is deliberately NOT moved here
+# (separate compatibility review) and carries no learner data.
+#
+# All paths are REPO-ROOT-relative.
+
+id: neo16
+name: Neo16 — AI Town
+version: 0.2.0
+edition: internal            # internal | public — gates inclusion on the `public` branch
+
+backend:
+  routes:
+    - { mount: /api/v3/neo16, router: backend/modules/neo16/routes.js, auth: true }  # /sessions, /sessions/:id/commands, /sessions/:id/state
+  services:
+    - backend/modules/neo16/engine/
+    - backend/modules/neo16/store/
+    - backend/modules/neo16/content/      # W2: versioned quest/NPC content seeded into neo16_content
+    - backend/modules/neo16/learning/     # W2: evaluator contract + durable quest loop
+
+frontend:
+  feature_dir:  src/features/widgets/components/presets/Neo16Widget/
+  preset_key:   16neo                                                            # compatibility key — existing widget rows/URLs
+  preset_entry: src/features/widgets/components/presets/Neo16Widget/Neo16Widget.module.tsx
+  preset_fragment: src/features/widgets/components/presets/Neo16Widget/presets.fragment.json
+
+owns_dirs:
+  - backend/modules/neo16/
+  - src/features/widgets/components/presets/Neo16Widget/

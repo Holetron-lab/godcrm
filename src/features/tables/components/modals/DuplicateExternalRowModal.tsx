@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useId, useState, useEffect, useMemo } from 'react';
 import { Modal, Button, Input } from '@/shared/components/ui';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { ColumnModel } from '../../types/table.types';
@@ -23,6 +23,7 @@ export const DuplicateExternalRowModal = ({
   idColumn,
   existingIds 
 }: DuplicateExternalRowModalProps) => {
+  const fieldId = useId();
   const { t } = useLanguage();
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [password, setPassword] = useState('');
@@ -171,10 +172,10 @@ export const DuplicateExternalRowModal = ({
         {/* Password field for users table */}
         {hasPasswordColumn && (
           <div className="space-y-1 pt-2">
-            <label className="block text-sm font-medium text-[var(--text-primary)]">
+            <label htmlFor={`${fieldId}-0`} className="block text-sm font-medium text-[var(--text-primary)]">
               Пароль <span className="text-red-500">*</span>
             </label>
-            <Input
+            <Input id={`${fieldId}-0`}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}

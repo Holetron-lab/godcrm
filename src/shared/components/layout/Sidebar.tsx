@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 import { useCallback, useState, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -44,8 +45,9 @@ export interface SidebarProps {
   isSidebarOpen: boolean;
   isSidebarLocked: boolean;
   sidebarWidth: number;
+  onWidthChange?: (width: number) => void;
   isResizing: boolean;
-  sidebarRef: React.RefObject<HTMLElement | null>;
+  sidebarRef: React.RefObject<HTMLElement>;
   setIsSidebarOpen: (open: boolean) => void;
   handleResizeStart: (e: React.MouseEvent) => void;
   // Mutation triggers — only invoked in private mode; optional/no-op-safe in public.
@@ -80,6 +82,7 @@ export const Sidebar = ({
   isSidebarOpen,
   isSidebarLocked,
   sidebarWidth,
+  onWidthChange,
   isResizing,
   sidebarRef,
   setIsSidebarOpen,
@@ -103,6 +106,7 @@ export const Sidebar = ({
   // Search state for sidebar - track which space has active search
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [searchActiveSpaceId, setSearchActiveSpaceId] = useState<number | null>(null);
+  const searchInputRef = useRequestedFocus<HTMLInputElement>(searchActiveSpaceId);
 
   return (
     <aside
@@ -247,7 +251,7 @@ export const Sidebar = ({
                             onChange={(e) => setSidebarSearch(e.target.value)}
                             placeholder={t('Поиск...', 'Search...')}
                             className="flex-1 min-w-0 px-2 py-0.5 text-xs bg-transparent border-none focus:outline-none text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
-                            autoFocus
+                            ref={searchInputRef}
                           />
                           {/* Vertical divider */}
                           <div className="w-px h-4 bg-[var(--border-secondary)] mx-0.5" />
@@ -339,7 +343,7 @@ export const Sidebar = ({
                         onChange={(e) => setSidebarSearch(e.target.value)}
                         placeholder={t('Поиск...', 'Search...')}
                         className="flex-1 min-w-0 px-2 py-0.5 text-xs bg-transparent border-none focus:outline-none text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
-                        autoFocus
+                        ref={searchInputRef}
                       />
                       {/* Vertical divider */}
                       <div className="w-px h-4 bg-[var(--border-secondary)] mx-0.5" />
@@ -466,7 +470,16 @@ export const Sidebar = ({
 
       {/* Resize handle — hidden in public mode (read-only viewers don't resize). */}
       {!isMobile && isSidebarLocked && !isPublic && (
-        <div
+        <div role="slider" tabIndex={0} aria-label="Ширина навигации" aria-orientation="horizontal"
+          aria-valuenow={sidebarWidth} aria-valuemin={230} aria-valuemax={400}
+          onKeyDown={e => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+            e.preventDefault();
+            const width = e.key === 'Home' ? 230 : e.key === 'End' ? 400
+              : Math.max(230, Math.min(400, sidebarWidth + (e.key === 'ArrowRight' ? 20 : -20)));
+            onWidthChange?.(width);
+            localStorage.setItem('sidebar-width', String(width));
+          }}
           onMouseDown={handleResizeStart}
           className={`
             absolute right-0 top-0 bottom-0 w-1 cursor-col-resize

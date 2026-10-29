@@ -13,6 +13,7 @@ export interface ApiResponse<T> {
 
 export interface ConversationResponse {
   id: number;
+  space_id?: number | null;
   type: string;
   title: string | null;
   /** ADR-0031 WP-24: user id who created the conversation — required for move-message ownership gate */

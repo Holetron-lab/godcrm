@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calculator, Plus, RefreshCw, Loader2, AlertCircle, Trash2, Edit2, Check, X, Table, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { Calculator, Plus, RefreshCw, Loader2, AlertCircle, Trash2, Edit2, Check, X, ExternalLink } from 'lucide-react';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { Input } from '@/shared/components/ui/Input';
 import { showToast } from '@/shared/hooks/useToast';
 import { Switch } from '@/shared/components/ui/Switch';
@@ -22,7 +23,7 @@ interface SpaceVariablesTabProps {
 }
 
 export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
-  const queryClient = useQueryClient();
+  const { t } = useLanguage();
   const [newVariable, setNewVariable] = useState({ name: '', formula: '', description: '' });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState({ name: '', formula: '', description: '' });
@@ -35,11 +36,11 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
       );
     },
     onSuccess: (result) => {
-      showToast(result.data.status === 'created' ? 'Таблица Variables создана' : 'Таблица Variables найдена', 'success');
+      showToast(result.data.status === 'created' ? t('spaces.variables.tableCreated') : t('spaces.variables.tableFound'), 'success');
       refetch();
     },
     onError: () => {
-      showToast('Ошибка создания таблицы', 'error');
+      showToast(t('spaces.variables.createFailed'), 'error');
     }
   });
 
@@ -62,11 +63,11 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
       );
     },
     onSuccess: (result) => {
-      showToast(`Пересчитано: ${result.data.calculated} переменных`, 'success');
+      showToast(t('spaces.variables.recalculated', { count: result.data.calculated }), 'success');
       refetch();
     },
     onError: () => {
-      showToast('Ошибка пересчёта', 'error');
+      showToast(t('spaces.variables.recalculateFailed'), 'error');
     }
   });
 
@@ -85,12 +86,12 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
       });
     },
     onSuccess: () => {
-      showToast('Переменная добавлена', 'success');
+      showToast(t('spaces.variables.added'), 'success');
       setNewVariable({ name: '', formula: '', description: '' });
       refetch();
     },
     onError: () => {
-      showToast('Ошибка добавления', 'error');
+      showToast(t('spaces.variables.addFailed'), 'error');
     }
   });
 
@@ -101,7 +102,7 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
       return apiClient.delete(`/tables/${data.tableId}/rows/${rowId}`);
     },
     onSuccess: () => {
-      showToast('Переменная удалена', 'success');
+      showToast(t('spaces.variables.deleted'), 'success');
       refetch();
     }
   });
@@ -113,7 +114,7 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
       return apiClient.patch(`/tables/${data.tableId}/rows/${rowId}`, { data: updateData });
     },
     onSuccess: () => {
-      showToast('Переменная обновлена', 'success');
+      showToast(t('spaces.variables.updated'), 'success');
       setEditingId(null);
       refetch();
     }
@@ -121,7 +122,7 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
 
   const handleAdd = () => {
     if (!newVariable.name.trim() || !newVariable.formula.trim()) {
-      showToast('Имя и формула обязательны', 'error');
+      showToast(t('spaces.variables.required'), 'error');
       return;
     }
     addMutation.mutate(newVariable);
@@ -146,7 +147,7 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-40">
+      <div role="status" aria-label={t('common.loading')} className="flex items-center justify-center h-40">
         <Loader2 className="w-6 h-6 animate-spin text-[var(--accent-primary)]" />
       </div>
     );
@@ -169,32 +170,33 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
           <div className="flex items-center gap-2">
             <Calculator className="w-5 h-5 text-[var(--accent-primary)]" />
             <h4 className="text-sm font-medium text-[var(--text-primary)]">
-              Переменные пространства
+              {t('spaces.variables.title')}
             </h4>
             {createTableMutation.isPending && (
-              <span className="text-xs text-[var(--text-tertiary)]">(создание таблицы...)</span>
+              <span className="text-xs text-[var(--text-tertiary)]">{t('spaces.variables.creatingTable')}</span>
             )}
           </div>
           <Switch
+            aria-label={t('spaces.variables.title')}
             checked={enabled}
             onCheckedChange={handleEnableToggle}
             disabled={createTableMutation.isPending || enabled}
           />
         </div>
         <p className="text-xs text-[var(--text-tertiary)]">
-          Глобальные переменные для формул и вычислений. Используйте $имя в формулах.
+          {t('spaces.variables.description')}
         </p>
       </div>
 
       {error && (
         <div className="flex items-center gap-2 text-red-400 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
           <AlertCircle className="w-4 h-4" />
-          <span className="text-sm">Ошибка загрузки переменных</span>
+          <span className="text-sm">{t('spaces.variables.loadFailed')}</span>
           <button 
             onClick={() => refetch()} 
             className="ml-auto text-xs underline hover:no-underline"
           >
-            Повторить
+            {t('spaces.variables.retry')}
           </button>
         </div>
       )}
@@ -205,7 +207,7 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs text-[var(--text-tertiary)]">
-                {variables.length} переменных
+                {t('spaces.variables.count', { count: variables.length })}
               </span>
               {data?.tableId && (
                 <a 
@@ -215,7 +217,7 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
                   className="flex items-center gap-1 text-xs text-[var(--accent-primary)] hover:underline"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  Открыть таблицу
+                  {t('spaces.variables.openTable')}
                 </a>
               )}
             </div>
@@ -225,7 +227,7 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--accent-primary)] border border-[var(--accent-primary)]/30 rounded-md hover:bg-[var(--accent-primary)]/10 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${recalculateMutation.isPending ? 'animate-spin' : ''}`} />
-              Пересчитать
+              {t('spaces.variables.recalculate')}
             </button>
           </div>
 
@@ -233,24 +235,27 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
           <div className="p-3 bg-[var(--bg-tertiary)] rounded-lg border border-[var(--border-primary)]">
             <div className="flex items-center gap-2 mb-2">
               <Plus className="w-4 h-4 text-[var(--text-tertiary)]" />
-              <span className="text-xs font-medium text-[var(--text-secondary)]">Новая переменная</span>
+              <span className="text-xs font-medium text-[var(--text-secondary)]">{t('spaces.variables.newVariable')}</span>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <Input
-            placeholder="$имя"
+            placeholder={t('spaces.variables.namePlaceholder')}
+            aria-label={t('spaces.variables.name')}
             value={newVariable.name}
             onChange={(e) => setNewVariable({ ...newVariable, name: e.target.value })}
             className="text-sm"
           />
           <Input
-            placeholder="Формула (напр. SUM({{revenue}}))"
+            placeholder={t('spaces.variables.formulaPlaceholder')}
+            aria-label={t('spaces.variables.formula')}
             value={newVariable.formula}
             onChange={(e) => setNewVariable({ ...newVariable, formula: e.target.value })}
             className="text-sm"
           />
           <div className="flex gap-2">
             <Input
-              placeholder="Описание"
+              placeholder={t('spaces.variables.fieldDescription')}
+              aria-label={t('spaces.variables.fieldDescription')}
               value={newVariable.description}
               onChange={(e) => setNewVariable({ ...newVariable, description: e.target.value })}
               className="text-sm flex-1"
@@ -260,7 +265,7 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
               disabled={addMutation.isPending}
               className="px-3 py-1.5 text-xs font-medium bg-[var(--accent-primary)] text-white rounded-md hover:bg-[var(--accent-primary)]/90 transition-colors disabled:opacity-50"
             >
-              {addMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Добавить'}
+              {addMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('spaces.variables.add')}
             </button>
           </div>
         </div>
@@ -270,7 +275,7 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
       <div className="space-y-1">
         {variables.length === 0 ? (
           <div className="text-center py-8 text-[var(--text-tertiary)]">
-            Нет переменных. Добавьте первую!
+            {t('spaces.variables.empty')}
           </div>
         ) : (
           variables.map((v) => (
@@ -282,28 +287,33 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
                 // Edit mode
                 <>
                   <Input
+                    aria-label={t('spaces.variables.name')}
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                     className="text-sm w-32"
                   />
                   <Input
+                    aria-label={t('spaces.variables.formula')}
                     value={editForm.formula}
                     onChange={(e) => setEditForm({ ...editForm, formula: e.target.value })}
                     className="text-sm flex-1"
                   />
                   <Input
+                    aria-label={t('spaces.variables.fieldDescription')}
                     value={editForm.description}
                     onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                     className="text-sm w-40"
-                    placeholder="Описание"
+                    placeholder={t('spaces.variables.fieldDescription')}
                   />
                   <button
+                    aria-label={t('common.save')}
                     onClick={saveEdit}
                     className="p-1.5 text-green-400 hover:bg-green-500/10 rounded"
                   >
                     <Check className="w-4 h-4" />
                   </button>
                   <button
+                    aria-label={t('common.cancel')}
                     onClick={() => setEditingId(null)}
                     className="p-1.5 text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] rounded"
                   >
@@ -332,12 +342,14 @@ export const SpaceVariablesTab = ({ spaceId }: SpaceVariablesTabProps) => {
                   )}
                   <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
                     <button
+                      aria-label={t('common.edit')}
                       onClick={() => startEdit(v)}
                       className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
+                      aria-label={t('common.delete')}
                       onClick={() => deleteMutation.mutate(v.id)}
                       className="p-1.5 text-[var(--text-tertiary)] hover:text-red-400 hover:bg-red-500/10 rounded"
                     >

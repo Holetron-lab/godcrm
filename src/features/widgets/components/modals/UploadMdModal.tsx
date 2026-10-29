@@ -7,7 +7,7 @@
  * @see ADR-006-DOCUMENTS-MODULE.md
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useId } from 'react';
 import {
   Upload,
   FileText,
@@ -58,7 +58,7 @@ interface AtomPreview {
   title: string;
   content: string;
   order_index: number;
-  parent?: string;
+  parent?: ParsedAtom['parent'];
   http_method?: string;
   http_path?: string;
   code?: string;
@@ -111,6 +111,7 @@ export function UploadMdModal({
   sectionsTableId = SECTIONS_TABLE_ID,
   documentsTableId = DOCUMENTS_TABLE_ID
 }: UploadMdModalProps) {
+  const fieldId = useId();
   // State
   const [step, setStep] = useState<'upload' | 'preview' | 'saving' | 'done'>('upload');
   const [file, setFile] = useState<File | null>(null);
@@ -389,27 +390,28 @@ export function UploadMdModal({
             </p>
 
             {/* Drag & Drop Zone */}
-            <div
+            <label
               onDrop={handleDrop}
               onDragOver={handleDragOver}
-              className="border-2 border-dashed border-[var(--border-primary)] rounded-lg p-8 text-center hover:border-[var(--color-primary-500)] transition-colors cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
+              className="block focus-within:ring-2 focus-within:ring-[var(--color-primary-500)] border-2 border-dashed border-[var(--border-primary)] rounded-lg p-8 text-center hover:border-[var(--color-primary-500)] transition-colors cursor-pointer"
+              htmlFor={`${fieldId}-file`}
             >
               <input
+                id={`${fieldId}-file`}
                 ref={fileInputRef}
                 type="file"
                 accept=".md,text/markdown"
                 onChange={handleFileSelect}
-                className="hidden"
+                className="sr-only"
               />
               <Upload className="w-12 h-12 mx-auto mb-4 text-[var(--text-tertiary)]" />
-              <p className="text-lg font-medium text-[var(--text-primary)] mb-2">
+              <span className="block text-lg font-medium text-[var(--text-primary)] mb-2">
                 Перетащите .md файл сюда
-              </p>
-              <p className="text-sm text-[var(--text-tertiary)]">
+              </span>
+              <span className="block text-sm text-[var(--text-tertiary)]">
                 или нажмите для выбора файла
-              </p>
-            </div>
+              </span>
+            </label>
 
             {/* Parse options */}
             <div className="p-4 rounded-lg bg-[var(--bg-secondary)] space-y-3">
@@ -553,11 +555,14 @@ export function UploadMdModal({
                     <div className="flex items-center gap-2 p-2">
                       <input
                         type="checkbox"
+                        aria-label={`Выбрать ${atom.title}`}
                         checked={atom.selected}
                         onChange={() => toggleAtom(index)}
                         className="w-4 h-4 rounded shrink-0"
                       />
                       <button
+                        aria-label={`${isExpanded ? 'Свернуть' : 'Развернуть'} ${atom.title}`}
+                        aria-expanded={isExpanded}
                         onClick={() => toggleExpand(index)}
                         className="shrink-0"
                       >
@@ -590,16 +595,18 @@ export function UploadMdModal({
                       <div className="px-4 pb-3 pt-1 border-t border-[var(--border-secondary)] space-y-2">
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="text-xs text-[var(--text-tertiary)]">Key</label>
+                            <label htmlFor={`${fieldId}-${index}-key`} className="text-xs text-[var(--text-tertiary)]">Key</label>
                             <Input
+                              id={`${fieldId}-${index}-key`}
                               value={atom.key}
                               onChange={(e) => updateAtom(index, 'key', e.target.value)}
                               className="h-7 text-xs"
                             />
                           </div>
                           <div>
-                            <label className="text-xs text-[var(--text-tertiary)]">Type</label>
+                            <label htmlFor={`${fieldId}-${index}-type`} className="text-xs text-[var(--text-tertiary)]">Type</label>
                             <select
+                              id={`${fieldId}-${index}-type`}
                               value={atom.type}
                               onChange={(e) => updateAtom(index, 'type', e.target.value)}
                               className="w-full h-7 px-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-xs text-[var(--text-primary)]"
@@ -614,9 +621,10 @@ export function UploadMdModal({
                         {atom.type === 'endpoint' && (
                           <div className="grid grid-cols-3 gap-2">
                             <div>
-                              <label className="text-xs text-[var(--text-tertiary)]">Method</label>
+                              <label htmlFor={`${fieldId}-${index}-method`} className="text-xs text-[var(--text-tertiary)]">Method</label>
                               <select
-                                value={atom.http_method || ''}
+                                id={`${fieldId}-${index}-method`}
+                              value={atom.http_method || ''}
                                 onChange={(e) => updateAtom(index, 'http_method', e.target.value)}
                                 className="w-full h-7 px-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-xs text-[var(--text-primary)]"
                               >
@@ -629,9 +637,10 @@ export function UploadMdModal({
                               </select>
                             </div>
                             <div className="col-span-2">
-                              <label className="text-xs text-[var(--text-tertiary)]">Path</label>
+                              <label htmlFor={`${fieldId}-${index}-path`} className="text-xs text-[var(--text-tertiary)]">Path</label>
                               <Input
-                                value={atom.http_path || ''}
+                                id={`${fieldId}-${index}-path`}
+                              value={atom.http_path || ''}
                                 onChange={(e) => updateAtom(index, 'http_path', e.target.value)}
                                 className="h-7 text-xs"
                                 placeholder="/api/..."
@@ -641,9 +650,9 @@ export function UploadMdModal({
                         )}
 
                         <div>
-                          <label className="text-xs text-[var(--text-tertiary)]">
+                          <p className="text-xs text-[var(--text-tertiary)]">
                             Content ({atom.content.length} chars)
-                          </label>
+                          </p>
                           <pre className="mt-1 p-2 rounded bg-[var(--bg-tertiary)] text-xs text-[var(--text-secondary)] max-h-24 overflow-auto whitespace-pre-wrap">
                             {atom.content.slice(0, 500)}
                             {atom.content.length > 500 && '...'}
@@ -652,7 +661,7 @@ export function UploadMdModal({
 
                         {atom.code && (
                           <div>
-                            <label className="text-xs text-[var(--text-tertiary)]">Code block</label>
+                            <p className="text-xs text-[var(--text-tertiary)]">Code block</p>
                             <pre className="mt-1 p-2 rounded bg-[var(--bg-tertiary)] text-xs text-[var(--text-secondary)] max-h-16 overflow-auto">
                               {atom.code.slice(0, 200)}
                               {atom.code.length > 200 && '...'}

@@ -173,12 +173,12 @@ export async function publishToTelegram(rowId) {
 
     // Format message for Telegram
     const lines = [];
-    lines.push(`*${title.replace(/([_*`\[\]])/g, '\\$1')}*`);
+    lines.push(`*${title.replace(/([_*`[\]])/g, '\\$1')}*`);
     if (body) {
       lines.push('');
       // Take first 300 chars of body for Telegram
       const snippet = body.length > 300 ? body.slice(0, 300) + '...' : body;
-      lines.push(snippet.replace(/([_*`\[\]])/g, '\\$1'));
+      lines.push(snippet.replace(/([_*`[\]])/g, '\\$1'));
     }
     if (sourceUrl) {
       lines.push('');

@@ -19,6 +19,9 @@ import express from 'express';
 import request from 'supertest';
 import { Router } from 'express';
 
+// This suite tests message enrichment; the read ACL matrix lives in conversation-read-access.test.js.
+vi.mock('../../../../services/chat/conversation-read-access.js', () => ({ canReadConversation: vi.fn(async () => true) }));
+
 const dbGetMock = vi.fn();
 const dbRunMock = vi.fn();
 const dbAllMock = vi.fn();
@@ -369,6 +372,35 @@ describe('ADR-0068 WP-B5 — persona enrichment on GET /messages', () => {
     dbGetMock.mockReset();
     dbRunMock.mockReset();
     dbAllMock.mockReset();
+  });
+
+  it('normalises legacy attachments so every entry carries string type/name (crm.hltrn.cc chat crash, 2026-09-25)', async () => {
+    dbAllMock.mockResolvedValueOnce([{
+      id: 904, conversation_id: 10, sender_id: 7, content: 'old client upload',
+      content_type: 'text', mentions: '[]',
+      attachments: '[{"url":"/uploads/spaces/35/x.png","mime_type":"image/png","original_name":"reference_1.png"}]',
+      metadata: null, sender_kind: 'user', sender_space_id: null,
+      sender_name: 'Alice', sender_avatar: null, sender_user_type: 'human',
+      _sender_space_name: null, _sender_space_icon: null, _sender_space_color: null,
+      created_at: '2026-09-25T05:00:00Z',
+    }]);
+    dbGetMock
+      .mockResolvedValueOnce({ settings: null, bound_table_id: null, bound_row_id: null, is_processing: false, processing_started_at: null, processing_agent_id: null, processing_agent_name: null, parent_conversation_id: null, purpose: null, is_readonly: false })
+      .mockResolvedValueOnce({ total_tokens_in: 0, total_tokens_out: 0, total_messages: 1, text_messages: 1, tool_calls: 0, thinking_steps: 0 })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+
+    const res = await request(buildApp())
+      .get('/api/v3/chat/conversations/10/messages')
+      .set('x-test-user-id', '7');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.messages[0].attachments).toEqual([{
+      url: '/uploads/spaces/35/x.png', mime_type: 'image/png', original_name: 'reference_1.png',
+      type: 'image/png', name: 'reference_1.png',
+    }]);
   });
 
   it('JOINs spaces and surfaces nested sender_space {id,name,icon,color} for sender_kind=space rows', async () => {

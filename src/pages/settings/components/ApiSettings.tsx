@@ -2,7 +2,7 @@
  * ApiSettings - Component for configuring API server URL in desktop app
  * Only renders when running inside Electron
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { Server, CheckCircle, XCircle, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/shared/components/ui';
 import { isDesktopApp } from '@/shared/types/electron.types';
@@ -15,6 +15,7 @@ interface ConnectionStatus {
 }
 
 export const ApiSettings = () => {
+  const apiUrlId = useId();
   const [apiUrl, setApiUrl] = useState('');
   const [originalUrl, setOriginalUrl] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({ status: 'idle' });
@@ -24,11 +25,6 @@ export const ApiSettings = () => {
     electron: string;
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Only render in desktop app
-  if (!isDesktopApp()) {
-    return null;
-  }
 
   // Load current API URL on mount
   useEffect(() => {
@@ -109,6 +105,11 @@ export const ApiSettings = () => {
     setConnectionStatus({ status: 'idle' });
   };
 
+  // Only render in desktop app
+  if (!isDesktopApp()) {
+    return null;
+  }
+
   const hasChanges = apiUrl !== originalUrl;
 
   return (
@@ -138,11 +139,12 @@ export const ApiSettings = () => {
 
       {/* API URL Input */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-[var(--text-secondary)]">
+        <label htmlFor={apiUrlId} className="block text-sm font-medium text-[var(--text-secondary)]">
           API Server URL
         </label>
         <div className="flex gap-2">
           <input
+            id={apiUrlId}
             type="url"
             value={apiUrl}
             onChange={(e) => setApiUrl(e.target.value)}
@@ -201,9 +203,9 @@ export const ApiSettings = () => {
 
       {/* Preset URLs */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-[var(--text-tertiary)]">
+        <p className="block text-sm font-medium text-[var(--text-tertiary)]">
           Quick presets:
-        </label>
+        </p>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setApiUrl('https://crm.hltrn.cc/api/v3')}

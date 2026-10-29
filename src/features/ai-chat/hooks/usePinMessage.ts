@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ADR-0068 WP-E — Pinned-message mutation hook.
  *
@@ -41,6 +42,7 @@ export interface UsePinMessageResult {
 }
 
 export function usePinMessage(conversationId: number | string | null | undefined): UsePinMessageResult {
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
   const queryKey = ['conversation-messages', conversationId] as const;
 
@@ -71,11 +73,11 @@ export function usePinMessage(conversationId: number | string | null | undefined
       // (JSON.parse on partial bodies is unsafe — substring is enough here).
       const body = typeof err?.message === 'string' ? err.message : '';
       if (body.includes('pin_cap_reached')) {
-        showToast('Достигнут лимит закреплённых (50). Открепите что-то и попробуйте снова.', 'error');
+        showToast(t('aiChat.ui.pinLimitReached'), 'error');
       } else if (body.includes('403') || body.toLowerCase().includes('forbidden') || body.toLowerCase().includes('only the chat owner')) {
-        showToast('Закреплять сообщения в этом чате может только владелец.', 'error');
+        showToast(t('aiChat.ui.pinOwnerOnly'), 'error');
       } else {
-        showToast('Не удалось обновить закрепление.', 'error');
+        showToast(t('aiChat.ui.pinFailed'), 'error');
       }
     },
     onSuccess: (resp, { messageId }) => {

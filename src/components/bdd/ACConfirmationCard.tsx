@@ -18,7 +18,7 @@
  * { recovery_code } instead of { totp_code }.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useId, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, XCircle, Loader2, KeyRound, ExternalLink } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { logger } from '@/shared/utils/logger';
@@ -195,6 +195,7 @@ function TotpDigits({
 }
 
 export function ACConfirmationCard({ criterion, onConfirmed }: ACConfirmationCardProps) {
+  const fieldId = useId();
   const [code, setCode] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [useRecovery, setUseRecovery] = useState(false);
@@ -372,10 +373,11 @@ export function ACConfirmationCard({ criterion, onConfirmed }: ACConfirmationCar
       <div className="mb-3">
         {useRecovery ? (
           <div>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+            <label htmlFor={`${fieldId}-0`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
               Recovery code (16 chars)
             </label>
             <input
+              id={`${fieldId}-0`}
               type="text"
               value={recoveryCode}
               onChange={(e) => setRecoveryCode(e.target.value.toUpperCase().slice(0, 16))}
@@ -403,10 +405,11 @@ export function ACConfirmationCard({ criterion, onConfirmed }: ACConfirmationCar
       {/* Waive reason */}
       {showWaive && (
         <div className="mb-3">
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+          <label htmlFor={`${fieldId}-1`} className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
             Waive reason (required)
           </label>
           <textarea
+            id={`${fieldId}-1`}
             value={waiveReason}
             onChange={(e) => setWaiveReason(e.target.value)}
             disabled={isSubmitting}

@@ -63,7 +63,7 @@ const TabItem = ({ tab, isActive, onClose, onClick, onContextMenu }: TabItemProp
   const [isHovered, setIsHovered] = useState(false);
 
   return (
-    <div
+    <div role="presentation"
       className={cn(
         'group flex items-center gap-1.5 px-3 py-1.5 rounded-md cursor-pointer transition-all duration-150 select-none whitespace-nowrap',
         'border border-transparent',
@@ -81,9 +81,9 @@ const TabItem = ({ tab, isActive, onClose, onClick, onContextMenu }: TabItemProp
       {renderTabIcon(tab.icon, tab.type)}
       
       {/* Title */}
-      <span className="text-xs font-medium truncate max-w-[120px]">
+      <button type="button" aria-pressed={isActive} className="text-xs font-medium truncate max-w-[120px]">
         {tab.title}
-      </span>
+      </button>
       
       {/* Dirty indicator or Close button */}
       {tab.isDirty && !isHovered ? (
@@ -114,12 +114,6 @@ export const DesktopTabBar = () => {
   const { tabs, activeTabId, openTab, closeTab, setActiveTab, closeOtherTabs, getTabByPath } = useTabsStore();
   
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
-
-  // Only render in desktop app
-  if (!isDesktopApp()) return null;
-
-  // Don't show if no tabs
-  if (tabs.length === 0) return null;
 
   const activeTab = tabs.find(t => t.id === activeTabId);
   const otherTabs = tabs.filter(t => t.id !== activeTabId);
@@ -189,6 +183,12 @@ export const DesktopTabBar = () => {
     }
   }, [activeTabId]);
 
+  // Only render in desktop app
+  if (!isDesktopApp()) return null;
+
+  // Don't show if no tabs
+  if (tabs.length === 0) return null;
+
   // Don't show if only active tab (no other tabs to display)
   if (otherTabs.length === 0) return null;
 
@@ -227,7 +227,7 @@ export const DesktopTabBar = () => {
       {/* Context Menu */}
       {contextMenu && (
         <>
-          <div 
+          <button type="button" aria-label={t("Закрыть меню вкладки", "Close tab menu")}
             className="fixed inset-0 z-50" 
             onClick={handleCloseContextMenu}
             onContextMenu={(e) => { e.preventDefault(); handleCloseContextMenu(); }}

@@ -215,7 +215,7 @@ export const AIAgentNode = {
     try {
       JSON.parse(content.trim());
       return 'json';
-    } catch {}
+    } catch { /* Not JSON; continue detecting the remaining content types. */ }
     
     // Detect code blocks
     if (/```[\s\S]*?```|`[^`]+`/.test(content)) {
@@ -306,14 +306,14 @@ export const AIAgentNode = {
         // Convert markdown-like content to basic HTML
         return `<div class="ai-response">${content.replace(/\n/g, '<br>')}</div>`;
       
-      case 'code':
+      case 'code': {
         // Try to extract code blocks
         const codeMatch = content.match(/```(?:\w+)?\s*([\s\S]*?)\s*```/);
         if (codeMatch) {
           return codeMatch[1].trim();
         }
         return content;
-      
+      }
       default:
         return content;
     }

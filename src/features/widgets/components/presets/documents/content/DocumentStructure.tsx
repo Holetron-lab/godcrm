@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 import { useState, useRef, useEffect } from 'react';
 import {
   FileText, Plus, Edit3, Trash2, MoreVertical, Atom, Ticket,
@@ -36,13 +37,14 @@ export function DocumentStructure({ items, document: docItem, onSelectItem, onAd
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set()); // Accordion state
   const [editingItemId, setEditingItemId] = useState<number | null>(null); // Inline editing
   const [editingContent, setEditingContent] = useState<string>('');
+  const requestedFocusRef = useRequestedFocus<HTMLTextAreaElement>(editingItemId);
   const [structureSubMenuType, setStructureSubMenuType] = useState<'above' | 'below' | null>(null);
   const [levelChangeItemId, setLevelChangeItemId] = useState<number | null>(null); // Level change dropdown
 
   // Build system variables for MarkdownPreview (includes space variables)
   const variables = useSystemVariables({
-    widgetId: ctx.widget?.id,
-    projectId: ctx.widget?.dashboard_id,
+    widgetId: ctx.widgetId,
+    projectId: ctx.projectId,
     spaceId: ctx.spaceId,
     includeSpaceVars: true,
   });
@@ -302,10 +304,9 @@ export function DocumentStructure({ items, document: docItem, onSelectItem, onAd
     );
     await ctx.addItem({
       documentId,
-      tableId,
-      data: {
+      item: {
         level: item.level,
-        [`content_${ctx.currentLanguage}`]: item.content,
+        ...{ [`content_${ctx.currentLanguage}`]: item.content },
         image_url: item.image_url,
         order: newOrder,
         is_hidden: false,
@@ -380,7 +381,7 @@ export function DocumentStructure({ items, document: docItem, onSelectItem, onAd
                     /* Divider - horizontal line */
                     <div className="flex-1 h-[2px] bg-gray-400 dark:bg-gray-500" />
                   ) : (
-                    <span
+                    <button type="button"
                       className={cn(
                         "flex-1 truncate cursor-pointer hover:text-[var(--color-primary-500)]",
                         item.level === 'h2' && "text-base font-semibold",
@@ -391,7 +392,7 @@ export function DocumentStructure({ items, document: docItem, onSelectItem, onAd
                       onClick={() => onSelectItem(item)}
                     >
                       {getItemText(item)}
-                    </span>
+                    </button>
                   )}
 
                   {/* Right side: Expand + Atom icon + Level badge + Actions */}
@@ -451,9 +452,9 @@ export function DocumentStructure({ items, document: docItem, onSelectItem, onAd
                                   if (lvl !== item.level) {
                                     ctx.updateItem({
                                       documentId: docItem.id,
-                                      tableId: docItem.content_table_id,
+                                      tableId: docItem.content_table_id ?? docItem.table_id,
                                       itemId: item.id,
-                                      updates: { level: lvl }
+                                      data: { level: lvl }
                                     });
                                   }
                                   setLevelChangeItemId(null);
@@ -647,7 +648,7 @@ export function DocumentStructure({ items, document: docItem, onSelectItem, onAd
                           onChange={(e) => setEditingContent(e.target.value)}
                           className="w-full text-xs bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg p-3 focus:border-blue-500 outline-none resize-none font-mono leading-relaxed"
                           rows={Math.max(5, (editingContent?.split('\n').length || 1) + 2)}
-                          autoFocus
+                          ref={requestedFocusRef}
                           onBlur={saveInlineEdit}
                           onKeyDown={(e) => {
                             if (e.key === 'Escape') cancelInlineEdit();
@@ -675,7 +676,7 @@ export function DocumentStructure({ items, document: docItem, onSelectItem, onAd
                       )
                     ) : (
                       /* Image preview */
-                      <div className="text-sm" onClick={() => onSelectItem(item)}>
+                      <button type="button" className="text-sm" onClick={() => onSelectItem(item)}>
                         {item.image_url ? (
                           <img
                             src={item.image_url}
@@ -685,7 +686,7 @@ export function DocumentStructure({ items, document: docItem, onSelectItem, onAd
                         ) : (
                           <span className="text-[var(--text-tertiary)] cursor-pointer">Нажмите чтобы добавить изображение...</span>
                         )}
-                      </div>
+                      </button>
                     )}
                   </div>
                 )}
@@ -764,7 +765,7 @@ export function DocumentStructure({ items, document: docItem, onSelectItem, onAd
           <div className="p-8 text-center text-[var(--text-tertiary)]">
             <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
             <p>Документ пуст</p>
-            <p className="text-xs mt-2">Нажмите "Добавить элемент" чтобы начать</p>
+            <p className="text-xs mt-2">Нажмите &quot;Добавить элемент&quot; чтобы начать</p>
           </div>
         )}
       </div>

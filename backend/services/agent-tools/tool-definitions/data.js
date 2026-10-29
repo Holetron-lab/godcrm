@@ -87,8 +87,10 @@ export const DATA_TOOLS = [
           },
           name: {
             type: 'string',
-            description: 'Name of the new table'
+            description: 'Technical table key: Latin letters, digits and underscores only, no spaces (e.g. tickets)'
           },
+          show_in_nav: { type: 'boolean', description: 'Create a table widget in the left menu (default true); false for internal tables' },
+          display_name: { type: 'string', description: 'Display title in any language (e.g. Тикеты)' },
           icon: {
             type: 'string',
             description: 'Emoji icon for the table'

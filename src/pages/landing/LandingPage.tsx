@@ -4,117 +4,46 @@ import { Sun, Moon } from 'lucide-react';
 import { TorusBrand } from '@/components/brand/TorusBrand';
 import { useTheme } from '@/shared/hooks/useTheme';
 import { LandingNewsSection } from './LandingNewsSection';
+import copy from '../../../shared/landing-copy.json';
 
-const SOURCE_REPO_URL = 'https://godcrm.ai/git/holetron-lab/godcrm';
+// Copy source of truth: shared/landing-copy.json — the same file the backend
+// renders for crawlers (backend/services/landingSeo.js, SSR-lite for `/`).
+// Marketing docs 254896 (landing v3), 254978 (GEO §2 anchor, §4 FAQ), 255025
+// (§B model swaps). Vendors are never named on this page; tab names live only
+// in the "Tab #N closed" series on /blog.
+const SOURCE_REPO_URL = copy.sourceRepoUrl;
+const MCP_ENDPOINT = copy.mcpEndpoint;
 
-type CapabilityDownload = { label: string; url: string; filename: string; meta: string };
-const CAPABILITIES: Array<{
-  num: string;
-  label: string;
-  span: string;
-  body: string;
-  long: string;
-  live?: boolean;
-  download?: CapabilityDownload;
-}> = [
-  {
-    num: '01', label: 'TABLES', span: 'md:col-span-7',
-    body: 'Programmable schema. 15+ column types, relations, formulas, JSON, files.',
-    long: 'Text, number, date, relation, formula, JSON, file, image, AI-generated. Schema mutates live — no downtime, no migrations. Up to 50 columns per table, soft-cap 10M rows. Row-level policies for fine-grained access.',
-  },
-  {
-    num: '02', label: 'VIEWS', span: 'md:col-span-5',
-    body: 'Table, Kanban, Calendar, Timeline, Gallery. Same data, any shape.',
-    long: 'Same rows, six shapes: table for power-users, kanban for flow, calendar for time, timeline for gantt, gallery for image-first records, list for mobile. Save filters/sorts per view. Share any view publicly by slug — read-only, no login.',
-  },
-  {
-    num: '03', label: 'WIDGETS', span: 'md:col-span-4',
-    body: 'Dashboards from any table. Charts, kanban, counters, docs.',
-    long: 'Mount any view + KPI counters + chart blocks on a project dashboard. Drag-resize grid, per-widget settings. Embed widget rows inside documents. Snapshot a widget into chat as a live mini-board.',
-  },
-  {
-    num: '04', label: 'AUTOMATIONS', span: 'md:col-span-8',
-    body: 'Triggers and actions on row events. Webhooks, notifications, hot-reload every 5 min.',
-    long: 'Trigger on row insert/update/delete, schedule, or external webhook. Actions: HTTP call, post chat message, mutate another row, run an agent, send Telegram. Hot-reloads from DB every 5 min — no restart, no deploy.',
-  },
-  {
-    num: '05', label: 'AGENTS', span: 'md:col-span-6',
-    body: 'Native first-class. They read, write, chat, and orchestrate other agents.',
-    long: 'Agents are rows in a table. Each has a prompt, a tool whitelist, a model (Claude / GPT-5 / local). Mention with @slug in any chat — they read history, call MCP tools, mutate rows, spawn other agents. First-class participants, not a chatbot bolted on the side.',
-  },
-  {
-    num: '06', label: 'API', span: 'md:col-span-6',
-    body: 'REST v3 on every table, row, widget. JWT, OpenAPI, signed webhooks.',
-    long: 'REST v3 on every entity — tables, rows, widgets, chats, projects. JWT auth, full OpenAPI 3.1 spec, signed webhooks with token-hash. Pagination, filters, sort, search — the same engine your views use is the same API external systems get.',
-  },
-  {
-    num: '07', label: 'MCP', span: 'md:col-span-8',
-    body: 'Native MCP server — 55 tools, ~160 lines. Claude Desktop, Cursor, any MCP client drives your CRM.',
-    long: 'Native Model Context Protocol server exposes 55 tools — query tables, create rows, manage widgets, spawn agents, search globally — and the whole server is ~160 lines, because the CRM already does the work. Point Claude Desktop, Cursor, Zed, or any MCP client at your workspace and it operates the CRM like a power user. No glue code, no scraping.',
-  },
-  {
-    num: '08', label: 'ARTIFACTS', span: 'md:col-span-4',
-    body: 'Real apps, not browser-only. Android, desktop, Photoshop plugin.',
-    long: 'Android app (Flutter) — chat, tables, agents in your pocket. Desktop client for Linux and Windows — file uploads, offline cache. Photoshop plugin — push designs straight into CRM rows. iOS in active development. One platform, many surfaces.',
-  },
-];
+// Block 3 — the only place on the page where the letters are spelled out.
+const INSIDE = copy.inside.cards;
 
-const COMPARISON: Array<{ axis: string; traditional: string; god: string }> = [
-  {
-    axis: 'SCHEMA',
-    traditional: 'Fixed tables. Changing a field is a migration and a deploy.',
-    god: '15+ column types, mutated live. Agents add tables and fields at runtime — no migration.',
-  },
-  {
-    axis: 'MODULES',
-    traditional: 'A fixed feature set the vendor ships — contacts, deals, pipelines, tickets. Need another? Wait for the roadmap.',
-    god: 'Tables, docs, chat, dashboards, kanban/calendar/list widgets, automations, connectors, agents — the building blocks. Agents assemble custom UI for any task on the same canvas, no release cycle.',
-  },
-  {
-    axis: 'WHO OPERATES IT',
-    traditional: 'Humans click the UI. Bots are bolt-on integrations.',
-    god: 'Humans and agents, same canvas. People work the UI; agents are rows — prompt, tools, model. Both drive the same data from either side.',
-  },
-  {
-    axis: 'AUTOMATION',
-    traditional: 'A visual rule-builder, vendor-hosted. Redeploy to change it.',
-    god: 'Triggers and actions are DB rows. Hot-reload, no restart — they run agents, HTTP, chat.',
-  },
-  {
-    axis: 'INTEGRATION',
-    traditional: 'A catalogue of pre-built connectors plus a REST API.',
-    god: 'Native MCP server. Any MCP client — Claude, Cursor — drives the CRM directly.',
-  },
-  {
-    axis: 'OWNERSHIP',
-    traditional: 'SaaS. Vendor-hosted, per-seat, your data on their servers.',
-    god: 'Open-core. Self-host, own the database, no seat tax.',
-  },
-];
+// Block 4 — the story carries no team numbers by the owner's decision (chat
+// 3772, 2026-10-22); the only figure is `modelSwaps` (doc 255025 §B).
 
-const MARKETPLACE = [
-  {
-    label: 'CODE IS CHEAP',
-    body: 'Anyone can generate a CRUD screen in an afternoon. What stayed scarce is the system someone built because they ran the business for ten years and know exactly where it bleeds.',
-  },
-  {
-    label: 'PACKAGE & TRADE',
-    body: 'On top of the open core: a marketplace. Package a table-system, an automation, a playbook — and trade it, free or paid. What you build, you price.',
-  },
-  {
-    label: 'TABLE WIZARD',
-    body: 'Our own first product lands here — a guided wizard that scaffolds a live, synced table from any data source. Building now.',
-  },
-];
+// Block 7 — the D in G.O.D.: widgets or code, no apology either way.
+const SHAPE_ROWS = copy.build.rows;
 
-const PROOF = [
-  { big: '10–200',        small: 'USERS PER WORKSPACE' },
-  { big: 'OPEN-CORE',     small: 'SELF-HOST, YOU OWN IT' },
-  { big: 'AGENTS NATIVE', small: 'FIRST-CLASS, NOT BOLTED ON' },
-  { big: 'BETA',          small: 'BUILD IN PUBLIC' },
-];
+// Block 8 — technical layer. Expandable cards keep the existing design; each
+// card carries the letter it serves.
+const UNDER_THE_HOOD = copy.underTheHood.cards;
+// Grid spans stay here as literal class names: Tailwind only scans
+// index.html + src/**, so a class kept in landing-copy.json is purged from the
+// build and every card collapses to one of twelve columns.
+const CAP_SPAN: Record<string, string> = {
+  '01': 'md:col-span-7',
+  '02': 'md:col-span-5',
+  '03': 'md:col-span-4',
+  '04': 'md:col-span-8',
+  '05': 'md:col-span-6',
+  '06': 'md:col-span-6',
+};
 
-const MCP_ENDPOINT = 'https://godcrm.ai/s/help/mcp';
+// Block 9 — kept in step with the repository's "What's broken" section.
+// Max four items on the landing. Only things we have actually hit.
+const BROKEN = copy.broken.items;
+
+// Block 10 — FAQ: five prompt-shaped questions (GEO clusters, doc 254978 §4).
+const FAQ = copy.faq.items;
 
 const CONNECT_SNIPPETS: Array<{ label: string; code: string }> = [
   {
@@ -133,6 +62,17 @@ const CONNECT_SNIPPETS: Array<{ label: string; code: string }> = [
 }`,
   },
 ];
+
+type Headline = { pre: string; glow: string; post: string };
+// Section headline with the glowing fragment — the JSON keeps the three parts
+// so the crawler render (plain text) and this one stay the same sentence.
+const Glow = ({ h }: { h: Headline }) => (
+  <>
+    {h.pre}
+    <span className="brutal-glow">{h.glow}</span>
+    {h.post}
+  </>
+);
 
 const LandingThemeToggle = () => {
   const { theme, toggleTheme } = useTheme();
@@ -154,7 +94,7 @@ const LandingThemeToggle = () => {
 
 const CopyBlock = ({ label, code }: { label: string; code: string }) => {
   const [copied, setCopied] = useState(false);
-  const copy = async () => {
+  const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(code);
       setCopied(true);
@@ -171,7 +111,7 @@ const CopyBlock = ({ label, code }: { label: string; code: string }) => {
         </span>
         <button
           type="button"
-          onClick={copy}
+          onClick={copyToClipboard}
           className="brutal-edge brutal-shadow border-2 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-widest"
           aria-label={`Copy ${label} connect snippet`}
         >
@@ -185,6 +125,18 @@ const CopyBlock = ({ label, code }: { label: string; code: string }) => {
   );
 };
 
+const SectionHeader = ({ title, badge }: { title: string; badge?: string }) => (
+  <div className="mb-8 flex items-baseline justify-between gap-4">
+    <h2 className="font-mono text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
+      {title}
+    </h2>
+    {badge && (
+      <span className="brutal-edge shrink-0 border-2 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
+        {badge}
+      </span>
+    )}
+  </div>
+);
 
 const LandingPage = () => {
   const { setTheme } = useTheme();
@@ -283,6 +235,11 @@ const LandingPage = () => {
         .cap-card:hover .cap-card-toggle { color: var(--text-primary); }
         .cap-card-toggle::before { content: '+'; }
         .cap-card[open] .cap-card-toggle::before { content: '–'; }
+        /* FAQ rows: the toggle sits on the question's first line, not the card corner. */
+        .faq-card .cap-card-toggle { top: 1.5rem; right: 1.25rem; }
+        @media (min-width: 768px) {
+          .faq-card .cap-card-toggle { top: 2rem; right: 1.75rem; }
+        }
         .cap-card-body {
           padding: 0 1.5rem 1.5rem;
         }
@@ -319,12 +276,12 @@ const LandingPage = () => {
               borderColor: 'var(--color-primary-500)',
             }}
           >
-            GET IT →
+            SELF-HOST →
           </a>
         </div>
       </header>
 
-      {/* Hero */}
+      {/* 1. Hero — thesis and category */}
       <section className="relative flex flex-col items-center justify-start overflow-hidden px-6 pt-0 pb-6 md:pt-0 md:pb-12">
         <div className="brutal-grid" aria-hidden />
         <div className="relative flex w-full flex-col items-center">
@@ -333,11 +290,14 @@ const LandingPage = () => {
             interactive
             className="origin-top scale-[0.9] md:scale-[1.5] -mt-12 md:-mt-24"
           />
-          <h1 className="brutal-glow mt-0 w-full max-w-4xl text-balance break-words text-center text-3xl font-black uppercase leading-[0.95] tracking-tighter text-[var(--text-primary)] sm:text-5xl md:mt-64 md:text-7xl">
-            Everything is a row.
+          <p className="mt-0 text-center font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)] md:mt-64 md:text-xs">
+            {copy.hero.kicker}
+          </p>
+          <h1 className="brutal-glow mt-3 w-full max-w-4xl text-balance break-words text-center text-4xl font-black uppercase leading-[0.95] tracking-tighter text-[var(--text-primary)] sm:text-6xl md:mt-4 md:text-8xl">
+            {copy.hero.h1}
           </h1>
-          <p className="mt-4 w-full max-w-3xl text-balance text-center text-base font-bold uppercase tracking-tight text-[var(--text-secondary)] sm:text-lg md:text-xl">
-            The self-configuring CRM. Agents build it — and reshape it when you change.
+          <p className="mt-4 w-full max-w-3xl text-balance text-center text-base font-bold tracking-tight text-[var(--text-secondary)] sm:text-lg md:text-xl">
+            {copy.hero.thesis}
           </p>
           <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4 md:mt-8">
             <a
@@ -350,82 +310,131 @@ const LandingPage = () => {
                 borderColor: 'var(--color-primary-500)',
               }}
             >
-              READ THE CODE →
+              SELF-HOST GOD CRM →
             </a>
             <a
-              href="#connect-mcp"
+              href="#inside"
               className="brutal-edge brutal-shadow inline-flex items-center justify-center gap-2 border-2 px-6 py-3 font-mono text-sm font-black uppercase tracking-widest"
             >
-              CONNECT VIA MCP
-            </a>
-            <a
-              href="https://t.me/god_crm"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="brutal-edge brutal-shadow inline-flex items-center justify-center gap-2 border-2 px-6 py-3 font-mono text-sm font-black uppercase tracking-widest"
-            >
-              ▶ JOIN TELEGRAM
+              WHAT&apos;S INSIDE ↓
             </a>
           </div>
 
-          {/* Hero KB preview — one tight line: live proof that /s/help is a real public surface */}
-          <div className="mt-6 flex max-w-md flex-col items-center gap-2 text-center md:items-start md:text-left">
+          <div className="mt-6 flex max-w-md flex-col items-center gap-2 text-center">
             <Link
               to="/s/help"
               className="font-mono text-[10px] uppercase tracking-widest text-[var(--text-secondary)] underline decoration-dotted underline-offset-4 hover:text-[var(--text-primary)] md:text-xs"
             >
-              NEW HERE? → KNOWLEDGE BASE{kbCount !== null ? ` (${kbCount} ARTICLES)` : ''}
+              READ THE DOCS{kbCount !== null ? ` (${kbCount} ARTICLES)` : ''}
             </Link>
             <div className="mt-6 font-mono text-[10px] uppercase tracking-widest text-[var(--text-tertiary)] md:text-xs">
-              v1.2.0-beta · self-host · open-core
+              {copy.hero.tags}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Building in Public — neutral RowCardsWidget feed (renders only when posts exist).
-          Sits directly under the hero badge: proof-of-life before the pitch. */}
-      <LandingNewsSection />
-
-      {/* Manifesto */}
-      <section className="brutal-edge relative overflow-hidden border-y-2 px-6 py-24 md:py-32">
+      {/* 2. The enemy — the tab. No vendor names on this page. */}
+      <section className="brutal-edge relative overflow-hidden border-t-2 bg-[var(--bg-secondary)] px-6 py-16 md:py-24">
         <div className="brutal-scanlines" aria-hidden />
-        <div className="relative mx-auto max-w-5xl space-y-8 text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl lg:text-5xl">
-          <p>
-            We started from a simple question.<br />
-            Why do all CRMs assume the operator is a <span className="brutal-glow">human</span>?
+        <div className="relative mx-auto max-w-6xl">
+          <SectionHeader title={copy.enemy.title} badge={copy.enemy.badge} />
+          <p className="max-w-4xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl lg:text-5xl">
+            <Glow h={copy.enemy.headline} />
           </p>
-          <p>
-            GOD CRM is built the other way around. <span className="brutal-glow">Agents</span> read rows,
-            mutate state, and talk back — through the same <span className="brutal-glow">API</span> you use.
-            No plugins. No <span className="brutal-glow">bolt-ons</span>.
+          <p className="mt-8 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
+            {copy.enemy.body}
+          </p>
+          {/* Null until Closed Tab #0 ships (doc 255372 §2.2): no link into an empty series. */}
+          {copy.enemy.link && (
+            <Link
+              to="/blog"
+              className="mt-8 inline-block font-mono text-xs font-black uppercase tracking-widest underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--text-secondary)]"
+            >
+              {copy.enemy.link}
+            </Link>
+          )}
+        </div>
+      </section>
+
+      {/* 3. Context · Rights · Memory · Build (hero CTA target) */}
+      <section id="inside" className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
+        <div className="brutal-grid" aria-hidden />
+        <div className="relative mx-auto max-w-6xl">
+          <SectionHeader title={copy.inside.title} badge={copy.inside.badge} />
+          <p className="max-w-4xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl">
+            <Glow h={copy.inside.headline} />
+          </p>
+          <p className="mt-4 mb-10 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)] md:text-xs">
+            {copy.inside.kicker}
+          </p>
+          <div className="grid grid-cols-1 gap-0 md:grid-cols-2 lg:grid-cols-4">
+            {INSIDE.map((item) => (
+              <article
+                key={item.label}
+                className="brutal-edge brutal-shadow -mt-[2px] border-2 p-6 first:mt-0 md:mt-0 md:-ml-[2px] md:first:ml-0 md:p-8"
+              >
+                <div className="flex items-baseline gap-4">
+                  <span className="font-mono text-4xl font-black opacity-30 md:text-5xl">{item.num}</span>
+                  <h3 className="text-xl font-black uppercase tracking-tighter md:text-2xl">{item.label}</h3>
+                </div>
+                <p className="mt-4 text-base leading-relaxed text-[var(--text-secondary)]">
+                  {item.body}
+                </p>
+                {item.link && (
+                  <a
+                    href={item.link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-4 inline-block font-mono text-xs font-black uppercase tracking-widest underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--text-secondary)]"
+                  >
+                    {item.link.label}
+                  </a>
+                )}
+              </article>
+            ))}
+          </div>
+          <p className="mt-8 max-w-3xl text-base font-bold leading-relaxed text-[var(--text-primary)] md:text-lg">
+            {copy.inside.outro}
           </p>
         </div>
       </section>
 
-      {/* Connect via MCP — the no-signup front door */}
+      {/* 4. The story — why believe us */}
+      <section className="brutal-edge relative overflow-hidden border-t-2 bg-[var(--bg-secondary)] px-6 py-16 md:py-24">
+        <div className="brutal-scanlines" aria-hidden />
+        <div className="relative mx-auto max-w-6xl">
+          <SectionHeader title={copy.story.title} badge={copy.story.badge} />
+          <p className="max-w-4xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl lg:text-5xl">
+            <Glow h={copy.story.headline} />
+          </p>
+          <p className="mt-8 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
+            {copy.story.body}
+          </p>
+          {/* The one canonical model-swap quote (doc 255025 §B) — cited verbatim site-wide. */}
+          <p className="mt-6 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
+            {copy.story.swapQuote.pre}{copy.story.modelSwaps}{copy.story.swapQuote.post}{' '}
+            {copy.story.conclusion}
+          </p>
+          <p className="mt-8 font-mono text-[10px] uppercase tracking-widest text-[var(--text-secondary)] md:text-xs">
+            {copy.story.credit}
+          </p>
+        </div>
+      </section>
+
+      {/* 5. Connect your agent — public MCP, explicitly read-only */}
       <section
         id="connect-mcp"
-        className="brutal-edge relative overflow-hidden border-y-2 bg-[var(--bg-secondary)] px-6 py-16 md:py-24"
+        className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24"
       >
         <div className="brutal-grid" aria-hidden />
         <div className="relative mx-auto max-w-5xl">
-          <div className="mb-8 flex items-baseline justify-between">
-            <h2 className="font-mono text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              CONNECT VIA MCP
-            </h2>
-            <span className="brutal-edge border-2 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-primary)]">
-              NO SIGNUP
-            </span>
-          </div>
+          <SectionHeader title={copy.connect.title} badge={copy.connect.badge} />
           <p className="text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl">
-            Point any MCP client at the CRM.<br />
-            <span className="brutal-glow">No login. No token.</span>
+            <Glow h={copy.connect.headline} />
           </p>
           <p className="mt-6 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
-            Drop the endpoint into Claude Desktop, Claude Code, Cursor, Zed — any MCP client. It
-            connects to a live, read-safe demo space and operates GOD CRM like a power user: query
-            tables, read docs, search globally. Want write access? Self-host it — clone, run, you're the admin.
+            {copy.connect.body}
           </p>
 
           <div className="brutal-edge brutal-shadow mt-8 flex flex-col gap-2 border-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -444,18 +453,17 @@ const LandingPage = () => {
           </div>
 
           <p className="mt-6 font-mono text-[10px] uppercase tracking-widest text-[var(--text-secondary)] md:text-xs">
-            ANONYMOUS TIER · READ-SAFE TOOLS · LIVE DEMO SPACE
+            {copy.connect.note}
           </p>
         </div>
       </section>
 
-      {/* Video showcase — 90s walkthrough. Sits right after CONNECT: you've
-          read how the door works, now watch it move, before the proof feed. */}
-      <section className="px-6 py-12 md:py-16">
+      {/* 6. Video — the walkthrough as recorded */}
+      <section className="brutal-edge border-t-2 px-6 py-12 md:py-16">
         <div className="mx-auto max-w-5xl">
           <div className="mb-6 flex items-baseline justify-between">
             <h2 className="font-mono text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              WHAT IT FEELS LIKE
+              WATCH IT WORK
             </h2>
             <span className="font-mono text-xs uppercase tracking-widest text-[var(--text-secondary)]">
               ▶ WATCH
@@ -475,57 +483,82 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Capabilities */}
+      {/* 7. Build — widgets or code, as a real <table> */}
+      <section className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
+        <div className="mx-auto max-w-6xl">
+          <SectionHeader title={copy.build.title} badge={copy.build.badge} />
+          <p className="mb-10 max-w-4xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl">
+            <Glow h={copy.build.headline} />
+          </p>
+          <div className="brutal-edge overflow-x-auto border-2">
+            <table className="w-full min-w-[640px] border-collapse text-left">
+              <thead>
+                <tr className="brutal-edge border-b-2">
+                  <th className="px-4 py-3 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)] md:text-xs">
+                    {copy.build.columns.need}
+                  </th>
+                  <th className="brutal-edge border-l-2 bg-[var(--bg-secondary)] px-4 py-3 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-primary)] md:text-xs">
+                    {copy.build.columns.widgets}
+                  </th>
+                  <th className="brutal-edge border-l-2 px-4 py-3 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-primary)] md:text-xs">
+                    {copy.build.columns.code}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {SHAPE_ROWS.map((row) => (
+                  <tr key={row.need} className="align-top">
+                    <th
+                      scope="row"
+                      className="px-4 py-5 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)] md:text-xs"
+                    >
+                      {row.need}
+                    </th>
+                    <td className="brutal-edge border-l-2 bg-[var(--bg-secondary)] px-4 py-5 text-sm leading-relaxed text-[var(--text-primary)]">
+                      {row.widgets}
+                    </td>
+                    <td className="brutal-edge border-l-2 px-4 py-5 text-sm leading-relaxed text-[var(--text-primary)]">
+                      {row.code}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-8 max-w-3xl text-base font-bold leading-relaxed text-[var(--text-primary)] md:text-lg">
+            {copy.build.outro}
+          </p>
+        </div>
+      </section>
+
+      {/* 8. Under the hood — technical layer, expandable cards tagged by letter */}
       <section className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
         <div className="brutal-grid" aria-hidden />
         <div className="relative mx-auto max-w-6xl">
-          <div className="mb-8 flex items-baseline justify-between">
-            <h2 className="font-mono text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              CAPABILITIES
-            </h2>
-            <span className="font-mono text-xs uppercase tracking-widest text-[var(--text-secondary)]">
-              08 / 08
-            </span>
-          </div>
+          <SectionHeader title={copy.underTheHood.title} badge={copy.underTheHood.badge} />
+          <p className="mb-10 max-w-3xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl">
+            <Glow h={copy.underTheHood.headline} />
+          </p>
           <div className="grid grid-cols-1 gap-0 md:grid-cols-12">
-            {CAPABILITIES.map((cap) => (
+            {UNDER_THE_HOOD.map((cap) => (
               <details
                 key={cap.num}
-                className={`cap-card brutal-edge brutal-shadow border-2 ${cap.span} -mt-[2px] md:-ml-[2px] md:mt-0 first:mt-0 md:first:ml-0`}
+                className={`cap-card brutal-edge brutal-shadow border-2 ${CAP_SPAN[cap.num] ?? ''} -mt-[2px] md:-ml-[2px] md:mt-0 first:mt-0 md:first:ml-0`}
               >
                 <summary aria-label={`Toggle ${cap.label} details`}>
                   <span className="cap-card-toggle" aria-hidden />
-                  <div className="flex items-baseline gap-4 pr-8">
+                  <span className="brutal-edge inline-block border px-1.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
+                    {cap.tag}
+                  </span>
+                  <div className="mt-3 flex items-baseline gap-4 pr-8">
                     <span className="font-mono text-4xl font-black opacity-30 md:text-5xl">{cap.num}</span>
                     <h3 className="text-xl font-black uppercase tracking-tighter md:text-2xl">{cap.label}</h3>
-                    {cap.live && (
-                      <span
-                        aria-label="Live now"
-                        className="ml-1 inline-flex items-center gap-1 border-2 border-green-500 px-1.5 py-0.5 font-mono text-[10px] font-black uppercase tracking-widest text-green-500"
-                      >
-                        <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                        LIVE
-                      </span>
-                    )}
                   </div>
                   <p className="mt-4 text-base leading-relaxed text-[var(--text-secondary)]">
                     {cap.body}
                   </p>
                 </summary>
                 <div className="cap-card-body">
-                  {cap.download && (
-                    <a
-                      href={cap.download.url}
-                      download={cap.download.filename}
-                      onClick={(e) => e.stopPropagation()}
-                      className="brutal-edge brutal-shadow mb-4 inline-flex flex-wrap items-center gap-x-3 gap-y-1 border-2 px-3 py-2 font-mono text-xs font-black uppercase tracking-widest text-[var(--text-primary)] hover:text-[var(--text-primary)]"
-                    >
-                      <span>↓ DOWNLOAD {cap.download.label}</span>
-                      <span className="font-mono text-[10px] font-normal tracking-widest text-[var(--text-secondary)]">
-                        {cap.download.meta}
-                      </span>
-                    </a>
-                  )}
                   <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
                     {cap.long}
                   </p>
@@ -533,173 +566,97 @@ const LandingPage = () => {
               </details>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Comparison — static vs self-configuring. Its own section above the
-          marketplace: a real <table>, the GEO unit LLMs parse and cite most
-          readily. The structural claim (schema-first vs schema-emergent) is a
-          fact about architecture — quotable without sounding like a put-down. */}
-      <section className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-8 flex items-baseline justify-between">
-            <h2 className="font-mono text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              STATIC VS SELF-CONFIGURING
-            </h2>
-            <span className="brutal-edge border-2 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              THE DIFFERENCE
-            </span>
-          </div>
-          <p className="mb-10 max-w-3xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl">
-            Every other CRM is <span className="brutal-glow">schema-first</span>.<br />
-            GOD CRM is <span className="brutal-glow">schema-emergent</span>.
+          {/* Category anchor (doc 254978 §2): the thesis above is for people,
+              this sentence maps "substrate" onto the words people type into a
+              prompt. Plain text, not a card. */}
+          <p className="mt-10 max-w-4xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
+            {copy.underTheHood.anchor}
           </p>
-          <div className="brutal-edge overflow-x-auto border-2">
-            <table className="w-full min-w-[640px] border-collapse text-left">
-              <thead>
-                <tr className="brutal-edge border-b-2">
-                  <th className="px-4 py-3 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)] md:text-xs">
-                    <span className="sr-only">Axis</span>
-                  </th>
-                  <th className="brutal-edge border-l-2 px-4 py-3 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)] md:text-xs">
-                    TRADITIONAL CRM
-                  </th>
-                  <th className="brutal-edge border-l-2 bg-[var(--bg-secondary)] px-4 py-3 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-primary)] md:text-xs">
-                    GOD CRM
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARISON.map((row) => (
-                  <tr key={row.axis} className="align-top">
-                    <th
-                      scope="row"
-                      className="px-4 py-5 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)] md:text-xs"
-                    >
-                      {row.axis}
-                    </th>
-                    <td className="brutal-edge border-l-2 px-4 py-5 text-sm leading-relaxed text-[var(--text-secondary)]">
-                      {row.traditional}
-                    </td>
-                    <td className="brutal-edge border-l-2 bg-[var(--bg-secondary)] px-4 py-5 text-sm leading-relaxed text-[var(--text-primary)]">
-                      {row.god}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
       </section>
 
-      {/* Marketplace */}
-      <section className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
+      {/* 9. What's broken — honest status */}
+      <section id="whats-broken" className="brutal-edge relative overflow-hidden border-t-2 bg-[var(--bg-secondary)] px-6 py-16 md:py-24">
+        <div className="brutal-scanlines" aria-hidden />
+        <div className="relative mx-auto max-w-6xl">
+          <SectionHeader title={copy.broken.title} badge={copy.broken.badge} />
+          <p className="max-w-4xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl">
+            <Glow h={copy.broken.headline} />
+          </p>
+          <p className="mt-8 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
+            {copy.broken.body}
+          </p>
+          <ul className="mt-6 max-w-3xl">
+            {BROKEN.map((item) => (
+              <li
+                key={item}
+                className="brutal-edge -mt-[2px] border-2 bg-[var(--bg-primary)] px-5 py-4 text-base leading-relaxed text-[var(--text-primary)] first:mt-0"
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* 10. Building in Public — home of the "Tab #N closed" series (renders only when posts exist). */}
+      <LandingNewsSection />
+
+      {/* 11. FAQ — the five prompt-shaped questions (GEO clusters). Mirrored as
+          FAQPage JSON-LD in index.html. */}
+      <section id="faq" className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
         <div className="brutal-grid" aria-hidden />
         <div className="relative mx-auto max-w-6xl">
-          <div className="mb-8 flex items-baseline justify-between">
-            <h2 className="font-mono text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              MARKETPLACE
-            </h2>
-            <span className="brutal-edge border-2 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              BUILDING
-            </span>
-          </div>
-          <p className="mb-8 max-w-3xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl">
-            A market for what you <span className="brutal-glow">know</span>.
+          <SectionHeader title={copy.faq.title} badge={copy.faq.badge} />
+          <p className="mb-10 max-w-4xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl">
+            <Glow h={copy.faq.headline} />
           </p>
-          <div className="grid grid-cols-1 gap-0 md:grid-cols-3">
-            {MARKETPLACE.map((item) => (
-              <article
-                key={item.label}
-                className="brutal-edge -mt-[2px] border-2 p-6 first:mt-0 md:-ml-[2px] md:mt-0 md:first:ml-0"
-              >
-                <h3 className="text-xl font-black uppercase tracking-tighter md:text-2xl">{item.label}</h3>
-                <p className="mt-4 text-base leading-relaxed text-[var(--text-secondary)]">
-                  {item.body}
-                </p>
-              </article>
+          <div>
+            {FAQ.map((item) => (
+              <details key={item.q} className="cap-card faq-card brutal-edge -mt-[2px] border-2 first:mt-0">
+                <summary>
+                  <span className="cap-card-toggle" aria-hidden />
+                  <h3 className="pr-10 text-lg font-black tracking-tight md:text-xl">{item.q}</h3>
+                </summary>
+                <div className="cap-card-body">
+                  <p className="text-base leading-relaxed text-[var(--text-secondary)]">{item.a}</p>
+                </div>
+              </details>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Audience → reframed: not who it's for, but how it fits */}
-      <section className="brutal-edge border-t-2 px-6 py-16 md:py-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-10 flex items-baseline justify-between">
-            <h2 className="font-mono text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              WHO IT'S FOR
-            </h2>
-            <span className="brutal-edge border-2 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              FITS YOU
-            </span>
-          </div>
-          <p className="max-w-4xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl lg:text-5xl">
-            Not a CRM for a kind of company.<br />
-            A CRM that becomes <span className="brutal-glow">your</span> shape.
-          </p>
-          <p className="mt-8 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
-            Most CRMs make you fit your work into their structure. GOD CRM does the opposite.
-            Describe what you need in plain language and its AI agents build the tables, fields,
-            links and automations on the fly — then rebuild them when your process changes. No setup
-            project. No admin panel. No consultant. The system configures itself to how you actually work.
-          </p>
-          <p className="mt-6 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
-            A studio runs it as a booking system. A workshop runs it as inventory. Our own shop runs
-            it as all of it at once. Same product — configured by agents, not by you.
-          </p>
-
-          <p className="mt-8 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
-            Pick a traditional CRM if your process never changes and already matches a standard sales
-            pipeline — you set it up once, then fit your work to its structure. Pick GOD CRM if your
-            process is <span className="brutal-glow">yours</span>: it shapes itself to how you actually
-            work and rebuilds itself when you change.
-          </p>
-        </div>
-      </section>
-
-      {/* Proof */}
-      <section className="brutal-edge border-y-2 bg-[var(--bg-secondary)] px-6 py-16">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-8 md:grid-cols-4">
-          {PROOF.map((p) => (
-            <div key={p.small} className="text-center">
-              <div className="text-3xl font-black uppercase tracking-tighter md:text-4xl">{p.big}</div>
-              <div className="mt-2 font-mono text-[10px] uppercase tracking-widest text-[var(--text-secondary)] md:text-xs">
-                {p.small}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Read the code */}
-      <section className="relative overflow-hidden px-6 py-16">
+      {/* 12. Final CTA */}
+      <section className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
         <div className="brutal-grid" aria-hidden />
         <div className="relative mx-auto max-w-6xl">
-          <div className="mb-10 flex items-baseline justify-between">
-            <h2 className="font-mono text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              GET STARTED
-            </h2>
-            <span className="brutal-edge border-2 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
-              SELF-HOST
-            </span>
-          </div>
+          <SectionHeader title={copy.finalCta.title} badge={copy.finalCta.badge} />
           <p className="max-w-4xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl lg:text-5xl">
-            Want to see how it <span className="brutal-glow">actually works</span>? It's <span className="brutal-glow">all open</span> — the CRM, the MCP server, the agents.
+            <Glow h={copy.finalCta.headline} />
           </p>
-          <div className="mt-8 flex">
+          <p className="mt-8 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
+            {copy.finalCta.body}
+          </p>
+          <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
             <a
               href={SOURCE_REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="brutal-shadow inline-flex w-full max-w-2xl items-center justify-center gap-2 border-2 px-6 py-5 font-mono text-sm font-black uppercase tracking-widest text-white md:text-base"
+              className="brutal-shadow inline-flex items-center justify-center gap-2 border-2 px-6 py-4 font-mono text-sm font-black uppercase tracking-widest text-white md:text-base"
               style={{
                 background: 'var(--color-primary-500)',
                 borderColor: 'var(--color-primary-500)',
               }}
             >
-              READ THE CODE → GODCRM.AI/GIT/GODCRM
+              SELF-HOST GOD CRM →
             </a>
+            <Link
+              to="/s/help"
+              className="brutal-edge brutal-shadow inline-flex items-center justify-center gap-2 border-2 px-6 py-4 font-mono text-sm font-black uppercase tracking-widest md:text-base"
+            >
+              READ THE DOCS →
+            </Link>
           </div>
         </div>
       </section>
@@ -707,7 +664,7 @@ const LandingPage = () => {
       {/* Footer */}
       <footer className="brutal-edge border-t-2 px-6 py-10">
         <div className="mx-auto max-w-6xl space-y-4 font-mono text-[10px] uppercase tracking-widest text-[var(--text-secondary)] md:text-xs">
-          <p>© 2026 HOLETRON LTD</p>
+          <p>{copy.footer.copyright}</p>
           <p className="flex flex-wrap gap-x-3 gap-y-2">
             <a
               href="https://hltrn.cc"
@@ -719,7 +676,7 @@ const LandingPage = () => {
             </a>
             <span aria-hidden>·</span>
             <a
-              href="https://godcrm.ai/git/holetron-lab/godcrm"
+              href={SOURCE_REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-[var(--text-primary)] transition-colors"
@@ -740,10 +697,20 @@ const LandingPage = () => {
             >
               BLOG
             </Link>
+            <span aria-hidden>·</span>
+            <a
+              href="https://t.me/god_crm"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-[var(--text-primary)] transition-colors"
+            >
+              TELEGRAM
+            </a>
           </p>
           <div className="brutal-edge mt-6 border-t-2 pt-4 leading-relaxed">
-            <p>GENERATIVE ORCHESTRATION & DEVELOPMENT</p>
-            <p>CRITICAL RESOURCE MANAGER</p>
+            <p>{copy.footer.lines[0]}</p>
+            <p className="text-[var(--text-primary)]">{copy.footer.lines[1]}</p>
+            <p>{copy.footer.lines[2]}</p>
           </div>
         </div>
       </footer>

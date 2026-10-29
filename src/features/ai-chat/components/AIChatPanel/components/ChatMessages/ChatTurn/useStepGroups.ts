@@ -1,26 +1,28 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ChatMessage } from '../../../types';
 import type { Step, StepGroup } from './types';
 import { parseToolName, parseToolArgs, parseToolResult } from './helpers';
 
 export interface StepGroupWithIdx extends StepGroup {
-  _groupIdx: number;
+  _groupIdx: string;
+  _ranges: StepGroup[];
 }
 
 export interface UseStepGroupsResult {
   allStepGroups: StepGroupWithIdx[];
   totalHiddenSteps: number;
-  expandedGroups: Record<number, boolean>;
-  loadedGroupSteps: Record<number, Step[]>;
-  loadingGroups: Record<number, boolean>;
-  loadedGroupToolCounts: Record<number, number>;
-  loadedGroupTerminals: Record<number, number | undefined>;
-  reasoningExpanded: Record<number, boolean>;
+  expandedGroups: Record<string, boolean>;
+  loadedGroupSteps: Record<string, Step[]>;
+  loadingGroups: Record<string, boolean>;
+  failedGroups: Record<string, boolean>;
+  loadedGroupToolCounts: Record<string, number>;
+  loadedGroupTerminals: Record<string, number | undefined>;
+  reasoningExpanded: Record<string, boolean>;
   masterExpanded: boolean;
-  collapsedToolGroups: Record<number, boolean>;
+  collapsedToolGroups: Record<string, boolean>;
   setMasterExpanded: React.Dispatch<React.SetStateAction<boolean>>;
-  setReasoningExpanded: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
-  setCollapsedToolGroups: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
+  setReasoningExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  setCollapsedToolGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   handleLoadGroup: (group: StepGroupWithIdx) => Promise<void>;
 }
 
@@ -34,39 +36,53 @@ export function useStepGroups(
     fetchToolSteps?: (afterId: number, beforeId: number) => Promise<ChatMessage[]>;
   },
 ): UseStepGroupsResult {
-  const { isProcessing, isLastTurn, fetchThinkingSteps, fetchToolStepsPreview, fetchToolSteps } = opts;
+  const { isProcessing, fetchThinkingSteps, fetchToolStepsPreview, fetchToolSteps } = opts;
 
-  // Extract step groups from message annotations
+  // Every carrier can have trailing history, even after polling appends messages.
+  const rawGroups: StepGroup[] = [];
+  for (const message of messages) {
+    const annotated = message as ChatMessage & {
+      _step_groups_before?: StepGroup[];
+      _step_groups_after?: StepGroup[];
+    };
+    for (const group of [...(annotated._step_groups_before ?? []), ...(annotated._step_groups_after ?? [])]) {
+      rawGroups.push(group);
+    }
+  }
   const allStepGroups: StepGroupWithIdx[] = [];
-  let groupIdx = 0;
-  for (const msg of messages) {
-    const groups = (msg as any)._step_groups_before as StepGroup[] | undefined;
-    if (groups) {
-      for (const g of groups) {
-        allStepGroups.push({ ...g, _groupIdx: groupIdx++ });
-      }
+  const seen = new Set<string>();
+  for (const group of rawGroups.sort((a, b) => Number(a.first_id) - Number(b.first_id))) {
+    const key = `${group.type}:${group.first_id}:${group.last_id}:${group.count}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const previous = allStepGroups[allStepGroups.length - 1];
+    const sameAgent = previous && (previous.agent_id != null && group.agent_id != null
+      ? previous.agent_id === group.agent_id : previous.agent_name === group.agent_name);
+    const hasInlineReasoning = previous && messages.some(m => m.contentType === 'thinking'
+      && Number(m.id) > previous.last_id && Number(m.id) < group.first_id);
+    if (previous?.type === 'tools' && group.type === 'tools' && sameAgent && !hasInlineReasoning) {
+      previous.count += group.count;
+      previous.last_id = group.last_id;
+      previous.last_at = group.last_at;
+      previous._ranges.push(group);
+      previous._groupIdx += `|${key}`;
+    } else {
+      allStepGroups.push({ ...group, _groupIdx: key, _ranges: [group] });
     }
   }
-  const lastMsg = messages[messages.length - 1];
-  const groupsAfter = (lastMsg as any)?._step_groups_after as StepGroup[] | undefined;
-  if (groupsAfter) {
-    for (const g of groupsAfter) {
-      allStepGroups.push({ ...g, _groupIdx: groupIdx++ });
-    }
-  }
-
-  const totalHiddenSteps = messages.reduce((sum, m) => sum + ((m as any)._total_hidden_before || 0), 0)
-    + ((lastMsg as any)?._total_hidden_after || 0);
+  const totalHiddenSteps = allStepGroups.reduce((sum, group) => sum + group.count, 0);
 
   // State hooks
-  const [expandedGroups, setExpandedGroups] = useState<Record<number, boolean>>({});
-  const [loadedGroupSteps, setLoadedGroupSteps] = useState<Record<number, Step[]>>({});
-  const [loadingGroups, setLoadingGroups] = useState<Record<number, boolean>>({});
-  const [loadedGroupToolCounts, setLoadedGroupToolCounts] = useState<Record<number, number>>({});
-  const [loadedGroupTerminals, setLoadedGroupTerminals] = useState<Record<number, number | undefined>>({});
-  const [reasoningExpanded, setReasoningExpanded] = useState<Record<number, boolean>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [loadedGroupSteps, setLoadedGroupSteps] = useState<Record<string, Step[]>>({});
+  const [loadingGroups, setLoadingGroups] = useState<Record<string, boolean>>({});
+  const [failedGroups, setFailedGroups] = useState<Record<string, boolean>>({});
+  const inFlight = useRef(new Set<string>());
+  const [loadedGroupToolCounts, setLoadedGroupToolCounts] = useState<Record<string, number>>({});
+  const [loadedGroupTerminals, setLoadedGroupTerminals] = useState<Record<string, number | undefined>>({});
+  const [reasoningExpanded, setReasoningExpanded] = useState<Record<string, boolean>>({});
   const [masterExpanded, setMasterExpanded] = useState(isProcessing);
-  const [collapsedToolGroups, setCollapsedToolGroups] = useState<Record<number, boolean>>({});
+  const [collapsedToolGroups, setCollapsedToolGroups] = useState<Record<string, boolean>>({});
 
   // Expand when processing starts, collapse when it ends
   useEffect(() => {
@@ -75,36 +91,30 @@ export function useStepGroups(
 
   const handleLoadGroup = useCallback(async (group: StepGroupWithIdx) => {
     const idx = group._groupIdx;
-    if (loadingGroups[idx] || loadedGroupSteps[idx]) return;
+    if (inFlight.current.has(idx) || loadedGroupSteps[idx]) return;
+    inFlight.current.add(idx);
     setLoadingGroups(prev => ({ ...prev, [idx]: true }));
+    setFailedGroups(prev => ({ ...prev, [idx]: false }));
     try {
-      const afterId = group.first_id - 1;
-      const beforeId = group.last_id + 1;
+      const fetcher = (group.type === 'thinking' ? fetchThinkingSteps : fetchToolStepsPreview) || fetchToolSteps;
+      if (!fetcher) throw new Error('Step loader unavailable');
+      // Fetch source ranges independently: another agent may own the gaps.
+      const batches = await Promise.all(group._ranges.map(async range => {
+        const rows = await fetcher(Number(range.first_id) - 1, Number(range.last_id) + 1);
+        const matching = rows.filter(m => Number(m.id) >= range.first_id && Number(m.id) <= range.last_id
+          && (group.type === 'thinking' ? m.contentType === 'thinking' : m.contentType === 'tool_call' || m.contentType === 'tool_result'));
+        if (!matching.length) throw new Error('Step range unavailable');
+        return matching;
+      }));
+      const groupMessages = [...new Map(batches.flat().map(m => [m.id, m])).values()]
+        .sort((a, b) => Number(a.id) - Number(b.id));
 
       if (group.type === 'thinking') {
-        const fetcher = fetchThinkingSteps || fetchToolSteps;
-        if (!fetcher) return;
-        let thinkingMessages: ChatMessage[];
-        if (fetchThinkingSteps) {
-          thinkingMessages = await fetchThinkingSteps(afterId, beforeId);
-        } else {
-          const all = await fetchToolSteps!(afterId, beforeId);
-          thinkingMessages = all.filter(m => m.contentType === 'thinking');
-        }
-        const steps: Step[] = thinkingMessages
-          .filter(m => m.contentType === 'thinking')
+        const steps: Step[] = groupMessages
           .map(m => ({ kind: 'thinking' as const, content: m.content }));
         setLoadedGroupSteps(prev => ({ ...prev, [idx]: steps }));
       } else {
-        const fetcher = fetchToolStepsPreview || fetchToolSteps;
-        if (!fetcher) return;
-        let toolMessages: ChatMessage[];
-        if (fetchToolStepsPreview) {
-          toolMessages = await fetchToolStepsPreview(afterId, beforeId);
-        } else {
-          const all = await fetchToolSteps!(afterId, beforeId);
-          toolMessages = all.filter(m => m.contentType === 'tool_call' || m.contentType === 'tool_result');
-        }
+        const toolMessages = groupMessages;
         const steps: Step[] = [];
         let toolCount = 0;
         let termSession: number | undefined;
@@ -127,8 +137,8 @@ export function useStepGroups(
               result = parsed.result;
               success = parsed.success;
               resultMessageId = Number(resultMsg.id);
-              _truncated = !!(resultMsg as any)._truncated;
-              _full_length = (resultMsg as any)._full_length;
+              _truncated = !!resultMsg._truncated;
+              _full_length = resultMsg._full_length;
               i++;
             }
             steps.push({ kind: 'tool', toolName, args, result, success, resultMessageId, _truncated, _full_length });
@@ -138,8 +148,8 @@ export function useStepGroups(
             steps.push({
               kind: 'tool', toolName: 'tool', result: parsed.result, success: parsed.success,
               resultMessageId: Number(msg.id),
-              _truncated: !!(msg as any)._truncated,
-              _full_length: (msg as any)._full_length,
+              _truncated: !!msg._truncated,
+              _full_length: msg._full_length,
             });
           }
         }
@@ -148,12 +158,13 @@ export function useStepGroups(
         setLoadedGroupTerminals(prev => ({ ...prev, [idx]: termSession }));
       }
       setExpandedGroups(prev => ({ ...prev, [idx]: true }));
-    } catch (err) {
-      console.error('Failed to load group steps:', err);
+    } catch {
+      setFailedGroups(prev => ({ ...prev, [idx]: true }));
     } finally {
+      inFlight.current.delete(idx);
       setLoadingGroups(prev => ({ ...prev, [idx]: false }));
     }
-  }, [fetchThinkingSteps, fetchToolStepsPreview, fetchToolSteps, loadingGroups, loadedGroupSteps]);
+  }, [fetchThinkingSteps, fetchToolStepsPreview, fetchToolSteps, loadedGroupSteps]);
 
   return {
     allStepGroups,
@@ -161,6 +172,7 @@ export function useStepGroups(
     expandedGroups,
     loadedGroupSteps,
     loadingGroups,
+    failedGroups,
     loadedGroupToolCounts,
     loadedGroupTerminals,
     reasoningExpanded,

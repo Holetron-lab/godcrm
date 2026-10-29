@@ -3,7 +3,7 @@
  * Multi-method N-of-M verification gate configuration for a column.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useId, useMemo, useState } from 'react';
 import type { ColumnSettingsProps } from './types';
 import type {
   ColumnOption,
@@ -63,7 +63,7 @@ const TagInput: React.FC<TagInputProps> = ({ label, values, onChange, placeholde
         {values.map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)]"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)]"
           >
             {tag}
             <button
@@ -130,7 +130,7 @@ const StatusMultiSelect: React.FC<StatusMultiSelectProps> = ({
             style={
               checked
                 ? { backgroundColor: color, borderColor: color }
-                : { borderColor: 'var(--border-color)' }
+                : { borderColor: 'var(--border-primary)' }
             }
           >
             {checked && <span>✓</span>}
@@ -147,6 +147,7 @@ export const VerificationColumnSettings: React.FC<ColumnSettingsProps> = ({
   setDraft,
   allColumns = [],
 }) => {
+  const fieldId = useId();
   // ADR-0011 Phase F: config is FLAT at draft.config.* — backend
   // validateVerificationConfig() reads top-level fields. Nested
   // `config.verification.*` is legacy fallback for in-memory state only.
@@ -260,7 +261,7 @@ export const VerificationColumnSettings: React.FC<ColumnSettingsProps> = ({
   const hasSelectGuards = statusOptions.length > 0;
 
   return (
-    <div className="space-y-4 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-4 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
         🛡️ Настройки верификации
       </h4>
@@ -331,8 +332,8 @@ export const VerificationColumnSettings: React.FC<ColumnSettingsProps> = ({
           )}
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm text-[var(--text-secondary)]">Политика</label>
+        <div role="group" aria-labelledby={`${fieldId}-group-336`} className="space-y-2">
+          <span id={`${fieldId}-group-336`} className="text-sm text-[var(--text-secondary)]">Политика</span>
           <div className="flex gap-3 pt-2">
             {(['all', 'any_n'] as const).map((p) => (
               <label key={p} className="flex items-center gap-1.5 cursor-pointer">
@@ -358,7 +359,7 @@ export const VerificationColumnSettings: React.FC<ColumnSettingsProps> = ({
           Защищаемые колонки
         </div>
         {guardCandidates.length > 0 ? (
-          <div className="max-h-40 overflow-y-auto border border-[var(--border-primary)] rounded-lg bg-[var(--bg-primary)] divide-y divide-[var(--border-color)]">
+          <div className="max-h-40 overflow-y-auto border border-[var(--border-primary)] rounded-lg bg-[var(--bg-primary)] divide-y divide-[var(--border-primary)]">
             {guardCandidates.map((col) => {
               const checked = cfg.guards.includes(col.name);
               const isSelect = col.type === 'select';
@@ -443,10 +444,11 @@ export const VerificationColumnSettings: React.FC<ColumnSettingsProps> = ({
       {/* Cooldown + TTL */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
-          <label className="text-sm text-[var(--text-secondary)]">
+          <label htmlFor={`${fieldId}-0`} className="text-sm text-[var(--text-secondary)]">
             Cooldown (сек)
           </label>
           <input
+            id={`${fieldId}-0`}
             type="number"
             min={0}
             value={cfg.cooldown_seconds}
@@ -460,9 +462,10 @@ export const VerificationColumnSettings: React.FC<ColumnSettingsProps> = ({
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm text-[var(--text-secondary)]">TTL (сек)</label>
+          <label htmlFor={`${fieldId}-ttl`} className="text-sm text-[var(--text-secondary)]">TTL (сек)</label>
           <div className="space-y-1">
             <input
+              id={`${fieldId}-ttl`}
               type="number"
               min={0}
               value={cfg.ttl_seconds ?? ''}
@@ -492,7 +495,7 @@ export const VerificationColumnSettings: React.FC<ColumnSettingsProps> = ({
       </div>
 
       {/* Rate limit (optional) */}
-      <div className="space-y-2 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-dashed border-[var(--border-color)]">
+      <div className="space-y-2 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-dashed border-[var(--border-primary)]">
         <label className="flex items-center justify-between cursor-pointer">
           <span className="text-sm font-medium text-[var(--text-primary)]">
             ⏱️ Rate limit
@@ -514,10 +517,11 @@ export const VerificationColumnSettings: React.FC<ColumnSettingsProps> = ({
         {rateLimitEnabled && (
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div className="space-y-1">
-              <label className="text-xs text-[var(--text-secondary)]">
+              <label htmlFor={`${fieldId}-1`} className="text-xs text-[var(--text-secondary)]">
                 Окно (сек)
               </label>
               <input
+                id={`${fieldId}-1`}
                 type="number"
                 min={1}
                 value={cfg.rate_limit?.window_seconds ?? 60}
@@ -534,10 +538,11 @@ export const VerificationColumnSettings: React.FC<ColumnSettingsProps> = ({
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs text-[var(--text-secondary)]">
+              <label htmlFor={`${fieldId}-2`} className="text-xs text-[var(--text-secondary)]">
                 Макс. попыток
               </label>
               <input
+                id={`${fieldId}-2`}
                 type="number"
                 min={1}
                 value={cfg.rate_limit?.max_attempts ?? 5}

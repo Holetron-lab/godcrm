@@ -10,7 +10,7 @@ import type { KanbanDraggableCardProps, KanbanDroppableColumnProps, KanbanCardDa
 // ═══════════════════════════════════════════════
 export function KanbanDraggableCard({
   item, isExpanded, activeId,
-  cardTitleColumn, cardSubtitleColumn, startDateCol, endDateCol,
+  cardTitleColumn, cardSubtitleColumn, assigneeColumn, startDateCol, endDateCol,
   colorCol, emojiCol, groupByColumn, cardColumns, visibleColumns,
   columnsInfo, relationData,
   onToggleExpand, onDoubleClick, onOpenComments, onOpenChat,
@@ -32,6 +32,7 @@ export function KanbanDraggableCard({
         item={item}
         cardTitleColumn={cardTitleColumn}
         cardSubtitleColumn={cardSubtitleColumn}
+        assigneeColumn={assigneeColumn}
         scheduledDateColumn={startDateCol}
         dueDateColumn={endDateCol}
         colorColumn={colorCol}
@@ -64,7 +65,7 @@ export function KanbanDraggableCard({
 export function KanbanDroppableColumn({
   columnValue, columnLabel, columnItems, columnColor,
   badgeStyles, columnStyles, colIndex, activeColumnId,
-  expandedCards, activeId, cardTitleColumn, cardSubtitleColumn,
+  expandedCards, activeId, cardTitleColumn, cardSubtitleColumn, assigneeColumn,
   startDateCol, endDateCol, colorCol, emojiCol, groupByColumn,
   cardColumns, visibleColumns, columnsInfo, relationData,
   onToggleCardExpanded, onCardDoubleClick, onOpenRowChat,
@@ -188,6 +189,7 @@ export function KanbanDroppableColumn({
                           activeId={activeId}
                           cardTitleColumn={cardTitleColumn}
                           cardSubtitleColumn={cardSubtitleColumn}
+                          assigneeColumn={assigneeColumn}
                           startDateCol={startDateCol}
                           endDateCol={endDateCol}
                           colorCol={colorCol}
@@ -226,6 +228,7 @@ export function KanbanDroppableColumn({
                 activeId={activeId}
                 cardTitleColumn={cardTitleColumn}
                 cardSubtitleColumn={cardSubtitleColumn}
+                assigneeColumn={assigneeColumn}
                 startDateCol={startDateCol}
                 endDateCol={endDateCol}
                 colorCol={colorCol}

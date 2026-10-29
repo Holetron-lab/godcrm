@@ -16,6 +16,11 @@ export function ImportTreeNode({
   const hasChildren = node.children && node.children.length > 0;
   const isExpanded = ctx.expandedNodes.has(node.section.order);
   const atomState = ctx.atomSections[node.section.order];
+  let label = node.section.content || 'Без названия';
+  if (node.section.level === 'divider') label = 'Разделитель';
+  else if (node.section.level === 'text' && node.section.content) {
+    label = stripMarkdown(node.section.content).substring(0, 40) || 'Текст';
+  }
 
   const toggleExpand = () => {
     ctx.setExpandedNodes(prev => {
@@ -33,22 +38,15 @@ export function ImportTreeNode({
     <div style={{ marginLeft: depth * 12 + (node.section.level === 'text' || node.section.level === 'divider' ? 16 : 0) }}>
       <div
         className={cn(
-          'flex items-center gap-1 py-1 px-2 rounded cursor-pointer text-sm',
+          'relative flex items-center gap-1 py-1 px-2 rounded cursor-pointer text-sm',
           ctx.activePreviewOrder === node.section.order
             ? 'bg-[var(--color-primary-500)]/20 text-[var(--color-primary-400)]'
             : 'hover:bg-[var(--bg-tertiary)]',
           !node.section.selected && 'opacity-50'
         )}
-        onClick={() => {
-          ctx.setActivePreviewOrder(node.section.order);
-          const element = document.getElementById(`preview-${node.section.order}`);
-          if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }}
       >
         {hasChildren ? (
-          <button onClick={(e) => { e.stopPropagation(); toggleExpand(); }} className="p-0.5">
+          <button type="button" aria-label={`${isExpanded ? 'Свернуть' : 'Развернуть'} ${label}`} aria-expanded={isExpanded} onClick={(e) => { e.stopPropagation(); toggleExpand(); }} className="relative z-10 p-0.5">
             {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           </button>
         ) : (
@@ -57,6 +55,7 @@ export function ImportTreeNode({
 
         <input
           type="checkbox"
+          aria-label={`Импортировать ${label}`}
           checked={node.section.selected}
           onChange={() => {
             ctx.setImportTree(prev => {
@@ -74,23 +73,26 @@ export function ImportTreeNode({
               return toggle(prev);
             });
           }}
-          className="w-3.5 h-3.5 rounded accent-[var(--color-primary-500)]"
+          className="relative z-10 w-3.5 h-3.5 rounded accent-[var(--color-primary-500)]"
           onClick={(e) => e.stopPropagation()}
         />
 
-        {node.section.level === 'divider' ? (
-          <span className="flex-1 flex items-center gap-2">
-            <span className="flex-1 border-t-2 border-dashed border-[var(--text-tertiary)]" />
-          </span>
-        ) : (
-          <span className="truncate flex-1">
-            {node.section.content
-              ? (node.section.level === 'text'
-                  ? stripMarkdown(node.section.content).substring(0, 40) || 'Текст'
-                  : node.section.content)
-              : 'Без названия'}
-          </span>
-        )}
+        <button
+          type="button"
+          aria-label={`Предпросмотр ${label}`}
+          className="min-w-0 flex-1 truncate text-left after:absolute after:inset-0 after:rounded focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-blue-500"
+          onClick={() => {
+            ctx.setActivePreviewOrder(node.section.order);
+            const element = document.getElementById(`preview-${node.section.order}`);
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }}
+        >
+          {node.section.level === 'divider' ? (
+            <span className="block border-t-2 border-dashed border-[var(--text-tertiary)]" />
+          ) : label}
+        </button>
 
         {atomState?.enabled && (
           <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400 flex items-center gap-0.5">

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { Input, Select, Button, Switch, Checkbox } from '@/shared/components/ui';
 import { ColumnSettingsProps } from './types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 /**
  * Тип правила валидации
@@ -33,6 +34,8 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
   draft,
   setDraft,
 }) => {
+  const { t } = useLanguage();
+  const fieldId = useId();
   const rules = (draft.config?.validation?.rules || []) as ValidationRule[];
 
   const addRule = () => {
@@ -44,11 +47,11 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
           ...prev.config?.validation,
           rules: [...(prev.config?.validation?.rules || []), {
             id: `rule_${Date.now()}`,
-            name: 'New rule',
+            name: t('columnSettings.validation.newRule'),
             enabled: true,
             type: 'regex',
             config: {},
-            errorMessage: 'Value does not match the rule'
+            errorMessage: t('columnSettings.validation.defaultError')
           }]
         }
       }
@@ -94,7 +97,7 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
     <div className="space-y-3 pt-4 border-t border-[var(--border-primary)]">
       <div className="flex items-center justify-between">
         <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
-          🛡️ Правила валидации
+          🛡️ {t('columnSettings.validation.title')}
         </h4>
         <Button
           type="button"
@@ -102,12 +105,12 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
           size="sm"
           onClick={addRule}
         >
-          + Добавить правило
+          {t('columnSettings.validation.add')}
         </Button>
       </div>
       
-      <p className="text-xs text-[var(--text-tertiary)]">
-        Правила проверяются при вводе значения в ячейку. Поддерживаются regex, ограничения длины и JavaScript валидаторы.
+      <p className="text-xs text-[var(--text-secondary)]">
+        {t('columnSettings.validation.description')}
       </p>
       
       {rules.map((rule, ruleIndex) => (
@@ -115,10 +118,12 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Switch
+                aria-label={t('columnSettings.validation.enabled')}
                 checked={rule.enabled}
                 onCheckedChange={(checked) => updateRule(ruleIndex, { enabled: checked === true })}
               />
               <Input
+                aria-label={t('columnSettings.validation.name')}
                 value={rule.name}
                 onChange={(e) => updateRule(ruleIndex, { name: e.target.value })}
                 className="w-40"
@@ -129,6 +134,7 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
               variant="ghost"
               size="sm"
               className="text-red-500 hover:text-red-700"
+              aria-label={t('columnSettings.validation.delete')}
               onClick={() => deleteRule(ruleIndex)}
             >
               🗑️
@@ -136,21 +142,21 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
           </div>
           
           <Select
-            label="Тип правила"
+            label={t('columnSettings.validation.type')}
             value={rule.type}
             onChange={(value) => updateRule(ruleIndex, { type: value as ValidationRule['type'], config: {} })}
             options={[
-              { label: '🔤 Регулярное выражение', value: 'regex' },
-              { label: '📏 Длина текста', value: 'length' },
-              { label: '🔢 Диапазон чисел', value: 'range' },
-              { label: '📅 Диапазон дат', value: 'dateRange' },
-              { label: '⚙️ JavaScript (кастом)', value: 'custom' }
+              { label: t('columnSettings.validation.regex'), value: 'regex' },
+              { label: t('columnSettings.validation.length'), value: 'length' },
+              { label: t('columnSettings.validation.range'), value: 'range' },
+              { label: t('columnSettings.validation.dateRange'), value: 'dateRange' },
+              { label: t('columnSettings.validation.custom'), value: 'custom' }
             ]}
           />
           
           {rule.type === 'regex' && (
             <Input
-              label="Regex паттерн"
+              label={t('columnSettings.validation.pattern')}
               placeholder="^[a-zA-Z0-9]+$"
               value={rule.config.pattern || ''}
               onChange={(e) => updateRuleConfig(ruleIndex, { pattern: e.target.value })}
@@ -160,14 +166,14 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
           {rule.type === 'length' && (
             <div className="grid grid-cols-2 gap-2">
               <Input
-                label="Мин. длина"
+                label={t('columnSettings.validation.minLength')}
                 type="number"
                 min={0}
                 value={String(rule.config.minLength ?? '')}
                 onChange={(e) => updateRuleConfig(ruleIndex, { minLength: parseInt(e.target.value) || undefined })}
               />
               <Input
-                label="Макс. длина"
+                label={t('columnSettings.validation.maxLength')}
                 type="number"
                 min={0}
                 value={String(rule.config.maxLength ?? '')}
@@ -179,13 +185,13 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
           {rule.type === 'range' && (
             <div className="grid grid-cols-2 gap-2">
               <Input
-                label="Минимум"
+                label={t('columnSettings.validation.min')}
                 type="number"
                 value={String(rule.config.min ?? '')}
                 onChange={(e) => updateRuleConfig(ruleIndex, { min: parseFloat(e.target.value) || undefined })}
               />
               <Input
-                label="Максимум"
+                label={t('columnSettings.validation.max')}
                 type="number"
                 value={String(rule.config.max ?? '')}
                 onChange={(e) => updateRuleConfig(ruleIndex, { max: parseFloat(e.target.value) || undefined })}
@@ -197,42 +203,45 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <Input
-                  label="Минимальная дата"
-                  placeholder="2025-01-01 или today-30d"
+                  label={t('columnSettings.validation.minDate')}
+                  placeholder={t('columnSettings.validation.minDatePlaceholder')}
                   value={rule.config.minDate || ''}
                   onChange={(e) => updateRuleConfig(ruleIndex, { minDate: e.target.value || undefined })}
                 />
                 <Input
-                  label="Максимальная дата"
-                  placeholder="2025-12-31 или today+30d"
+                  label={t('columnSettings.validation.maxDate')}
+                  placeholder={t('columnSettings.validation.maxDatePlaceholder')}
                   value={rule.config.maxDate || ''}
                   onChange={(e) => updateRuleConfig(ruleIndex, { maxDate: e.target.value || undefined })}
                 />
               </div>
-              <p className="text-xs text-[var(--text-tertiary)]">
-                💡 Форматы: <code className="bg-[var(--bg-tertiary)] px-1 rounded">today</code>, <code className="bg-[var(--bg-tertiary)] px-1 rounded">today+7d</code>, <code className="bg-[var(--bg-tertiary)] px-1 rounded">today-1m</code>, <code className="bg-[var(--bg-tertiary)] px-1 rounded">today+1y</code>, или конкретная дата <code className="bg-[var(--bg-tertiary)] px-1 rounded">2025-12-31</code>
+              <p className="text-xs text-[var(--text-secondary)]">
+                💡 {t('columnSettings.validation.formats')} <code className="bg-[var(--bg-tertiary)] px-1 rounded">today</code>, <code className="bg-[var(--bg-tertiary)] px-1 rounded">today+7d</code>, <code className="bg-[var(--bg-tertiary)] px-1 rounded">today-1m</code>, <code className="bg-[var(--bg-tertiary)] px-1 rounded">today+1y</code>, {t('columnSettings.validation.exactDate')} <code className="bg-[var(--bg-tertiary)] px-1 rounded">2025-12-31</code>
               </p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="flex items-center gap-2">
                   <Checkbox
+                    aria-label={t('columnSettings.validation.past')}
                     checked={rule.config.allowPast !== false}
                     onCheckedChange={(checked) => updateRuleConfig(ruleIndex, { allowPast: checked === true })}
                   />
-                  <span className="text-sm text-[var(--text-secondary)]">Прошлые</span>
+                  <span className="text-sm text-[var(--text-secondary)]">{t('columnSettings.validation.past')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Checkbox
+                    aria-label={t('columnSettings.validation.future')}
                     checked={rule.config.allowFuture !== false}
                     onCheckedChange={(checked) => updateRuleConfig(ruleIndex, { allowFuture: checked === true })}
                   />
-                  <span className="text-sm text-[var(--text-secondary)]">Будущие</span>
+                  <span className="text-sm text-[var(--text-secondary)]">{t('columnSettings.validation.future')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Checkbox
+                    aria-label={t('columnSettings.validation.weekends')}
                     checked={rule.config.allowWeekends !== false}
                     onCheckedChange={(checked) => updateRuleConfig(ruleIndex, { allowWeekends: checked === true })}
                   />
-                  <span className="text-sm text-[var(--text-secondary)]">Выходные</span>
+                  <span className="text-sm text-[var(--text-secondary)]">{t('columnSettings.validation.weekends')}</span>
                 </div>
               </div>
             </div>
@@ -240,23 +249,23 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
           
           {rule.type === 'custom' && (
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-[var(--text-secondary)]">
-                JavaScript код (return true/false)
+              <label htmlFor={`${fieldId}-${rule.id}`} className="block text-sm font-medium text-[var(--text-secondary)]">
+                {t('columnSettings.validation.code')}
               </label>
-              <textarea
+              <textarea id={`${fieldId}-${rule.id}`}
                 className="w-full h-24 px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-sm font-mono"
-                placeholder="// value - текущее значение&#10;// row - данные строки&#10;return value.length > 0 && value.startsWith('ID-');"
+                placeholder={t('columnSettings.validation.codePlaceholder')}
                 value={rule.config.customJs || ''}
                 onChange={(e) => updateRuleConfig(ruleIndex, { customJs: e.target.value })}
               />
-              <p className="text-xs text-[var(--text-tertiary)]">
-                Доступны: <code className="bg-[var(--bg-tertiary)] px-1 rounded">value</code> (значение ячейки), <code className="bg-[var(--bg-tertiary)] px-1 rounded">row</code> (данные строки)
+              <p className="text-xs text-[var(--text-secondary)]">
+                {t('columnSettings.validation.available')} <code className="bg-[var(--bg-tertiary)] px-1 rounded">value</code> {t('columnSettings.validation.cellValue')}, <code className="bg-[var(--bg-tertiary)] px-1 rounded">row</code> {t('columnSettings.validation.rowData')}
               </p>
             </div>
           )}
           
           <Input
-            label="Сообщение об ошибке"
+            label={t('columnSettings.validation.errorMessage')}
             value={rule.errorMessage}
             onChange={(e) => updateRule(ruleIndex, { errorMessage: e.target.value })}
           />
@@ -264,8 +273,8 @@ export const ValidationRulesSettings: React.FC<ColumnSettingsProps> = ({
       ))}
       
       {rules.length === 0 && (
-        <div className="p-4 text-center text-[var(--text-tertiary)] border border-dashed border-[var(--border-secondary)] rounded-lg">
-          Правил валидации пока нет. Нажмите "+ Добавить правило" для создания.
+        <div className="p-4 text-center text-[var(--text-secondary)] border border-dashed border-[var(--border-secondary)] rounded-lg">
+          {t('columnSettings.validation.empty')}
         </div>
       )}
     </div>

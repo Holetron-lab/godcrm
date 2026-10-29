@@ -251,13 +251,13 @@ function ErrorRow({ err, onCancel }: { err: ErrorJob; onCancel?: () => void }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="border-b border-zinc-800 last:border-0 py-2">
-      <div className="flex items-center gap-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+      <button type="button" aria-expanded={expanded} className="w-full text-left flex items-center gap-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
         <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
         <span className="text-xs text-zinc-300 font-medium">{err.agent_name}</span>
         <span className="text-xs text-zinc-500">Job #{err.id}</span>
         <span className="text-xs text-zinc-600 ml-auto">{err.completed_at ? timeAgo(err.completed_at) : timeAgo(err.created_at)}</span>
         {expanded ? <ChevronUp className="w-3 h-3 text-zinc-500" /> : <ChevronDown className="w-3 h-3 text-zinc-500" />}
-      </div>
+      </button>
       {expanded && (
         <div className="mt-1 ml-5 text-xs text-red-300/80 bg-red-500/10 rounded p-2 font-mono whitespace-pre-wrap break-all max-h-32 overflow-auto">
           {err.error_message || 'No error message'}
@@ -283,15 +283,15 @@ function RecentJobRow({ job }: { job: RecentJob }) {
 
 // ─── Main Widget ─────────────────────────────────────────────────────────────
 
-export function AutopilotDashboardWidget({ widget }: PresetWidgetProps) {
+export function AutopilotDashboardWidget(_props: Partial<PresetWidgetProps>) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'overview' | 'errors' | 'history'>('overview');
 
   const { data: dashboard, isLoading, error: fetchError } = useQuery<DashboardData>({
     queryKey: ['autopilot', 'dashboard'],
     queryFn: async () => {
-      const res = await apiClient.get('/api/v3/ai/autopilot/dashboard');
-      return res.data.data;
+      const res = await apiClient.get<{ data: DashboardData }>('/api/v3/ai/autopilot/dashboard');
+      return res.data;
     },
     refetchInterval: 10_000,
     refetchIntervalInBackground: false,

@@ -54,7 +54,7 @@ function requireInternalToken(req, res, next) {
 
 // ─── POST /check — main hook endpoint ──────────────────────────────────
 router.post('/check', requireInternalToken, express.json({ limit: '64kb' }), async (req, res) => {
-  const { tool_name, tool_input, agent_id, space_id, session_id, wp_id } = req.body || {};
+  const { tool_name, tool_input, agent_id, space_id, session_id, wp_id, cwd } = req.body || {};
   if (!tool_name || typeof tool_name !== 'string') {
     return badRequest(res, 'tool_name is required (string).');
   }
@@ -75,6 +75,7 @@ router.post('/check', requireInternalToken, express.json({ limit: '64kb' }), asy
       const reservation = await gateWrite({
         toolName: tool_name,
         toolInput: tool_input || {},
+        cwd: typeof cwd === 'string' ? cwd : null,
         holderSession: session_id ?? null,
         wpId: wp_id ?? null,
         agentId: agent_id ?? null,

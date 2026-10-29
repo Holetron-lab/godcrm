@@ -53,7 +53,7 @@ export function TicketsListPreset({ widget }: PresetWidgetProps) {
   const { openTaskChat, attachRowToMessage, attachRowToChat } = useAIChat();
   const queryClient = useQueryClient();
 
-  const widgetConfig = (widget.config || {}) as Record<string, unknown>;
+  const widgetConfig = useMemo(() => (widget.config || {}) as Record<string, unknown>, [widget.config]);
   const showFilters = widgetConfig.show_filters !== false;
   const defaultExpanded = widgetConfig.default_expanded === true;
 
@@ -154,7 +154,7 @@ export function TicketsListPreset({ widget }: PresetWidgetProps) {
     enabled: !!ticketConfig?.table_id,
     staleTime: 60_000,
   });
-  const tableColumns: ColumnModel[] = tableColumnsResult || [];
+  const tableColumns = useMemo(() => tableColumnsResult || [], [tableColumnsResult]);
 
   // Discover every relation table referenced by tickets columns. Mirrors
   // useTicketData.relationTableConfigs — covers `assigned_to` (users table),

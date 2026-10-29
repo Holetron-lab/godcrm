@@ -4,7 +4,7 @@
  * ограничения min/max, prefix/suffix, форматирование
  */
 
-import React from 'react';
+import React, { useId } from 'react';
 import { Select } from '@/shared/components/ui';
 import type { ColumnSettingsProps } from './types';
 import { renderTypeCellPreview } from './types';
@@ -12,14 +12,16 @@ import type { NumberColumnConfig } from '@/features/tables/types/table.types';
 import { NumberPreview } from './NumberPreview';
 
 export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, setDraft, allColumns = [], firstRow }) => {
+  const fieldId = useId();
+
   return (
-    <div className="space-y-4 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-4 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)] flex items-center gap-2">
         🔢 Настройки числа
       </h4>
       
       {/* Переключатель кнопок +/- */}
-      <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-color)]">
+      <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-primary)]">
         <div className="flex items-center gap-3">
           <span className="text-lg">➕➖</span>
           <div>
@@ -29,6 +31,8 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
         </div>
         <button
           type="button"
+          aria-label="Кнопки увеличения и уменьшения"
+          aria-pressed={draft.config?.number?.showStepButtons ?? false}
           onClick={() => setDraft({
             ...draft,
             config: {
@@ -39,7 +43,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
           className={`relative w-12 h-6 rounded-full transition-colors ${
             draft.config?.number?.showStepButtons 
               ? 'bg-[var(--color-primary-500)]' 
-              : 'bg-[var(--bg-tertiary)] border border-[var(--border-color)]'
+              : 'bg-[var(--bg-tertiary)] border border-[var(--border-primary)]'
           }`}
         >
           <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
@@ -50,10 +54,10 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
       
       {/* Настройки кнопок +/- */}
       {draft.config?.number?.showStepButtons && (
-        <div className="space-y-3 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-dashed border-[var(--border-color)]">
+        <div className="space-y-3 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-dashed border-[var(--border-primary)]">
           <div className="flex items-center gap-2">
-            <label className="text-sm text-[var(--text-secondary)]">Шаг:</label>
-            <input
+            <label htmlFor={`${fieldId}-step`} className="text-sm text-[var(--text-secondary)]">Шаг:</label>
+            <input id={`${fieldId}-step`}
               type="number"
               value={draft.config?.number?.step ?? 1}
               onChange={(e) => setDraft({
@@ -66,16 +70,16 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                   }
                 }
               })}
-              className="w-20 px-2 py-1 text-sm rounded border border-[var(--border-color)] bg-[var(--bg-primary)]"
+              className="w-20 px-2 py-1 text-sm rounded border border-[var(--border-primary)] bg-[var(--bg-primary)]"
               placeholder="1"
             />
           </div>
           
           {/* Настройка цвета кнопок */}
           <div className="space-y-2">
-            <label className="text-sm text-[var(--text-secondary)]">Цвет кнопок:</label>
+            <label htmlFor={`${fieldId}-stepButtonColorType`} className="text-sm text-[var(--text-secondary)]">Цвет кнопок:</label>
             <div className="flex items-center gap-2">
-              <select
+              <select id={`${fieldId}-stepButtonColorType`}
                 value={draft.config?.number?.stepButtonColorType ?? 'default'}
                 onChange={(e) => setDraft({
                   ...draft,
@@ -87,7 +91,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                     }
                   }
                 })}
-                className="flex-1 px-2 py-1 text-sm rounded border border-[var(--border-color)] bg-[var(--bg-primary)]"
+                className="flex-1 px-2 py-1 text-sm rounded border border-[var(--border-primary)] bg-[var(--bg-primary)]"
               >
                 <option value="default">По умолчанию</option>
                 <option value="fixed">Фиксированный цвет</option>
@@ -95,7 +99,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
               </select>
               
               {draft.config?.number?.stepButtonColorType === 'fixed' && (
-                <input
+                <input aria-label="Фиксированный цвет кнопок"
                   type="color"
                   value={draft.config?.number?.stepButtonColor ?? '#6366f1'}
                   onChange={(e) => setDraft({
@@ -108,13 +112,13 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                       }
                     }
                   })}
-                  className="w-8 h-8 rounded border border-[var(--border-color)] cursor-pointer"
+                  className="w-8 h-8 rounded border border-[var(--border-primary)] cursor-pointer"
                 />
               )}
             </div>
             
             {draft.config?.number?.stepButtonColorType === 'column' && (
-              <select
+              <select aria-label="Колонка цвета кнопок"
                 value={draft.config?.number?.stepButtonColorColumn ?? ''}
                 onChange={(e) => setDraft({
                   ...draft,
@@ -126,7 +130,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                     }
                   }
                 })}
-                className="w-full px-2 py-1 text-sm rounded border border-[var(--border-color)] bg-[var(--bg-primary)]"
+                className="w-full px-2 py-1 text-sm rounded border border-[var(--border-primary)] bg-[var(--bg-primary)]"
               >
                 <option value="">— Выберите колонку —</option>
                 {allColumns
@@ -183,9 +187,9 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
         <div className="grid grid-cols-2 gap-3">
           {/* Минимум */}
           <div className="space-y-2">
-            <label className="text-sm text-[var(--text-secondary)]">Минимум</label>
+            <label htmlFor={`${fieldId}-min`} className="text-sm text-[var(--text-secondary)]">Минимум</label>
             <div className="flex gap-1">
-              <select
+              <select aria-label="Источник минимума"
                 value={draft.config?.number?.minType ?? 'fixed'}
                 onChange={(e) => setDraft({
                   ...draft,
@@ -205,7 +209,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                 <option value="column">📊</option>
               </select>
               {(draft.config?.number?.minType ?? 'fixed') === 'fixed' ? (
-                <input
+                <input id={`${fieldId}-min`}
                   type="number"
                   step="any"
                   value={draft.config?.number?.min ?? ''}
@@ -223,7 +227,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                   placeholder="Без ограничения"
                 />
               ) : (
-                <select
+                <select id={`${fieldId}-min`}
                   value={draft.config?.number?.minColumn ?? ''}
                   onChange={(e) => setDraft({
                     ...draft,
@@ -248,9 +252,9 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
           
           {/* Максимум */}
           <div className="space-y-2">
-            <label className="text-sm text-[var(--text-secondary)]">Максимум</label>
+            <label htmlFor={`${fieldId}-max`} className="text-sm text-[var(--text-secondary)]">Максимум</label>
             <div className="flex gap-1">
-              <select
+              <select aria-label="Источник максимума"
                 value={draft.config?.number?.maxType ?? 'fixed'}
                 onChange={(e) => setDraft({
                   ...draft,
@@ -270,7 +274,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                 <option value="column">📊</option>
               </select>
               {(draft.config?.number?.maxType ?? 'fixed') === 'fixed' ? (
-                <input
+                <input id={`${fieldId}-max`}
                   type="number"
                   step="any"
                   value={draft.config?.number?.max ?? ''}
@@ -288,7 +292,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                   placeholder="Без ограничения"
                 />
               ) : (
-                <select
+                <select id={`${fieldId}-max`}
                   value={draft.config?.number?.maxColumn ?? ''}
                   onChange={(e) => setDraft({
                     ...draft,
@@ -339,16 +343,38 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
             { label: '🔢 Компактный (1K, 1M)', value: 'compact' },
             { label: '⭐ Рейтинг (звёзды)', value: 'rating' },
             { label: '🎚️ Слайдер', value: 'slider' },
+            { label: '📈 Динамика (значение + изменение)', value: 'trend' },
           ]}
         />
-        
+
+        {/* Trend: sidecar column with the previous measurement */}
+        {draft.config?.number?.displayStyle === 'trend' && (
+          <div className="space-y-2 p-3 rounded-lg bg-[var(--bg-tertiary)]">
+            <label htmlFor={`${fieldId}-trendField`} className="text-sm text-[var(--text-secondary)]">Колонка с данными замера (JSON)</label>
+            <select id={`${fieldId}-trendField`}
+              value={draft.config?.number?.trendField ?? ''}
+              onChange={(e) => setDraft({
+                ...draft,
+                config: { ...draft.config, number: { ...draft.config?.number, trendField: e.target.value || undefined } }
+              })}
+              className="w-full px-2 py-2 text-sm rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)]"
+            >
+              <option value="">— Колонка —</option>
+              {allColumns.filter(col => col.id !== draft.id && ['json', 'text', 'long_text'].includes(col.type)).map((col) => (
+                <option key={col.id} value={col.name}>{col.displayName || col.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-[var(--text-tertiary)]">Ячейка показывает «4 ↑1»: текущее значение и изменение к предыдущему замеру из этой колонки.</p>
+          </div>
+        )}
+
         {/* Prefix / Suffix */}
         <div className="grid grid-cols-2 gap-3">
           {/* Префикс */}
           <div className="space-y-2">
-            <label className="text-sm text-[var(--text-secondary)]">Префикс</label>
+            <label htmlFor={`${fieldId}-prefix`} className="text-sm text-[var(--text-secondary)]">Префикс</label>
             <div className="flex gap-1">
-              <select
+              <select aria-label="Источник префикса"
                 value={draft.config?.number?.prefixType ?? 'fixed'}
                 onChange={(e) => setDraft({
                   ...draft,
@@ -368,7 +394,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                 <option value="column">📊</option>
               </select>
               {(draft.config?.number?.prefixType ?? 'fixed') === 'fixed' ? (
-                <input
+                <input id={`${fieldId}-prefix`}
                   type="text"
                   value={draft.config?.number?.prefix ?? ''}
                   onChange={(e) => setDraft({
@@ -385,7 +411,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                   placeholder="$ или €"
                 />
               ) : (
-                <select
+                <select id={`${fieldId}-prefix`}
                   value={draft.config?.number?.prefixColumn ?? ''}
                   onChange={(e) => setDraft({
                     ...draft,
@@ -410,9 +436,9 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
           
           {/* Суффикс */}
           <div className="space-y-2">
-            <label className="text-sm text-[var(--text-secondary)]">Суффикс</label>
+            <label htmlFor={`${fieldId}-suffix`} className="text-sm text-[var(--text-secondary)]">Суффикс</label>
             <div className="flex gap-1">
-              <select
+              <select aria-label="Источник суффикса"
                 value={draft.config?.number?.suffixType ?? 'fixed'}
                 onChange={(e) => setDraft({
                   ...draft,
@@ -432,7 +458,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                 <option value="column">📊</option>
               </select>
               {(draft.config?.number?.suffixType ?? 'fixed') === 'fixed' ? (
-                <input
+                <input id={`${fieldId}-suffix`}
                   type="text"
                   value={draft.config?.number?.suffix ?? ''}
                   onChange={(e) => setDraft({
@@ -449,7 +475,7 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
                   placeholder="шт. или %"
                 />
               ) : (
-                <select
+                <select id={`${fieldId}-suffix`}
                   value={draft.config?.number?.suffixColumn ?? ''}
                   onChange={(e) => setDraft({
                     ...draft,
@@ -476,8 +502,8 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
         {/* Decimals */}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <label className="text-sm text-[var(--text-secondary)]">Десятичных знаков</label>
-            <input
+            <label htmlFor={`${fieldId}-decimals`} className="text-sm text-[var(--text-secondary)]">Десятичных знаков</label>
+            <input id={`${fieldId}-decimals`}
               type="number"
               min="0"
               max="10"
@@ -522,8 +548,8 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
         {draft.config?.number?.displayStyle === 'progress' && (
           <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-[var(--bg-tertiary)]">
             <div className="space-y-2">
-              <label className="text-sm text-[var(--text-secondary)]">Макс. значение</label>
-              <input
+              <label htmlFor={`${fieldId}-progressMax`} className="text-sm text-[var(--text-secondary)]">Макс. значение</label>
+              <input id={`${fieldId}-progressMax`}
                 type="number"
                 value={draft.config?.number?.progressMax ?? 100}
                 onChange={(e) => setDraft({
@@ -540,8 +566,8 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm text-[var(--text-secondary)]">Цвет</label>
-              <input
+              <label htmlFor={`${fieldId}-progressColor`} className="text-sm text-[var(--text-secondary)]">Цвет</label>
+              <input id={`${fieldId}-progressColor`}
                 type="color"
                 value={draft.config?.number?.progressColor ?? '#22c55e'}
                 onChange={(e) => setDraft({
@@ -564,8 +590,8 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
         {draft.config?.number?.displayStyle === 'badge' && (
           <div className="p-3 rounded-lg bg-[var(--bg-tertiary)]">
             <div className="space-y-2">
-              <label className="text-sm text-[var(--text-secondary)]">Цвет бейджа</label>
-              <input
+              <label htmlFor={`${fieldId}-badgeColor`} className="text-sm text-[var(--text-secondary)]">Цвет бейджа</label>
+              <input id={`${fieldId}-badgeColor`}
                 type="color"
                 value={draft.config?.number?.badgeColor ?? '#6366f1'}
                 onChange={(e) => setDraft({
@@ -588,8 +614,8 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
         {draft.config?.number?.displayStyle === 'rating' && (
           <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-[var(--bg-tertiary)]">
             <div className="space-y-2">
-              <label className="text-sm text-[var(--text-secondary)]">Макс. звёзд</label>
-              <input
+              <label htmlFor={`${fieldId}-ratingMax`} className="text-sm text-[var(--text-secondary)]">Макс. звёзд</label>
+              <input id={`${fieldId}-ratingMax`}
                 type="number"
                 min="1"
                 max="10"
@@ -608,8 +634,8 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm text-[var(--text-secondary)]">Цвет звёзд</label>
-              <input
+              <label htmlFor={`${fieldId}-progressColor`} className="text-sm text-[var(--text-secondary)]">Цвет звёзд</label>
+              <input id={`${fieldId}-progressColor`}
                 type="color"
                 value={draft.config?.number?.progressColor ?? '#fbbf24'}
                 onChange={(e) => setDraft({
@@ -632,8 +658,8 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
         {draft.config?.number?.displayStyle === 'slider' && (
           <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-[var(--bg-tertiary)]">
             <div className="space-y-2">
-              <label className="text-sm text-[var(--text-secondary)]">Макс. значение</label>
-              <input
+              <label htmlFor={`${fieldId}-progressMax`} className="text-sm text-[var(--text-secondary)]">Макс. значение</label>
+              <input id={`${fieldId}-progressMax`}
                 type="number"
                 value={draft.config?.number?.progressMax ?? 100}
                 onChange={(e) => setDraft({
@@ -650,8 +676,8 @@ export const NumberColumnSettings: React.FC<ColumnSettingsProps> = ({ draft, set
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm text-[var(--text-secondary)]">Цвет</label>
-              <input
+              <label htmlFor={`${fieldId}-progressColor`} className="text-sm text-[var(--text-secondary)]">Цвет</label>
+              <input id={`${fieldId}-progressColor`}
                 type="color"
                 value={draft.config?.number?.progressColor ?? '#6366f1'}
                 onChange={(e) => setDraft({

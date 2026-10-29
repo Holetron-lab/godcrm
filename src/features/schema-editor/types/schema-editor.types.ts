@@ -1,4 +1,5 @@
 import type { Node, Edge } from '@xyflow/react';
+import type { ColumnConfig } from '@/features/tables/types/table.types';
 
 // ============ LAYOUT TYPES ============
 
@@ -87,7 +88,19 @@ export interface TableNodeData {
   columns: ColumnData[];
   rowsPreview?: Record<string, any>[];  // First 10 rows for preview
   rowsLoading?: boolean;  // Loading state for rows
+  rowCount?: number;      // Total rows; undefined when unknown (external data-source tables)
+  isPinned?: boolean;     // Position locked: not draggable, skipped by auto-layout
+  widgets?: TableWidgetSummary[]; // Modules built on this table, drawn as strips glued above the card
   [key: string]: unknown; // Index signature for React Flow compatibility
+}
+
+// A module attached to its main table (rendered inside the TableNode, not as a canvas node).
+export interface TableWidgetSummary {
+  widgetId: number;
+  name: string;
+  icon: string;
+  widgetConfig?: unknown; // Raw widget config used to distinguish specialized preset renderers
+  presetName?: string;
 }
 
 export interface ColumnData {
@@ -99,16 +112,15 @@ export interface ColumnData {
   isPrimaryKey: boolean;
   isForeignKey: boolean;
   isRequired: boolean;
-  config?: {
+  orderIndex?: number;   // Position in the universal table grid
+  isVisible?: boolean;   // Hidden in the grid (still drawn here, dimmed)
+  isReadonly?: boolean;
+  isLocked?: boolean;    // Locked / from-source columns cannot be deleted
+  isFromSource?: boolean;
+  config?: ColumnConfig & {
     relatedTableId?: number;
     relatedColumn?: string;
     relatedTableName?: string;
-    appearance?: {
-      indicator?: {
-        type: string;
-        value: string;
-      };
-    };
   };
 }
 
@@ -122,7 +134,9 @@ export interface WidgetNodeData {
   name: string;
   displayName: string;
   icon: string;           // Emoji icon
-  widgetType: string;     // 'calendar', 'kanban', 'gallery', 'chart', etc.
+  widgetType: string;     // 'preset' | 'custom'
+  widgetConfig?: unknown; // Raw widget config used to distinguish specialized preset renderers
+  presetName?: string;    // widgets.preset_name (table_view, kanban_board, documents, …)
   mainTableId?: number;   // Primary table this widget is based on
   projectId: number;
   projectName?: string;
@@ -132,12 +146,14 @@ export interface WidgetNodeData {
 
 export type WidgetNode = Node<WidgetNodeData, 'widgetNode'>;
 
+export type SchemaNode = TableNode | WidgetNode;
+
 // ============ CONNECTION (EDGE) ============
 
 export interface ConnectionData {
-  sourceColumn: string;
-  targetColumn: string;
-  relationType: 'one-to-one' | 'one-to-many' | 'many-to-many';
+  sourceColumn: string | null;
+  targetColumn: string | null;
+  relationType: 'one-to-one' | 'one-to-many' | 'many-to-many' | 'backlink' | 'form' | 'widget';
   isReversed: boolean;   // true = стрелка инвертирована
   [key: string]: unknown; // Index signature for React Flow compatibility
 }
@@ -161,7 +177,7 @@ export interface PendingConnection {
 
 export interface SchemaEditorState {
   spaceId: number | null;
-  nodes: TableNode[];
+  nodes: SchemaNode[];
   edges: SchemaConnection[];
   
   // Pending connections (not yet applied to DB)
@@ -211,6 +227,8 @@ export interface SchemaEditorState {
   // Project boundaries display
   showProjectBoundaries: boolean;
   showProjectConnectionLines: boolean;
+  // Modules on the canvas (strips above their tables + standalone module cards)
+  showWidgets: boolean;
   
   // Table selection for bulk operations
   selectedTables: Set<number>;
@@ -234,7 +252,9 @@ export interface NavTreeNode {
   isExternal?: boolean; // Table from another space
   sourceSpaceName?: string; // Name of the source space for external tables
   color?: string;       // Custom color for table row highlight
-  widgetType?: string;  // For widget nodes
+  widgetType?: string;  // For widget nodes ('preset' | 'custom')
+  widgetConfig?: unknown; // Raw widget config used to distinguish specialized preset renderers
+  presetName?: string;  // For widget nodes: widgets.preset_name (table_view, kanban_board, documents, …)
   mainTableId?: number; // For widgets - connected table ID
 }
 
@@ -247,33 +267,42 @@ export interface SchemaTableResponse {
   icon?: string;
   description?: string;
   project_id: number;
+  color?: string;
+  is_system?: boolean | number;
+  sync_target?: string;
   project_name?: string;
   project_icon?: string;
+  row_count?: number | string | null; // pg COUNT() arrives as a string; null for data-source tables
   columns: Array<{
     id: number;
     name: string;
     display_name: string;
     type: string;
     is_required: boolean;
+    order_index?: number | null;
+    is_visible?: boolean | number | null;
+    is_readonly?: boolean | number | null;
+    is_locked?: boolean | number | null;
+    is_from_source?: boolean | number | null;
     config?: Record<string, unknown>;
   }>;
 }
 
+// One saved node position; `locked` pins the table so drag and auto-layout leave it in place.
+export interface LayoutNodeEntry {
+  tableId: number;
+  x: number;
+  y: number;
+  locked?: boolean;
+}
+
 export interface SchemaResponse {
   tables: SchemaTableResponse[];
-  layout?: Array<{
-    tableId: number;
-    x: number;
-    y: number;
-  }>;
+  layout?: LayoutNodeEntry[];
 }
 
 export interface SaveLayoutRequest {
-  nodes: Array<{
-    tableId: number;
-    x: number;
-    y: number;
-  }>;
+  nodes: LayoutNodeEntry[];
 }
 
 export interface CreateTableRequest {

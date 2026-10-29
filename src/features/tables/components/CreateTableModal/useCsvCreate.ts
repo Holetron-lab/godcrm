@@ -6,8 +6,10 @@ import { useNavigate } from 'react-router-dom';
 import { tablesApi } from '../../api/tablesApi';
 import { apiClient } from '@/shared/utils/apiClient';
 import { useCreateTable } from '../../hooks/useCreateTable';
+import { showToast } from '@/shared/hooks/useToast';
 import { extractNotionId, isGeneratedId, getIdFromNameId, convertValue } from './notion-utils';
-import type { CSVFileData, CSVColumnDefinition } from './types';
+import { runExcelImport } from './excel-import';
+import type { CSVFileData, CSVColumnDefinition, ExcelImportState } from './types';
 import type { CreateTablePayload } from '../../types/table.types';
 
 interface UseCsvCreateParams {
@@ -17,6 +19,8 @@ interface UseCsvCreateParams {
   useFirstRowAsHeaders: boolean;
   setCsvCreating: React.Dispatch<React.SetStateAction<boolean>>;
   setCsvStep: React.Dispatch<React.SetStateAction<'upload' | 'configure' | 'creating'>>;
+  // Needed to persist frozen Excel import state for retries (optional for CSV-only callers).
+  setCsvFiles?: React.Dispatch<React.SetStateAction<CSVFileData[]>>;
   resetState: () => void;
   onOpenChange: (open: boolean) => void;
   // For handleSubmit:
@@ -43,6 +47,7 @@ export function useCsvCreate(params: UseCsvCreateParams) {
     useFirstRowAsHeaders,
     setCsvCreating,
     setCsvStep,
+    setCsvFiles,
     resetState,
     onOpenChange,
     tableType,
@@ -65,13 +70,55 @@ export function useCsvCreate(params: UseCsvCreateParams) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
+  const createMenuWidget = useCallback(async (csvFile: CSVFileData, newTableId: number) => {
+    if (!csvFile.showInMenu) return;
+    try {
+      const widgetTitle = csvFile.menuWidgetTitle.trim() || csvFile.tableDisplayName || csvFile.tableName;
+      const widgetIcon = csvFile.menuWidgetIcon || csvFile.icon || '📊';
+      const widgetDescription =
+        csvFile.menuWidgetDescription.trim() || csvFile.tableDescription || undefined;
+      const dashboardResponse = await apiClient.request<{ data: { id: number } }>(
+        `/projects/${targetProjectId}/dashboard`
+      );
+      await apiClient.request(`/dashboards/${dashboardResponse.data.id}/widgets`, {
+        method: 'POST',
+        body: JSON.stringify({
+          widget_type: 'preset',
+          preset_name: 'table_view',
+          title: widgetTitle,
+          icon: widgetIcon,
+          description: widgetDescription,
+          config: { table_id: newTableId },
+          position: { x: 0, y: 0, w: 12, h: 6 }
+        })
+      });
+      queryClient.invalidateQueries({ queryKey: ['project-widgets', targetProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['widgets'] });
+    } catch (widgetError) {
+      logger.error('Failed to create widget from CSV:', widgetError);
+    }
+  }, [targetProjectId, queryClient]);
+
+  const persistExcelState = useCallback((fileId: string, state: ExcelImportState) => {
+    setCsvFiles?.(prev => prev.map(file =>
+      file.id === fileId && file.excel ? { ...file, excel: { ...file.excel, importState: state } } : file
+    ));
+  }, [setCsvFiles]);
+
   const handleCsvCreate = useCallback(async () => {
     if (csvFiles.length === 0 || !targetProjectId) {
+      return;
+    }
+    // Every Excel entry needs a chosen, loaded sheet; nothing is created otherwise.
+    const notReady = csvFiles.find(f => f.source === 'excel' && (!f.excel || f.excel.loading || f.excel.error || f.excel.sheetIndex === null));
+    if (notReady) {
+      logger.warn(`Excel file ${notReady.fileName} is not ready for import`);
       return;
     }
 
     setCsvCreating(true);
     setCsvStep('creating');
+    const excelSummaries: string[] = [];
 
     // Map: csvFileId -> table info for relation linking
     const tableInfoMap = new Map<string, {
@@ -169,9 +216,38 @@ export function useCsvCreate(params: UseCsvCreateParams) {
       }
     });
 
+    let failedExcelFile: CSVFileData | null = null;
     try {
       // PHASE 1: Create all tables with notion_id column and import data
       for (const csvFile of csvFiles) {
+        // Excel: schema + rows go through the retry-safe importId contract.
+        if (csvFile.source === 'excel') {
+          failedExcelFile = csvFile;
+          const { state, tableId } = await runExcelImport(csvFile, {
+            projectId: targetProjectId,
+            useFirstRowAsHeaders,
+            description: t('tables.create.importedFromNotion').replace('{file}', csvFile.fileName),
+            persist: (next) => persistExcelState(csvFile.id, next),
+          });
+          failedExcelFile = null;
+          // Sidebar widget only after the rows are in (README: no widget before success).
+          await createMenuWidget(csvFile, tableId);
+          tableInfoMap.set(csvFile.id, {
+            tableId,
+            notionIdToRowId: new Map(),
+            nameToNotionId: new Map(),
+            columnDefinitions: csvFile.columnDefinitions,
+          });
+          excelSummaries.push(t('tables.create.excel.importedToast', {
+            imported: state.importedRows,
+            table: csvFile.tableDisplayName,
+            empty: state.skippedEmptyRows,
+            excluded: state.excludedColumns,
+            cells: csvFile.excel?.skippedCellCount ?? 0,
+          }));
+          continue;
+        }
+
         // 1. Create table
         const tableResponse = await tablesApi.createTable({
           name: csvFile.tableName,
@@ -181,35 +257,9 @@ export function useCsvCreate(params: UseCsvCreateParams) {
           projectId: targetProjectId
         });
 
-        const newTableId = tableResponse.table.id;
+        const newTableId = Number(tableResponse.table.id);
 
-        if (csvFile.showInMenu) {
-          try {
-            const widgetTitle = csvFile.menuWidgetTitle.trim() || csvFile.tableDisplayName || csvFile.tableName;
-            const widgetIcon = csvFile.menuWidgetIcon || csvFile.icon || '📊';
-            const widgetDescription =
-              csvFile.menuWidgetDescription.trim() || csvFile.tableDescription || undefined;
-            const dashboardResponse = await apiClient.request<{ data: { id: number } }>(
-              `/projects/${targetProjectId}/dashboard`
-            );
-            await apiClient.request(`/dashboards/${dashboardResponse.data.id}/widgets`, {
-              method: 'POST',
-              body: JSON.stringify({
-                widget_type: 'preset',
-                preset_name: 'table_view',
-                title: widgetTitle,
-                icon: widgetIcon,
-                description: widgetDescription,
-                config: { table_id: newTableId },
-                position: { x: 0, y: 0, w: 12, h: 6 }
-              })
-            });
-            queryClient.invalidateQueries({ queryKey: ['project-widgets', targetProjectId] });
-            queryClient.invalidateQueries({ queryKey: ['widgets'] });
-          } catch (widgetError) {
-            logger.error('Failed to create widget from CSV:', widgetError);
-          }
-        }
+        await createMenuWidget(csvFile, newTableId);
         // 2. Create columns (notion_id is already in columnDefinitions after Notion Import)
         // For relation columns, create as text first - will be updated with notion_ids in row data
         // Skip excluded columns
@@ -226,7 +276,7 @@ export function useCsvCreate(params: UseCsvCreateParams) {
           if (isRelationColumn) {
             columnType = 'text'; // Store as text initially, will update config in PHASE 2
           } else if (col.type === 'select') {
-            const colIdx = csvFile.headers.indexOf(col.csvColumn);
+            const colIdx = col.colIndex;
             const dataRows = useFirstRowAsHeaders ? csvFile.data.slice(1) : csvFile.data;
             const uniqueOptions = new Set<string>();
 
@@ -308,8 +358,9 @@ export function useCsvCreate(params: UseCsvCreateParams) {
         const rows = dataRows.map((row, rowIdx) => {
           const obj: Record<string, unknown> = {};
 
-          headers.forEach((header, i) => {
-            const def = csvFile.columnDefinitions.find(d => d.csvColumn === header);
+          // Walk by source column index: duplicate/blank headers must not collapse.
+          headers.forEach((_header, i) => {
+            const def = csvFile.columnDefinitions.find(d => d.colIndex === i);
             // Skip excluded columns
             if (!def || def.name === 'id' || def.excluded) return;
 
@@ -432,14 +483,16 @@ export function useCsvCreate(params: UseCsvCreateParams) {
         const nameToNotionId = new Map<string, string>();
 
         if (tableRows.rows && Array.isArray(tableRows.rows)) {
-          tableRows.rows.forEach((row: { row_id: string; notion_id?: string; name?: string; [key: string]: unknown }, idx: number) => {
-            rowIdxToRowId.set(idx, row.row_id);
-            if (row.notion_id) {
-              notionIdToRowId.set(row.notion_id, row.row_id);
-              // Also build name -> notion_id for this table
-              if (row.name && typeof row.name === 'string') {
-                nameToNotionId.set(row.name, row.notion_id);
-                nameToNotionId.set(row.name.toLowerCase(), row.notion_id);
+          tableRows.rows.forEach((row, idx) => {
+            const rowId = String(row.id);
+            const notionId = row.data?.notion_id;
+            const name = row.data?.name;
+            rowIdxToRowId.set(idx, rowId);
+            if (typeof notionId === 'string' && notionId) {
+              notionIdToRowId.set(notionId, rowId);
+              if (typeof name === 'string' && name) {
+                nameToNotionId.set(name, notionId);
+                nameToNotionId.set(name.toLowerCase(), notionId);
               }
             }
           });
@@ -459,19 +512,15 @@ export function useCsvCreate(params: UseCsvCreateParams) {
 
       // PHASE 2: Create relation columns with notion_id mapping
       for (const csvFile of csvFiles) {
+        if (csvFile.source === 'excel') continue; // no Notion relations for Excel sheets
         const sourceInfo = tableInfoMap.get(csvFile.id);
         if (!sourceInfo) continue;
 
         // Get columns of this table to find column IDs
         const tableColumns = await tablesApi.getColumns(String(sourceInfo.tableId));
         const columnNameToId = new Map<string, string>();
-        if (tableColumns && Array.isArray(tableColumns)) {
-          tableColumns.forEach((col: { id: number; name?: string; column_name?: string }) => {
-            const colName = col.name || col.column_name;
-            if (colName) {
-              columnNameToId.set(colName, String(col.id));
-            }
-          });
+        for (const col of tableColumns.columns) {
+          columnNameToId.set(col.name, col.id);
         }
 
         for (const col of csvFile.columnDefinitions) {
@@ -544,17 +593,21 @@ export function useCsvCreate(params: UseCsvCreateParams) {
 
       resetState();
       onOpenChange(false);
+      excelSummaries.forEach(summary => showToast(summary, 'success'));
 
       if (firstTableInfo) {
         navigate(`/tables/${firstTableInfo.tableId}`);
       }
     } catch (err) {
       logger.error('CSV create error:', err);
+      if (failedExcelFile) {
+        showToast(err instanceof Error ? err.message : String(err), 'error');
+      }
       setCsvStep('configure');
     } finally {
       setCsvCreating(false);
     }
-  }, [csvFiles, csvFilesBeforeNotionImport, targetProjectId, useFirstRowAsHeaders, queryClient, onOpenChange, navigate, resetState]);
+  }, [csvFiles, csvFilesBeforeNotionImport, targetProjectId, useFirstRowAsHeaders, queryClient, onOpenChange, navigate, resetState, createMenuWidget, persistExcelState, t]);
 
   const handleSubmit = async () => {
     // Handle CSV creation separately
@@ -563,7 +616,7 @@ export function useCsvCreate(params: UseCsvCreateParams) {
       return;
     }
 
-    if (!basic.displayName.trim() || createTable.isLoading) {
+    if (!basic.displayName.trim() || createTable.isPending) {
       return;
     }
 
@@ -593,59 +646,60 @@ export function useCsvCreate(params: UseCsvCreateParams) {
       })
     };
 
-    // Create main table
-    createTable.mutate(payload, {
-      onSuccess: async (data) => {
-        const createdTableId = data?.table?.id ? Number(data.table.id) : null;
-        const createdProjectId = data?.table?.projectId ?? targetProjectId ?? null;
+    // A mutate onSuccess callback is skipped if navigation unmounts this form.
+    // Await the mutation so widget/related-table creation survives that unmount.
+    const data = await createTable.mutateAsync(payload).catch(() => null);
+    // useCreateTable already reports the error; keep the form available for retry.
+    if (!data) return;
 
-        if (showInMenu && createdTableId && createdProjectId) {
-          try {
-            const dashboardResponse = await apiClient.request<{ data: { id: number } }>(
-              `/projects/${createdProjectId}/dashboard`
-            );
-            await apiClient.request(`/dashboards/${dashboardResponse.data.id}/widgets`, {
-              method: 'POST',
-              body: JSON.stringify({
-                widget_type: 'preset',
-                preset_name: 'table_view',
-                title: menuWidgetTitle.trim() || basic.displayName.trim() || data?.table?.displayName || data?.table?.name || t('tables.create.tableDefault'),
-                icon: menuWidgetIcon || basic.icon || '📋',
-                description: menuWidgetDescription.trim() || basic.description?.trim() || undefined,
-                config: { table_id: createdTableId },
-                position: { x: 0, y: 0, w: 12, h: 6 }
-              })
-            });
-            queryClient.invalidateQueries({ queryKey: ['project-widgets', createdProjectId] });
-            queryClient.invalidateQueries({ queryKey: ['widgets'] });
-          } catch (error) {
-            logger.error('Failed to create menu widget:', error);
-          }
-        }
+    const createdTableId = data?.table?.id ? Number(data.table.id) : null;
+    const createdProjectId = data?.table?.projectId ?? targetProjectId ?? null;
 
-        // Create related tables if selected
-        if (tableType === 'external' && selectedRelatedTables.length > 0) {
-          for (const relatedTable of selectedRelatedTables) {
-            try {
-              const relatedPayload: CreateTablePayload = {
-                name: relatedTable.replace(/[^a-z0-9_]/gi, '_'),
-                displayName: relatedTable,
-                description: t('tables.create.linkedTableFor').replace('{name}', basic.displayName),
-                icon: '🔗',
-                projectId: targetProjectId ?? undefined,
-                data_source_id: selectedDataSource,
-                external_table_name: relatedTable
-              };
-              await createTable.mutateAsync(relatedPayload);
-            } catch (error) {
-              logger.error(`Failed to create related table ${relatedTable}:`, error);
-            }
-          }
-        }
-        resetState();
-        onOpenChange(false);
+    if (showInMenu && createdTableId && createdProjectId) {
+      try {
+        const dashboardResponse = await apiClient.request<{ data: { id: number } }>(
+          `/projects/${createdProjectId}/dashboard`
+        );
+        await apiClient.request(`/dashboards/${dashboardResponse.data.id}/widgets`, {
+          method: 'POST',
+          body: JSON.stringify({
+            widget_type: 'preset',
+            preset_name: 'table_view',
+            title: menuWidgetTitle.trim() || basic.displayName.trim() || data?.table?.displayName || data?.table?.name || t('tables.create.tableDefault'),
+            icon: menuWidgetIcon || basic.icon || '📋',
+            description: menuWidgetDescription.trim() || basic.description?.trim() || undefined,
+            config: { table_id: createdTableId },
+            position: { x: 0, y: 0, w: 12, h: 6 }
+          })
+        });
+        queryClient.invalidateQueries({ queryKey: ['project-widgets', createdProjectId] });
+        queryClient.invalidateQueries({ queryKey: ['widgets'] });
+      } catch (error) {
+        logger.error('Failed to create menu widget:', error);
       }
-    });
+    }
+
+    // Create related tables if selected
+    if (tableType === 'external' && selectedRelatedTables.length > 0) {
+      for (const relatedTable of selectedRelatedTables) {
+        try {
+          const relatedPayload: CreateTablePayload = {
+            name: relatedTable.replace(/[^a-z0-9_]/gi, '_'),
+            displayName: relatedTable,
+            description: t('tables.create.linkedTableFor').replace('{name}', basic.displayName),
+            icon: '🔗',
+            projectId: targetProjectId ?? undefined,
+            data_source_id: selectedDataSource,
+            external_table_name: relatedTable
+          };
+          await createTable.mutateAsync(relatedPayload);
+        } catch (error) {
+          logger.error(`Failed to create related table ${relatedTable}:`, error);
+        }
+      }
+    }
+    resetState();
+    onOpenChange(false);
   };
 
   return { handleCsvCreate, handleSubmit, createTable };

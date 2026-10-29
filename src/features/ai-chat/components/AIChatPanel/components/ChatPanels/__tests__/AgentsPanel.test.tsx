@@ -4,7 +4,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { AgentsPanel } from '../AgentsPanel';
 
 // Mock dependencies
@@ -75,7 +76,7 @@ describe('AgentsPanel', () => {
   it('should show clear button when search has value', () => {
     render(<AgentsPanel {...mockProps} agentsSearch="test" />);
     
-    const clearButton = screen.getByRole('button', { name: /clear/i });
+    const clearButton = screen.getByRole('button', { name: /очистить/i });
     expect(clearButton).toBeInTheDocument();
   });
 

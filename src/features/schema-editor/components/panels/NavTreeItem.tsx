@@ -3,9 +3,9 @@
  * Renders project, folder, table, widget, or external-section nodes
  */
 
-import { useState } from 'react';
+import { useRef } from 'react';
 import { useSchemaEditorStore } from '../../store/schemaEditorStore';
-import type { NavTreeNode, TableVisibilityState } from '../../types/schema-editor.types';
+import type { NavTreeNode, TableVisibilityState, TableNode as TableFlowNode } from '../../types/schema-editor.types';
 import {
   ChevronRight,
   ChevronDown,
@@ -20,10 +20,12 @@ import {
   RefreshCw,
   Globe,
   FileText,
-  Component,
+  Table2,
 } from 'lucide-react';
 import { VisibilityCheckbox } from './VisibilityCheckbox';
 import { NavTreeItemContextMenu } from './NavTreeItemContextMenu';
+import { NavTreeColumnRow } from './NavTreeColumnRow';
+import { getWidgetIcon } from '../widgetIcon';
 import type { ParentSelectionState } from './navTreeTypes';
 
 interface NavTreeItemProps {
@@ -36,6 +38,9 @@ interface NavTreeItemProps {
   onToggleProjectSelect: (projectId: number, children: number[]) => void;
   sortMode?: boolean;
 }
+
+// Holding the table emoji this long opens "Move" (the table keeps a plain click free).
+const HOLD_TO_MOVE_MS = 500;
 
 // Get all table IDs from children (recursive)
 const getChildTableIds = (n: NavTreeNode): number[] => {
@@ -60,6 +65,7 @@ export const NavTreeItem = ({
   sortMode = false,
 }: NavTreeItemProps) => {
   const {
+    nodes,
     tableVisibility,
     projectVisibility,
     folderVisibility,
@@ -72,14 +78,20 @@ export const NavTreeItem = ({
     toggleFolderExpanded,
   } = useSchemaEditorStore();
 
+  // Tables expand into their columns (data comes from the canvas node, so there is no extra request).
+  const tableNode = node.type === 'table'
+    ? nodes.find((n): n is TableFlowNode => n.type === 'tableNode' && n.data.tableId === node.numericId)
+    : undefined;
+  const columns = tableNode?.data.columns ?? [];
+
   const isExpanded =
     node.type === 'project'
       ? expandedProjects.has(node.numericId)
-      : node.type === 'folder' || node.type === 'external-section'
-        ? expandedFolders.has(node.id)  // Use node.id for virtual folders
+      : node.type === 'folder' || node.type === 'external-section' || node.type === 'table'
+        ? expandedFolders.has(node.id)  // Use node.id for virtual folders and tables ("table:<id>")
         : false;
 
-  const hasChildren = node.children.length > 0;
+  const hasChildren = node.children.length > 0 || columns.length > 0;
 
   // Get visibility state for this node
   const visibilityState: TableVisibilityState =
@@ -95,7 +107,7 @@ export const NavTreeItem = ({
     e.stopPropagation();
     if (node.type === 'project') {
       toggleProjectExpanded(node.numericId);
-    } else if (node.type === 'folder' || node.type === 'external-section') {
+    } else if (node.type === 'folder' || node.type === 'external-section' || node.type === 'table') {
       toggleFolderExpanded(node.id);  // Use node.id for virtual folders
     }
   };
@@ -110,6 +122,32 @@ export const NavTreeItem = ({
     }
   };
 
+  // Name click opens the entity settings (table → edit modal, project → edit project).
+  const handleNameClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (node.type === 'table') {
+      window.dispatchEvent(new CustomEvent('schema-editor:edit-table', { detail: { tableId: node.numericId } }));
+    } else if (node.type === 'project') {
+      window.dispatchEvent(new CustomEvent('schema-editor:edit-project', { detail: { projectId: node.numericId } }));
+    }
+  };
+
+  // Hold the table emoji → Move dialog; a released-early press does nothing.
+  const holdTimerRef = useRef<number | null>(null);
+  const startHold = () => {
+    if (node.type !== 'table') return;
+    holdTimerRef.current = window.setTimeout(() => {
+      holdTimerRef.current = null;
+      window.dispatchEvent(new CustomEvent('schema-editor:move-table', { detail: { tableId: node.numericId } }));
+    }, HOLD_TO_MOVE_MS);
+  };
+  const cancelHold = () => {
+    if (holdTimerRef.current !== null) {
+      window.clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+
   // Get row background style based on table color
   const getRowStyle = (): React.CSSProperties => {
     if (node.type === 'table' && node.color) {
@@ -118,21 +156,10 @@ export const NavTreeItem = ({
     return {};
   };
 
-  // Build display text for tables: "DisplayName" with (#id . key) styled like node
-  const getDisplayText = () => {
-    if (node.type === 'table') {
-      return node.displayName || node.name;
-    }
-    if (node.type === 'widget') {
-      return node.displayName || node.name;
-    }
-    if (node.type === 'external-section') {
-      return node.displayName || node.name;
-    }
-    return node.displayName || node.name;
-  };
+  const displayText = node.displayName || node.name;
 
-  // Get connection indicator color
+  // Connection colour: external grey, pending blue, related green. The dot is shown only for tables
+  // that take part in a relation; the table icon carries the same colour on every table.
   const getIndicatorClass = () => {
     if (node.type !== 'table') return '';
     if (node.isExternal) return 'bg-gray-400 dark:bg-gray-500';
@@ -140,11 +167,18 @@ export const NavTreeItem = ({
     if (node.hasEdge) return 'bg-emerald-500 dark:bg-green-400';
     return '';
   };
+  const tableIconClass = node.isExternal ? 'text-gray-400 dark:text-gray-500'
+    : node.hasPending ? 'text-primary-500 dark:text-primary-400'
+    : node.hasEdge ? 'text-emerald-500 dark:text-green-400'
+    : 'text-gray-400 dark:text-gray-500';
 
-  const showIndicator = node.type === 'table' && (node.hasEdge || node.hasPending || node.isExternal);
-  const showContextMenuTrigger = node.type === 'table' || node.type === 'project' || node.type === 'folder';
+  const showIndicator = node.type === 'table' && (node.hasEdge || node.hasPending);
+  const showContextMenuTrigger = node.type !== 'external-section';
+  const WidgetIcon = node.type === 'widget' ? getWidgetIcon(node.presetName || node.widgetType, node.widgetConfig) : null;
 
-  const primaryTableId = node.type === 'table' ? node.numericId : getChildTableIds(node)[0];
+  const primaryTableId = node.type === 'table' ? node.numericId
+    : node.type === 'widget' ? node.mainTableId
+    : getChildTableIds(node)[0];
 
   // Get selection state for project/folder
   const getParentSelectionState = (): ParentSelectionState => {
@@ -174,10 +208,32 @@ export const NavTreeItem = ({
     }
   };
 
+  const nameClasses = `text-sm truncate ${
+    node.type === 'project' ? 'font-medium text-[var(--text-primary)]' :
+    node.type === 'folder' ? (
+      node.id.includes('virtual:databases') ? 'font-medium text-yellow-500' :
+      node.id.includes('virtual:internal') ? 'font-medium text-primary-500' :
+      node.id.includes('virtual:synced') ? 'font-medium text-cyan-500' :
+      node.id.includes('virtual:external') ? 'font-medium text-indigo-500' :
+      node.id.includes('virtual:forms') ? 'font-medium text-orange-500' :
+      'font-medium text-amber-500'
+    ) :
+    node.type === 'external-section' ? 'font-medium text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide' :
+    node.type === 'widget' ? 'text-purple-700 dark:text-purple-300' :
+    'text-[var(--text-primary)]'
+  }`;
+
+  const nameTitle = node.type === 'table'
+    ? `${displayText} (ID: ${node.numericId}, key: ${node.name})${node.isExternal && node.sourceSpaceName ? ` • ${node.sourceSpaceName}` : ''} — ${t('schemaEditor.navMenu.openTableSettings')}`
+    : node.type === 'project' ? t('schemaEditor.navMenu.openProjectSettings')
+    : node.type === 'widget' ? `${node.displayName} (${node.presetName || node.widgetType || 'widget'})` : undefined;
+
+  const rowPaddingLeft = depth * 12 + 8;
+
   return (
     <div>
       <div
-        style={{ paddingLeft: `${depth * 12 + 8}px`, ...getRowStyle() }}
+        style={{ paddingLeft: `${rowPaddingLeft}px`, ...getRowStyle() }}
         className={`group relative flex items-center gap-1 h-7 pr-2 rounded hover:bg-[var(--bg-secondary)] cursor-pointer ${
           node.type === 'external-section' ? 'border-t border-[var(--border-secondary)] mt-2' : ''
         } ${sortMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
@@ -204,22 +260,6 @@ export const NavTreeItem = ({
           </button>
         )}
 
-        {/* Expand/Collapse */}
-        {hasChildren ? (
-          <button
-            onClick={handleToggleExpand}
-            className="p-0.5 hover:bg-[var(--bg-tertiary)] rounded flex-shrink-0"
-          >
-            {isExpanded ? (
-              <ChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-            ) : (
-              <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
-            )}
-          </button>
-        ) : (
-          <div className="w-4.5" />
-        )}
-
         {/* Selection Checkbox - only for tables (hidden in sort mode) */}
         {!sortMode && node.type === 'table' && (
           <button
@@ -235,6 +275,24 @@ export const NavTreeItem = ({
           </button>
         )}
 
+        {/* Expand/Collapse */}
+        {hasChildren ? (
+          <button
+            onClick={handleToggleExpand}
+            aria-expanded={isExpanded}
+            aria-label={`${isExpanded ? t('schemaEditor.collapseAll') : t('schemaEditor.expandAll')}: ${displayText}`}
+            className="p-0.5 hover:bg-[var(--bg-tertiary)] rounded flex-shrink-0"
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+            )}
+          </button>
+        ) : (
+          <div className="w-4.5" />
+        )}
+
         {/* Visibility Checkbox - for projects, folders and tables (always visible) */}
         {(node.type === 'project' || node.type === 'table' || node.type === 'folder') && (
           <VisibilityCheckbox
@@ -244,9 +302,21 @@ export const NavTreeItem = ({
           />
         )}
 
-        {/* Icon - left side */}
+        {/* Icon - left side; the table emoji opens Move when held */}
         {node.type === 'table' ? (
-          <span className="text-sm flex-shrink-0">{node.icon}</span>
+          <button
+            type="button"
+            onPointerDown={startHold}
+            onPointerUp={cancelHold}
+            onPointerLeave={cancelHold}
+            onPointerCancel={cancelHold}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`${t('schemaEditor.navMenu.holdToMove')}: ${displayText}`}
+            title={t('schemaEditor.navMenu.holdToMove')}
+            className="text-sm flex-shrink-0 select-none touch-none"
+          >
+            {node.icon}
+          </button>
         ) : node.type === 'external-section' ? (
           <ExternalLink className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
         ) : node.type === 'folder' ? (
@@ -261,44 +331,36 @@ export const NavTreeItem = ({
           <span className="text-sm flex-shrink-0">{node.icon}</span>
         )}
 
-        {/* Name */}
-        <span
-          className={`text-sm truncate ${
-            node.type === 'project' ? 'font-medium text-[var(--text-primary)]' :
-            node.type === 'folder' ? (
-              node.id.includes('virtual:databases') ? 'font-medium text-yellow-500' :
-              node.id.includes('virtual:internal') ? 'font-medium text-primary-500' :
-              node.id.includes('virtual:synced') ? 'font-medium text-cyan-500' :
-              node.id.includes('virtual:external') ? 'font-medium text-indigo-500' :
-              node.id.includes('virtual:forms') ? 'font-medium text-orange-500' :
-              'font-medium text-amber-500'
-            ) :
-            node.type === 'external-section' ? 'font-medium text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wide' :
-            node.type === 'widget' ? 'text-purple-400' :
-            'text-[var(--text-primary)]'
-          }`}
-          title={node.type === 'table'
-            ? `${node.displayName || node.name} (ID: ${node.numericId}, key: ${node.name})${node.isExternal && node.sourceSpaceName ? ` • ${node.sourceSpaceName}` : ''}`
-            : node.type === 'widget' ? `${node.displayName} (${node.widgetType})` : undefined
-          }
-        >
-          {getDisplayText()}
-        </span>
+        {/* Name - a button for tables/projects (opens their settings) */}
+        {node.type === 'table' || node.type === 'project' ? (
+          <button
+            type="button"
+            onClick={handleNameClick}
+            className={`${nameClasses} text-left hover:text-[var(--accent-primary)] transition-colors`}
+            title={nameTitle}
+          >
+            {displayText}
+          </button>
+        ) : (
+          <span className={nameClasses} title={nameTitle}>
+            {displayText}
+          </span>
+        )}
 
         {/* ID and Key for tables - flex-1 to push badge to right */}
         {node.type === 'table' && (
-          <span className="flex-1 text-[10px] text-gray-500 dark:text-gray-500 font-mono opacity-70 truncate">
+          <span className="flex-1 text-[10px] text-[var(--text-secondary)] font-mono truncate">
             #{node.numericId} • {node.name}
           </span>
         )}
         {node.type === 'project' && (
-          <span className="flex-1 text-[10px] text-[var(--text-tertiary)] font-mono opacity-70 truncate">
+          <span className="flex-1 text-[10px] text-[var(--text-secondary)] font-mono truncate">
             #{node.numericId}
           </span>
         )}
         {node.type === 'widget' && (
-          <span className="flex-1 text-[10px] text-purple-400 opacity-70 truncate">
-            {node.widgetType || 'widget'}
+          <span className="flex-1 text-[10px] text-purple-700 dark:text-purple-300 truncate">
+            {node.presetName || node.widgetType || 'widget'}
           </span>
         )}
         {node.type !== 'table' && node.type !== 'widget' && node.type !== 'project' && (
@@ -317,25 +379,44 @@ export const NavTreeItem = ({
           />
         )}
 
-        {/* Type Badge - right side icons + context menu */}
-        {showContextMenuTrigger ? (
+        {/* Kind icon left of the menu: tables in their connection colour, modules in purple */}
+        {node.type === 'table' && (
+          <Table2 className={`w-3.5 h-3.5 flex-shrink-0 ${tableIconClass}`} aria-hidden="true" />
+        )}
+        {WidgetIcon && (
+          <WidgetIcon className="w-3.5 h-3.5 flex-shrink-0 text-purple-500" aria-hidden="true" />
+        )}
+
+        {/* ⋮ context menu on the right */}
+        {showContextMenuTrigger && (
           <NavTreeItemContextMenu
             node={node}
             primaryTableId={primaryTableId}
             t={t}
           />
-        ) : (
-          <span
-            className="flex-shrink-0 text-purple-500"
-            title={node.type.toUpperCase()}
-          >
-            {node.type === 'widget' ? <Component className="w-3.5 h-3.5" /> : null}
-          </span>
         )}
       </div>
 
+      {/* Columns of an expanded table - last nesting level, same indent as the table row */}
+      {isExpanded && node.type === 'table' && tableNode && columns.length > 0 && (
+        <div>
+          {columns.map((column, index) => (
+            <NavTreeColumnRow
+              key={column.id}
+              tableId={node.numericId}
+              column={column}
+              canMoveUp={!column.isPrimaryKey && index > columns.findIndex((c) => !c.isPrimaryKey)}
+              canMoveDown={!column.isPrimaryKey && index < columns.length - 1}
+              rowsPreview={tableNode.data.rowsPreview}
+              rowsLoading={tableNode.data.rowsLoading}
+              paddingLeft={rowPaddingLeft}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Children */}
-      {isExpanded && hasChildren && (
+      {isExpanded && node.children.length > 0 && (
         <div>
           {node.children.map((child) => (
             <NavTreeItem

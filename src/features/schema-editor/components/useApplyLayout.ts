@@ -53,15 +53,18 @@ export const useApplyLayout = ({
       const WIDGET_GAP = 200;
       const FORM_GAP = 150;
 
+      // Pinned nodes keep their position: they take no grid slot and are never moved.
+      const movable = nodes.filter((n) => !(n.data as any).isPinned);
+
       // Separate nodes by type
-      const widgetNodes = nodes.filter((n) => n.type === 'widgetNode');
-      const formNodes = nodes.filter(
+      const widgetNodes = movable.filter((n) => n.type === 'widgetNode');
+      const formNodes = movable.filter(
         (n) =>
           n.type === 'tableNode' &&
           (n.data as any).isSystem &&
           (n.data as any).name?.startsWith('form_')
       );
-      const tableNodes = nodes.filter(
+      const tableNodes = movable.filter(
         (n) =>
           n.type === 'tableNode' &&
           !((n.data as any).isSystem && (n.data as any).name?.startsWith('form_'))
@@ -77,7 +80,7 @@ export const useApplyLayout = ({
         edgeSet.add(edge.target);
       });
 
-      let newNodes = [...nodes];
+      const newNodes = [...nodes];
       let sortedTables = [...tableNodes];
 
       // 1. Project Grouping - sort tables by project first
@@ -297,14 +300,16 @@ export const useApplyLayout = ({
           });
         }
       } else {
-        // No grid - simple list layout
-        sortedTables.forEach((node, i) => {
+        // No grid - stack tables using their actual heights.
+        let nextTableY = 50;
+        sortedTables.forEach((node) => {
           const nodeIndex = newNodes.findIndex((n) => n.id === node.id);
           if (nodeIndex >= 0) {
             newNodes[nodeIndex] = {
               ...newNodes[nodeIndex],
-              position: { x: 50, y: i * SPACING_Y + 50 },
+              position: { x: 50, y: nextTableY },
             };
+            nextTableY += getCardHeight(node) + MIN_GAP_Y;
           }
         });
 

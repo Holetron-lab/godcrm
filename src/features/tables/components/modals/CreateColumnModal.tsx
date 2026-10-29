@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Button, Input, Modal, Select } from '@/shared/components/ui';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { getColumnTypeOptions } from '@/shared/types';
+import { toSlug } from '@/shared/utils/i18n-utils';
 
 interface CreateColumnModalProps {
   open: boolean;
@@ -12,7 +13,7 @@ interface CreateColumnModalProps {
   projectId?: string | number;
 }
 
-export const CreateColumnModal = ({ open, onOpenChange, onSubmit, loading, tableId, projectId }: CreateColumnModalProps) => {
+export const CreateColumnModal = ({ open, onOpenChange, onSubmit, loading }: CreateColumnModalProps) => {
   const { language } = useLanguage();
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -20,24 +21,23 @@ export const CreateColumnModal = ({ open, onOpenChange, onSubmit, loading, table
 
   // Generate column types from shared types
   const columnTypes = useMemo(() => getColumnTypeOptions(language as 'ru' | 'en'), [language]);
+  // Row data is keyed by this value, so it must stay [a-z0-9_]; a Cyrillic
+  // title becomes a transliterated key and the title itself stays the display name.
+  const key = toSlug(name.trim());
 
   const handleSubmit = () => {
-    if (!name.trim()) return;
+    if (!key) return;
     
-    // Build config for file/image columns with default upload path
+    // Space uploads already return a complete /uploads/spaces/<id>/ URL, so image
+    // columns need no prefix. FileCell still requires a prefix to enable upload;
+    // point it at this ring's own origin, never at a foreign host.
     let config: Record<string, any> | undefined;
-    if (type === 'file' || type === 'image') {
-      const uploadPath = `https://crm.hltrn.cc/uploads/project_${projectId || 0}/table_${tableId || 0}/${name.trim()}/`;
-      config = {
-        file: {
-          prefix: uploadPath,
-          saveFormat: 'filename'
-        }
-      };
+    if (type === 'file') {
+      config = { file: { prefix: window.location.origin, saveFormat: 'url' } };
     }
     
     onSubmit({
-      name: name.trim(),
+      name: key,
       displayName: displayName.trim() || name.trim(),
       type,
       config
@@ -74,6 +74,7 @@ export const CreateColumnModal = ({ open, onOpenChange, onSubmit, loading, table
           />
           <p className="mt-1 text-xs text-[var(--text-tertiary)]">
             Используется в API и базе данных. Только латиница, цифры и подчеркивания.
+            {key && key !== name.trim() && <> Будет сохранено как <code className="font-mono text-[var(--text-secondary)]">{key}</code></>}
           </p>
         </div>
 
@@ -105,7 +106,7 @@ export const CreateColumnModal = ({ open, onOpenChange, onSubmit, loading, table
           <Button
             variant="primary"
             onClick={handleSubmit}
-            disabled={!name.trim() || loading}
+            disabled={!key || loading}
           >
             {loading ? 'Создание...' : 'Создать'}
           </Button>

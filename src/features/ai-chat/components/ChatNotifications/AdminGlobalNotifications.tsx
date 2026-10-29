@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 // AdminGlobalNotifications.tsx — ADR-0064 WP-C.
 //
 // Admin/Global defaults sub-tab. Reads + writes
@@ -15,6 +16,7 @@ interface ApiEnvelope<T> { data?: T; success?: boolean }
 const EMPTY: PrefsValue = {};
 
 export function AdminGlobalNotifications() {
+  const { t } = useLanguage();
   const [value, setValue] = useState<PrefsValue>(EMPTY);
   const [initial, setInitial] = useState<PrefsValue>(EMPTY);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,9 +47,9 @@ export function AdminGlobalNotifications() {
     try {
       await apiClient.put('/admin/global/chat-notifications', { prefs: value });
       setInitial(value);
-      showToast('Глобальный дефолт сохранён', 'success');
+      showToast(t('aiChat.ui.globalDefaultsSaved'), 'success');
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Не удалось сохранить', 'error');
+      showToast(err instanceof Error ? err.message : t('aiChat.ui.couldNotSave'), 'error');
     } finally {
       setIsSaving(false);
     }
@@ -66,8 +68,7 @@ export function AdminGlobalNotifications() {
       <div className="flex items-start gap-2 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
         <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" />
         <p className="text-[10px] text-amber-300/90">
-          Глобальные дефолты применяются ко всем пользователям приложения. Пространства и личные
-          настройки могут переопределить эти значения. Доступ — только владелец приложения.
+          {t('aiChat.ui.globalNotificationHelp')}
         </p>
       </div>
       <NotificationMatrix value={value} onChange={setValue} triState />
@@ -79,8 +80,7 @@ export function AdminGlobalNotifications() {
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-600)] disabled:opacity-50 transition-colors"
         >
           {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          Сохранить
-        </button>
+          {t('aiChat.ui.save')}</button>
       )}
     </div>
   );

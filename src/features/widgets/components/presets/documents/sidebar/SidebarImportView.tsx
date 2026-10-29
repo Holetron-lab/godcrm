@@ -9,9 +9,12 @@ export function SidebarImportView() {
   return (
     <div>
       {ctx.newDocName && (
-        <div
+        <button
+          type="button"
+          aria-label={`Редактировать название ${ctx.newDocName}`}
+          aria-current={ctx.activePreviewOrder === -1 ? 'true' : undefined}
           className={
-            'px-3 py-2 border-b border-[var(--border-secondary)] cursor-pointer ' +
+            'w-full text-left px-3 py-2 border-b border-[var(--border-secondary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-primary-500)] ' +
             (ctx.activePreviewOrder === -1
               ? 'bg-[var(--color-primary-500)]/20'
               : 'hover:bg-[var(--bg-tertiary)]')
@@ -22,12 +25,12 @@ export function SidebarImportView() {
             ctx.setEditingImportData({ title: ctx.newDocName });
           }}
         >
-          <div className="flex items-center gap-2">
+          <span className="flex items-center gap-2">
             <span className="text-purple-400 text-sm">📌</span>
             <span className="font-medium text-[var(--text-primary)] truncate">{ctx.newDocName}</span>
             <span className="text-[10px] text-purple-400 uppercase ml-auto">H1</span>
-          </div>
-        </div>
+          </span>
+        </button>
       )}
 
       <div className="px-3 py-2 text-xs font-semibold text-[var(--text-tertiary)] uppercase border-b border-[var(--border-secondary)]">

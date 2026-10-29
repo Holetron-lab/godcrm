@@ -7,6 +7,9 @@
 import { dbGet, dbRun, dbAll, isPostgres, sqlNow } from '../../database/connection.js';
 import { parseRowData } from './data-tools.js';
 
+// universal_tables.table_type column bound (VARCHAR(50), see migration 077).
+const TABLE_TYPE_MAX_LEN = 50;
+
 export const calendarToolHandlers = {
   async list_events({ start_date, end_date, space_id, limit = 100 }) {
     const pg = isPostgres();
@@ -73,22 +76,52 @@ export const calendarToolHandlers = {
     return { success: true, message: `Event "${event.title}" deleted` };
   },
 
-  async global_search({ query, types, space_id, limit = 20, include_archived = false }) {
-    if (!query) return { error: 'query is required' };
+  async global_search({ query, types, space_id, limit = 20, include_archived = false, table_type }) {
+    // ADR-164 addendum (doc 232328): exact `table_type` marker filter. In that
+    // mode only tables are searched and `query` is optional; otherwise legacy
+    // query-required behaviour is kept.
+    const byType = table_type !== undefined;
+    if (byType) {
+      if (typeof table_type !== 'string' || !table_type.trim()) {
+        return { error: 'table_type must be a non-empty string (exact marker, e.g. "ai_agents")' };
+      }
+      if (table_type.length > TABLE_TYPE_MAX_LEN) {
+        return { error: `table_type must be at most ${TABLE_TYPE_MAX_LEN} characters` };
+      }
+      if (types !== undefined && !(Array.isArray(types) && types.length === 1 && types[0] === 'tables')) {
+        return { error: 'table_type filter applies to tables only: pass types: ["tables"] or omit types' };
+      }
+    } else if (!query) {
+      return { error: 'query is required (or pass table_type to search tables by marker)' };
+    }
 
     const pg = isPostgres();
     const searchPattern = `%${query}%`;
     const results = {};
 
-    const searchTypes = types || ['tables', 'rows', 'projects', 'conversations'];
+    const searchTypes = byType ? ['tables'] : (types || ['tables', 'rows', 'projects', 'conversations']);
 
     if (searchTypes.includes('tables')) {
-      const tables = await dbAll(
-        pg ? 'SELECT id, name, icon, description FROM universal_tables WHERE name ILIKE $1 LIMIT $2'
-           : 'SELECT id, name, icon, description FROM universal_tables WHERE name LIKE ? LIMIT ?',
-        [searchPattern, limit]
-      );
-      results.tables = tables;
+      const where = [];
+      const p = [];
+      const bind = (col, value) => {
+        p.push(value);
+        where.push(pg ? `${col} = $${p.length}` : `${col} = ?`);
+      };
+      if (query) {
+        p.push(searchPattern);
+        where.push(pg ? `ut.name ILIKE $${p.length}` : 'ut.name LIKE ?');
+      }
+      if (byType) bind('ut.table_type', table_type);
+      let q = 'SELECT ut.id, ut.name, ut.icon, ut.description, ut.table_type FROM universal_tables ut';
+      if (space_id) {
+        q += ' JOIN projects pr ON ut.project_id = pr.id';
+        bind('pr.space_id', space_id);
+      }
+      if (where.length) q += ` WHERE ${where.join(' AND ')}`;
+      p.push(limit);
+      q += pg ? ` LIMIT $${p.length}` : ' LIMIT ?';
+      results.tables = await dbAll(q, p);
     }
 
     if (searchTypes.includes('rows')) {
@@ -128,7 +161,7 @@ export const calendarToolHandlers = {
       results.conversations = convs;
     }
 
-    return { query, results };
+    return { query: query || '', results };
   },
 
   async list_spaces() {

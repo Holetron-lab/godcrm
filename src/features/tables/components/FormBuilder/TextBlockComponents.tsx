@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import {
   FileText,
   ArrowUp,
@@ -63,22 +63,27 @@ export function TextBlockPreview({
   return (
     <div className="p-1.5">
       <div
-        onClick={onClick}
         className={`
-          p-3 rounded-lg border cursor-pointer transition-all
+          relative p-3 rounded-lg border transition-all
           ${isSelected
             ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]/10 ring-2 ring-[var(--color-primary-500)]'
             : 'border-[var(--border-primary)] bg-[var(--bg-secondary)] hover:border-[var(--color-primary-400)]'}
         `}
       >
-        <div className="flex items-center gap-2 mb-2">
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label="Редактировать текстовый блок"
+          aria-pressed={isSelected}
+          className="flex items-center gap-2 mb-2 after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[var(--color-primary-500)]"
+        >
           <FileText className="w-3 h-3 text-[var(--text-tertiary)]" />
-          <span className="text-[10px] text-[var(--text-tertiary)]">
+          <span className="text-[10px] text-[var(--text-secondary)]">
             Текст ({block.contentType === 'html' ? 'HTML' : 'Markdown'})
           </span>
-        </div>
+        </button>
 
-        <div className="min-h-[1.5rem]">{renderContent()}</div>
+        <div className="min-h-[1.5rem] [&_a]:relative [&_a]:z-10">{renderContent()}</div>
       </div>
     </div>
   );
@@ -104,12 +109,13 @@ export function TextBlockSettingsPanel({
   canMoveDown: boolean;
   onClose: () => void;
 }) {
+  const fieldId = useId();
   return (
     <div className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-tertiary)] p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-[var(--text-tertiary)]" />
+          <FileText className="w-4 h-4 text-[var(--text-secondary)]" />
           <span className="text-sm font-medium text-[var(--text-primary)]">
             Текстовый блок
           </span>
@@ -118,20 +124,22 @@ export function TextBlockSettingsPanel({
         <div className="flex items-center gap-2">
           {/* Move arrows */}
           <button
+            type="button"
             disabled={!canMoveUp}
             onClick={onMoveUp}
             className="p-1.5 rounded hover:bg-[var(--bg-secondary)] disabled:opacity-30 transition-colors"
             title="Переместить вверх"
           >
-            <ArrowUp className="w-4 h-4 text-[var(--text-tertiary)]" />
+            <ArrowUp className="w-4 h-4 text-[var(--text-secondary)]" />
           </button>
           <button
+            type="button"
             disabled={!canMoveDown}
             onClick={onMoveDown}
             className="p-1.5 rounded hover:bg-[var(--bg-secondary)] disabled:opacity-30 transition-colors"
             title="Переместить вниз"
           >
-            <ArrowDown className="w-4 h-4 text-[var(--text-tertiary)]" />
+            <ArrowDown className="w-4 h-4 text-[var(--text-secondary)]" />
           </button>
 
           {/* Order input */}
@@ -141,9 +149,8 @@ export function TextBlockSettingsPanel({
             defaultValue={block.order}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                const newOrder = parseInt((e.target as HTMLInputElement).value) || block.order;
-                onUpdate({ order: newOrder });
-                (e.target as HTMLInputElement).blur();
+                e.preventDefault();
+                e.currentTarget.blur();
               }
             }}
             onBlur={(e) => {
@@ -158,6 +165,7 @@ export function TextBlockSettingsPanel({
 
           {/* Delete button */}
           <button
+            type="button"
             onClick={onDelete}
             className="p-1.5 rounded hover:bg-red-500/20 text-red-500 transition-colors"
             title="Удалить"
@@ -167,10 +175,12 @@ export function TextBlockSettingsPanel({
 
           {/* Close button */}
           <button
+            type="button"
+            aria-label="Закрыть настройки текстового блока"
             onClick={onClose}
             className="p-1.5 rounded hover:bg-[var(--bg-secondary)] transition-colors"
           >
-            <X className="w-4 h-4 text-[var(--text-tertiary)]" />
+            <X className="w-4 h-4 text-[var(--text-secondary)]" />
           </button>
         </div>
       </div>
@@ -179,10 +189,10 @@ export function TextBlockSettingsPanel({
       <div className="grid grid-cols-2 gap-4 mb-4">
         {/* Content type */}
         <div>
-          <label className="block text-xs text-[var(--text-tertiary)] mb-1.5">
+          <label htmlFor={`${fieldId}-0`} className="block text-xs text-[var(--text-secondary)] mb-1.5">
             Тип контента
           </label>
-          <select
+          <select id={`${fieldId}-0`}
             value={block.contentType || 'markdown'}
             onChange={(e) => onUpdate({ contentType: e.target.value as 'markdown' | 'html' })}
             className="w-full px-3 py-2 rounded-lg border bg-[var(--bg-primary)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] border-[var(--border-primary)]"
@@ -193,14 +203,16 @@ export function TextBlockSettingsPanel({
         </div>
 
         {/* Width */}
-        <div>
-          <label className="block text-xs text-[var(--text-tertiary)] mb-1.5">
+        <div role="group" aria-labelledby={`${fieldId}-group-199`}>
+          <span id={`${fieldId}-group-199`} className="block text-xs text-[var(--text-secondary)] mb-1.5">
             Ширина
-          </label>
+          </span>
           <div className="flex gap-1">
             {WIDTH_OPTIONS.map(opt => (
               <button
+                type="button"
                 key={opt.value}
+                aria-pressed={block.width === opt.value || (!block.width && opt.value === 'full')}
                 onClick={() => onUpdate({ width: opt.value })}
                 className={`flex-1 p-2 rounded transition-colors flex items-center justify-center ${
                   block.width === opt.value || (!block.width && opt.value === 'full')
@@ -218,10 +230,11 @@ export function TextBlockSettingsPanel({
 
       {/* Content editor */}
       <div>
-        <label className="block text-xs text-[var(--text-tertiary)] mb-1.5">
+        <label htmlFor={`${fieldId}-content`} className="block text-xs text-[var(--text-secondary)] mb-1.5">
           Содержимое ({block.contentType === 'html' ? 'HTML' : 'Markdown'})
         </label>
         <textarea
+          id={`${fieldId}-content`}
           value={block.content || ''}
           onChange={(e) => onUpdate({ content: e.target.value })}
           placeholder={block.contentType === 'html'

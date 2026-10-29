@@ -8,16 +8,22 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import crypto from 'crypto';
 import pg from 'pg';
+import { createEphemeralWorkspace } from '../../tests/helpers/workspace-fixture.js';
 
 const { Pool } = pg;
 
 // PostgreSQL connection for tests
+// ADR-0009 §Phase 7 — read the pinned contour (backend/test/contour.js), not a
+// private DB_* alias. The previous form defaulted to `godcrm_prod` with a
+// literal password: it failed on a wrong password rather than on the guard,
+// because the boot guard only inspects POSTGRES_*. The alias is now refused
+// there too.
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'godcrm_prod',
-  user: process.env.DB_USER || 'godcrm',
-  password: process.env.DB_PASSWORD || 'godcrm_dev_2026'
+  host: process.env.POSTGRES_HOST || '127.0.0.1',
+  port: parseInt(process.env.POSTGRES_PORT || '5432'),
+  database: process.env.POSTGRES_DB || 'godcrm_test',
+  user: process.env.POSTGRES_USER || 'godcrm',
+  password: process.env.POSTGRES_PASSWORD
 });
 
 // Helper functions
@@ -47,7 +53,14 @@ const generateApiKey = () => {
 };
 
 describe('API Keys PostgreSQL Integration', () => {
-  
+  // api_keys grew a NOT NULL project_id, so a key can no longer be inserted
+  // against the bare literal user_id=1 these tests used to assume. Own a
+  // throwaway user+space+project instead of borrowing whatever row 1 happens
+  // to be in a freshly copied godcrm_test.
+  let workspace;
+  let fixtureUserId;
+  let fixtureProjectId;
+
   beforeAll(async () => {
     // Verify connection
     try {
@@ -57,11 +70,15 @@ describe('API Keys PostgreSQL Integration', () => {
       console.error('❌ PostgreSQL connection failed:', err.message);
       throw err;
     }
+    workspace = await createEphemeralWorkspace({ label: 'apikeys', dashboard: false, table: false });
+    fixtureUserId = workspace.userId;
+    fixtureProjectId = workspace.projectId;
   });
 
   afterAll(async () => {
     // Cleanup test data
     await pool.query(`DELETE FROM api_keys WHERE name LIKE 'TEST_%'`).catch(() => {});
+    await workspace?.cleanup();
     await pool.end();
   });
 
@@ -94,10 +111,10 @@ describe('API Keys PostgreSQL Integration', () => {
       const keyHash = hashApiKey(apiKey);
       
       const result = await dbRun(`
-        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, project_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
         RETURNING id
-      `, [1, 'TEST_insert_key', keyPrefix, keyHash, 'all', 1]);
+      `, [fixtureUserId, 'TEST_insert_key', keyPrefix, keyHash, 'all', 1, fixtureProjectId]);
       
       expect(result.rowCount).toBe(1);
       expect(result.rows[0].id).toBeDefined();
@@ -110,9 +127,9 @@ describe('API Keys PostgreSQL Integration', () => {
       
       // Insert
       await dbRun(`
-        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-      `, [1, 'TEST_find_key', keyPrefix, keyHash, 'all', 1]);
+        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, project_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      `, [fixtureUserId, 'TEST_find_key', keyPrefix, keyHash, 'all', 1, fixtureProjectId]);
       
       // Find by prefix + hash
       const found = await dbGet(`
@@ -133,9 +150,9 @@ describe('API Keys PostgreSQL Integration', () => {
       
       // Insert
       await dbRun(`
-        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-      `, [1, 'TEST_wrong_hash', keyPrefix, keyHash, 'all', 1]);
+        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, project_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      `, [fixtureUserId, 'TEST_wrong_hash', keyPrefix, keyHash, 'all', 1, fixtureProjectId]);
       
       // Try to find with wrong hash
       const notFound = await dbGet(`
@@ -152,9 +169,9 @@ describe('API Keys PostgreSQL Integration', () => {
       
       // Insert inactive key
       await dbRun(`
-        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-      `, [1, 'TEST_inactive_key', keyPrefix, keyHash, 'all', 0]);
+        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, project_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      `, [fixtureUserId, 'TEST_inactive_key', keyPrefix, keyHash, 'all', 0, fixtureProjectId]);
       
       // Try to find active key
       const notFound = await dbGet(`
@@ -171,10 +188,10 @@ describe('API Keys PostgreSQL Integration', () => {
       
       // Insert
       const insertResult = await dbRun(`
-        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, request_count, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, request_count, project_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
         RETURNING id
-      `, [1, 'TEST_usage_key', keyPrefix, keyHash, 'all', 1, 0]);
+      `, [fixtureUserId, 'TEST_usage_key', keyPrefix, keyHash, 'all', 1, 0, fixtureProjectId]);
       
       const keyId = insertResult.rows[0].id;
       
@@ -290,9 +307,9 @@ describe('API Keys PostgreSQL Integration', () => {
       
       // 1. Create key in database
       await dbRun(`
-        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-      `, [1, 'TEST_auth_flow', keyPrefix, keyHash, 'all', 1]);
+        INSERT INTO api_keys (user_id, name, key_prefix, key_hash, scopes, is_active, project_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      `, [fixtureUserId, 'TEST_auth_flow', keyPrefix, keyHash, 'all', 1, fixtureProjectId]);
       
       // 2. Simulate authentication (what middleware does)
       const inputPrefix = apiKey.substring(0, 7);
@@ -308,7 +325,9 @@ describe('API Keys PostgreSQL Integration', () => {
       // 3. Verify authentication succeeded
       expect(keyRecord).toBeDefined();
       expect(keyRecord.is_active).toBe(1);
-      expect(keyRecord.uid).toBe(1);
+      // The JOIN must resolve to the key's own owner — the fixture user, not
+      // the hard-coded id 1 this assertion used to pin.
+      expect(keyRecord.uid).toBe(fixtureUserId);
     });
 
     it('should reject authentication with invalid key', async () => {

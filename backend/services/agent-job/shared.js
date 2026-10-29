@@ -20,7 +20,7 @@ export function mapTodoStatus(status) {
 
 // ─── CONSTANTS ───────────────────────────────────────────────────
 
-export const JOB_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes (matches Claude CLI timeout)
+export const JOB_TIMEOUT_MS = 120 * 60 * 1000; // 120 minutes (matches CLI provider timeout)
 export const MAX_ATTEMPTS = 3;
 export const MAX_JOB_RESTART_RETRIES = 3; // Max auto-restarts for a single conversation after server restarts
 export const MAX_RECOVERY_REDISPATCH = 2;  // Max CLI processes to spawn during startup recovery (prevents server overload)

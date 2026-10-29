@@ -1,7 +1,8 @@
 import { Table2 } from 'lucide-react';
+import { ProcurementWidget } from './procurement/ProcurementWidget';
 import type { PresetWidgetProps } from '../../types/widget.types';
 import type { ColumnType } from '../../../../shared/types';
-import type { RowModel } from '../../../tables/types/table.types';
+import type { ColumnConfig } from '../../../tables/types/table.types';
 import {
   TextCell,
   NumberCell,
@@ -13,8 +14,13 @@ import {
   EmailCell,
   UrlCell,
   PhoneCell,
-  RollupCell
+  RollupCell,
+  JsonCell,
+  JsonTableCell
 } from '../../../tables/components/cells';
+import { parseImageUrls, resolveAttachmentUrl } from '../../../tables/components/cells/attachmentValue';
+import { resolveLens } from '../../../tables/utils/resolveLens';
+import type { TicketRowData } from '../../hooks/useTicketData';
 import { useIsPublicReadOnly } from '@/features/public/PublicViewContext';
 import { PublicAttachmentPlaceholder } from '@/features/public/PublicAttachmentPlaceholder';
 
@@ -26,14 +32,14 @@ export interface ColumnInfo {
   name: string;
   displayName?: string;
   type: string;
-  config?: Record<string, unknown>;
+  config?: ColumnConfig & { relatedTableId?: number };
   isVisible?: boolean;
   orderIndex?: number;
   width?: number;
 }
 
 // Fallback type inference when columnsInfo is not provided
-const inferColumnType = (columnName: string, value: unknown): ColumnType => {
+const inferColumnType = (columnName: string, value: unknown): ColumnType | 'date' => {
   const lowerName = columnName.toLowerCase();
   
   if (lowerName.includes('email')) return 'email';
@@ -51,7 +57,7 @@ const inferColumnType = (columnName: string, value: unknown): ColumnType => {
 };
 
 // Emoji для типов колонок
-const typeEmojiMap: Record<ColumnType | 'image', string> = {
+const typeEmojiMap: Partial<Record<string, string>> = {
   text: '📝',
   number: '🔢',
   email: '✉️',
@@ -83,11 +89,12 @@ const formatColumnName = (name: string): string => {
 // Рендеринг ячейки в зависимости от типа
 const renderCell = (
   value: unknown,
-  type: ColumnType | 'image',
-  config?: Record<string, unknown>,
+  type: string,
+  config?: ColumnInfo['config'],
   rowData?: Record<string, unknown>,
   relationData?: RelationDataMap,
   publicReadOnly = false,
+  columns?: ColumnInfo[],
 ) => {
   // ADR-0060 AC13: public viewer cannot resolve authenticated uploads,
   // so render a non-fetching placeholder instead of <img>/<a>.
@@ -95,8 +102,8 @@ const renderCell = (
     const variant = type === 'image' ? 'image' : type === 'file' ? 'file' : 'attachment';
     return <PublicAttachmentPlaceholder value={value} variant={variant} />;
   }
-  // FIRST: Check if this column has relation config (regardless of type)
-  // This handles select, multi-select, relation, and any other type with relatedTableId
+  // FIRST: Check if this column has relation config (regardless of type).
+  // ADR-205 D4: the same `resolveLens` as the grid, fed by the widget's per-table map.
   const relatedTableId = config?.relatedTableId || config?.relation?.tableId;
   if (relatedTableId && relationData) {
     if (value === null || value === undefined) {
@@ -104,32 +111,29 @@ const renderCell = (
     }
     const tableMap = relationData.get(String(relatedTableId));
     if (tableMap) {
-      const ids = Array.isArray(value) ? value : [value];
-      const labels = ids.map(id => {
-        const entry = tableMap.get(String(id));
-        return entry ? entry.label : String(id);
-      });
-      const colors = ids.map(id => {
-        const entry = tableMap.get(String(id));
-        return entry?.color;
-      });
-      return (
-        <div className="flex flex-wrap gap-1">
-          {labels.map((label, i) => (
-            <span
-              key={i}
-              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-              style={{
-                backgroundColor: colors[i] ? `${colors[i]}20` : 'var(--bg-tertiary)',
-                color: colors[i] || 'var(--text-secondary)',
-                border: colors[i] ? `1px solid ${colors[i]}40` : '1px solid var(--border-primary)'
-              }}
-            >
-              {label}
-            </span>
-          ))}
-        </div>
-      );
+      const relation = { enabled: true, tableId: String(relatedTableId), ...config?.relation };
+      const lensed = resolveLens(value, relation, tableMap, 'auto');
+      // Image lens: the related row holds the path suffix, the column's prefix builds the URL.
+      if (type !== 'image') {
+        return (
+          <div className="flex flex-wrap gap-1">
+            {lensed.items.map((item, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                style={{
+                  backgroundColor: item.color ? `${item.color}20` : 'var(--bg-tertiary)',
+                  color: item.color || 'var(--text-secondary)',
+                  border: item.color ? `1px solid ${item.color}40` : '1px solid var(--border-primary)'
+                }}
+              >
+                {item.label}
+              </span>
+            ))}
+          </div>
+        );
+      }
+      value = lensed.value;
     }
   }
 
@@ -146,34 +150,48 @@ const renderCell = (
     case 'phone':
       return <PhoneCell value={value} />;
     case 'date':
-      return <DateCell value={value} showTime={false} />;
     case 'datetime':
-      return <DateCell value={value} showTime={true} />;
+      return <DateCell value={value} showTime={type === 'datetime'} displayFormat={config?.date?.displayFormat} storageFormat={config?.date?.storageFormat} mode={config?.date?.mode} />;
     case 'checkbox':
       return <CheckboxCell value={value} />;
     case 'password':
       return <PasswordCell value={value} />;
     case 'select':
-      return <SelectCell value={value} options={(config?.options as Array<{value: string; label?: string; color?: string}>) || []} />;
+      return <SelectCell value={value} options={config?.options || []} />;
     case 'multi-select':
-      return <MultiSelectCell value={value} options={(config?.options as Array<{value: string; label?: string; color?: string}>) || []} />;
+      return <MultiSelectCell value={value} options={config?.options || []} />;
     case 'relation':
       // Fallback for relation type without loaded data
       return <TextCell value={value} />;
     case 'rollup':
-      return <RollupCell value={value} config={config} rowData={rowData} />;
-    case 'image':
-      if (!value) return <span className="text-[var(--text-tertiary)]">—</span>;
+      return <RollupCell value={value} config={config} rowData={rowData} columns={columns} />;
+    case 'json':
+      return config?.json?.cellView === 'table'
+        ? <JsonTableCell value={value} config={config.json} />
+        : <JsonCell value={value} config={config?.json} />;
+    case 'image': {
+      // Same parser as ImageCell: comma lists, JSON strings and external {path,...} arrays
+      const imageUrls = parseImageUrls(value)
+        .map((url) => resolveAttachmentUrl(url, (config as { file?: { prefix?: string; suffix?: string } } | undefined)?.file, rowData))
+        .slice(0, 3);
+      if (imageUrls.length === 0) return <span className="text-[var(--text-tertiary)]">—</span>;
       return (
-        <img 
-          src={String(value)} 
-          alt="" 
-          className="w-10 h-10 object-cover rounded"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = 'none';
-          }}
-        />
+        <span className="inline-flex gap-1">
+          {imageUrls.map((url, index) => (
+            <img
+              key={`${url}-${index}`}
+              src={url}
+              alt=""
+              loading="lazy"
+              className="w-10 h-10 object-cover rounded"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          ))}
+        </span>
       );
+    }
     default:
       return <TextCell value={value} />;
   }
@@ -191,8 +209,8 @@ interface TableViewWidgetProps extends PresetWidgetProps {
   columnsInfo?: ColumnInfo[];
   relationData?: RelationDataMap;
   tableConfig?: TableRowHeightConfig | null;
-  onRowClick?: (row: RowModel) => void;
-  onRowDoubleClick?: (row: RowModel) => void;
+  onRowClick?: (row: TicketRowData) => void;
+  onRowDoubleClick?: (row: TicketRowData) => void;
 }
 
 /**
@@ -202,7 +220,19 @@ interface TableViewWidgetProps extends PresetWidgetProps {
 export function TableViewWidget({ widget, data, columnsInfo, relationData, tableConfig, onRowClick, onRowDoubleClick }: TableViewWidgetProps) {
   const publicReadOnly = useIsPublicReadOnly();
 
+  if (widget.config?.procurement) {
+    if (publicReadOnly) return <p className="p-4">Поставки доступны в рабочем пространстве после входа.</p>;
+    return <ProcurementWidget widget={widget} />;
+  }
+
   const config = widget.config;
+  const rows = (data ?? []).map((row) => {
+    const fields = row.data && typeof row.data === 'object' && !Array.isArray(row.data)
+      ? row.data as Record<string, unknown>
+      : row;
+    const id = row.id ?? fields.id;
+    return { ...row, id: typeof id === 'string' || typeof id === 'number' ? id : undefined, data: fields };
+  });
 
   // Row height settings from table config
   const minRowHeight = tableConfig?.min_row_height ?? 24;
@@ -244,18 +274,18 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
       .map(col => col.name);
   } else {
     // Fallback to data keys
-    columns = Object.keys(data[0]?.data || data[0] || {})
+    columns = Object.keys(rows[0]?.data || {})
       .filter(k => !k.startsWith('_') && k !== 'id' && k !== 'table_id' && k !== 'created_at' && k !== 'updated_at');
   }
 
   // Get column type - prefer real type from columnsInfo, fallback to inference
-  const getColumnType = (colName: string): ColumnType | 'image' => {
+  const getColumnType = (colName: string): string => {
     const info = columnInfoMap.get(colName);
     if (info?.type) {
-      return info.type as ColumnType | 'image';
+      return info.type;
     }
     // Fallback to inference
-    const firstValue = data[0]?.data?.[colName];
+    const firstValue = rows[0]?.data[colName];
     return inferColumnType(colName, firstValue);
   };
 
@@ -277,7 +307,8 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
   };
 
   return (
-    <div className="h-full overflow-auto rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)]">
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Keyboard users must be able to scroll the table container.
+    <div tabIndex={0} className="h-full overflow-auto rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--text-primary)]">
       <table className="w-full text-sm border-collapse">
         <thead className="sticky top-0 bg-[var(--bg-secondary)] border-b border-[var(--border-primary)]">
           <tr>
@@ -307,9 +338,17 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
           </tr>
         </thead>
         <tbody>
-          {data.map((row, idx) => (
+          {rows.map((row, idx) => (
             <tr
-              key={row.id || idx}
+              key={row.id ?? idx}
+              tabIndex={onRowClick || onRowDoubleClick ? 0 : undefined}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  (onRowClick ?? onRowDoubleClick)?.(row);
+                }
+              }}
               onClick={() => onRowClick?.(row)}
               onDoubleClick={() => onRowDoubleClick?.(row)}
               className={`border-b border-[var(--border-secondary)] last:border-none hover:bg-[var(--bg-tertiary)] transition-colors ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''}`}
@@ -321,7 +360,7 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
               }}
             >
               {columns.map((col) => {
-                const value = row.data?.[col] ?? row[col];
+                const value = row.data[col] ?? data[idx][col];
                 const type = getColumnType(col);
                 const config = getColumnConfig(col);
                 const width = getColumnWidth(col);
@@ -340,7 +379,7 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
                     }}
                     className="px-4 py-2 border-r border-[var(--border-primary)] last:border-r-0 overflow-hidden"
                   >
-                    {renderCell(value, type, config, cellRowData, relationData, publicReadOnly)}
+                    {renderCell(value, type, config, cellRowData, relationData, publicReadOnly, safeColumnsInfo)}
                   </td>
                 );
               })}

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatToolbar — Horizontal toolbar between header and messages area.
  * ADR-129 WP-1: Consolidates action buttons.
@@ -50,6 +51,7 @@ interface ChatToolbarProps {
   // Delete (now lives in ⋮ overflow — opens DeleteChatModal in parent)
   onDeleteChat?: () => void;
   // ADR-0064 §Per-chat: tabbed inline settings panel — notifications + participants
+  onSettingsOpen?: () => void;
   onNotificationsOpen?: () => void;
   onParticipantsOpen?: () => void;
   // ADR-0059 §4.1: voice call
@@ -85,6 +87,7 @@ function ToolbarBtn({ icon, label, active, onClick, className: extraClass }: {
 }
 
 export function ChatToolbar(props: ChatToolbarProps) {
+  const { t } = useLanguage();
   const {
     markdownEnabled, setMarkdownEnabled,
     showTerminal, setShowTerminal,
@@ -96,6 +99,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
     onScheduledToggle, scheduledActive, scheduledCount,
     onPinnedToggle, pinnedListActive, pinnedCount,
     onDeleteChat,
+    onSettingsOpen,
     onNotificationsOpen,
     onParticipantsOpen,
     onCallClick,
@@ -123,7 +127,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
       {/* Terminal toggle */}
       <ToolbarBtn
         icon={<Terminal className="w-3.5 h-3.5" />}
-        label={showTerminal ? "Скрыть терминал" : "Показать терминал"}
+        label={showTerminal ? t('aiChat.ui.hideTerminal') : t('aiChat.ui.showTerminal')}
         active={showTerminal}
         onClick={() => setShowTerminal(prev => !prev)}
       />
@@ -143,7 +147,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
               if (e.key === 'Enter') { e.shiftKey ? onSearchPrev?.() : onSearchNext?.(); }
               if (e.key === 'Escape') { onSearchQueryChange?.(''); onSearchToggle?.(); }
             }}
-            placeholder="Поиск..."
+            placeholder={t('aiChat.ui.search')}
             className="bg-transparent text-xs text-[var(--text-primary)] outline-none w-24 min-w-0 placeholder:text-[var(--text-tertiary)]"
           />
           {searchQuery && (searchMatchCount ?? 0) > 0 && (
@@ -154,20 +158,20 @@ export function ChatToolbar(props: ChatToolbarProps) {
           {searchQuery && (searchMatchCount ?? 0) === 0 && (
             <span className="text-[10px] text-red-400 flex-shrink-0">0</span>
           )}
-          <button onClick={onSearchPrev} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]" title="Предыдущий">
+          <button onClick={onSearchPrev} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]" title={t('aiChat.ui.previous')}>
             <ChevronUp className="w-3 h-3" />
           </button>
-          <button onClick={onSearchNext} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]" title="Следующий">
+          <button onClick={onSearchNext} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]" title={t('aiChat.ui.next')}>
             <ChevronDown className="w-3 h-3" />
           </button>
-          <button onClick={() => { onSearchQueryChange?.(''); onSearchToggle?.(); }} className="p-0.5 text-[var(--text-tertiary)] hover:text-red-400" title="Закрыть">
+          <button onClick={() => { onSearchQueryChange?.(''); onSearchToggle?.(); }} className="p-0.5 text-[var(--text-tertiary)] hover:text-red-400" title={t('aiChat.ui.close')}>
             <X className="w-3 h-3" />
           </button>
         </div>
       ) : (
         <ToolbarBtn
           icon={<Search className="w-3.5 h-3.5" />}
-          label="Поиск по чату"
+          label={t('aiChat.ui.searchChat')}
           active={searchActive}
           onClick={onSearchToggle}
         />
@@ -178,7 +182,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
       {/* Summary */}
       <ToolbarBtn
         icon={<FileText className="w-3.5 h-3.5" />}
-        label="Сводка чата"
+        label={t('aiChat.ui.chatSummary')}
         onClick={onSummaryOpen}
       />
 
@@ -196,7 +200,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
             )}
           </span>
         }
-        label="Привязать строку к чату"
+        label={t('aiChat.ui.linkARowToThisChat')}
         active={showRowBinding || boundRowsCount > 0}
         onClick={() => setShowRowBinding(prev => !prev)}
       />
@@ -213,7 +217,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
             )}
           </span>
         }
-        label="Отложенные сообщения"
+        label={t('aiChat.ui.scheduledMessages')}
         active={scheduledActive}
         onClick={onScheduledToggle}
       />
@@ -231,7 +235,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
             )}
           </span>
         }
-        label="Закреплённые сообщения"
+        label={t('aiChat.ui.pinnedMessages')}
         active={pinnedListActive}
         onClick={onPinnedToggle}
       />
@@ -239,7 +243,7 @@ export function ChatToolbar(props: ChatToolbarProps) {
       {/* ADR-0059 §4.1 — voice call. Disabled until a conversation is selected. */}
       <ToolbarBtn
         icon={<Phone className="w-3.5 h-3.5" />}
-        label="Звонок"
+        label={t('aiChat.ui.call')}
         active={callActive}
         onClick={currentConversationId ? onCallClick : undefined}
         className={!currentConversationId ? "opacity-30 cursor-not-allowed" : undefined}
@@ -249,6 +253,8 @@ export function ChatToolbar(props: ChatToolbarProps) {
           ADR-0064 §Per-chat — Notifications + Participants open the tabbed
           inline settings panel below BoundRowsStrip. */}
       <ChatToolbarOverflowMenu
+        onSettings={onSettingsOpen}
+        settingsDisabled={!currentConversationId}
         onNotifications={onNotificationsOpen}
         notificationsDisabled={!currentConversationId}
         onParticipants={onParticipantsOpen}

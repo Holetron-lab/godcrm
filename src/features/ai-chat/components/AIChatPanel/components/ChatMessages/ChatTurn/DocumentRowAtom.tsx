@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * DocumentRowAtom — T-141688 / ADR-0031 §Y / WP-22 (documents preset).
  *
@@ -92,6 +93,7 @@ export function DocumentRowAtom({
   onOpenTaskChat,
   onAttachToMessage,
 }: DocumentRowAtomProps) {
+  const { t } = useLanguage();
   const { ref: ioRef, isInView } = useInView<HTMLDivElement>({ rootMargin: '200px 0px', enabled: true });
   const enabled = isInView && tableId > 0 && rowId > 0;
   const [isViewerOpen, setIsViewerOpen] = useState(false);
@@ -233,7 +235,7 @@ export function DocumentRowAtom({
       <div ref={ioRef} className="w-full rounded-lg bg-[rgba(239,68,68,0.06)] border border-[rgba(239,68,68,0.2)] px-3 py-2">
         <div className="flex items-center gap-2 text-xs text-red-300">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="truncate">Не удалось загрузить документ #{rowId}</span>
+          <span className="truncate">{t('aiChat.ui.documentLoadFailed', { id: rowId })}</span>
         </div>
       </div>
     );
@@ -290,7 +292,7 @@ export function DocumentRowAtom({
               }
             }
             logger.error('Failed to update document status:', error);
-            showToast(err?.message || 'Не удалось сменить статус документа', 'error');
+            showToast(err?.message || t('aiChat.ui.couldNotChangeTheDocumentStatus'), 'error');
           }
         }}
         onChat={onOpenTaskChat}

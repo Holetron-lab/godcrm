@@ -1,0 +1,5 @@
+# Build once through the host executor; pin the resulting image ID in grants.
+FROM mcr.microsoft.com/playwright:v1.58.2-noble
+USER 65534:65534
+WORKDIR /work
+ENTRYPOINT ["node"]

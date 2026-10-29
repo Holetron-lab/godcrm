@@ -1,4 +1,5 @@
-import { useRef, useState, useCallback, Fragment } from 'react';
+import { ScrollableTextCell } from './ScrollableTextCell';
+import { useState, useCallback, Fragment } from 'react';
 import { flexRender, Row as TanstackRow } from '@tanstack/react-table';
 import type { RowModel, ColumnModel } from '../../types/table.types';
 import { RowActionsMenu } from './RowActionsMenu';
@@ -9,6 +10,7 @@ import { DateEditor } from '../cells/DateEditor';
 import { NumberEditor } from '../cells/NumberEditor';
 import { ColorEditor } from '../cells/ColorEditor';
 import { JsonEditor } from '../cells/JsonEditor';
+import { AddressEditor } from '../cells/AddressEditor';
 import { validateCell, getColumnValidationRules } from '../../utils/validation';
 import { InlineNestedTable } from '../cells/InlineNestedTable';
 import { DateCell } from '../cells/DateCell';
@@ -16,6 +18,19 @@ import { useTablesStore } from '../../store/tablesStore';
 import { cn } from '@/shared/utils/cn';
 import { getRowColorStyle } from '../../utils/rowColorStyle';
 import { getSystemColumnRowField } from '../../utils/systemColumns';
+import { parseGeoPoint } from '../../../../../shared/geo-point.js';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
+
+const GEO_INVALID_FALLBACK = 'Expected "lat, lng" (lat −90…90, lng −180…180)';
+
+/** Rows also render outside a LanguageProvider (embeds, isolated row tests): same hook call every render, but no throw. */
+const useGeoInvalidMessage = (): string => {
+  try {
+    return useLanguage().t('columnSettings.geo.invalid');
+  } catch {
+    return GEO_INVALID_FALLBACK;
+  }
+};
 
 export interface TableGridRowProps {
   row: TanstackRow<RowModel>;
@@ -24,7 +39,6 @@ export interface TableGridRowProps {
   hiddenColumns: ColumnModel[];
   editingCell: { rowId: string; columnId: string } | null;
   draftValue: string;
-  rowsVersion: number;
   onCellDoubleClick: (rowId: string, columnId: string, initialValue: unknown) => void;
   onDraftChange: (value: string) => void;
   onCommitEdit: (valueOverride?: string) => void;
@@ -69,7 +83,6 @@ export const TableGridRow = ({
   hiddenColumns,
   editingCell,
   draftValue,
-  rowsVersion,
   onCellDoubleClick,
   onDraftChange,
   onCommitEdit,
@@ -100,25 +113,32 @@ export const TableGridRow = ({
   displayColumns,
   showHiddenTemporarily,
 }: TableGridRowProps) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const focusEditor = useCallback((element: HTMLInputElement | HTMLTextAreaElement | null) => element?.focus(), []);
   const [validationError, setValidationError] = useState<string | null>(null);
   const isSelected = selectedRowIds?.has(row.original.id) ?? false;
 
   // Get success flash cells from store
   const successCells = useTablesStore((state) => state.successCells);
 
+  const geoInvalidMessage = useGeoInvalidMessage();
+
   // Validate current draft value
   const validateDraft = useCallback((value: string, columnId: string, rowData?: Record<string, unknown>) => {
     const column = columns.find(c => c.id === columnId);
     if (!column) return { valid: true, errors: [] as string[] };
+    // ADR-0035: a geo_point cell must parse as "lat, lng" (one shared parser); empty clears.
+    if (column.type === 'geo_point') {
+      const valid = value.trim() === '' || parseGeoPoint(value) !== null;
+      return { valid, errors: valid ? [] : [geoInvalidMessage] };
+    }
     const rules = getColumnValidationRules(column.config as unknown as Record<string, unknown>);
     return validateCell(value, rules, rowData);
-  }, [columns]);
+  }, [columns, geoInvalidMessage]);
 
   const hasActionsColumn = onAddColumn || (!readOnly && (onDuplicateRow || onDeleteRow));
 
   return (
-    <Fragment key={`${row.id}_v${rowsVersion}`}>
+    <Fragment>
       <tr
         data-testid="table-row"
         data-row-id={row.original.id}
@@ -168,6 +188,9 @@ export const TableGridRow = ({
           const column = columns.find(col => col.id === cell.column.id)
             || columns.find(col => col.name === cell.column.id);
 
+          // Multi-line editor for text columns.
+          const isMultilineText = column?.type === 'text';
+          const TextInput = isMultilineText ? 'textarea' : 'input';
           const isEditing =
             editingCell?.rowId === row.original.id && editingCell?.columnId === cell.column.id;
           const isExternal = (column as any)?.is_external;
@@ -176,6 +199,12 @@ export const TableGridRow = ({
           const cellKey = `${row.original.id}-${cell.column.id}`;
           const isSuccessFlash = successCells.has(cellKey);
           const cellWidth = cell.column.getSize();
+          // Cells with their own interactive controls render in a div (not a button);
+          // double-click on the cell background still opens the editor.
+          const cellOwnsControls = Boolean(groupByColumn) || (!rawMode && (
+            column?.type === 'table' ||
+            (column?.type === 'json' && column.config?.json?.cellView === 'table')
+          ));
 
           return (
             <td
@@ -200,7 +229,7 @@ export const TableGridRow = ({
                   )
                 )
               }`}
-              onDoubleClick={groupByColumn ? (() =>
+              onDoubleClick={cellOwnsControls ? (() =>
                 !isExternal && !isIdColumn && !readOnly &&
                 onCellDoubleClick(row.original.id, cell.column.id, cell.getValue())
               ) : undefined}
@@ -222,7 +251,7 @@ export const TableGridRow = ({
                       }
                     }}
                     onBlur={() => onCommitEdit(draftValue)}
-                    autoFocus
+                    ref={focusEditor}
                     className="w-full h-full px-2 py-1 text-sm bg-transparent border-none outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] focus:ring-inset font-mono"
                   />
                 ) : (column?.type === 'relation' && column.config?.relation?.enabled) ? (
@@ -280,6 +309,15 @@ export const TableGridRow = ({
                       onCancel={onCancelEdit}
                     />
                   </div>
+                ) : column?.type === 'address' ? (
+                  // ADR-0035-A: address editor (formatted / name / components); commits a JSON draft or '' to clear
+                  <div className="relative h-full w-full">
+                    <AddressEditor
+                      value={String(draftValue ?? '')}
+                      onCommit={onCommitEdit}
+                      onCancel={onCancelEdit}
+                    />
+                  </div>
                 ) : column?.type === 'datetime' ? (
                   <div className="relative h-full w-full">
                     <DateEditor
@@ -305,10 +343,12 @@ export const TableGridRow = ({
                     />
                   </div>
                 ) : (
-                  <div className="relative h-full w-full">
-                    <input
+                  <div className="w-full" style={{ minHeight: fixedRowHeight || minRowHeight }}>
+                    <TextInput
                       data-testid="cell-input"
-                      ref={inputRef}
+                      aria-label={column?.displayName || column?.name || 'Текст ячейки'}
+                      aria-invalid={Boolean(validationError)}
+                      ref={focusEditor}
                       value={draftValue}
                       onChange={(event) => {
                         const newValue = event.target.value;
@@ -324,7 +364,9 @@ export const TableGridRow = ({
                         }
                       }}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
+                        if (event.nativeEvent.isComposing) return;
+                        if (event.key === 'Enter' && (!isMultilineText || event.shiftKey)) {
+                          event.preventDefault();
                           const result = validateDraft(draftValue, cell.column.id, row.original.data);
                           if (result.valid) {
                             setValidationError(null);
@@ -335,14 +377,14 @@ export const TableGridRow = ({
                           onCancelEdit();
                         }
                       }}
-                      className={`h-full w-full rounded border px-2 py-1 text-sm ${
+                      className={`absolute inset-0 h-full w-full resize-none rounded border px-2 py-1 text-sm ${
                         validationError
                           ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
                           : 'border-[var(--border-primary)] bg-[var(--bg-primary)]'
                       }`}
                     />
                     {validationError && (
-                      <div className="absolute left-0 top-full z-50 mt-1 px-2 py-1 text-xs text-white bg-red-500 rounded shadow-lg whitespace-nowrap">
+                      <div role="alert" className="absolute bottom-0 left-0 right-0 z-50 px-2 py-1 text-xs text-white bg-red-500 rounded">
                         {validationError}
                       </div>
                     )}
@@ -412,8 +454,31 @@ export const TableGridRow = ({
                     </div>
                   );
                 })()
-              ) : groupByColumn ? (
-                // Grouped mode: render cell in a div (onDoubleClick is on td)
+              ) : column?.type === 'text' && (fixedRowHeight || !['nowrap', 'wrap-ellipsis'].includes(column.config?.cellFormat?.textWrap ?? '')) ? (
+                <ScrollableTextCell
+                  height={fixedRowHeight ?? undefined}
+                  minHeight={fixedRowHeight ?? minRowHeight}
+                  maxHeight={fixedRowHeight ?? maxRowHeight}
+                  align={column.config?.appearance?.align}
+                  onClick={(event) => onCellClick?.(cell.getValue(), cell.column.id, event)}
+                  onEdit={!readOnly && !isExternal && !isIdColumn ? () => onCellDoubleClick(row.original.id, cell.column.id, cell.getValue() ?? '') : undefined}
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </ScrollableTextCell>
+              ) : column?.type === 'image' && !rawMode ? (
+                // A gallery overflows like long text: same scroll region and hold-to-scroll control.
+                <ScrollableTextCell
+                  height={fixedRowHeight ?? undefined}
+                  minHeight={fixedRowHeight ?? minRowHeight}
+                  maxHeight={fixedRowHeight ?? maxRowHeight}
+                  align={column.config?.appearance?.align}
+                  label={column.displayName || column.name}
+                  reserveScrollControl={false}
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </ScrollableTextCell>
+              ) : cellOwnsControls ? (
+                // Table and JSON-grid cells own their controls; do not nest them inside a button.
                 <div
                   className={`h-full w-full px-4 py-2 overflow-hidden ${
                     column?.config?.appearance?.align === 'center' ? 'text-center' :
@@ -546,7 +611,7 @@ export const TableGridRow = ({
                         showTime
                         mode="datetime"
                         storageFormat="iso"
-                        displayFormat="dd.MM.yyyy HH:mm"
+                        displayFormat={col.config?.date?.displayFormat}
                         rawMode={rawMode}
                       />
                     ) : (
@@ -562,7 +627,7 @@ export const TableGridRow = ({
         {/* Actions column */}
         {hasActionsColumn && (
           <td
-            className="sticky right-0 z-20 backdrop-blur-xl bg-white/80 dark:bg-gray-900/60 px-2 py-2 text-center align-middle border-l border-[var(--border-primary)]"
+            className="sticky right-0 z-20 bg-[var(--bg-primary)] px-2 py-2 text-center align-middle border-l border-[var(--border-primary)]"
             style={{ boxShadow: 'inset 1px 0 0 0 rgba(255, 255, 255, 0.3), -2px 0 8px rgba(0,0,0,0.05)' }}
           >
             {!readOnly && (onEditRow || onDuplicateRow || onDeleteRow) && (

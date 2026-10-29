@@ -400,7 +400,7 @@ function escapeMarkdown(text) {
   if (!text) return '';
   // Escape characters that have special meaning in Telegram Markdown v1:
   // _ * ` [
-  return text.replace(/([_*`\[])/g, '\\$1');
+  return text.replace(/([_*`[])/g, '\\$1');
 }
 
 /**

@@ -1,0 +1,15 @@
+Host godcrm-browser-attest
+    HostName <DEV_IP>
+    Port 2222
+    User root
+    IdentityFile /etc/godcrm-staging-browser/attestor.key
+    IdentitiesOnly yes
+    BatchMode yes
+    StrictHostKeyChecking yes
+    UserKnownHostsFile /etc/godcrm-staging-browser/known_hosts
+    ConnectTimeout 1
+    ConnectionAttempts 1
+    ClearAllForwardings yes
+    ForwardAgent no
+    RequestTTY no
+    LogLevel ERROR

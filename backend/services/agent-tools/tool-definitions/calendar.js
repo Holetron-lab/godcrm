@@ -80,21 +80,22 @@ export const CALENDAR_TOOLS = [
     type: 'function',
     function: {
       name: 'global_search',
-      description: 'Search across tables, rows, projects, and conversations. Returns results grouped by type.',
+      description: 'Search across tables, rows, projects, and conversations by name. Returns results grouped by type; every table result includes its stored table_type marker (string or null). Two modes: (1) name search — query is required, types defaults to all; (2) marker search — pass table_type (exact, case-sensitive) to find tables by their stored marker regardless of name; then query is optional (combined with AND when given) and types must be omitted or ["tables"]. space_id narrows tables and projects to one space. A result list of exactly `limit` items may be truncated.',
       parameters: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Search query' },
+          query: { type: 'string', description: 'Name search text (substring, case-insensitive). Required unless table_type is given.' },
+          table_type: { type: 'string', description: 'Exact stored table marker, e.g. "ai_agents" (max 50 chars, not a pattern). Searches tables only; query becomes optional.' },
           types: {
             type: 'array',
             items: { type: 'string', enum: ['tables', 'rows', 'projects', 'conversations'] },
-            description: 'Entity types to search (default: all)'
+            description: 'Entity types to search (default: all). With table_type must be omitted or ["tables"].'
           },
-          space_id: { type: 'number', description: 'Limit search to a space' },
+          space_id: { type: 'number', description: 'Limit tables and projects to a space' },
           limit: { type: 'number', description: 'Max results per type (default: 20)' },
           include_archived: { type: 'boolean', description: 'Include rows with status=archived (default: false — archived rows are hidden)' }
         },
-        required: ['query']
+        required: []
       }
     }
   },
@@ -116,13 +117,13 @@ export const CALENDAR_TOOLS = [
     type: 'function',
     function: {
       name: 'send_telegram_message',
-      description: 'Send a message to a Telegram destination: "channel" (@godcrm RU), "channel_en" (@god_crm EN), "group" (general), a topic key (news, ai_news, notifications, schedule, fitness, nutrition, tasks, business, pets, creative, together, notes, trainer), or a calibrated Anti-Marketing Club topic via "club_<key>" (e.g. "club_bluesky") — sent plain-text into the club staging group.',
+      description: 'Send a message to a Telegram destination: "channel" (@godcrm RU), "channel_en" (@god_crm EN), "group" (general), a topic key (news, ai_news, notifications, schedule, fitness, nutrition, tasks, business, pets, creative, together, notes, trainer), a calibrated Anti-Marketing Club topic via "club_<key>" (e.g. "club_bluesky") — sent plain-text into the club staging group — or a private chat via "tg:<chat_id>" (the person must have pressed /start on @godcrmbot first).',
       parameters: {
         type: 'object',
         properties: {
           destination: {
             type: 'string',
-            description: 'Where to send: "channel" (→ @godcrm RU), "channel_en" (→ @god_crm EN), "group", a topic key like "news"/"notifications"/"ai_news"/"schedule", or "club_<key>" for a calibrated club topic (e.g. "club_bluesky").'
+            description: 'Where to send: "channel" (→ @godcrm RU), "channel_en" (→ @god_crm EN), "group", a topic key like "news"/"notifications"/"ai_news"/"schedule", "club_<key>" for a calibrated club topic (e.g. "club_bluesky"), or "tg:<numeric chat_id>" for a private chat.'
           },
           text: {
             type: 'string',

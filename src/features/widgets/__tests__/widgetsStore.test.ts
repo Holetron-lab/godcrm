@@ -10,10 +10,23 @@ import type { Widget } from '../types/widget.types';
 const createMockWidget = (overrides: Partial<Widget> = {}): Widget => ({
   id: 1,
   dashboard_id: 1,
-  type: 'kanban_board',
+  widget_type: 'preset',
+  preset_name: 'kanban_board',
+  icon: '📋',
+  created_by: null,
+  source_widget_id: null,
+  code: null,
+  code_version: 1,
+  description: null,
+  is_module: false,
+  module_id: null,
+  sidebar_order: null,
+  sidebar_icon: null,
+  access_level: null,
+  is_pinned: null,
   title: 'Test Widget',
-  settings: {},
-  layout: { x: 0, y: 0, w: 4, h: 4 },
+  config: {},
+  position: { x: 0, y: 0, w: 4, h: 4 },
   order_index: 0,
   is_visible: true,
   created_at: new Date().toISOString(),
@@ -165,9 +178,9 @@ describe('widgetsStore', () => {
       // Test that Labs widget creation includes proper table mapping
       const labsWidget = createMockWidget({ 
         id: 1,
-        type: 'labs',
+        preset_name: 'labs',
         title: 'Test Labs Widget',
-        settings: {
+        config: {
           labs_table_id: 123,
           labs_nodes_table_id: 124,
           labs_edges_table_id: 125,
@@ -178,10 +191,10 @@ describe('widgetsStore', () => {
       useWidgetsStore.getState().addWidget(labsWidget);
       
       // Verify Labs widget has required table mappings
-      expect(labsWidget.settings.labs_table_id).toBeDefined();
-      expect(labsWidget.settings.labs_nodes_table_id).toBeDefined();
-      expect(labsWidget.settings.labs_edges_table_id).toBeDefined();
-      expect(labsWidget.settings.labs_ai_templates_table_id).toBeDefined();
+      expect(labsWidget.config.labs_table_id).toBeDefined();
+      expect(labsWidget.config.labs_nodes_table_id).toBeDefined();
+      expect(labsWidget.config.labs_edges_table_id).toBeDefined();
+      expect(labsWidget.config.labs_ai_templates_table_id).toBeDefined();
     });
 
     it('should validate Labs widget table requirements (v4 Documents pattern)', async () => {

@@ -134,6 +134,7 @@ export function useNotionImport(params: UseNotionImportParams) {
 
       // Add notion_id column definition at the beginning
       const notionIdColDef: CSVColumnDefinition = {
+        colIndex: -1, // Synthetic column; preserve original source indices.
         csvColumn: 'notion_id',
         name: 'notion_id',
         displayName: 'Notion ID',
@@ -143,7 +144,7 @@ export function useNotionImport(params: UseNotionImportParams) {
 
       // Update column definitions - detect relations and find target tables BY URL
       // Shift column indices by 1 because we added notion_id at the beginning
-      const updatedColumnDefs = file.columnDefinitions.map((def, colIdx) => {
+      const updatedColumnDefs = file.columnDefinitions.map((def, colIdx): CSVColumnDefinition => {
         const columnValues = dataRows.map(row => row[colIdx] || '');
         const isRelation = isNotionRelationColumn(columnValues);
 
@@ -296,6 +297,7 @@ export function useNotionImport(params: UseNotionImportParams) {
     logger.debug('=== Step 1: Building name->notionId map from Notion URLs ===');
 
     csvFiles.forEach(file => {
+      if (file.source === 'excel') return; // Excel values never go through Notion transforms
       const dataRows = useFirstRowAsHeaders ? file.data.slice(1) : file.data;
       logger.debug(`  Scanning ${file.tableDisplayName}: ${dataRows.length} rows`);
 
@@ -338,7 +340,7 @@ export function useNotionImport(params: UseNotionImportParams) {
 
       // Get name column - first try selected, then auto-detect
       const selectedNameCol = notionNameColumnMap[file.id];
-      let nameColDef = selectedNameCol
+      const nameColDef = selectedNameCol
         ? file.columnDefinitions.find(c => c.csvColumn === selectedNameCol)
         : file.columnDefinitions.find(c =>
             c.name === 'name' ||
@@ -404,6 +406,7 @@ export function useNotionImport(params: UseNotionImportParams) {
     let totalUpdated = 0;
 
     const updatedFiles = csvFiles.map(file => {
+      if (file.source === 'excel') return file; // Excel values never go through Notion transforms
       // Debug: log available columns
       logger.debug(`File ${file.tableDisplayName} columns:`, file.columnDefinitions.map(c =>
         `${c.displayName} (name: ${c.name}, csv: ${c.csvColumn})`
@@ -560,7 +563,7 @@ export function useNotionImport(params: UseNotionImportParams) {
     const notionIdToTargetFile = new Map<string, string>();
 
     csvFiles.forEach(file => {
-      if (file.data.length < 2) return;
+      if (file.data.length < 2 || file.source === 'excel') return;
       const dataRows = useFirstRowAsHeaders ? file.data.slice(1) : file.data;
 
       file.columnDefinitions.forEach((def, colIdx) => {
@@ -588,7 +591,7 @@ export function useNotionImport(params: UseNotionImportParams) {
     const newLogLines: NotionImportLogEntry[] = [];
 
     const updatedFiles = csvFiles.map(file => {
-      if (file.data.length < 2) return file;
+      if (file.data.length < 2 || file.source === 'excel') return file;
 
       // Need to use original data to extract IDs - but we may have cleaned it
       // So we use csvFilesBeforeNotionImport if available
@@ -597,7 +600,7 @@ export function useNotionImport(params: UseNotionImportParams) {
         ? (useFirstRowAsHeaders ? originalFile.data.slice(1) : originalFile.data)
         : (useFirstRowAsHeaders ? file.data.slice(1) : file.data);
 
-      const updatedColumnDefs = file.columnDefinitions.map((def, colIdx) => {
+      const updatedColumnDefs = file.columnDefinitions.map((def, colIdx): CSVColumnDefinition => {
         // Skip columns that are already relations (manually set or from initial Notion Import)
         // But ALLOW columns that were detected previously (source: 'detect') to be re-scanned
         if (def.isNotionRelation || def.type === 'relation') {

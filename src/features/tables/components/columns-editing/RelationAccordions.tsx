@@ -1,6 +1,7 @@
 /**
  * RelationAccordions - Relation (data source) and BackLink accordion sections
  */
+import { useId } from 'react';
 import { ChevronRight, Database, Link2 } from 'lucide-react';
 import { Switch } from '@/shared/components/ui';
 import { useTableColumns } from '../../hooks/useTableColumns';
@@ -24,6 +25,8 @@ export const RelationAccordions = ({
   settingsSection,
   onSetSection
 }: RelationAccordionsProps) => {
+  const id = useId();
+
   // Relation config
   const relationConfig = (config.relation as Record<string, unknown>) || {};
   const relationEnabled = (relationConfig.enabled as boolean) || false;
@@ -53,35 +56,40 @@ export const RelationAccordions = ({
     <>
       {/* Relation accordion */}
       <div className="rounded-lg border border-[var(--border-secondary)]">
-        <div
-          onClick={() => onSetSection(settingsSection === 'relation' ? null : 'relation')}
-          className="w-full flex items-center gap-2 p-2 hover:bg-[var(--bg-tertiary)] rounded-t-lg cursor-pointer"
-        >
-          <ChevronRight className={`w-3 h-3 transition-transform ${settingsSection === 'relation' ? 'rotate-90' : ''}`} />
-          <div onClick={(e) => e.stopPropagation()}>
-            <Switch
-              checked={relationEnabled}
-              onCheckedChange={(v) => {
-                onUpdate('config.relation.enabled', v);
-                if (!v) {
-                  onUpdate('config.relation.tableId', '');
-                  onUpdate('config.relation.valueColumn', '');
-                  onUpdate('config.relation.labelColumn', '');
-                }
-              }}
-            />
-          </div>
-          <Database className="w-3 h-3 text-primary-400" />
-          <span className="text-xs font-medium text-[var(--text-secondary)] uppercase">Источник данных</span>
+        <div className="w-full flex items-center gap-2 p-2 rounded-t-lg">
+          <Switch
+            aria-label="Источник данных"
+            checked={relationEnabled}
+            onCheckedChange={(v) => {
+              onUpdate('config.relation.enabled', v);
+              if (!v) {
+                onUpdate('config.relation.tableId', '');
+                onUpdate('config.relation.valueColumn', '');
+                onUpdate('config.relation.labelColumn', '');
+              }
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => onSetSection(settingsSection === 'relation' ? null : 'relation')}
+            aria-expanded={settingsSection === 'relation'}
+            aria-controls={settingsSection === 'relation' ? `${id}-relation-panel` : undefined}
+            className="flex flex-1 items-center gap-2 text-left hover:bg-[var(--bg-tertiary)] rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
+          >
+            <ChevronRight className={`w-3 h-3 transition-transform ${settingsSection === 'relation' ? 'rotate-90' : ''}`} />
+            <Database className="w-3 h-3 text-primary-400" />
+            <span className="text-xs font-medium text-[var(--text-secondary)] uppercase">Источник данных</span>
+          </button>
         </div>
         {settingsSection === 'relation' && (
-          <div className="px-3 pb-3 space-y-2">
+          <div id={`${id}-relation-panel`} className="px-3 pb-3 space-y-2">
             {relationEnabled ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Связанная таблица</label>
+                    <label htmlFor={`${id}-relationTableId`} className="text-xs text-[var(--text-tertiary)] mb-1 block">Связанная таблица</label>
                     <select
+                      id={`${id}-relationTableId`}
                       value={relationTableId}
                       onChange={(e) => {
                         onUpdate('config.relation.tableId', e.target.value);
@@ -104,8 +112,9 @@ export const RelationAccordions = ({
                   </div>
                   {relationTableId && relationColumns.length > 0 && (
                     <div>
-                      <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Колонка отображения</label>
+                      <label htmlFor={`${id}-relationLabelColumn`} className="text-xs text-[var(--text-tertiary)] mb-1 block">Колонка отображения</label>
                       <select
+                        id={`${id}-relationLabelColumn`}
                         value={relationLabelColumn}
                         onChange={(e) => onUpdate('config.relation.labelColumn', e.target.value)}
                         className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -137,35 +146,40 @@ export const RelationAccordions = ({
 
       {/* BackLink accordion */}
       <div className="rounded-lg border border-[var(--border-secondary)]">
-        <div
-          onClick={() => onSetSection(settingsSection === 'backlink' ? null : 'backlink')}
-          className="w-full flex items-center gap-2 p-2 hover:bg-[var(--bg-tertiary)] rounded-t-lg cursor-pointer"
-        >
-          <ChevronRight className={`w-3 h-3 transition-transform ${settingsSection === 'backlink' ? 'rotate-90' : ''}`} />
-          <div onClick={(e) => e.stopPropagation()}>
-            <Switch
-              checked={backLinkEnabled}
-              onCheckedChange={(v) => {
-                onUpdate('config.backLink.enabled', v);
-                if (!v) {
-                  onUpdate('config.backLink.targetTableId', '');
-                  onUpdate('config.backLink.targetColumnId', '');
-                  onUpdate('config.backLink.displayColumn', '');
-                }
-              }}
-            />
-          </div>
-          <Link2 className="w-3 h-3 text-purple-400" />
-          <span className="text-xs font-medium text-[var(--text-secondary)] uppercase">Обратная связь</span>
+        <div className="w-full flex items-center gap-2 p-2 rounded-t-lg">
+          <Switch
+            aria-label="Обратная связь"
+            checked={backLinkEnabled}
+            onCheckedChange={(v) => {
+              onUpdate('config.backLink.enabled', v);
+              if (!v) {
+                onUpdate('config.backLink.targetTableId', '');
+                onUpdate('config.backLink.targetColumnId', '');
+                onUpdate('config.backLink.displayColumn', '');
+              }
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => onSetSection(settingsSection === 'backlink' ? null : 'backlink')}
+            aria-expanded={settingsSection === 'backlink'}
+            aria-controls={settingsSection === 'backlink' ? `${id}-backlink-panel` : undefined}
+            className="flex flex-1 items-center gap-2 text-left hover:bg-[var(--bg-tertiary)] rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
+          >
+            <ChevronRight className={`w-3 h-3 transition-transform ${settingsSection === 'backlink' ? 'rotate-90' : ''}`} />
+            <Link2 className="w-3 h-3 text-purple-400" />
+            <span className="text-xs font-medium text-[var(--text-secondary)] uppercase">Обратная связь</span>
+          </button>
         </div>
         {settingsSection === 'backlink' && (
-          <div className="px-3 pb-3 space-y-2">
+          <div id={`${id}-backlink-panel`} className="px-3 pb-3 space-y-2">
             {backLinkEnabled ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Целевая таблица</label>
+                    <label htmlFor={`${id}-backLinkTableId`} className="text-xs text-[var(--text-tertiary)] mb-1 block">Целевая таблица</label>
                     <select
+                      id={`${id}-backLinkTableId`}
                       value={backLinkTableId}
                       onChange={(e) => {
                         onUpdate('config.backLink.targetTableId', e.target.value);
@@ -189,8 +203,9 @@ export const RelationAccordions = ({
                   {backLinkTableId && backLinkColumns.length > 0 && (
                     <>
                       <div>
-                        <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Целевая колонка</label>
+                        <label htmlFor={`${id}-backLinkColumnId`} className="text-xs text-[var(--text-tertiary)] mb-1 block">Целевая колонка</label>
                         <select
+                          id={`${id}-backLinkColumnId`}
                           value={backLinkColumnId}
                           onChange={(e) => onUpdate('config.backLink.targetColumnId', e.target.value)}
                           className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"
@@ -204,8 +219,9 @@ export const RelationAccordions = ({
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs text-[var(--text-tertiary)] mb-1 block">Колонка отображения</label>
+                        <label htmlFor={`${id}-backLinkDisplayColumn`} className="text-xs text-[var(--text-tertiary)] mb-1 block">Колонка отображения</label>
                         <select
+                          id={`${id}-backLinkDisplayColumn`}
                           value={backLinkDisplayColumn}
                           onChange={(e) => onUpdate('config.backLink.displayColumn', e.target.value)}
                           className="w-full px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-primary)] text-sm text-[var(--text-primary)]"

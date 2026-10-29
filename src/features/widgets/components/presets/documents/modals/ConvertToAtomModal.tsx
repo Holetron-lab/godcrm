@@ -2,7 +2,7 @@
  * Convert to Atom Modal - Create a full atom from text element with translations
  */
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
   X,
   Atom,
@@ -15,6 +15,7 @@ import { useDocumentsContext } from '../DocumentsContext';
 
 export function ConvertToAtomModal() {
   const ctx = useDocumentsContext();
+  const fieldId = useId();
   const item = ctx.convertToAtomItem;
 
   // Get parent heading (h2 or h3) for default title
@@ -48,7 +49,7 @@ export function ConvertToAtomModal() {
 
   const parentHeading = getParentHeading();
 
-  const [atomKey, setAtomKey] = useState(() => item?.atom_ref || transliterate(parentHeading || 'atom') + '-' + (item?.id || ''));
+  const [atomKey, setAtomKey] = useState(() => item?.atom_key || transliterate(parentHeading || 'atom') + '-' + (item?.id || ''));
   const [atomTitle, setAtomTitle] = useState(() => item?.atom_title || parentHeading);
   const [content, setContent] = useState(() => item?.content || '');
   const [contentEn, setContentEn] = useState(() => item?.content_en || '');
@@ -124,7 +125,7 @@ ${content}`,
         content: content,
         content_en: contentEn || null,
         content_ru: contentRu || null,
-        type: 'content',
+        type: 'reference',
         document_ids: [ctx.selectedDocumentId],
       });
       logger.debug('Atom created result:', atomResult);
@@ -190,10 +191,10 @@ ${content}`,
 
           {/* base_id */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+            <label htmlFor={`${fieldId}-key`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
               base_id (ключ атома)
             </label>
-            <input
+            <input id={`${fieldId}-key`}
               type="text"
               value={atomKey}
               onChange={(e) => setAtomKey(transliterate(e.target.value))}
@@ -204,10 +205,10 @@ ${content}`,
 
           {/* Title */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+            <label htmlFor={`${fieldId}-title`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
               Название атома
             </label>
-            <input
+            <input id={`${fieldId}-title`}
               type="text"
               value={atomTitle}
               onChange={(e) => setAtomTitle(e.target.value)}
@@ -218,10 +219,10 @@ ${content}`,
 
           {/* Content */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+            <label htmlFor={`${fieldId}-content`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
               Содержимое (Markdown)
             </label>
-            <textarea
+            <textarea id={`${fieldId}-content`}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Основной контент атома..."
@@ -251,8 +252,8 @@ ${content}`,
             {/* Translations in single column */}
             <div className="space-y-3">
               <div>
-                <label className="block text-xs uppercase text-blue-400 mb-1">English</label>
-                <textarea
+                <label htmlFor={`${fieldId}-en`} className="block text-xs uppercase text-blue-400 mb-1">English</label>
+                <textarea id={`${fieldId}-en`}
                   value={contentEn}
                   onChange={(e) => setContentEn(e.target.value)}
                   placeholder="English translation..."
@@ -262,8 +263,8 @@ ${content}`,
               </div>
 
               <div>
-                <label className="block text-xs uppercase text-blue-400 mb-1">Русский</label>
-                <textarea
+                <label htmlFor={`${fieldId}-ru`} className="block text-xs uppercase text-blue-400 mb-1">Русский</label>
+                <textarea id={`${fieldId}-ru`}
                   value={contentRu}
                   onChange={(e) => setContentRu(e.target.value)}
                   placeholder="Русский перевод..."

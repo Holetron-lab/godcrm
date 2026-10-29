@@ -11,7 +11,9 @@
  *
  * Loop guards:
  *   - Self-trigger: skip if resolved agent.id === sourceAgentId.
- *   - Dedup window (30s): same (conversation, slug, sourceKey) won't fire twice.
+ *   - Dedup window (30s): same (conversation, slug, sha1(token + 200 chars))
+ *     won't fire twice — keyed on content, not message id, because the
+ *     agent-job path persists one text as two messages.
  *   - Per-conversation delegation chain depth still enforced inside
  *     chatAgentDelegation._handleDelegation for final-text dispatch.
  *
@@ -20,6 +22,7 @@
  * -> AgentLoopService -> loop.js).
  */
 
+import { createHash } from 'crypto';
 import { dbGet, isPostgres } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
 import { parseInvocationMentions, parseInvocationCommands } from './mention-parsers.js';
@@ -67,27 +70,54 @@ function _isDuplicate(conversationId, slug, sourceKey) {
   return false;
 }
 
-function _resolveCommandContent(content, agent, commandIndex) {
+// Dedup on what was said, not on which message row carried it: the agent-job
+// path saves one agent text twice (streamed block, then final result) under
+// two message ids, and a message-id key let the same handoff fire two jobs
+// (Bugs 1552/228708). Key = token + the 200 chars that follow it, so the
+// same slug can still be handed a different task within the window.
+//
+// The two copies are not byte-identical: the final text has every
+// `[[row:T/R]]` chip token stripped (agent-loop/messages.js step 4) while the
+// streamed block still carries them, and the live 3660 pair had a chip right
+// after the token. Hash the text with chips and whitespace normalised away.
+function _contentKey(content, tokenRe) {
+  const norm = content.replace(/\[\[row:[^\]]*\]\]/g, '').replace(/\s+/g, ' ').trim();
+  const at = Math.max(0, norm.search(tokenRe));
+  return createHash('sha1').update(norm.slice(at, at + 200)).digest('hex');
+}
+
+/**
+ * Message text for a <</slug>> or <</slug/N>> run (Bug 1552/228714, ADR-203 D4).
+ *
+ * The agent's main_instruction (or the Nth quick command from a JSON array)
+ * is a PREFIX; the user's message — the actual task after the token — is
+ * appended, never dropped. Before this the instruction replaced the message,
+ * so `<</sysadmin>> проверь диск на .72` reached the agent as its own
+ * system prompt and the task text was lost. Shared by the HTTP path
+ * (messageController) and every dispatcher source.
+ */
+export function resolveCommandContent(content, agent, commandIndex) {
   const agentConfig = agent._agentConfig || {};
   const mainInstruction = agentConfig.main_instruction || agentConfig.main_instructions || null;
   if (!mainInstruction) return content;
 
-  if (commandIndex == null) {
-    return typeof mainInstruction === 'string' ? mainInstruction : JSON.stringify(mainInstruction);
-  }
-
-  try {
-    const commands = typeof mainInstruction === 'string' ? JSON.parse(mainInstruction) : mainInstruction;
-    if (Array.isArray(commands) && commands[commandIndex] != null) {
-      const picked = commands[commandIndex];
-      return typeof picked === 'string'
-        ? picked
-        : (picked.content || picked.text || picked.instruction || JSON.stringify(picked));
+  const asText = (v) => (typeof v === 'string' ? v : JSON.stringify(v));
+  let instruction = asText(mainInstruction);
+  if (commandIndex != null) {
+    try {
+      const commands = typeof mainInstruction === 'string' ? JSON.parse(mainInstruction) : mainInstruction;
+      if (Array.isArray(commands) && commands[commandIndex] != null) {
+        const picked = commands[commandIndex];
+        instruction = typeof picked === 'string'
+          ? picked
+          : (picked.content || picked.text || picked.instruction || JSON.stringify(picked));
+      }
+    } catch {
+      // not a JSON array — the whole instruction is the prefix
     }
-    return typeof mainInstruction === 'string' ? mainInstruction : JSON.stringify(mainInstruction);
-  } catch {
-    return typeof mainInstruction === 'string' ? mainInstruction : String(mainInstruction);
   }
+  const task = typeof content === 'string' ? content.trim() : '';
+  return task ? `${instruction}\n\n${task}` : instruction;
 }
 
 /**
@@ -102,7 +132,7 @@ function _resolveCommandContent(content, agent, commandIndex) {
  * @param {number|null} [args.spaceId]
  * @param {object} [args.agentOptions] — forwarded to executeAgentResponse
  * @param {string} [args.sourceLabel] — 'http' | 'mcp_tool' | 'thinking' | 'final_text'
- * @param {number|null} [args.sourceMessageId] — for dedup keying & logs
+ * @param {number|null} [args.sourceMessageId] — for logs only (dedup is content-keyed)
  * @param {number|null} [args.sourceAgentId] — originating agent id (skip self)
  * @returns {Promise<{triggered:number, skipped:number}>}
  */
@@ -140,7 +170,6 @@ export async function dispatchInvocationsFromContent({
     _spaceId = conv?.space_id || null;
   }
 
-  const sourceKey = sourceMessageId != null ? `msg:${sourceMessageId}` : `${sourceLabel}`;
   const executeAgentResponse = await _getExecutor();
   const { resolveMentionedUser, resolveAgentUser, findAiAgentByCommand, autoJoinAgentToConversation } = await _getHelpers();
 
@@ -154,8 +183,8 @@ export async function dispatchInvocationsFromContent({
 
   for (const cmd of agentCommands) {
     const { slug, commandIndex } = cmd;
-    if (_isDuplicate(conversationId, slug, sourceKey)) {
-      apiLogger.debug({ conversationId, slug, sourceKey }, 'ADR-117 dispatcher: dedup skip /command');
+    if (_isDuplicate(conversationId, slug, _contentKey(content, new RegExp(`<<\\/${slug}(?:\\/\\d+)?>>`, 'i')))) {
+      apiLogger.debug({ conversationId, slug, sourceLabel, sourceMessageId }, 'ADR-117 dispatcher: dedup skip /command');
       skipped++; continue;
     }
     let agent = await resolveAgentUser(slug, _spaceId);
@@ -169,7 +198,7 @@ export async function dispatchInvocationsFromContent({
       skipped++; continue;
     }
     if (agent.id) await autoJoinAgentToConversation(Number(conversationId), agent.id, { source: 'command' });
-    const commandContent = _resolveCommandContent(content, agent, commandIndex);
+    const commandContent = resolveCommandContent(content, agent, commandIndex);
 
     apiLogger.info({ conversationId, slug, agentName: agent.name, sourceLabel }, 'ADR-117 dispatcher: triggering /command');
     triggered++;
@@ -183,8 +212,8 @@ export async function dispatchInvocationsFromContent({
   }
 
   for (const slug of mentionsFiltered) {
-    if (_isDuplicate(conversationId, slug, sourceKey)) {
-      apiLogger.debug({ conversationId, slug, sourceKey }, 'ADR-117 dispatcher: dedup skip @mention');
+    if (_isDuplicate(conversationId, slug, _contentKey(content, new RegExp(`<<@${slug}>>`, 'i')))) {
+      apiLogger.debug({ conversationId, slug, sourceLabel, sourceMessageId }, 'ADR-117 dispatcher: dedup skip @mention');
       skipped++; continue;
     }
     let agent = null;

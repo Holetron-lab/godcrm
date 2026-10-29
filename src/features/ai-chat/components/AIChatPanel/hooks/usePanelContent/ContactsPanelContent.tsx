@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /** ContactsPanelContent — ADR-119 extracted from usePanelContent.tsx
  *
  * Header layout (unified with TasksPanelContent):
@@ -15,6 +16,7 @@ import { useAuthStore } from '@/features/auth/store/authStore';
 const CONTACTS_PAGE = 30;
 
 export function ContactsPanelContent(d: PanelContentDeps) {
+  const { t } = useLanguage();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const activeFilterCount =
     (d.userTypeFilter !== 'all' ? 1 : 0) + (!d.showAllContacts ? 1 : 0);
@@ -72,7 +74,7 @@ export function ContactsPanelContent(d: PanelContentDeps) {
               type="text"
               value={d.contactsSearch}
               onChange={(e) => d.setContactsSearch(e.target.value)}
-              placeholder="Поиск контактов..."
+              placeholder={t('aiChat.contacts.searchPlaceholder')}
               className="w-full pl-7 pr-7 py-1 text-xs rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
             />
             {d.contactsSearch && (
@@ -87,7 +89,7 @@ export function ContactsPanelContent(d: PanelContentDeps) {
           <button
             type="button"
             onClick={() => d.setShowFavorites(prev => !prev)}
-            title="Избранные"
+            title={t('aiChat.contacts.favoritesTitle')}
             className={cn(
               'p-1 rounded transition-colors',
               d.showFavorites
@@ -100,7 +102,7 @@ export function ContactsPanelContent(d: PanelContentDeps) {
           <button
             type="button"
             onClick={() => setFiltersOpen(o => !o)}
-            title={filtersOpen ? 'Скрыть фильтры' : 'Показать фильтры'}
+            title={filtersOpen ? t('aiChat.ui.hideFilters') : t('aiChat.ui.showFilters')}
             className={cn(
               'relative p-1 rounded transition-colors',
               activeFilterCount > 0 || filtersOpen
@@ -126,8 +128,8 @@ export function ContactsPanelContent(d: PanelContentDeps) {
             onChange={(e) => d.setUserTypeFilter(e.target.value as 'all' | 'humans' | 'agents')}
             className="px-2 py-1 text-xs rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
           >
-            <option value="all">Все</option>
-            <option value="humans">Люди</option>
+            <option value="all">{t('aiChat.contacts.scopeAll')}</option>
+            <option value="humans">{t('aiChat.contacts.filterHumans')}</option>
             <option value="agents">AI</option>
           </select>
           <button
@@ -138,9 +140,9 @@ export function ContactsPanelContent(d: PanelContentDeps) {
                 ? 'bg-[var(--color-primary-500)]/15 text-[var(--color-primary-500)] border-[var(--color-primary-500)]/30'
                 : 'bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] border-[var(--border-primary)] hover:text-[var(--text-primary)]'
             )}
-            title={d.showAllContacts ? 'Показать только участников спейса' : 'Показать всех пользователей'}
+            title={d.showAllContacts ? t('aiChat.contacts.showSpaceOnly') : t('aiChat.contacts.showAll')}
           >
-            {d.showAllContacts ? 'Все' : 'Спейс'}
+            {d.showAllContacts ? t('aiChat.contacts.scopeAll') : t('aiChat.contacts.scopeSpace')}
           </button>
         </div>
       )}
@@ -148,7 +150,7 @@ export function ContactsPanelContent(d: PanelContentDeps) {
         {d.isLoadingUsers ? (
           <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-[var(--text-tertiary)]" /></div>
         ) : d.filteredUsers.length === 0 ? (
-          <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{d.contactsSearch ? 'Не найдено' : 'Нет контактов'}</div>
+          <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">{d.contactsSearch ? t('aiChat.contacts.notFound') : t('aiChat.contacts.empty')}</div>
         ) : (
           <>
           {visibleUsers.map(user => {
@@ -193,8 +195,8 @@ export function ContactsPanelContent(d: PanelContentDeps) {
                   } else {
                     // Self-only conversation
                     const me = useAuthStore.getState().user;
-                    d.setChatPartner({ type: 'user', id: Number(me?.id || 0), name: chat.title || me?.name || 'Я' });
-                    d.setChatParticipants([{ id: Number(me?.id || 0), name: me?.name || 'Я', type: 'user' }]);
+                    d.setChatPartner({ type: 'user', id: Number(me?.id || 0), name: chat.title || me?.name || t('aiChat.ui.me') });
+                    d.setChatParticipants([{ id: Number(me?.id || 0), name: me?.name || t('aiChat.ui.me'), type: 'user' }]);
                     d.setUserConversationId(chat.id);
                   }
 
@@ -238,18 +240,18 @@ export function ContactsPanelContent(d: PanelContentDeps) {
       <div className="px-3 py-1.5 border-t border-[var(--border-secondary)] bg-[var(--bg-tertiary)] flex items-center justify-between gap-2 text-[10px] text-[var(--text-tertiary)] flex-shrink-0">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           <Users className="w-3 h-3 flex-shrink-0" />
-          <span className="truncate">Контакты</span>
+          <span className="truncate">{t('aiChat.ui.contacts')}</span>
           <span className="flex-shrink-0">·</span>
           <span className="flex-shrink-0">
             {hasMore ? `${visibleUsers.length} / ${d.filteredUsers.length}` : d.filteredUsers.length}
-            {typeof d.usersTotalCount === 'number' && d.usersTotalCount !== d.filteredUsers.length ? ` (из ${d.usersTotalCount})` : ''}
+            {typeof d.usersTotalCount === 'number' && d.usersTotalCount !== d.filteredUsers.length ? t('aiChat.ui.outOfTotal', { count: d.usersTotalCount }) : ''}
           </span>
         </div>
         {d.togglePanelMode && (
           <button
             type="button"
             onClick={d.togglePanelMode}
-            title={d.panelMode === 'fullscreen' ? 'Свернуть' : 'Развернуть'}
+            title={d.panelMode === 'fullscreen' ? t('aiChat.ui.collapse') : t('aiChat.ui.expand')}
             className="p-1 rounded hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] flex-shrink-0"
           >
             {d.panelMode === 'fullscreen' ? <ChevronDown className="w-3 h-3" /> :

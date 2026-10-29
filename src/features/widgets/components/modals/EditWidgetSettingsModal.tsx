@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useId, useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { logger } from '@/shared/utils/logger';
 import { X, Save, Plus, Trash2 } from 'lucide-react';
@@ -36,6 +36,7 @@ export function EditWidgetSettingsModal({
   widget,
   onSaved
 }: EditWidgetSettingsModalProps) {
+  const fieldId = useId();
   const storeTables = useTablesStore(state => state.tables);
   const spaces = useSpaces();
   const projects = useProjectStore(state => state.projects);
@@ -359,13 +360,14 @@ export function EditWidgetSettingsModal({
     setColumns,
     setColorColumn,
     setStatusColumn,
+    setAssigneeColumn,
     setTimelineDependsOnColumn,
     setTimelineGroupByColumn,
   });
 
   const handleCreateCalendarTable = createHandleCreateCalendarTable({
     timelineCalendarProjectId,
-    systemDataProject,
+    systemDataProject: systemDataProject ?? null,
     setCreatingCalendarTable,
     setTimelineCalendarTableId,
   });
@@ -520,10 +522,11 @@ export function EditWidgetSettingsModal({
             
             {/* Title */}
             <div className="flex-1">
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-0`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Название виджета
               </label>
               <input
+                id={`${fieldId}-0`}
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -535,10 +538,11 @@ export function EditWidgetSettingsModal({
           
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-1`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Описание
             </label>
             <textarea
+              id={`${fieldId}-1`}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] resize-none"
@@ -550,9 +554,9 @@ export function EditWidgetSettingsModal({
           {/* Table Info - read only with full path (hidden for ai_agents) */}
           {selectedTableId && linkedTable && widget.preset_name !== 'ai_agents' && (
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              <span className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Таблица данных
-              </label>
+              </span>
               <div className="w-full px-3 py-2.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-tertiary)]">
                 {/* Breadcrumb path */}
                 <div className="flex items-center gap-2 text-sm flex-wrap">
@@ -697,7 +701,7 @@ export function EditWidgetSettingsModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={updateWidgetMutation.isPending}
+            disabled={updateWidgetMutation.isPending || creatingColumn}
             className="px-4 py-2 bg-[var(--color-primary-500)] text-white rounded-lg hover:bg-[var(--color-primary-600)] disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
           >
             {updateWidgetMutation.isPending ? (

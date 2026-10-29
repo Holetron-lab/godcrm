@@ -1,3 +1,4 @@
+import type { AuthUser } from '@/features/auth/types/auth.types';
 import { useEffect, useState } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -75,7 +76,7 @@ export default function GoogleCallbackPage() {
           const response = await apiClient.post<{
             success: boolean;
             data?: {
-              user: { id: number; email: string; name: string; role: string };
+              user: Omit<AuthUser, 'id'> & { id: number };
               accessToken: string;
             };
             error?: { message: string };
@@ -85,7 +86,7 @@ export default function GoogleCallbackPage() {
             const { user, accessToken } = response.data;
 
             // Store auth data
-            setAuth(accessToken, user);
+            setAuth(accessToken, { ...user, id: String(user.id) });
 
             setStatus('success');
 

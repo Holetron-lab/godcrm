@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { logger } from '@/shared/utils/logger';
 import { Modal } from '@/shared/components/ui';
@@ -15,10 +15,12 @@ export const AutomationModal = ({
   onOpenChange,
   tableId,
 }: AutomationModalProps) => {
+  const fieldId = useId();
   // Automation form state
   const [automationName, setAutomationName] = useState('');
   const [automationDescription, setAutomationDescription] = useState('');
-  const [automationTrigger, setAutomationTrigger] = useState('column_change');
+  const [automationTrigger, setAutomationTrigger] = useState('row_update');
+  const [watchField, setWatchField] = useState('');
   const [automationAction, setAutomationAction] = useState('webhook');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [webhookMethod, setWebhookMethod] = useState('POST');
@@ -51,7 +53,8 @@ export const AutomationModal = ({
   const resetForm = () => {
     setAutomationName('');
     setAutomationDescription('');
-    setAutomationTrigger('column_change');
+    setAutomationTrigger('row_update');
+    setWatchField('');
     setAutomationAction('webhook');
     setWebhookUrl('');
     setWebhookMethod('POST');
@@ -75,6 +78,9 @@ export const AutomationModal = ({
         triggerConfig.cron = scheduleCron;
         triggerConfig.interval = scheduleInterval;
         triggerConfig.time = scheduleTime;
+      } else if (automationTrigger === 'row_update' && watchField.trim()) {
+        // Engine gate: fires only when this column key changes (AutomationTriggerService).
+        triggerConfig.watch_field = watchField.trim();
       }
 
       // Build action config
@@ -123,8 +129,8 @@ export const AutomationModal = ({
     >
       <div className="space-y-4">
         <div>
-          <label className="block text-sm text-[var(--text-secondary)] mb-1">Название</label>
-          <input
+          <label htmlFor={`${fieldId}-field-1`} className="block text-sm text-[var(--text-secondary)] mb-1">Название</label>
+          <input id={`${fieldId}-field-1`}
             type="text"
             value={automationName}
             onChange={(e) => setAutomationName(e.target.value)}
@@ -134,8 +140,8 @@ export const AutomationModal = ({
         </div>
 
         <div>
-          <label className="block text-sm text-[var(--text-secondary)] mb-1">Описание (опционально)</label>
-          <textarea
+          <label htmlFor={`${fieldId}-field-2`} className="block text-sm text-[var(--text-secondary)] mb-1">Описание (опционально)</label>
+          <textarea id={`${fieldId}-field-2`}
             value={automationDescription}
             onChange={(e) => setAutomationDescription(e.target.value)}
             className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-primary-500/50 resize-none h-20"
@@ -144,13 +150,13 @@ export const AutomationModal = ({
         </div>
 
         <div>
-          <label className="block text-sm text-[var(--text-secondary)] mb-1">Триггер (когда запускать)</label>
-          <select
+          <label htmlFor={`${fieldId}-field-3`} className="block text-sm text-[var(--text-secondary)] mb-1">Триггер (когда запускать)</label>
+          <select id={`${fieldId}-field-3`}
             value={automationTrigger}
             onChange={(e) => setAutomationTrigger(e.target.value)}
             className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-primary-500/50"
           >
-            <option value="column_change" className="bg-[var(--bg-secondary)]">Изменение поля</option>
+            <option value="row_update" className="bg-[var(--bg-secondary)]">Изменение записи</option>
             <option value="row_create" className="bg-[var(--bg-secondary)]">Создание записи</option>
             <option value="row_delete" className="bg-[var(--bg-secondary)]">Удаление записи</option>
             <option value="button_click" className="bg-[var(--bg-secondary)]">Нажатие кнопки</option>
@@ -159,8 +165,8 @@ export const AutomationModal = ({
         </div>
 
         <div>
-          <label className="block text-sm text-[var(--text-secondary)] mb-1">Действие (что делать)</label>
-          <select
+          <label htmlFor={`${fieldId}-field-4`} className="block text-sm text-[var(--text-secondary)] mb-1">Действие (что делать)</label>
+          <select id={`${fieldId}-field-4`}
             value={automationAction}
             onChange={(e) => setAutomationAction(e.target.value)}
             className="w-full bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-primary-500/50"
@@ -175,12 +181,28 @@ export const AutomationModal = ({
           </select>
         </div>
 
+        {automationTrigger === 'row_update' && (
+          <div className="space-y-1 p-3 bg-[var(--bg-tertiary)] rounded-lg">
+            <label htmlFor={`${fieldId}-watch`} className="block text-sm text-[var(--text-secondary)]">Отслеживаемое поле (ключ колонки)</label>
+            <input id={`${fieldId}-watch`}
+              type="text"
+              value={watchField}
+              onChange={(e) => setWatchField(e.target.value)}
+              placeholder="например: status"
+              className="w-full bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg px-3 py-2 text-[var(--text-primary)] font-mono focus:outline-none focus:border-primary-500/50"
+            />
+            <p className="text-xs text-[var(--text-tertiary)]">
+              Срабатывает только когда меняется это поле. Пусто — при любом изменении записи.
+            </p>
+          </div>
+        )}
+
         {/* Schedule trigger settings */}
         {automationTrigger === 'schedule' && (
           <div className="space-y-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">Интервал</label>
-              <select
+              <label htmlFor={`${fieldId}-field-5`} className="block text-sm text-[var(--text-secondary)] mb-1">Интервал</label>
+              <select id={`${fieldId}-field-5`}
                 value={scheduleInterval}
                 onChange={(e) => {
                   setScheduleInterval(e.target.value);
@@ -205,11 +227,11 @@ export const AutomationModal = ({
             </div>
             {scheduleInterval !== 'hourly' && scheduleInterval !== 'custom' && (
               <div>
-                <label className="flex justify-between text-sm text-[var(--text-secondary)] mb-1">
+                <label htmlFor={`${fieldId}-field-6`} className="flex justify-between text-sm text-[var(--text-secondary)] mb-1">
                   <span>Время запуска</span>
                   <span className="text-[var(--text-tertiary)] font-mono">Сейчас на сервере: {serverTime}</span>
                 </label>
-                <input
+                <input id={`${fieldId}-field-6`}
                   type="time"
                   value={scheduleTime}
                   onChange={(e) => {
@@ -228,8 +250,8 @@ export const AutomationModal = ({
             )}
             {scheduleInterval === 'custom' && (
               <div>
-                <label className="block text-sm text-[var(--text-secondary)] mb-1">Cron выражение</label>
-                <input
+                <label htmlFor={`${fieldId}-field-7`} className="block text-sm text-[var(--text-secondary)] mb-1">Cron выражение</label>
+                <input id={`${fieldId}-field-7`}
                   type="text"
                   value={scheduleCron}
                   onChange={(e) => setScheduleCron(e.target.value)}
@@ -251,8 +273,8 @@ export const AutomationModal = ({
         {automationAction === 'api_sync' && (
           <div className="space-y-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">API URL</label>
-              <input
+              <label htmlFor={`${fieldId}-field-8`} className="block text-sm text-[var(--text-secondary)] mb-1">API URL</label>
+              <input id={`${fieldId}-field-8`}
                 type="url"
                 value={apiSyncUrl}
                 onChange={(e) => setApiSyncUrl(e.target.value)}
@@ -261,8 +283,8 @@ export const AutomationModal = ({
               />
             </div>
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">Заголовки (JSON)</label>
-              <textarea
+              <label htmlFor={`${fieldId}-field-9`} className="block text-sm text-[var(--text-secondary)] mb-1">Заголовки (JSON)</label>
+              <textarea id={`${fieldId}-field-9`}
                 value={apiSyncHeaders}
                 onChange={(e) => setApiSyncHeaders(e.target.value)}
                 className="w-full bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg px-3 py-2 text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-primary-500/50 resize-none h-16"
@@ -273,8 +295,8 @@ export const AutomationModal = ({
               </p>
             </div>
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">Путь к данным</label>
-              <input
+              <label htmlFor={`${fieldId}-field-10`} className="block text-sm text-[var(--text-secondary)] mb-1">Путь к данным</label>
+              <input id={`${fieldId}-field-10`}
                 type="text"
                 value={apiSyncDataPath}
                 onChange={(e) => setApiSyncDataPath(e.target.value)}
@@ -286,8 +308,8 @@ export const AutomationModal = ({
               </p>
             </div>
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">Маппинг полей (JSON)</label>
-              <textarea
+              <label htmlFor={`${fieldId}-field-11`} className="block text-sm text-[var(--text-secondary)] mb-1">Маппинг полей (JSON)</label>
+              <textarea id={`${fieldId}-field-11`}
                 value={apiSyncMapping}
                 onChange={(e) => setApiSyncMapping(e.target.value)}
                 className="w-full bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg px-3 py-2 text-[var(--text-primary)] font-mono text-sm focus:outline-none focus:border-primary-500/50 resize-none h-20"
@@ -303,8 +325,8 @@ export const AutomationModal = ({
         {(automationAction === 'webhook' || automationAction === 'n8n') && (
           <div className="space-y-3 p-3 bg-[var(--bg-tertiary)] rounded-lg">
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">Webhook URL</label>
-              <input
+              <label htmlFor={`${fieldId}-field-12`} className="block text-sm text-[var(--text-secondary)] mb-1">Webhook URL</label>
+              <input id={`${fieldId}-field-12`}
                 type="url"
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
@@ -313,8 +335,8 @@ export const AutomationModal = ({
               />
             </div>
             <div>
-              <label className="block text-sm text-[var(--text-secondary)] mb-1">HTTP метод</label>
-              <select
+              <label htmlFor={`${fieldId}-field-13`} className="block text-sm text-[var(--text-secondary)] mb-1">HTTP метод</label>
+              <select id={`${fieldId}-field-13`}
                 value={webhookMethod}
                 onChange={(e) => setWebhookMethod(e.target.value)}
                 className="w-full bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-lg px-3 py-2 text-[var(--text-primary)] focus:outline-none focus:border-primary-500/50"

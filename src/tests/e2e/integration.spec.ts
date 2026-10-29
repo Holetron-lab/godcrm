@@ -95,7 +95,7 @@ test.describe('Full Integration E2E Tests', () => {
       <div class="leads-summary">
         <h2>Sales Pipeline Summary</h2>
         <p>Total Leads: {{leads_count}}</p>
-        <p>Total Value: ${{total_value}}</p>
+        <p>Total Value: \${{total_value}}</p>
         <p>Project: {{project.name}}</p>
       </div>
     `;
@@ -230,7 +230,10 @@ test.describe('Full Integration E2E Tests', () => {
     const endTime = Date.now();
     const duration = endTime - startTime;
 
-    console.log(`Created 100 rows in ${duration}ms`);
+    await test.info().attach('row-creation-duration', {
+      body: `Created 100 rows in ${duration}ms`,
+      contentType: 'text/plain',
+    });
 
     // Navigate to table and verify rendering
     await page.goto(`/tables/${tableId}`);
@@ -240,7 +243,10 @@ test.describe('Full Integration E2E Tests', () => {
     const renderEndTime = Date.now();
     const renderDuration = renderEndTime - renderStartTime;
 
-    console.log(`Rendered 100 rows in ${renderDuration}ms`);
+    await test.info().attach('row-render-duration', {
+      body: `Rendered 100 rows in ${renderDuration}ms`,
+      contentType: 'text/plain',
+    });
 
     // Verify count
     const rowCount = await page.locator('[data-testid="table-row"]').count();

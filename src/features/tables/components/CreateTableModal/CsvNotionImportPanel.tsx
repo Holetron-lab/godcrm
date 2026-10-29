@@ -71,7 +71,7 @@ export const CsvNotionImportPanel = ({
             style={{ colorScheme: 'dark' }}
           >
             <option value="comma">a, b</option>
-            <option value="json">["a","b"]</option>
+            <option value="json">[&quot;a&quot;,&quot;b&quot;]</option>
             <option value="semicolon">a; b</option>
           </select>
           <label
@@ -113,15 +113,17 @@ export const CsvNotionImportPanel = ({
 
       {notionImportLog.length > 0 && (
         <div className="px-3 pb-2 border-t border-purple-500/30">
-          <div
-            className="pt-2 flex items-center justify-between cursor-pointer"
+          <button
+            type="button"
+            aria-expanded={notionImportLogExpanded}
+            className="w-full text-left pt-2 flex items-center justify-between cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
             onClick={() => setNotionImportLogExpanded(!notionImportLogExpanded)}
           >
             <span className="text-xs text-purple-300/70">
               {t('tables.create.log')} ({notionImportLog.length})
             </span>
             <ChevronDown className={`w-3 h-3 text-purple-300 transition-transform ${notionImportLogExpanded ? 'rotate-180' : ''}`} />
-          </div>
+          </button>
           {notionImportLogExpanded && (
             <div className="mt-2 max-h-[100px] overflow-y-auto text-xs space-y-0.5 font-mono">
               {notionImportLog.map((entry, i) => (

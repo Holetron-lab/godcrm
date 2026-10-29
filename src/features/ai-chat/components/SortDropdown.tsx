@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * SortDropdown - TASK-043
  * 
@@ -26,10 +27,10 @@ interface SortConfig {
 }
 
 const SORT_OPTIONS: SortConfig[] = [
-  { value: 'date', label: 'По дате', icon: <Calendar className="w-3.5 h-3.5" /> },
-  { value: 'space', label: 'По спейсу', icon: <Folder className="w-3.5 h-3.5" /> },
-  { value: 'alphabet', label: 'По алфавиту', icon: <SortAsc className="w-3.5 h-3.5" /> },
-  { value: 'participants', label: 'По участникам', icon: <Users className="w-3.5 h-3.5" /> },
+  { value: 'date', label: "aiChat.ui.byDate", icon: <Calendar className="w-3.5 h-3.5" /> },
+  { value: 'space', label: "aiChat.ui.bySpace", icon: <Folder className="w-3.5 h-3.5" /> },
+  { value: 'alphabet', label: "aiChat.ui.alphabetically", icon: <SortAsc className="w-3.5 h-3.5" /> },
+  { value: 'participants', label: "aiChat.ui.byParticipants", icon: <Users className="w-3.5 h-3.5" /> },
 ];
 
 interface SortDropdownProps {
@@ -45,6 +46,7 @@ export function SortDropdown({
   options,
   className,
 }: SortDropdownProps) {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -82,10 +84,10 @@ export function SortDropdown({
             ? "bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]"
             : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
         )}
-        title="Сортировка"
+        title={t('kanban.sort')}
       >
         {currentOption.icon}
-        <span className="hidden sm:inline">{currentOption.label}</span>
+        <span className="hidden sm:inline">{t(currentOption.label)}</span>
         <ChevronDown className={cn(
           "w-3 h-3 transition-transform",
           isOpen && "rotate-180"
@@ -110,7 +112,7 @@ export function SortDropdown({
               )}
             >
               {option.icon}
-              <span className="flex-1">{option.label}</span>
+              <span className="flex-1">{t(option.label)}</span>
               {value === option.value && <Check className="w-3.5 h-3.5" />}
             </button>
           ))}

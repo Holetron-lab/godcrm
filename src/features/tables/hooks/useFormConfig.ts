@@ -7,6 +7,21 @@ const FORM_CONFIGS_KEY = 'form-configs';
 // Form type values matching backend
 type FormTypeValue = 'add_row' | 'edit_row' | 'custom' | 'edit' | 'add';
 
+const BUILDER_FORM_TYPES = ['add_row', 'edit_row', 'custom'] as const;
+type BuilderFormType = (typeof BUILDER_FORM_TYPES)[number];
+
+/**
+ * Form types the builder should show as checked — what the server actually
+ * stores for the table. Undefined when nothing is stored (builder falls back
+ * to the modal's own type).
+ */
+export function storedFormTypes(data?: FormConfigResponse | null): BuilderFormType[] | undefined {
+  const types = (data?.formTypes || []).filter(
+    (t): t is BuilderFormType => (BUILDER_FORM_TYPES as readonly string[]).includes(t)
+  );
+  return types.length > 0 ? types : undefined;
+}
+
 /**
  * In-flight request deduplication map.
  * Prevents duplicate API calls when multiple components mount simultaneously

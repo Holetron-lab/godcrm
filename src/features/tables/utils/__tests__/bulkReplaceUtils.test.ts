@@ -10,6 +10,13 @@ import {
 import type { BulkReplaceConfig } from '../../types/selection.types';
 import type { ColumnModel, RowModel } from '../../types/table.types';
 
+const rowDefaults = {
+  tableId: 'table-1',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  createdBy: 'test-user',
+};
+
 describe('bulkReplaceUtils', () => {
   describe('escapeRegex', () => {
     test('escapes special regex characters', () => {
@@ -189,12 +196,12 @@ describe('bulkReplaceUtils', () => {
   });
   
   describe('sortRowsWithSelection', () => {
-    const rows = [
-      { id: '1', data: {} },
-      { id: '2', data: {} },
-      { id: '3', data: {} },
-      { id: '4', data: {} },
-    ] as RowModel[];
+    const rows: RowModel[] = [
+      { id: '1', data: {}, ...rowDefaults },
+      { id: '2', data: {}, ...rowDefaults },
+      { id: '3', data: {}, ...rowDefaults },
+      { id: '4', data: {}, ...rowDefaults },
+    ];
     
     test('returns rows unchanged with default sort', () => {
       const selected = new Set(['2', '4']);
@@ -267,11 +274,11 @@ describe('bulkReplaceUtils', () => {
     ];
     
     const rows: RowModel[] = [
-      { id: '1', data: { col1: 'Draft' } },
-      { id: '2', data: { col1: 'Active' } },
-      { id: '3', data: { col1: 'Draft' } },
-      { id: '4', data: { col1: 'Archived' } },
-    ] as RowModel[];
+      { id: '1', data: { col1: 'Draft' }, ...rowDefaults },
+      { id: '2', data: { col1: 'Active' }, ...rowDefaults },
+      { id: '3', data: { col1: 'Draft' }, ...rowDefaults },
+      { id: '4', data: { col1: 'Archived' }, ...rowDefaults },
+    ];
     
     test('generates preview for matching rows', () => {
       const config: BulkReplaceConfig = {
@@ -351,10 +358,10 @@ describe('bulkReplaceUtils', () => {
     ];
     
     const rows: RowModel[] = [
-      { id: '1', data: { col1: 'Draft' } },
-      { id: '2', data: { col1: 'Active' } },
-      { id: '3', data: { col1: 'Draft' } },
-    ] as RowModel[];
+      { id: '1', data: { col1: 'Draft' }, ...rowDefaults },
+      { id: '2', data: { col1: 'Active' }, ...rowDefaults },
+      { id: '3', data: { col1: 'Draft' }, ...rowDefaults },
+    ];
     
     test('prepares updates only for changed rows', () => {
       const config: BulkReplaceConfig = {

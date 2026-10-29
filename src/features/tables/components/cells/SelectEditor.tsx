@@ -181,7 +181,7 @@ export const SelectEditor = ({
       );
   
   // Добавляем опцию "Не выбрано"
-  const allOptions = [
+  const allOptions = multiple ? filteredOptions : [
     { value: '', label: '— Не выбрано —', color: undefined },
     ...filteredOptions
   ];
@@ -207,7 +207,7 @@ export const SelectEditor = ({
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
-        setHighlightedIndex(prev => Math.min(prev + 1, allOptions.length - 1));
+        setHighlightedIndex(prev => Math.max(0, Math.min(prev + 1, allOptions.length - 1)));
         break;
       case 'ArrowUp':
         event.preventDefault();
@@ -216,9 +216,7 @@ export const SelectEditor = ({
       case 'Enter':
         event.preventDefault();
         if (allOptions[highlightedIndex]) {
-          const selectedValue = allOptions[highlightedIndex].value;
-          onChange(selectedValue);
-          onCommit(selectedValue);
+          handleSelect(allOptions[highlightedIndex].value);
         }
         break;
       case 'Escape':
@@ -229,13 +227,21 @@ export const SelectEditor = ({
   };
   
   const handleSelect = (optValue: string) => {
+    if (multiple) {
+      const selectedValues = parseStoredValues(value, relation?.storageFormat);
+      const newValues = selectedValues.includes(optValue)
+        ? selectedValues.filter(v => v !== optValue)
+        : [...selectedValues.filter(Boolean), optValue];
+      onChange(serializeValues(newValues, relation?.storageFormat));
+      return;
+    }
     onChange(optValue);
     onCommit(optValue);
   };
   
   if ((isLoading || isSearching) && relation?.enabled) {
     return (
-      <div className="h-full w-full flex items-center px-2 py-1 text-sm text-[var(--text-tertiary)]">
+      <div className="h-full w-full flex items-center px-2 py-1 text-sm text-[var(--text-secondary)]">
         <div className="animate-pulse flex gap-2 items-center">
           <div className="w-4 h-4 rounded-full bg-[var(--bg-tertiary)]" />
           <span>Загрузка...</span>
@@ -258,7 +264,7 @@ export const SelectEditor = ({
       {/* Trigger element with current value shown in gray */}
       <div className="absolute inset-0 flex items-center px-4 py-2">
         {value && (
-          <span className="text-sm text-[var(--text-tertiary)] opacity-60 truncate">
+          <span className="text-sm text-[var(--text-secondary)] truncate">
             {multiple ? `Выбрано: ${selectedCount}` : currentLabel}
           </span>
         )}
@@ -275,10 +281,11 @@ export const SelectEditor = ({
           <input
             ref={searchRef}
             type="text"
+            aria-label="Поиск опций"
             value={search}
             onChange={(e) => {
               handleSearchChange(e.target.value);
-              if (!multiple) setHighlightedIndex(0);
+              setHighlightedIndex(0);
             }}
             onKeyDown={handleKeyDown}
             placeholder="Поиск..."
@@ -293,23 +300,29 @@ export const SelectEditor = ({
               const opt = effectiveOptions.find(o => o.value === sv);
               const color = opt?.color || '#6366f1';
               return (
-                <span
+                <button
                   key={sv}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80"
+                  type="button"
+                  aria-label={`Удалить ${opt?.label || sv}`}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') handleKeyDown(event);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]"
                   style={{
                     backgroundColor: `${color}20`,
-                    color: color,
+                    color: 'var(--text-primary)',
                     border: `1px solid ${color}40`
                   }}
                   onClick={() => {
                     const currentValues = parseStoredValues(value, relation?.storageFormat);
                     const newValues = currentValues.filter(v => v !== sv);
                     onChange(serializeValues(newValues, relation?.storageFormat));
+                    searchRef.current?.focus();
                   }}
                 >
                   {opt?.label || sv}
-                  <span className="text-[10px] opacity-60">✕</span>
-                </span>
+                  <span aria-hidden="true" className="text-[10px] opacity-60">✕</span>
+                </button>
               );
             })}
           </div>
@@ -317,76 +330,70 @@ export const SelectEditor = ({
 
         {/* Опции */}
         <div className="overflow-y-auto py-1" style={{ maxHeight: '250px' }}>
-          {(multiple ? filteredOptions : allOptions).map((opt, index) => {
+          {allOptions.map((opt, index) => {
             const selectedValues = multiple ? parseStoredValues(value, relation?.storageFormat) : [value];
             const isSelected = multiple ? selectedValues.includes(opt.value) : opt.value === value;
-            const isHighlighted = !multiple && index === highlightedIndex;
+            const isHighlighted = index === highlightedIndex;
             const color = opt.color || ((!multiple && index === 0) ? undefined : getDefaultColor(multiple ? index : index - 1));
 
             return (
-              <div
+              <button
                 key={opt.value || `__empty_${index}__`}
-                onClick={() => {
-                  if (multiple) {
-                    if (isSelected) {
-                      const newValues = selectedValues.filter(v => v !== opt.value);
-                      onChange(serializeValues(newValues, relation?.storageFormat));
-                    } else {
-                      const newValues = [...selectedValues.filter(Boolean), opt.value];
-                      onChange(serializeValues(newValues, relation?.storageFormat));
-                    }
-                  } else {
-                    handleSelect(opt.value);
-                  }
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => handleSelect(opt.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') handleKeyDown(event);
                 }}
-                onMouseEnter={() => !multiple && setHighlightedIndex(index)}
-                className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors ${
+                onFocus={() => setHighlightedIndex(index)}
+                onMouseEnter={() => setHighlightedIndex(index)}
+                className={`w-full text-left flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--text-primary)] ${
                   isHighlighted ? 'bg-[var(--bg-secondary)]' : ''
                 } ${isSelected ? 'bg-[var(--color-primary-500)]/10' : 'hover:bg-[var(--bg-secondary)]'}`}
               >
                 {/* Чекбокс/чекмарк */}
-                <div className="w-4 flex-shrink-0">
+                <span aria-hidden="true" className="w-4 flex-shrink-0">
                   {multiple ? (
-                    <div
+                    <span
                       className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
                         isSelected ? 'border-[var(--color-primary-500)] bg-[var(--color-primary-500)]' : 'border-[var(--border-primary)]'
                       }`}
                     >
                       {isSelected && <span className="text-white text-xs">✓</span>}
-                    </div>
+                    </span>
                   ) : isSelected ? (
                     <span className="text-[var(--color-primary-500)] text-sm">✓</span>
                   ) : null}
-                </div>
+                </span>
 
                 {/* Опция */}
                 {opt.value === '' ? (
-                  <span className="text-sm text-[var(--text-tertiary)]">{opt.label}</span>
+                  <span className="text-sm text-[var(--text-secondary)]">{opt.label}</span>
                 ) : (
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="flex items-center gap-2 flex-1 min-w-0">
                     <span
                       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium transition-transform hover:scale-105"
                       style={{
                         backgroundColor: color ? `${color}20` : 'var(--bg-tertiary)',
-                        color: color || 'var(--text-secondary)',
+                        color: 'var(--text-primary)',
                         border: `1px solid ${color ? `${color}40` : 'var(--border-primary)'}`
                       }}
                     >
                       {opt.label}
                     </span>
-                    {(opt as Record<string, unknown>).originalId && (
-                      <span className="text-[10px] text-[var(--text-tertiary)] opacity-60 font-mono truncate">
+                    {Boolean((opt as Record<string, unknown>).originalId) && (
+                      <span className="text-[10px] text-[var(--text-secondary)] font-mono truncate">
                         {String((opt as Record<string, unknown>).originalId)}
                       </span>
                     )}
-                  </div>
+                  </span>
                 )}
-              </div>
+              </button>
             );
           })}
 
           {filteredOptions.length === 0 && search && (
-            <div className="px-3 py-4 text-center text-sm text-[var(--text-tertiary)]">
+            <div className="px-3 py-4 text-center text-sm text-[var(--text-secondary)]">
               Ничего не найдено
             </div>
           )}
@@ -396,8 +403,12 @@ export const SelectEditor = ({
         {multiple && (
           <div className="p-2 border-t border-[var(--border-secondary)]">
             <button
+              type="button"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') handleKeyDown(event);
+              }}
               onClick={() => onCommit()}
-              className="w-full px-3 py-1.5 text-sm font-medium rounded-md bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-600)] transition-colors"
+              className="w-full px-3 py-1.5 text-sm font-medium rounded-md bg-[var(--text-primary)] text-[var(--bg-primary)] hover:opacity-90 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]"
             >
               Готово
             </button>

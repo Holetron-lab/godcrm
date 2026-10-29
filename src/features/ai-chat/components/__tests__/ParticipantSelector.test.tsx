@@ -4,7 +4,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ParticipantSelector, Participant } from '../ParticipantSelector';
 
@@ -159,6 +160,28 @@ describe('ParticipantSelector', () => {
     });
   });
 
+  it('should give participant search an accessible name', async () => {
+    renderComponent();
+    fireEvent.click(screen.getByText('Выберите участника...'));
+
+    expect(await screen.findByRole('textbox', { name: 'Поиск...' })).toBeVisible();
+  });
+
+  it('should expose a named clear action that restores filtered participants', async () => {
+    renderComponent();
+    fireEvent.click(screen.getByText('Выберите участника...'));
+    await screen.findByText('John Doe');
+
+    const search = screen.getByPlaceholderText('Поиск...');
+    fireEvent.change(search, { target: { value: 'Jane' } });
+    expect(screen.queryByText('John Doe')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Очистить поиск' }));
+
+    expect(search).toHaveValue('');
+    expect(screen.getByText('John Doe')).toBeVisible();
+    expect(screen.getByText('Jane Smith')).toBeVisible();
+  });
+
   it('should filter by tab - users only', async () => {
     renderComponent();
     
@@ -223,7 +246,7 @@ describe('ParticipantSelector', () => {
     ];
     renderComponent({ multiSelect: true, participants });
     
-    expect(screen.getByText('2 участник(ов)')).toBeInTheDocument();
+    expect(screen.getByText('Участников: 2')).toBeInTheDocument();
   });
 
   it('should exclude specified user ids', async () => {

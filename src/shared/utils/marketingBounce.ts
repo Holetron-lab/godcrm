@@ -4,7 +4,7 @@
 
 export const MARKETING_HOSTS = ['godcrm.ai', 'www.godcrm.ai'];
 export const APP_HOST = 'app.godcrm.ai';
-export const MARKETING_PATHS = ['/welcome', '/hltrn', '/s', '/invitations', '/reset-password'];
+export const MARKETING_PATHS = ['/welcome', '/hltrn', '/palevo', '/vspomnil', '/s', '/invitations', '/reset-password'];
 
 // hltrn.cc / www.hltrn.cc apex serves the Holetron UMBRELLA landing (HoletronLanding),
 // NOT the app and NOT the godcrm.ai product landing. crm.hltrn.cc stays the app host —

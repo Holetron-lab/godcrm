@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useRef } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Button } from './Button';
 import { cn } from '@/shared/utils/cn';
@@ -34,6 +34,8 @@ export interface ModalProps {
   fixedHeight?: boolean;  // NEW: Use fixed height instead of max-h
   heightOffset?: number;  // NEW: Offset from viewport height (default: 300)
   className?: string;     // Custom CSS class
+  contentClassName?: string;
+  restoreFocus?: boolean;
 }
 
 export const Modal = ({
@@ -48,20 +50,37 @@ export const Modal = ({
   secondaryAction,
   fixedHeight = false,
   heightOffset = 300,
-  className
+  className,
+  contentClassName,
+  restoreFocus = false
 }: ModalProps) => {
+  const openerRef = useRef<HTMLElement | null>(null);
+  // Snapshot before React removes a menu item that opened this dialog.
+  const activeElement = open && restoreFocus && typeof document !== 'undefined' ? document.activeElement : null;
+  const menuTriggerId = activeElement?.closest('[role="menu"]')?.getAttribute('aria-labelledby');
+  const opener = menuTriggerId ? document.getElementById(menuTriggerId) : activeElement;
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" />
         <Dialog.Content
+          onOpenAutoFocus={() => {
+            if (restoreFocus) openerRef.current = opener instanceof HTMLElement ? opener : null;
+          }}
+          onCloseAutoFocus={event => {
+            if (restoreFocus && openerRef.current?.isConnected) {
+              event.preventDefault();
+              openerRef.current.focus();
+            }
+          }}
           className={cn(
             'fixed left-1/2 top-1/2 z-[70] w-[95vw] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] shadow-xl focus:outline-none',
             // Mobile: full screen
             'max-sm:h-[100dvh] max-sm:max-h-none max-sm:rounded-none max-sm:p-4',
             // Desktop: fixed or default padding
             fixedHeight ? 'sm:p-6 flex flex-col' : 'p-6',
-            sizeClassMap[size]
+            sizeClassMap[size],
+            className
           )}
           style={fixedHeight ? {
             height: `calc(100vh - ${heightOffset}px)`,
@@ -91,7 +110,8 @@ export const Modal = ({
             "mt-4 overflow-y-auto pr-2 text-[var(--text-primary)]",
             fixedHeight 
               ? "flex-1 min-h-0"  // Takes remaining space
-              : "max-h-[70vh]"    // Original behavior
+              : "max-h-[70vh]",    // Original behavior
+            contentClassName
           )}>
             {children}
           </div>
@@ -106,12 +126,13 @@ export const Modal = ({
                     type="button"
                     variant={secondaryAction.variant ?? 'secondary'}
                     onClick={secondaryAction.onClick}
+                    disabled={secondaryAction.disabled}
                   >
                     {secondaryAction.label}
                   </Button>
                 )}
                 {primaryAction && (
-                  <Button type="button" variant={primaryAction.variant ?? 'primary'} onClick={primaryAction.onClick}>
+                  <Button type="button" variant={primaryAction.variant ?? 'primary'} onClick={primaryAction.onClick} disabled={primaryAction.disabled}>
                     {primaryAction.label}
                   </Button>
                 )}

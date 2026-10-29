@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // ADR-0031 §Z / WP-24 — ChatLinkCard render + grouping contracts
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { screen, fireEvent, cleanup } from '@testing-library/react';
+import { renderWithProviders as render } from '@/tests/renderWithProviders';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
@@ -14,21 +15,12 @@ import {
 import type { ChatMessage } from '../../../types';
 
 // Stub lucide icons so render tests stay snappy.
-vi.mock('lucide-react', () => {
-  const stub = (testid: string) => (p: React.HTMLAttributes<HTMLSpanElement>) => (
-    <span data-testid={testid} {...p} />
-  );
-  return {
-    Bot: stub('bot'),
-    ChevronDown: stub('chevron-down'),
-    ChevronUp: stub('chevron-up'),
-    Inbox: stub('inbox'),
-    Link2: stub('link2'),
-    MessageCircle: stub('message-circle'),
-    Users: stub('users'),
-    User: stub('user'),
-  };
-});
+// lucide-react is auto-mocked (src/tests/lucideMock.tsx). This suite queries icons by
+// bare name rather than the `-icon` convention, so every name it asserts is overridden.
+vi.mock('lucide-react', async () => (await import('@/tests/lucideMock')).lucideMock({
+  Bot: 'bot', ChevronDown: 'chevron-down', ChevronUp: 'chevron-up', Inbox: 'inbox',
+  Link2: 'link2', MessageCircle: 'message-circle', Users: 'users', User: 'user'
+}));
 
 // Mock the hook with a controllable singleton.
 const mockSummaryState: { data?: unknown; isLoading: boolean; error?: unknown } = {
@@ -126,7 +118,7 @@ describe('ChatLinkCard — render states', () => {
     // Title row: tiny inline icon + "в «Project chat»" (no #id)
     expect(screen.getByText(/в «Project chat»/)).toBeTruthy();
     // Combined meta line: #id · type · N уч. · created date
-    expect(screen.getByText(/#42 · Группа · 3 уч\. · 9 мая/)).toBeTruthy();
+    expect(screen.getByText(/#42 · Группа · Участников: 3 · 9 мая/)).toBeTruthy();
     // Right side of footer: moved count (shortened — 5 сообщ.)
     expect(screen.getByText(/5 сообщ\./)).toBeTruthy();
   });

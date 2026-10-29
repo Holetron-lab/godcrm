@@ -1,8 +1,10 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatToolbarOverflowMenu — `⋮` popover at the right edge of the chat
  * toolbar. Stacks rarely-used actions vertically (ADR-0059 §4.1).
  *
  * Items (in order):
+ *   0. ⚙ Настройки чата   → onSettings()
  *   1. 🔔 Уведомления      → onNotifications()  (per-chat inline tab)
  *   2. 👥 Участники        → onParticipants()   (per-chat inline tab)
  *   3. 🗑 Удалить чат      → onDelete()         (red)
@@ -11,10 +13,12 @@
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MoreVertical, Trash2, Bell, Users } from 'lucide-react';
+import { MoreVertical, Trash2, Bell, Users, Settings } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 
 interface ChatToolbarOverflowMenuProps {
+  onSettings?: () => void;
+  settingsDisabled?: boolean;
   onDelete?: () => void;
   /** ADR-0064 §Per-chat override surface. Disabled when no conversation is active. */
   onNotifications?: () => void;
@@ -27,6 +31,8 @@ interface ChatToolbarOverflowMenuProps {
 }
 
 export function ChatToolbarOverflowMenu({
+  onSettings,
+  settingsDisabled,
   onDelete,
   onNotifications,
   notificationsDisabled,
@@ -34,6 +40,7 @@ export function ChatToolbarOverflowMenu({
   participantsDisabled,
   deleteDisabled,
 }: ChatToolbarOverflowMenuProps) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -78,6 +85,7 @@ export function ChatToolbarOverflowMenu({
 
   const handleItem = (handler?: () => void) => {
     setOpen(false);
+    buttonRef.current?.focus();
     handler?.();
   };
 
@@ -87,7 +95,7 @@ export function ChatToolbarOverflowMenu({
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        title="Ещё"
+        title={t('aiChat.ui.more')}
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
@@ -107,6 +115,23 @@ export function ChatToolbarOverflowMenu({
           style={{ position: 'fixed', top: coords.top, right: coords.right, zIndex: 1000 }}
           className="min-w-[180px] rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] shadow-xl py-1"
         >
+          {onSettings && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => !settingsDisabled && handleItem(onSettings)}
+              disabled={settingsDisabled}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors',
+                settingsDisabled
+                  ? 'opacity-40 cursor-not-allowed text-[var(--text-tertiary)]'
+                  : 'text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]',
+              )}
+            >
+              <Settings className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
+              <span>{t('aiChat.ui.chatSettings')}</span>
+            </button>
+          )}
           {onNotifications && (
             <button
               type="button"
@@ -121,7 +146,7 @@ export function ChatToolbarOverflowMenu({
               )}
             >
               <Bell className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-              <span>Уведомления чата</span>
+              <span>{t('aiChat.ui.chatNotifications')}</span>
             </button>
           )}
           {onParticipants && (
@@ -138,7 +163,7 @@ export function ChatToolbarOverflowMenu({
               )}
             >
               <Users className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-              <span>Участники</span>
+              <span>{t('aiChat.ui.participants')}</span>
             </button>
           )}
           {onDelete && (
@@ -155,7 +180,7 @@ export function ChatToolbarOverflowMenu({
               )}
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Удалить чат</span>
+              <span>{t('aiChat.ui.deleteChat')}</span>
             </button>
           )}
         </div>,

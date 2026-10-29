@@ -3,13 +3,14 @@
 # Build context is the repo root (see docker-compose.yml `build.context: ../..`).
 
 # ---- builder: install all deps, build the React/Vite frontend, prune dev deps ----
-FROM node:20-bookworm AS builder
+FROM node:22-bookworm AS builder
 WORKDIR /app
 ENV NODE_ENV=production
 
 # Install deps first for better layer caching. Need devDependencies (vite,
 # tailwind, typescript) to build the frontend, so override NODE_ENV for npm ci.
 COPY package.json package-lock.json ./
+COPY scripts/qa/prepare-container-mounts.mjs ./scripts/qa/prepare-container-mounts.mjs
 RUN npm ci --include=dev
 
 # Copy source and build the frontend bundle into ./dist (served by the backend).
@@ -21,7 +22,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 # ---- runtime: slim image with only what the server needs ----
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=5000

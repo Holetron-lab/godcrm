@@ -7,12 +7,17 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import { dbAll, dbGet, dbRun, sqlNow, safeJsonParse } from '../../../database/connection.js';
 import { apiLogger } from '../../../utils/logger.js';
+import { isMysqlSource, openMysqlConnection } from '../../../services/data-source/mysql.js';
 import { success, notFound, badRequest, forbidden, error } from '../../../utils/response.js';
+import { guardRowKeys, unknownKeysMessage } from '../../../services/row-schema-guard.js';
+import { mergeRowData } from '../../../services/mergeRowData.js';
+import { normalizeTypedCells } from '../../../services/cellNormalizers.js';
 import { resolveSelectValues } from '../../../services/SelectValueResolver.js';
 import { coerceDataObject } from '../../../services/agent-tools/coerceDataInput.js';
-import { checkTableAccess } from './helpers.js';
+import { checkTableAccess, requireTableWriteAccess } from './helpers.js';
 import { applyAtomVersioning, isAtomsV2Table, ATOMS_V2_TABLE_ID } from '../../../services/atoms-archive.js';
 import { fireRowUpdateTriggers } from '../../../services/AutomationTriggerService.js';
+import { notifyRowChange } from '../../../services/realtime/rowEvents.js';
 import { emitRowMutationEvents } from '../../../services/tableMutationService.js';
 import { onDocumentTableMutation, captureDocumentContext, onDocumentStatusTransition } from '../../../services/documents/SnapshotWriter.js';
 import { onTicketStateTransition } from '../../../services/bdd/regressionWatcher.js';
@@ -26,6 +31,10 @@ import { isBookingConflictError, findConflictingRowId } from '../../../lib/booki
 import { writeAudit } from '../../../services/audit/writeAudit.js';
 import { computeRowDiff } from '../../../services/audit/rowDiff.js';
 import { applyMailMessageWrites, extractMailRowId, MailWriteError } from '../../../services/mail/messageWrites.js';
+import secretsVault from '../../../services/secrets/SecretsVault.js';
+import {
+  SECRETS_SYNC_TARGET, MASKED_VALUE, requireSecretsTableOwner, normalizeSecretRowData, parseSecretRowId,
+} from '../../../services/secrets/secretsSystemTable.js';
 
 const router = express.Router();
 
@@ -33,7 +42,7 @@ const router = express.Router();
  * PUT /api/v3/tables/:tableId/rows/:rowId
  * Update a row in a table (supports external data sources)
  */
-router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
+router.put('/tables/:tableId/rows/:rowId', requireTableWriteAccess, async (req, res) => {
   try {
     const { tableId, rowId } = req.params;
 
@@ -92,6 +101,44 @@ router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
         if (mailErr instanceof MailWriteError) return badRequest(res, mailErr.message);
         throw mailErr;
       }
+    }
+
+    // ADR-0040 §space-secrets — grid edits re-encrypt into the vault. The grid
+    // echoes the masked value back on description-only edits: treat it as
+    // "unchanged". Keys are immutable (consumers address secrets by key).
+    if (table.is_system && table.sync_target === SECRETS_SYNC_TARGET) {
+      const scope = await requireSecretsTableOwner(table, req.user);
+      if (scope.error) return forbidden(res, scope.error);
+      const secretId = parseSecretRowId(rowId);
+      if (!secretId) return badRequest(res, 'Invalid secret row id');
+      const existing = await dbGet('SELECT id, key, description FROM _secrets WHERE id = ? AND space_id = ?', [secretId, scope.spaceId]);
+      if (!existing) return notFound(res, 'Secret');
+
+      const patch = normalizeSecretRowData(tableId, data);
+      if ('key' in patch && patch.key !== existing.key) {
+        return badRequest(res, 'Secret key cannot be renamed — create a new secret');
+      }
+      const hasValue = typeof patch.value === 'string' && patch.value.length > 0 && patch.value !== MASKED_VALUE;
+      const hasDesc = 'description' in patch;
+      if (!hasValue && !hasDesc) return badRequest(res, 'Nothing to update');
+
+      try {
+        if (hasValue) {
+          await secretsVault.putSecret(existing.key, patch.value, {
+            actor: req.user.id, spaceId: scope.spaceId, description: hasDesc ? patch.description : existing.description,
+          });
+        } else {
+          await dbRun('UPDATE _secrets SET description = ?, updated_at = NOW() WHERE id = ?', [patch.description, secretId]);
+        }
+      } catch (err) {
+        if (err?.code === 'VAULT_NOT_CONFIGURED') return error(res, 'VAULT_NOT_CONFIGURED', err.message, 503);
+        throw err;
+      }
+      void writeAudit(req, {
+        action: 'secret.update', entity_type: 'secret', entity_id: existing.key,
+        details: { space_id: scope.spaceId, table_id: Number(tableId), changed: [hasValue ? 'plaintext' : null, hasDesc ? 'description' : null].filter(Boolean) },
+      });
+      return success(res, null, 'Secret updated');
     }
 
     // If external table, update in data source
@@ -178,21 +225,14 @@ router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
         return success(res, null, 'Row updated successfully');
       }
 
-      if (dataSource.type === 'local_mysql') {
+      if (isMysqlSource(dataSource)) {
         let realRowId = rowId;
         if (rowId.startsWith('ext_')) {
           const parts = rowId.split('_');
           realRowId = parts[parts.length - 1];
         }
         apiLogger.debug({ realRowId }, 'External UPDATE real MySQL row ID');
-        const mysql = await import('mysql2/promise');
-        const connection = await mysql.createConnection({
-          host: dataSource.db_host,
-          port: dataSource.db_port,
-          database: dataSource.db_name,
-          user: dataSource.db_username,
-          password: ''
-        });
+        const connection = await openMysqlConnection(dataSource);
 
         try {
           const columns = await dbAll(`
@@ -316,7 +356,7 @@ router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
 
     // Map column_id keys to column_name keys (frontend may send either)
     const tableColumns = await dbAll(`
-      SELECT id, column_name FROM table_columns WHERE table_id = ?
+      SELECT id, column_name, type FROM table_columns WHERE table_id = ?
     `, [tableId]);
 
     const columnIdToName = {};
@@ -351,11 +391,25 @@ router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
 
     apiLogger.debug({ originalKeys: Object.keys(data), normalizedKeys: Object.keys(normalizedData) }, 'UPDATE local table key normalization');
 
-    const { resolvedData: validatedData, errors: selectErrors } = await resolveSelectValues(tableId, normalizedData);
+    // QA-20816-01 — a key the schema does not declare is rejected unless the
+    // row already carries it (round-trip editors echo backend-written fields).
+    const keyGuard = await guardRowKeys(tableId, normalizedData, safeJsonParse(existingRow.data) || {});
+    if (keyGuard.unknown.length > 0) {
+      return error(res, 'UNKNOWN_COLUMN', unknownKeysMessage(keyGuard.unknown), 400, { unknown_fields: keyGuard.unknown });
+    }
+
+    const { resolvedData: selectResolved, errors: selectErrors } = await resolveSelectValues(tableId, keyGuard.data);
     if (selectErrors.length > 0) {
       apiLogger.warn({ selectErrors }, 'Select column validation errors — auto-resolved what we could');
       return badRequest(res, `Invalid select values: ${selectErrors.join('; ')}`);
     }
+
+    // ADR-0035 S1.4 / ADR-0035-A: geo_point + address cells are normalized before mergeRowData().
+    const geoCheck = normalizeTypedCells(tableColumns, selectResolved);
+    if (!geoCheck.ok) {
+      return error(res, geoCheck.code, geoCheck.message, geoCheck.status, geoCheck.meta);
+    }
+    const validatedData = geoCheck.data;
 
     const existingData = safeJsonParse(existingRow.data) || {};
 
@@ -408,7 +462,7 @@ router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
       return error(res, guardResult.code, guardResult.message, guardResult.status, guardResult.meta || null);
     }
 
-    let mergedData = { ...existingData, ...validatedData, ...guardResult.cellOverrides };
+    let mergedData = mergeRowData(tableColumns, existingData, { ...validatedData, ...guardResult.cellOverrides });
     apiLogger.debug('Merging existing data with new data');
     apiLogger.debug({ existingKeys: Object.keys(existingData) }, 'Existing keys');
     apiLogger.debug({ newKeys: Object.keys(validatedData) }, 'New keys');
@@ -501,6 +555,9 @@ router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
       SET data = ?, updated_at = ${sqlNow()}
       WHERE id = ? AND table_id = ?
     `, [JSON.stringify(mergedData), actualRowId, tableId]);
+
+    // Live grid sync: tell every open browser this row changed. Fire-and-forget.
+    void notifyRowChange({ tableId, rowId: actualRowId, action: 'updated', source: 'api' });
 
     // ADR-0025 A.2: fire row_update automations (e.g. archive → hidden=true).
     // Watch-field gating in fireRowUpdateTriggers prevents action loops.
@@ -602,7 +659,7 @@ router.put('/tables/:tableId/rows/:rowId', async (req, res) => {
  * DELETE /api/v3/tables/:tableId/rows/:rowId
  * Delete a row from a table (supports external data sources)
  */
-router.delete('/tables/:tableId/rows/:rowId', async (req, res) => {
+router.delete('/tables/:tableId/rows/:rowId', requireTableWriteAccess, async (req, res) => {
   try {
     const { tableId, rowId: rawRowId } = req.params;
 
@@ -636,7 +693,7 @@ router.delete('/tables/:tableId/rows/:rowId', async (req, res) => {
     }
 
     const table = await dbGet(`
-      SELECT data_source_id, source_table_name, source_id_column, is_system, sync_target
+      SELECT data_source_id, source_table_name, source_id_column, is_system, sync_target, project_id
       FROM universal_tables
       WHERE id = ?
     `, [tableId]);
@@ -650,6 +707,22 @@ router.delete('/tables/:tableId/rows/:rowId', async (req, res) => {
     // which has the proper atom_refs guard (see WidgetService.deleteWidget).
     if (table.is_system && table.sync_target === 'widgets') {
       return forbidden(res, 'Deleting widgets via system table is not supported. Use DELETE /api/v3/widgets/:id.');
+    }
+
+    // ADR-0040 §space-secrets — deleting a grid row removes the vault entry.
+    if (table.is_system && table.sync_target === SECRETS_SYNC_TARGET) {
+      const scope = await requireSecretsTableOwner(table, req.user);
+      if (scope.error) return forbidden(res, scope.error);
+      const secretId = parseSecretRowId(rowId);
+      if (!secretId) return badRequest(res, 'Invalid secret row id');
+      const existing = await dbGet('SELECT id, key, description FROM _secrets WHERE id = ? AND space_id = ?', [secretId, scope.spaceId]);
+      if (!existing) return notFound(res, 'Secret');
+      await secretsVault.deleteSecret(existing.key, { actor: req.user.id, spaceId: scope.spaceId });
+      void writeAudit(req, {
+        action: 'secret.delete', entity_type: 'secret', entity_id: existing.key,
+        details: { space_id: scope.spaceId, table_id: Number(tableId), description: existing.description ?? null },
+      });
+      return success(res, null, 'Secret deleted');
     }
 
     // ADR-158 §P3 — mail_messages is read-only from the grid. Trashing a message
@@ -742,15 +815,8 @@ router.delete('/tables/:tableId/rows/:rowId', async (req, res) => {
         return success(res, null, 'Row deleted successfully');
       }
 
-      if (dataSource.type === 'local_mysql') {
-        const mysql = await import('mysql2/promise');
-        const connection = await mysql.createConnection({
-          host: dataSource.db_host,
-          port: dataSource.db_port,
-          database: dataSource.db_name,
-          user: dataSource.db_username,
-          password: ''
-        });
+      if (isMysqlSource(dataSource)) {
+        const connection = await openMysqlConnection(dataSource);
 
         try {
           const idColumn = table.source_id_column || 'id';
@@ -811,6 +877,8 @@ router.delete('/tables/:tableId/rows/:rowId', async (req, res) => {
       DELETE FROM table_rows
       WHERE id = ? AND table_id = ?
     `, [rowId, tableId]);
+
+    void notifyRowChange({ tableId, rowId, action: 'deleted', source: 'api' });
 
     // ADR-0066 P1 — fire-and-forget audit of the row delete.
     void writeAudit(req, {

@@ -7,6 +7,7 @@
 import { dbRun, dbGet, dbAll, withTransactionAsync } from '../database/connection.js';
 import mergeWith from 'lodash/mergeWith.js';
 import { writeAudit } from './audit/writeAudit.js';
+import { createMailMessagesSystemTable } from './SystemTablesCreator.js';
 
 const OWNER_KINDS = ['dashboard', 'document', 'atom'];
 
@@ -57,9 +58,15 @@ function resolveOwner({ owner_kind, owner_id, dashboard_id }) {
 /**
  * Create a new widget
  * @param {object} widgetData - Widget data
+ * @param {object} [opts]
+ * @param {object} [opts.trx] - an OPEN transaction handle (`get`/`run`) to create within, so a
+ *   caller can commit a widget together with whatever else it is writing (ADR-200 W3: a module
+ *   install is one transaction — tables, seed, widgets and sidebar all land or none do).
+ *   Dashboard-owned creation opens a transaction when omitted, keeping the dashboard alive
+ *   through insertion. An existing transaction is reused, never nested on another connection.
  * @returns {Promise<object>} Created widget
  */
-export async function createWidget(widgetData) {
+export async function createWidget(widgetData, { trx = null } = {}) {
   const {
     dashboard_id,
     owner_kind,
@@ -105,19 +112,27 @@ export async function createWidget(widgetData) {
 
   const owner = resolveOwner({ owner_kind, owner_id, dashboard_id });
 
+  if (owner.owner_kind === 'dashboard' && !trx) {
+    return withTransactionAsync(trx => createWidget(widgetData, { trx }));
+  }
+
+  // Same statements, same order — only the handle differs (see `trx` above).
+  const get = trx ? (sql, params) => trx.get(sql, params) : dbGet;
+  const run = trx ? (sql, params) => trx.run(sql, params) : dbRun;
+
   // Validation: owner must exist.
   if (owner.owner_kind === 'dashboard') {
-    const dashboard = await dbGet('SELECT id FROM dashboards WHERE id = ?', [owner.owner_id]);
+    const dashboard = await get('SELECT id FROM dashboards WHERE id = ? FOR KEY SHARE', [owner.owner_id]);
     if (!dashboard) throw new Error('Dashboard not found');
   } else if (owner.owner_kind === 'document') {
-    const row = await dbGet('SELECT id FROM table_rows WHERE id = ?', [owner.owner_id]);
+    const row = await get('SELECT id FROM table_rows WHERE id = ?', [owner.owner_id]);
     if (!row) throw new Error('Owner document row not found');
   }
   // 'atom' — ownership target is a row in the atoms table; caller is
   // responsible for target validity (table varies per widget).
 
   // Insert widget
-  const result = await dbRun(`
+  const result = await run(`
     INSERT INTO widgets (
       dashboard_id,
       owner_kind,
@@ -155,7 +170,11 @@ export async function createWidget(widgetData) {
     is_module ? 1 : 0
   ]);
 
-  return await getWidgetById(result.lastInsertRowid);
+  const widget = await getWidgetById(result.lastInsertRowid, { trx });
+  if (preset_name === 'mail' && widget.project_id) {
+    await createMailMessagesSystemTable(widget.project_id, { trx });
+  }
+  return widget;
 }
 
 // ADR-0012 Phase 8 (T-135214): atom-aware effective config resolver.
@@ -216,11 +235,15 @@ export async function getEffectiveWidgetConfig(widgetId, atomId) {
 /**
  * Get widget by ID
  * @param {number} widgetId - Widget ID
+ * @param {object} [opts]
+ * @param {object} [opts.trx] - read inside an open transaction (so a widget created in that
+ *   same transaction is visible — ADR-200 W3)
  * @returns {Promise<object|null>} Widget or null
  */
-export async function getWidgetById(widgetId) {
+export async function getWidgetById(widgetId, { trx = null } = {}) {
+  const get = trx ? (sql, params) => trx.get(sql, params) : dbGet;
   // Join with dashboard and project to get project_id and space_id
-  const widget = await dbGet(`
+  const widget = await get(`
     SELECT w.*, d.project_id, p.space_id,
       CASE WHEN m.id IS NOT NULL THEN true ELSE false END as is_module,
       m.id as module_id,
@@ -537,49 +560,77 @@ export async function deleteWidget(widgetId, options = false) {
     }
   }
 
-  return await withTransactionAsync(async (trx) => {
-    let reassigned = 0;
-    let orphaned = 0;
+  return await withTransactionAsync(async (trx) =>
+    deleteWidgetInTrx(trx, widgetId, { atomRefsCount, force, reassignTo, orphan, userId })
+  );
+}
 
-    if (atomRefsCount > 0) {
-      if (force && reassignTo != null) {
-        reassigned = await reassignWidgetRefsInTrx(trx, widgetId, Number(reassignTo));
-        await writeAuditInTrx(trx, {
-          userId,
-          action: 'widget.refs_reassigned',
-          entityId: widgetId,
-          details: { from: Number(widgetId), to: Number(reassignTo), count: reassigned },
-        });
-      } else if (orphan) {
-        orphaned = await orphanWidgetRefsInTrx(trx, widgetId);
-        await writeAuditInTrx(trx, {
-          userId,
-          action: 'widget.refs_orphaned',
-          entityId: widgetId,
-          details: { widget_id: Number(widgetId), count: orphaned },
-        });
-      }
+/**
+ * The transactional body of {@link deleteWidget}, callable from a caller's own transaction.
+ *
+ * ADR-200 W3 needs this: `uninstall` removes a module's widgets inside the same transaction
+ * that retires the installation record, and `deleteWidget` opens its OWN transaction — calling
+ * it from within one would move the work to a second connection. The alternative, a bare
+ * `DELETE FROM widgets`, would skip the atom-reference repair below and leave documents
+ * pointing at a widget that no longer exists (T-127905/906). So both paths run this one body.
+ *
+ * `modules`, `widget_library`, `user_widget_favorites` and `user_widget_history` all reference
+ * `widgets` ON DELETE CASCADE, so the sidebar entry and library index go with the widget.
+ *
+ * @param {object} trx - open transaction handle
+ * @param {number} widgetId
+ * @param {object} [opts] - same flow flags as deleteWidget; `atomRefsCount` is counted here
+ *   when the caller has not counted it already.
+ */
+export async function deleteWidgetInTrx(trx, widgetId, opts = {}) {
+  const { force = false, reassignTo = null, orphan = false, userId = null } = opts;
+  const atomRefsCount = opts.atomRefsCount != null
+    ? opts.atomRefsCount
+    : Number(
+      (await trx.get(`SELECT COUNT(*)::int AS n FROM (${ATOMS_WITH_WIDGET_REF_CTE}) t`, [String(widgetId)]))?.n || 0
+    );
+
+  let reassigned = 0;
+  let orphaned = 0;
+
+  if (atomRefsCount > 0) {
+    if (force && reassignTo != null) {
+      reassigned = await reassignWidgetRefsInTrx(trx, widgetId, Number(reassignTo));
+      await writeAuditInTrx(trx, {
+        userId,
+        action: 'widget.refs_reassigned',
+        entityId: widgetId,
+        details: { from: Number(widgetId), to: Number(reassignTo), count: reassigned },
+      });
+    } else if (orphan) {
+      orphaned = await orphanWidgetRefsInTrx(trx, widgetId);
+      await writeAuditInTrx(trx, {
+        userId,
+        action: 'widget.refs_orphaned',
+        entityId: widgetId,
+        details: { widget_id: Number(widgetId), count: orphaned },
+      });
     }
+  }
 
-    await trx.run('DELETE FROM widgets WHERE source_widget_id = ?', [widgetId]);
-    await trx.run('DELETE FROM widgets WHERE id = ?', [widgetId]);
+  await trx.run('DELETE FROM widgets WHERE source_widget_id = ?', [widgetId]);
+  await trx.run('DELETE FROM widgets WHERE id = ?', [widgetId]);
 
-    await writeAuditInTrx(trx, {
-      userId,
-      action: 'widget.deleted',
-      entityId: widgetId,
-      details: {
-        widget_id: Number(widgetId),
-        atom_refs_count: atomRefsCount,
-        reassigned_to: force && reassignTo != null ? Number(reassignTo) : null,
-        orphaned: orphan ? orphaned : 0,
-      },
-    });
-
-    if (reassigned > 0) return { action: 'reassigned', reassigned };
-    if (orphaned > 0) return { action: 'orphaned', orphaned };
-    return { action: 'deleted' };
+  await writeAuditInTrx(trx, {
+    userId,
+    action: 'widget.deleted',
+    entityId: widgetId,
+    details: {
+      widget_id: Number(widgetId),
+      atom_refs_count: atomRefsCount,
+      reassigned_to: force && reassignTo != null ? Number(reassignTo) : null,
+      orphaned: orphan ? orphaned : 0,
+    },
   });
+
+  if (reassigned > 0) return { action: 'reassigned', reassigned };
+  if (orphaned > 0) return { action: 'orphaned', orphaned };
+  return { action: 'deleted' };
 }
 
 /**

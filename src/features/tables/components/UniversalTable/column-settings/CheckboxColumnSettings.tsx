@@ -72,7 +72,7 @@ export const CheckboxColumnSettings: React.FC<ColumnSettingsProps> = ({
         )}
 
         <div className="h-full flex items-center pt-6">
-          <div className="w-px h-8 bg-[var(--border-color)]"></div>
+          <div className="w-px h-8 bg-[var(--border-primary)]"></div>
         </div>
 
         <div className="flex-1">

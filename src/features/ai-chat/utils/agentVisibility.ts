@@ -27,3 +27,16 @@ export function isAgentInvokable<T extends AgentVisibilityShape>(agent: T): bool
 export function filterInvokableAgents<T extends AgentVisibilityShape>(agents: T[]): T[] {
   return agents.filter(isAgentInvokable);
 }
+
+/**
+ * Management surfaces (owner agent list) also list the active locked bindings
+ * the invocation list dropped, so an admin can unlock them. Rows already in
+ * `visible` are skipped — the no-space loader keeps locked rows itself.
+ */
+export function lockedAgentsForManagement<T extends AgentVisibilityShape & { id: number; is_active?: boolean }>(
+  visible: T[],
+  all: T[],
+): T[] {
+  const seen = new Set(visible.map(agent => agent.id));
+  return all.filter(agent => agent.visibility === 'locked' && agent.is_active !== false && !seen.has(agent.id));
+}

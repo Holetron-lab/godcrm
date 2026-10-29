@@ -1,3 +1,6 @@
+import { VideoAttachmentPlayer } from '../VideoAttachmentPlayer';
+import { AudioAttachmentPlayer } from '../AudioAttachmentPlayer';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatAttachmentRenderer — Rich attachment rendering for chat messages.
  *
@@ -5,7 +8,7 @@
  * Replaces plain "📎 filename" badges with inline previews:
  *   • Images  → thumbnail with hover overlay + Eye icon
  *   • Video   → native <video> player
- *   • Audio   → native <audio> player with 🎵 icon
+ *   • Audio   → waveform player with seeking
  *   • Other   → icon + name + size + preview/external-link buttons
  *
  * Consumers: MessageBubble, ChatTurn (human & agent attachments).
@@ -29,6 +32,7 @@ import { useAIChat } from '@/features/ai-chat/context/AIChatContext';
 import { resolveActivePreset } from '@/features/ai-chat/utils/chatSourcePresets';
 import type { TasksSourceConfig, FavoritesConfig } from '@/features/ai-chat/components/AIChatPanel/types';
 import type { ChatAttachment } from '@/features/ai-chat/types';
+import { MailMessageChip } from '@/features/mail/components/MailMessageChip';
 import { RowPresetCard } from './ChatTurn/RowPresetCard';
 import { TicketRowAtom } from './ChatTurn/TicketRowAtom';
 import { DocumentRowAtom } from './ChatTurn/DocumentRowAtom';
@@ -68,6 +72,7 @@ export const ChatAttachmentRenderer = ({
   attachments,
   className = '',
 }: ChatAttachmentRendererProps) => {
+  const { t } = useLanguage();
   const [previewFile, setPreviewFile] = useState<{ url: string; name: string } | null>(null);
   // Ticket #81431: State for viewing a row reference — kanban card detail (default) or edit form.
   const [viewingRow, setViewingRow] = useState<
@@ -90,7 +95,7 @@ export const ChatAttachmentRenderer = ({
       );
       const convId = response.data?.conversationId || response.data?.id;
       if (!convId) {
-        showToast('Не удалось получить ID чата', 'error');
+        showToast(t('aiChat.ui.couldNotGetTheChatID'), 'error');
         return;
       }
       openTaskChat({
@@ -101,7 +106,7 @@ export const ChatAttachmentRenderer = ({
       });
     } catch (error) {
       logger.error('[ChatAttachmentRenderer] openRowTaskChat failed', { error });
-      showToast('Не удалось открыть чат', 'error');
+      showToast(t('aiChat.ui.couldNotOpenTheChat'), 'error');
     }
   };
 
@@ -129,8 +134,17 @@ export const ChatAttachmentRenderer = ({
 
   return (
     <>
-      <div className={`mt-2 space-y-2 ${className}`}>
+      <div className={`mt-2 flex flex-wrap items-start gap-2 ${className}`}>
         {attachments.map((att, i) => {
+          // ADR-158 §P5: a mail message attached from the mail list — the
+          // snapshot travels inline, the chip deep-links into the reader.
+          if (att.type === 'mail_message_ref' && att.mailRef) {
+            return (
+              <div key={i} className="min-w-0 max-w-full">
+                <MailMessageChip mailRef={att.mailRef} />
+              </div>
+            );
+          }
           // Ticket #77794 (+ T-141688 / ADR-0031 §Y / WP-22): Row reference
           // attachment — collapsed chip by default; chevron expands to a
           // preset-driven card view when an active preset matches the table.
@@ -143,75 +157,52 @@ export const ChatAttachmentRenderer = ({
               favoritesConfig: spaceConfig?.favoritesConfig,
             });
             return (
-              <RowReferenceItem
-                key={i}
-                ref_={ref}
-                activePreset={activePreset}
-                onOpenView={() => setViewingRow({ tableId: ref.table_id, rowId: ref.row_id, mode: 'view' })}
-                onOpenEdit={() => setViewingRow({ tableId: ref.table_id, rowId: ref.row_id, mode: 'edit' })}
-                onOpenTaskChat={openRowTaskChat}
-                onAttachToChat={attachRowToChat}
-                onAttachToMessage={attachRowToMessage}
-              />
+              <div key={i} className="w-full min-w-0">
+                <RowReferenceItem
+                  ref_={ref}
+                  activePreset={activePreset}
+                  onOpenView={() => setViewingRow({ tableId: ref.table_id, rowId: ref.row_id, mode: 'view' })}
+                  onOpenEdit={() => setViewingRow({ tableId: ref.table_id, rowId: ref.row_id, mode: 'edit' })}
+                  onOpenTaskChat={openRowTaskChat}
+                  onAttachToChat={attachRowToChat}
+                  onAttachToMessage={attachRowToMessage}
+                />
+              </div>
             );
           }
 
           const fileUrl = att.url || att.preview || '';
           const fileName = att.name || 'file';
-          const isImage = isImageFile(fileUrl || fileName);
-          const isVideo = isVideoFile(fileUrl || fileName);
-          const isAudio = isAudioFile(fileUrl || fileName);
+          const isImage = att.type.startsWith('image/') || isImageFile(fileUrl || fileName);
+          const isAudio = att.type.startsWith('audio/') || (!att.type.startsWith('video/') && isAudioFile(fileUrl || fileName));
+          const isVideo = !isAudio && (att.type.startsWith('video/') || isVideoFile(fileName) || isVideoFile(fileUrl));
           const canPreview = fileUrl && isPreviewable(fileUrl);
 
           return (
-            <div key={i} className="rounded-lg overflow-hidden">
-              {/* Image preview — responsive: full width on mobile, max 280px on desktop.
-                  SafeChatImage adds loading=lazy + decoding=async and gates oversized
-                  inline data: URLs behind a click-to-reveal placeholder. */}
+            <div key={i} className={`min-w-0 max-w-full rounded-lg overflow-hidden ${isImage ? 'w-fit' : 'w-full'}`}>
+              {/* Intrinsic image widths let narrow attachments share a row. */}
               {isImage && fileUrl && (
-                <div
-                  className="relative group cursor-pointer active:opacity-80"
-                  onClick={() => setPreviewFile({ url: fileUrl, name: fileName })}
-                >
+                <div className="relative group/attachment max-w-[280px]">
                   <SafeChatImage
                     src={fileUrl}
                     alt={fileName}
-                    className="max-w-full sm:max-w-[280px] max-h-[200px] rounded-lg object-cover"
+                    onClick={() => setPreviewFile({ url: fileUrl, name: fileName })}
+                    className="max-w-full max-h-[200px] rounded-lg object-contain"
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 sm:transition-colors rounded-lg flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100">
-                    <Eye className="w-6 h-6 text-white drop-shadow-md" />
+                  <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black/0 group-hover/attachment:bg-black/30 group-focus-within/attachment:bg-black/30 transition-colors rounded-lg flex items-center justify-center opacity-0 group-hover/attachment:opacity-100 group-focus-within/attachment:opacity-100">
+                    <Eye className="w-6 h-6 text-white" />
                   </div>
                 </div>
               )}
 
               {/* Video preview */}
               {isVideo && fileUrl && (
-                <div className="relative max-w-full sm:max-w-[320px]">
-                  <video
-                    src={fileUrl}
-                    controls
-                    className="w-full rounded-lg"
-                    style={{ maxHeight: '200px' }}
-                    preload="metadata"
-                  >
-                    Ваш браузер не поддерживает видео.
-                  </video>
-                </div>
+                <VideoAttachmentPlayer key={fileUrl} src={fileUrl} name={fileName} />
               )}
 
               {/* Audio preview */}
               {isAudio && fileUrl && (
-                <div className="flex items-center gap-2 p-2 bg-black/20 rounded-lg">
-                  <span className="text-xl">🎵</span>
-                  <audio
-                    src={fileUrl}
-                    controls
-                    className="flex-1 h-8"
-                    preload="metadata"
-                  >
-                    Ваш браузер не поддерживает аудио.
-                  </audio>
-                </div>
+                <AudioAttachmentPlayer src={fileUrl} name={fileName} />
               )}
 
               {/* Other files — icon + name + size + preview/external-link (mobile-friendly touch targets) */}
@@ -242,7 +233,7 @@ export const ChatAttachmentRenderer = ({
                       <span className="text-sm sm:text-xs font-medium truncate block">{fileName}</span>
                     )}
                     {att.size > 0 && (
-                      <span className="text-[11px] sm:text-[10px] opacity-60">{formatFileSize(att.size)}</span>
+                      <span className="text-[11px] sm:text-[10px]">{formatFileSize(att.size)}</span>
                     )}
                   </div>
                   {canPreview && (
@@ -250,7 +241,7 @@ export const ChatAttachmentRenderer = ({
                       type="button"
                       onClick={() => setPreviewFile({ url: fileUrl, name: fileName })}
                       className="p-2 sm:p-1 hover:bg-white/10 active:bg-white/20 rounded-lg sm:rounded transition-colors flex-shrink-0"
-                      title="Preview"
+                      title={t('aiChat.ui.preview')}
                     >
                       <Eye className="w-5 h-5 sm:w-4 sm:h-4" />
                     </button>
@@ -261,7 +252,7 @@ export const ChatAttachmentRenderer = ({
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-2 sm:p-1 hover:bg-white/10 active:bg-white/20 rounded-lg sm:rounded transition-colors flex-shrink-0"
-                      title="Open in new tab"
+                      title={t('aiChat.ui.openNewTab')}
                     >
                       <ExternalLink className="w-5 h-5 sm:w-4 sm:h-4" />
                     </a>
@@ -354,6 +345,7 @@ interface RowReferenceItemProps {
 function RowReferenceItem({
   ref_, activePreset, onOpenView, onOpenEdit, onOpenTaskChat, onAttachToChat, onAttachToMessage,
 }: RowReferenceItemProps) {
+  const { t } = useLanguage();
   const refForAttach = {
     table_id: ref_.table_id,
     row_id: ref_.row_id,
@@ -404,25 +396,25 @@ function RowReferenceItem({
 
   const menuItems = [
     {
-      label: 'Редактировать',
+      label: t('dashboardPage.edit'),
       value: 'edit',
       icon: <Pencil className="w-4 h-4" />,
       onSelect: onOpenEdit,
     },
     {
-      label: 'Открыть чат',
+      label: t('rowActions.openChat'),
       value: 'open-chat',
       icon: <MessageCircle className="w-4 h-4" />,
       onSelect: () => onOpenTaskChat(refForAttach),
     },
     {
-      label: 'Привязать к чату',
+      label: t('aiChat.ui.linkToChat'),
       value: 'bind-chat',
       icon: <MessageCirclePlus className="w-4 h-4" />,
       onSelect: () => onAttachToChat(refForAttach),
     },
     {
-      label: 'Прикрепить к сообщению',
+      label: t('rowActions.attachToMessage'),
       value: 'attach-message',
       icon: <Paperclip className="w-4 h-4" />,
       onSelect: () => onAttachToMessage(refForAttach),
@@ -452,7 +444,7 @@ function RowReferenceItem({
           <button
             type="button"
             className="ml-1 flex-shrink-0 p-0.5 rounded text-blue-400/60 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-            title="Действия"
+            title={t('tableToolbar.actionsLabel')}
             onClick={(e) => e.stopPropagation()}
           >
             <MoreVertical className="w-3.5 h-3.5" />

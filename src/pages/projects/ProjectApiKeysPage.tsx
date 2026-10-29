@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { useState, useEffect, useMemo, useId, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -476,6 +477,8 @@ function CreateApiKeyModal({
   currentProjectId?: number;
 }) {
   const t = (ru: string, en: string) => language === 'ru' ? ru : en;
+  const fieldId = useId();
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const [name, setName] = useState('');
   const [selectedScopes, setSelectedScopes] = useState<string[]>(['*']);
   const [expiresIn, setExpiresIn] = useState<string>('never');
@@ -596,31 +599,40 @@ function CreateApiKeyModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div 
-        className="w-full max-w-md bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)]"
-        onClick={e => e.stopPropagation()}
-      >
+    <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+        <Dialog.Content
+          aria-modal="true"
+          aria-describedby={undefined}
+          onOpenAutoFocus={() => {
+            returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            returnFocusRef.current?.focus();
+          }}
+          className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-md max-h-[90dvh] overflow-y-auto bg-[var(--bg-primary)] rounded-xl shadow-xl border border-[var(--border-primary)]"
+        >
         <div className="flex items-center justify-between p-4 border-b border-[var(--border-primary)]">
-          <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+          <Dialog.Title className="text-lg font-semibold text-[var(--text-primary)]">
             {t('Новый API ключ', 'New API Key')}
-          </h2>
+          </Dialog.Title>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-name`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               {t('Название', 'Name')}
             </label>
-            <input
+            <input id={`${fieldId}-name`}
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('Например: Интеграция с n8n', 'e.g., n8n Integration')}
-              className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)]"
+              className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder:text-[var(--text-secondary)]"
               required
-              autoFocus
             />
           </div>
 
@@ -644,7 +656,7 @@ function CreateApiKeyModal({
                   <span className="text-sm text-[var(--text-primary)] flex-1">
                     {scope.label[language as 'ru' | 'en']}
                   </span>
-                  <code className="text-xs text-[var(--text-tertiary)] font-mono">{scope.value}</code>
+                  <code className="text-xs text-[var(--text-secondary)] font-mono">{scope.value}</code>
                 </label>
               ))}
             </div>
@@ -652,10 +664,10 @@ function CreateApiKeyModal({
 
           {/* Expiration */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-expiration`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               {t('Срок действия', 'Expiration')}
             </label>
-            <select
+            <select id={`${fieldId}-expiration`}
               value={expiresIn}
               onChange={(e) => setExpiresIn(e.target.value)}
               className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)]"
@@ -672,16 +684,16 @@ function CreateApiKeyModal({
           <div className="space-y-3">
             <label className="block text-sm font-medium text-[var(--text-secondary)]">
               {t('Привязать к агенту', 'Assign to Agent')}
-              <span className="text-[var(--text-tertiary)] ml-1">({t('опционально', 'optional')})</span>
+              <span className="text-[var(--text-secondary)] ml-1">({t('опционально', 'optional')})</span>
             </label>
             
             {/* Project selector */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-[var(--text-tertiary)] mb-1">
+                <label htmlFor={`${fieldId}-project`} className="block text-xs text-[var(--text-secondary)] mb-1">
                   {t('Проект', 'Project')}
                 </label>
-                <select
+                <select id={`${fieldId}-project`}
                   value={selectedProjectId || ''}
                   onChange={(e) => {
                     setSelectedProjectId(e.target.value ? parseInt(e.target.value) : null);
@@ -701,10 +713,10 @@ function CreateApiKeyModal({
               
               {/* Table selector */}
               <div>
-                <label className="block text-xs text-[var(--text-tertiary)] mb-1">
+                <label htmlFor={`${fieldId}-table`} className="block text-xs text-[var(--text-secondary)] mb-1">
                   {t('Таблица', 'Table')}
                 </label>
-                <select
+                <select id={`${fieldId}-table`}
                   value={selectedTableId || ''}
                   onChange={(e) => {
                     setSelectedTableId(e.target.value ? parseInt(e.target.value) : null);
@@ -725,10 +737,10 @@ function CreateApiKeyModal({
             
             {/* Agent selector */}
             <div>
-              <label className="block text-xs text-[var(--text-tertiary)] mb-1">
+              <label htmlFor={`${fieldId}-agent`} className="block text-xs text-[var(--text-secondary)] mb-1">
                 {t('Агент', 'Agent')}
               </label>
-              <select
+              <select id={`${fieldId}-agent`}
                 value={selectedAgentId || ''}
                 onChange={(e) => setSelectedAgentId(e.target.value ? parseInt(e.target.value) : null)}
                 disabled={!selectedTableId}
@@ -742,12 +754,12 @@ function CreateApiKeyModal({
                 ))}
               </select>
               {selectedTableId && agents.length === 0 && (
-                <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
                   {t('В выбранной таблице нет записей', 'No records in selected table')}
                 </p>
               )}
               {selectedAgentId && (
-                <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
                   {t('Ключ будет привязан к выбранному агенту', 'Key will be assigned to selected agent')}
                 </p>
               )}
@@ -772,8 +784,9 @@ function CreateApiKeyModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

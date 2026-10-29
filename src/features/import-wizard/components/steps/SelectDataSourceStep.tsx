@@ -45,31 +45,31 @@ export function SelectDataSourceStep({
       </h3>
       
       {dataSources.map((ds) => (
-        <div
+        <button type="button" aria-pressed={selectedId === ds.id}
           key={ds.id}
           onClick={() => onSelect(ds.id)}
           className={`
-            p-4 border-2 rounded-lg cursor-pointer transition-all
+            w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 text-left p-4 border-2 rounded-lg cursor-pointer transition-all
             ${selectedId === ds.id
               ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
               : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
             }
           `}
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-gray-100">
+          <span className="flex items-center justify-between">
+            <span className="block">
+              <span className="block font-semibold text-gray-900 dark:text-gray-100">
                 {ds.name}
-              </h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
+              </span>
+              <span className="block text-sm text-gray-600 dark:text-gray-400">
                 {ds.type.toUpperCase()} • {ds.host}:{ds.port} • {ds.database}
-              </p>
-            </div>
+              </span>
+            </span>
             {selectedId === ds.id && (
-              <span className="text-2xl">✓</span>
+              <span className="block text-2xl">✓</span>
             )}
-          </div>
-        </div>
+          </span>
+        </button>
       ))}
     </div>
   );

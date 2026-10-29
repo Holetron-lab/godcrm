@@ -1,0 +1,25 @@
+[Unit]
+Description=GOD CRM staging executor (independent, preflight only)
+Documentation=file:///opt/godcrm-staging-executor/current/INSTALL.md
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=/etc/godcrm-staging-executor/executor.env
+ExecStart=/usr/bin/python3 /opt/godcrm-staging-executor/current/executor.py
+RuntimeDirectory=godcrm-staging-executor
+RuntimeDirectoryMode=0700
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=20
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target

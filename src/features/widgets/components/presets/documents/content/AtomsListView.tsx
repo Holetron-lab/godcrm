@@ -1,11 +1,12 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useId, useMemo, useState, useEffect, useRef } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { Atom, Loader2, X, Code, Link, BookOpen, Lightbulb, FileCode, Component, Workflow, ChevronRight, ChevronDown } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { logger } from '@/shared/utils/logger';
 import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
 import { ViewModeToggle } from '@/shared/components/ui/ViewModeToggle';
 import { useDocumentsContext } from '../DocumentsContext';
-import type { DocumentAtom } from '../../../../types/documents.types';
+import type { DocumentAtom } from '../../../../hooks/useAtoms';
 
 // Atom type icons
 const ATOM_TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -35,11 +36,13 @@ const ATOM_TYPE_COLORS: Record<string, string> = {
  * Displays atoms in a list with search from toolbar
  */
 export function AtomsListView() {
+  const fieldId = useId();
+  const editTriggerRef = useRef<HTMLButtonElement | null>(null);
   const ctx = useDocumentsContext();
   const [atoms, setAtoms] = useState<DocumentAtom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [editingAtom, setEditingAtom] = useState<DocumentAtom | null>(null);
-  const [editForm, setEditForm] = useState({ key: '', title: '', content: '', type: 'content' });
+  const [editForm, setEditForm] = useState<Pick<DocumentAtom, 'key' | 'title' | 'content' | 'type'>>({ key: '', title: '', content: '', type: 'reference' });
   const [isSaving, setIsSaving] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
@@ -161,16 +164,7 @@ export function AtomsListView() {
               return (
                 <div
                   key={atom.id}
-                  onClick={() => {
-                    setEditingAtom(atom);
-                    setEditForm({
-                      key: atom.key || '',
-                      title: atom.title || '',
-                      content: atom.content || '',
-                      type: atom.type || 'content',
-                    });
-                  }}
-                  className="rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] hover:border-purple-500/30 transition-all cursor-pointer overflow-hidden"
+                  className="relative rounded-xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] hover:border-purple-500/30 transition-all cursor-pointer overflow-hidden"
                 >
                   {/* Header */}
                   <div className="p-4 pb-2">
@@ -180,7 +174,19 @@ export function AtomsListView() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-medium text-sm mb-1">
-                          {atom.title || 'Без названия'}
+                          <button type="button" aria-label={`Редактировать атом ${atom.title || 'Без названия'}`}
+                            className="text-left after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-purple-500"
+                            onClick={(e) => {
+                              editTriggerRef.current = e.currentTarget;
+                              setEditingAtom(atom);
+                              setEditForm({
+                                key: atom.key || '',
+                                title: atom.title || '',
+                                content: atom.content || '',
+                                type: atom.type || 'reference',
+                              });
+                            }}
+                          >{atom.title || 'Без названия'}</button>
                         </h3>
                         <span className="text-[10px] text-purple-400 font-mono">#{atom.key}</span>
                       </div>
@@ -189,7 +195,7 @@ export function AtomsListView() {
 
                   {/* Content preview */}
                   {atom.content && (
-                    <div className="px-4 pb-3">
+                    <div className="relative z-10 pointer-events-none [&_a]:pointer-events-auto [&_button]:pointer-events-auto px-4 pb-3">
                       <div className="p-3 rounded-lg bg-[var(--bg-tertiary)] text-xs leading-relaxed max-h-32 overflow-hidden">
                         <MarkdownPreview content={atom.content.slice(0, 300) + (atom.content.length > 300 ? '...' : '')} />
                       </div>
@@ -234,7 +240,9 @@ export function AtomsListView() {
                   className="rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] hover:border-purple-500/30 transition-all overflow-hidden"
                 >
                   {/* Collapsed header row */}
-                  <div
+                  <div className="p-3 group flex items-center gap-3">
+                  <button type="button" aria-expanded={isExpanded}
+                    aria-label={atom.title || 'Без названия'}
                     onClick={() => {
                       setExpandedIds(prev => {
                         const next = new Set(prev);
@@ -246,27 +254,29 @@ export function AtomsListView() {
                         return next;
                       });
                     }}
-                    className="p-3 cursor-pointer group flex items-center gap-3"
+                    className="flex flex-1 min-w-0 items-center gap-3 text-left rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-purple-500"
                   >
                     {/* Expand arrow */}
-                    <button className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]">
+                    <span className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]">
                       {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    </button>
+                    </span>
                     
                     {/* Type icon */}
-                    <div className={cn("p-1.5 rounded", typeColor)}>
+                    <span className={cn("p-1.5 rounded", typeColor)}>
                       {typeIcon}
-                    </div>
+                    </span>
 
                     {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                    <span className="flex-1 min-w-0">
+                      <span className="flex items-center gap-2">
                         <span className="text-[10px] text-purple-400 font-mono">#{atom.key}</span>
-                        <h3 className="font-medium text-sm truncate">
+                        <span className="font-medium text-sm truncate">
                           {atom.title || 'Без названия'}
-                        </h3>
-                      </div>
-                    </div>
+                        </span>
+                      </span>
+                    </span>
+
+                  </button>
 
                     {/* Right side - type badge */}
                     <div className="flex items-center gap-2 shrink-0">
@@ -284,17 +294,19 @@ export function AtomsListView() {
                         {atom.type || 'content'}
                       </span>
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          editTriggerRef.current = e.currentTarget;
                           setEditingAtom(atom);
                           setEditForm({
                             key: atom.key || '',
                             title: atom.title || '',
                             content: atom.content || '',
-                            type: atom.type || 'content',
+                            type: atom.type || 'reference',
                           });
                         }}
-                        className="p-1.5 rounded hover:bg-purple-500/20 transition-colors opacity-0 group-hover:opacity-100 text-purple-400"
+                        className="p-1.5 rounded hover:bg-purple-500/20 transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 text-purple-400"
                         title="Редактировать"
                       >
                         <Atom className="w-4 h-4" />
@@ -316,7 +328,7 @@ export function AtomsListView() {
                       <div className="flex items-center gap-3 flex-wrap text-[10px] text-[var(--text-tertiary)]">
                         {atom.content_en && <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400">EN локализация</span>}
                         {atom.content_ru && <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">RU локализация</span>}
-                        {atom.api_path && <span className="font-mono text-green-400">{atom.api_path}</span>}
+                        {atom.http_path && <span className="font-mono text-green-400">{atom.http_path}</span>}
                         {atom.tags && atom.tags.length > 0 && (
                           <span>Теги: {atom.tags.join(', ')}</span>
                         )}
@@ -324,13 +336,15 @@ export function AtomsListView() {
                       
                       {/* Edit button */}
                       <button
-                        onClick={() => {
+                        type="button"
+                        onClick={(e) => {
+                          editTriggerRef.current = e.currentTarget;
                           setEditingAtom(atom);
                           setEditForm({
                             key: atom.key || '',
                             title: atom.title || '',
                             content: atom.content || '',
-                            type: atom.type || 'content',
+                            type: atom.type || 'reference',
                           });
                         }}
                         className="mt-3 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-400 text-xs font-medium hover:bg-purple-500/30 transition-colors"
@@ -348,30 +362,37 @@ export function AtomsListView() {
 
       {/* Atom Edit Modal */}
       {editingAtom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditingAtom(null)}>
-          <div
-            className="bg-[var(--bg-primary)] rounded-xl border border-[var(--border-primary)] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden"
-            onClick={e => e.stopPropagation()}
+        <Dialog.Root open onOpenChange={open => { if (!open && !isSaving) setEditingAtom(null); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            onCloseAutoFocus={e => { e.preventDefault(); editTriggerRef.current?.focus(); }}
+            className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 bg-[var(--bg-primary)] rounded-xl border border-[var(--border-primary)] shadow-2xl w-[calc(100%-2rem)] max-w-2xl max-h-[90vh] overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-primary)]">
               <div className="flex items-center gap-3">
                 <Atom className="w-5 h-5 text-purple-400" />
-                <h2 className="text-lg font-semibold">Редактирование атома</h2>
+                <Dialog.Title className="text-lg font-semibold">Редактирование атома</Dialog.Title>
               </div>
               <button
+                type="button"
+                disabled={isSaving}
                 onClick={() => setEditingAtom(null)}
+                aria-label="Закрыть редактирование атома"
                 className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
             {/* Body */}
             <div className="p-6 space-y-4 overflow-y-auto max-h-[60vh]">
               <div>
-                <label className="block text-sm font-medium mb-1.5">Ключ</label>
+                <label htmlFor={`${fieldId}-0`} className="block text-sm font-medium mb-1.5">Ключ</label>
                 <input
+                  id={`${fieldId}-0`}
                   type="text"
                   value={editForm.key}
                   onChange={e => setEditForm(f => ({ ...f, key: e.target.value }))}
@@ -381,8 +402,9 @@ export function AtomsListView() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5">Название</label>
+                <label htmlFor={`${fieldId}-1`} className="block text-sm font-medium mb-1.5">Название</label>
                 <input
+                  id={`${fieldId}-1`}
                   type="text"
                   value={editForm.title}
                   onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
@@ -392,13 +414,13 @@ export function AtomsListView() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5">Тип</label>
-                <select
+                <label htmlFor={`${fieldId}-2`} className="block text-sm font-medium mb-1.5">Тип</label>
+                <select id={`${fieldId}-2`}
                   value={editForm.type}
-                  onChange={e => setEditForm(f => ({ ...f, type: e.target.value }))}
+                  onChange={e => setEditForm(f => ({ ...f, type: e.target.value as DocumentAtom['type'] }))}
                   className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-sm"
                 >
-                  <option value="content">content</option>
+                  <option value="store">store</option>
                   <option value="endpoint">endpoint</option>
                   <option value="concept">concept</option>
                   <option value="howto">howto</option>
@@ -410,8 +432,9 @@ export function AtomsListView() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1.5">Содержимое</label>
+                <label htmlFor={`${fieldId}-3`} className="block text-sm font-medium mb-1.5">Содержимое</label>
                 <textarea
+                  id={`${fieldId}-3`}
                   value={editForm.content}
                   onChange={e => setEditForm(f => ({ ...f, content: e.target.value }))}
                   rows={6}
@@ -424,12 +447,15 @@ export function AtomsListView() {
             {/* Footer */}
             <div className="flex items-center justify-between px-6 py-4 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)]">
               <button
+                type="button"
+                disabled={isSaving}
                 onClick={() => setEditingAtom(null)}
                 className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
                 Отмена
               </button>
               <button
+                type="button"
                 onClick={async () => {
                   setIsSaving(true);
                   try {
@@ -457,8 +483,9 @@ export function AtomsListView() {
                 {isSaving ? 'Сохранение...' : 'Сохранить'}
               </button>
             </div>
-          </div>
-        </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+        </Dialog.Root>
       )}
     </div>
   );

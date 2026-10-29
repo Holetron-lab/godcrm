@@ -73,9 +73,23 @@ describe('CredentialVault', () => {
 });
 
 describe('Connector catalogue', () => {
-  it('lists 4 types in Phase 1', () => {
+  // The catalogue has doubled since Phase 1 (github, google, imap, slack were
+  // added); the frozen four-slug list turned a registry guard into a permanent
+  // red. Keep the guard — a new connector still has to be declared here
+  // deliberately — but pin the set the catalogue actually ships.
+  it('registers exactly the catalogued connector types', () => {
     const slugs = listConnectorTypes().map((t) => t.slug).sort();
-    expect(slugs).toEqual(['custom_api_key', 'custom_oauth2', 'figma', 'notion']);
+    expect(slugs).toEqual([
+      'blender_mcp', 'custom_api_key', 'custom_blender_mcp', 'custom_godcrm_mcp', 'custom_mcp',
+      'custom_oauth2', 'figma', 'github', 'google', 'imap', 'midjourney', 'notion', 'slack',
+    ]);
+  });
+
+  it('still carries the four Phase-1 types', () => {
+    const slugs = listConnectorTypes().map((t) => t.slug);
+    for (const slug of ['custom_api_key', 'custom_oauth2', 'figma', 'notion']) {
+      expect(slugs).toContain(slug);
+    }
   });
 
   it('figma is oauth2 with correct URLs', () => {

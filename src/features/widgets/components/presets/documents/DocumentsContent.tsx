@@ -63,8 +63,8 @@ export function DocumentsContent() {
 
   // Build system variables for MarkdownPreview (includes space variables)
   const variables = useSystemVariables({
-    widgetId: ctx.widget?.id,
-    projectId: ctx.widget?.dashboard_id,
+    widgetId: ctx.widgetId,
+    projectId: ctx.projectId,
     spaceId: ctx.spaceId,
     includeSpaceVars: true,
   });
@@ -121,7 +121,7 @@ export function DocumentsContent() {
     // Transform 'content' field to language-specific field (content_en, content_ru)
     const data = { ...ctx.editingData };
     if ('content' in data && data.content !== undefined) {
-      const contentField = `content_${ctx.currentLanguage}`;
+      const contentField = `content_${ctx.currentLanguage}` as const;
       data[contentField] = data.content;
       delete data.content;
     }
@@ -176,7 +176,6 @@ export function DocumentsContent() {
 
     await ctx.addItem({
       documentId: ctx.selectedDocumentId,
-      tableId: ctx.selectedDocument.content_table_id,
       item: {
         order,
         level,
@@ -212,11 +211,10 @@ export function DocumentsContent() {
 
     await ctx.addItem({
       documentId: ctx.selectedDocumentId,
-      tableId: ctx.selectedDocument.content_table_id,
       item: {
         order,
         level: item.level,
-        [contentField]: item.content,
+        ...{ [contentField]: item.content },
         atom_ref: item.atom_ref,
       },
     });
@@ -241,7 +239,6 @@ export function DocumentsContent() {
 
     await ctx.addItem({
       documentId: ctx.selectedDocumentId,
-      tableId: ctx.selectedDocument.content_table_id,
       item: {
         order,
         level,
@@ -342,7 +339,6 @@ export function DocumentsContent() {
 
       await ctx.addItem({
         documentId: ctx.selectedDocumentId,
-        tableId,
         item: {
           order,
           level: 'widget',

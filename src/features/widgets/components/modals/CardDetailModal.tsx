@@ -1,3 +1,4 @@
+import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { X, Check, Clock, MessageCircle, MessageCirclePlus, Paperclip } from 'lucide-react';
@@ -43,6 +44,8 @@ export function CardDetailModal({
   const editTitle = isPublicReadOnly ? undefined : 'Двойной клик для редактирования';
 
   const [editingField, setEditingField] = useState<string | null>(null);
+  const editInputRef = useRequestedFocus<HTMLInputElement>(isOpen ? editingField : null);
+  const editTextRef = useRequestedFocus<HTMLTextAreaElement>(isOpen ? editingField : null);
   const [formData, setFormData] = useState<Record<string, unknown>>({});
   const startEdit = (field: string, val: unknown) => {
     if (isPublicReadOnly) return;
@@ -64,7 +67,7 @@ export function CardDetailModal({
     sendMessage,
     isSending,
   } = useRowChat({
-    tableId: tableId ?? 0,
+    tableId: Number(tableId ?? 0),
     rowId: chatRowId,
     autoCreate: true,
   });
@@ -218,7 +221,9 @@ export function CardDetailModal({
       return <span className="text-[var(--text-tertiary)] italic text-sm">—</span>;
     }
 
-    switch (column.type) {
+    // Older schemas persist rich_text alongside the current column types.
+    const displayType: string = column.type;
+    switch (displayType) {
       case 'select': {
         // Check if this is a relation column and use relationData for label
         const relationConfig = column.config?.relation;
@@ -288,7 +293,9 @@ export function CardDetailModal({
   const renderEditField = (column: ColumnModel, value: unknown) => {
     const currentValue = formData[column.name] ?? value;
 
-    switch (column.type) {
+    // Older schemas persist rich_text alongside the current column types.
+    const displayType: string = column.type;
+    switch (displayType) {
       case 'select': {
         // Check if this is a relation column
         const relationConfig = column.config?.relation;
@@ -426,8 +433,9 @@ export function CardDetailModal({
     );
   };
 
-  const cardTitle = card?.data?.[effectiveTitleField] || 'Без названия';
-  const cardStatus = groupByField ? card?.data?.[groupByField] : null;
+  const cardTitle = String(card?.data?.[effectiveTitleField] || 'Без названия');
+  const rawStatus = groupByField ? card?.data?.[groupByField] : null;
+  const cardStatus = rawStatus ? String(rawStatus) : '';
   const statusColumn = groupByField ? cols.find(c => c.name === groupByField) : null;
   const statusColor = statusColumn && cardStatus ? getOptionColor(cardStatus, statusColumn) : undefined;
 
@@ -523,14 +531,21 @@ export function CardDetailModal({
         <label className="block text-xs font-medium text-[var(--text-tertiary)] mb-2 uppercase tracking-wide">
           {column.displayName || column.name}
         </label>
+        {!isPublicReadOnly && !isFieldEditing && <button
+          type="button"
+          className="mb-2 text-xs underline text-[var(--text-secondary)] focus-visible:ring-2"
+          aria-label={`Редактировать ${column.displayName || column.name}`}
+          onClick={() => startEdit(column.name, value)}
+        >Редактировать</button>}
         {isFieldEditing ? (
           <div className="space-y-2">
             <textarea
+              aria-label={column.displayName || column.name}
               value={String(formData[column.name] ?? value ?? '')}
               onChange={(e) => handleFieldChange(column.name, e.target.value)}
               rows={6}
               className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)] resize-y"
-              autoFocus
+              ref={editTextRef}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') handleInlineCancel(column.name);
               }}
@@ -575,16 +590,18 @@ export function CardDetailModal({
     <>
       <Modal
         open={isOpen}
+        restoreFocus
         onOpenChange={(v) => !v && onClose()}
         size="2xl"
         fixedHeight
         heightOffset={100}
-        className="!p-0"
+        className="!p-0 max-sm:!w-screen max-sm:!max-w-none max-sm:!h-[100dvh] max-sm:!max-h-[100dvh] max-sm:border-0"
+        contentClassName="mt-0 pr-0 overflow-hidden"
       >
-        <div className="flex flex-col h-full min-h-0 -mt-4 -mr-2">
+        <div className="flex flex-col h-full min-h-0 min-w-0">
           {/* Custom Header */}
           <div className="flex-shrink-0 px-5 py-3 pr-12 border-b border-[var(--border-primary)]">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 min-w-0">
               {cardStatus && (
                 <span
                   className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold flex-shrink-0${isPublicReadOnly ? '' : ' cursor-pointer hover:opacity-80'}`}
@@ -604,8 +621,8 @@ export function CardDetailModal({
                     type="text"
                     value={String(formData[effectiveTitleField] || '')}
                     onChange={(e) => handleFieldChange(effectiveTitleField, e.target.value)}
-                    className="flex-1 text-lg font-semibold px-2 py-1 rounded border border-[var(--color-primary-500)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none"
-                    autoFocus
+                    className="flex-1 min-w-0 text-lg font-semibold px-2 py-1 rounded border border-[var(--color-primary-500)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none"
+                    ref={editInputRef}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleInlineSave(effectiveTitleField);
                       if (e.key === 'Escape') handleInlineCancel(effectiveTitleField);
@@ -661,14 +678,14 @@ export function CardDetailModal({
           </div>
 
           {/* Content - Two columns: structured (left) + text (right) */}
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 min-h-0 flex flex-col overflow-y-auto sm:flex-row sm:overflow-hidden">
             {/* Left Column - Structured fields + Files */}
             <div className={cn(
-              'flex-shrink-0 flex flex-col overflow-hidden',
-              hasTextColumns ? 'w-[360px] border-r border-[var(--border-primary)]' : 'flex-1'
+              'w-full min-w-0 shrink-0 flex flex-col sm:overflow-hidden',
+              hasTextColumns ? 'sm:w-[360px] sm:border-r border-[var(--border-primary)]' : 'sm:flex-1'
             )}>
               {/* Structured Fields */}
-              <div className="flex-1 overflow-y-auto p-4">
+              <div className="min-w-0 p-4 [overflow-wrap:anywhere] sm:flex-1 sm:overflow-y-auto">
                 <div className="space-y-3">
                   {structuredColumns.map(renderStructuredField)}
                 </div>
@@ -688,7 +705,7 @@ export function CardDetailModal({
                 <div className="flex items-center gap-3 text-[10px] text-[var(--text-tertiary)]">
                   <span className="flex items-center gap-1">
                     <Clock className="w-3 h-3" />
-                    {card.created_at ? new Date(card.created_at).toLocaleString('ru-RU') : '—'}
+                    {typeof card.created_at === 'string' || typeof card.created_at === 'number' ? new Date(card.created_at).toLocaleString('ru-RU') : '—'}
                   </span>
                 </div>
               </div>
@@ -696,8 +713,8 @@ export function CardDetailModal({
 
             {/* Right Column - Text columns (universal) */}
             {hasTextColumns && (
-              <div className="flex-1 flex flex-col bg-[var(--bg-primary)] overflow-hidden">
-                <div className="flex-1 overflow-y-auto p-4">
+              <div className="min-w-0 shrink-0 flex flex-col bg-[var(--bg-primary)] border-t border-[var(--border-primary)] sm:border-t-0 sm:flex-1 sm:overflow-hidden">
+                <div className="min-w-0 p-4 [overflow-wrap:anywhere] sm:flex-1 sm:overflow-y-auto">
                   {textColumns.map(renderTextField)}
                 </div>
               </div>

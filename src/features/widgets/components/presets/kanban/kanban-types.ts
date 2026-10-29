@@ -1,10 +1,11 @@
+import type { TicketRowData } from '../../../hooks/useTicketData';
 import type { PresetWidgetProps } from '../../../types/widget.types';
 
 // Generic type for kanban card data
-export type KanbanCardData = Record<string, unknown>;
+export type KanbanCardData = TicketRowData;
 
 // Type for field values in callbacks
-export type FieldValue = string | number | boolean | null | undefined;
+export type FieldValue = string | number | boolean | string[] | null | undefined;
 
 // Column info for editable fields
 export interface ColumnInfo {
@@ -12,6 +13,7 @@ export interface ColumnInfo {
   displayName?: string;
   type: string;
   config?: {
+    person?: { source?: string; allowMultiple?: boolean };
     options?: Array<{ value: string; label: string; color?: string }>;
     relation?: {
       enabled?: boolean;
@@ -20,6 +22,7 @@ export interface ColumnInfo {
       labelColumn?: string;
     };
     relatedTableId?: string | number;
+    tableId?: string | number;
   };
 }
 
@@ -82,6 +85,7 @@ export interface ExpandableCardProps {
   item: KanbanCardData;
   cardTitleColumn: string;
   cardSubtitleColumn?: string;
+  assigneeColumn?: string;
   scheduledDateColumn?: string;
   dueDateColumn?: string;
   colorColumn?: string;
@@ -130,6 +134,7 @@ export interface KanbanDraggableCardProps {
   activeId: string | null;
   cardTitleColumn: string;
   cardSubtitleColumn?: string;
+  assigneeColumn?: string;
   startDateCol?: string;
   endDateCol?: string;
   colorCol?: string;
@@ -162,6 +167,7 @@ export interface KanbanDroppableColumnProps {
   activeId: string | null;
   cardTitleColumn: string;
   cardSubtitleColumn?: string;
+  assigneeColumn?: string;
   startDateCol?: string;
   endDateCol?: string;
   colorCol?: string;

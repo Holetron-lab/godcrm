@@ -34,6 +34,10 @@ const DISPLAY_FORMATS_BY_MODE: Record<string, Array<{ label: string; value: stri
     { label: '3 дня назад', value: 'relative' },
     { label: '14:30', value: 'time_only' },
     { label: '14:30:45', value: 'time_seconds' },
+    { label: '15 дек. 2025', value: 'date_only' },
+    { label: '15.12.2025', value: 'date_short' },
+    { label: '15 декабря 2025 г.', value: 'date_full' },
+    { label: '2025-12-15', value: 'iso_date' },
   ],
   month: [
     { label: 'Декабрь 2025', value: 'default' },
@@ -165,7 +169,7 @@ export const DateColumnSettings: React.FC<ColumnSettingsProps> = ({
   const displayFormats = DISPLAY_FORMATS_BY_MODE[mode] ?? DISPLAY_FORMATS_BY_MODE.datetime;
 
   return (
-    <div className="space-y-4 p-4 border border-[var(--border-color)] rounded-lg bg-[var(--bg-secondary)]">
+    <div className="space-y-4 p-4 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-secondary)]">
       <h4 className="font-medium text-[var(--text-primary)]">
         📅 {t('dateSettings.title')}
       </h4>
@@ -252,7 +256,7 @@ export const DateColumnSettings: React.FC<ColumnSettingsProps> = ({
                   <label className="text-xs font-medium text-[var(--text-secondary)]">
                     {t('dateSettings.displayTz')}
                   </label>
-                  <div className="h-[38px] px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] text-xs text-[var(--text-tertiary)] flex items-center">
+                  <div className="h-[38px] px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-primary)] text-xs text-[var(--text-tertiary)] flex items-center">
                     {t('dateSettings.storageAlwaysUtc')}
                   </div>
                 </div>
@@ -263,7 +267,7 @@ export const DateColumnSettings: React.FC<ColumnSettingsProps> = ({
                 <label className="text-xs font-medium text-[var(--text-secondary)]">
                   {t('dateSettings.rawPreview')}
                 </label>
-                <div className="h-[38px] px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)] flex items-center overflow-x-auto whitespace-nowrap">
+                <div className="h-[38px] px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-primary)] font-mono text-xs text-[var(--text-primary)] flex items-center overflow-x-auto whitespace-nowrap">
                   {getRawPreview()}
                 </div>
               </div>
@@ -344,7 +348,7 @@ export const DateColumnSettings: React.FC<ColumnSettingsProps> = ({
         ) : (
           /* month/year/week/quarter — always ISO */
           <div className="flex flex-col gap-1">
-            <div className="h-[38px] px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-color)] font-mono text-xs text-[var(--text-primary)] flex items-center overflow-x-auto whitespace-nowrap">
+            <div className="h-[38px] px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border-primary)] font-mono text-xs text-[var(--text-primary)] flex items-center overflow-x-auto whitespace-nowrap">
               {getRawPreview()}
             </div>
             <span className="text-xs text-[var(--text-tertiary)]">
@@ -354,7 +358,7 @@ export const DateColumnSettings: React.FC<ColumnSettingsProps> = ({
         )}
       </div>
 
-      <div className="border-t border-[var(--border-color)]" />
+      <div className="border-t border-[var(--border-primary)]" />
 
       {/* Display */}
       <div className="space-y-2">
@@ -421,7 +425,7 @@ export const DateColumnSettings: React.FC<ColumnSettingsProps> = ({
         </div>
       </div>
 
-      <div className="border-t border-[var(--border-color)]" />
+      <div className="border-t border-[var(--border-primary)]" />
 
       <p className="text-xs text-[var(--text-tertiary)]">
         💡 {t('dateSettings.hint')}

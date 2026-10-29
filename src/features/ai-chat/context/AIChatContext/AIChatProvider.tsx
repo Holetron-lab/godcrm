@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
-import { apiClient } from '@/shared/utils/apiClient';
+import { fetchAllAgents } from '../../api/fetchAllAgents';
 import type { AIAgent, ChatMessage, AIChatContextValue, AIChatProviderProps, PendingTaskChat } from './types';
+import type { BoundRow } from '../../components/RowBindingV2';
 import { useProcessingState } from './useProcessingState';
 import { useConversationActions } from './useConversationActions';
 import { useSendMessage } from './useSendMessage';
@@ -12,6 +13,7 @@ export function AIChatProvider({ children, spaceId }: AIChatProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<AIAgent | null>(null);
   const [agents, setAgents] = useState<AIAgent[]>([]);
+  const [mentionAgents, setMentionAgents] = useState<AIAgent[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingAgents, setIsLoadingAgents] = useState(true); // Start true — agents not yet loaded
@@ -31,8 +33,8 @@ export function AIChatProvider({ children, spaceId }: AIChatProviderProps) {
   const [pendingTaskChat, setPendingTaskChat] = useState<PendingTaskChat | null>(null);
 
   // External row attachment state
-  const [pendingBoundRow, setPendingBoundRow] = useState<{ table_id: number; row_id: number; table_name?: string; table_icon?: string; row_title?: string } | null>(null);
-  const [pendingMessageRow, setPendingMessageRow] = useState<{ table_id: number; row_id: number; table_name?: string; table_icon?: string; row_title?: string } | null>(null);
+  const [pendingBoundRow, setPendingBoundRow] = useState<BoundRow | null>(null);
+  const [pendingMessageRow, setPendingMessageRow] = useState<BoundRow | null>(null);
 
   // Multi-conversation row filter — filters history panel to show only conversations for a specific row
   const [rowFilter, setRowFilter] = useState<{ tableId: number; rowId: number; rowTitle: string; conversations: PendingTaskChat['conversations'] } | null>(null);
@@ -121,12 +123,12 @@ export function AIChatProvider({ children, spaceId }: AIChatProviderProps) {
   }, []);
 
   // External row attachment methods — called from UniversalTable etc.
-  const attachRowToChat = useCallback((row: { table_id: number; row_id: number; table_name?: string; table_icon?: string; row_title?: string }) => {
+  const attachRowToChat = useCallback((row: BoundRow) => {
     setPendingBoundRow(row);
     if (!isOpen) setIsOpen(true);
   }, [isOpen]);
 
-  const attachRowToMessage = useCallback((row: { table_id: number; row_id: number; table_name?: string; table_icon?: string; row_title?: string }) => {
+  const attachRowToMessage = useCallback((row: BoundRow) => {
     setPendingMessageRow(row);
     if (!isOpen) setIsOpen(true);
   }, [isOpen]);
@@ -157,19 +159,14 @@ export function AIChatProvider({ children, spaceId }: AIChatProviderProps) {
       setError(null);
 
       try {
-        const response = await apiClient.get<{ success: boolean; data: { agents: AIAgent[] } }>(
-          '/ai/agents'
-        );
+        const allAgents = await fetchAllAgents<AIAgent>('/ai/agents');
+        setAgents(allAgents.filter((a) => a.is_active));
+        setMentionAgents(allAgents);
 
-        if (response.success && response.data?.agents) {
-          const activeAgents = response.data.agents.filter((a) => a.is_active);
-          setAgents(activeAgents);
-
-          // Do NOT auto-select agent here — let AIChatPanel Effect #5 handle it.
-          // It checks defaultAgentId from space settings first, then falls back to agents[0].
-          // Selecting here causes a race condition: loadAgents() runs before defaultAgentId
-          // is loaded from currentSpace.settings → always picks agents[0] instead of default.
-        }
+        // Do NOT auto-select agent here — let AIChatPanel Effect #5 handle it.
+        // It checks defaultAgentId from space settings first, then falls back to agents[0].
+        // Selecting here causes a race condition: loadAgents() runs before defaultAgentId
+        // is loaded from currentSpace.settings → always picks agents[0] instead of default.
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load agents');
       } finally {
@@ -184,22 +181,16 @@ export function AIChatProvider({ children, spaceId }: AIChatProviderProps) {
     setError(null);
 
     try {
-      const response = await apiClient.get<{ success: boolean; data: { agents: AIAgent[] } }>(
-        `/ai/agents/${spaceId}`
-      );
+      const allAgents = await fetchAllAgents<AIAgent>(`/ai/agents/${spaceId}`);
+      // ADR-0079 §2: hide locked Tier-B bindings from the invocation surface.
+      // Settings → Add Agent uses a separate fetch that intentionally shows
+      // locked bindings to enable unlock.
+      setAgents(allAgents.filter((a) => a.is_active && a.visibility !== 'locked'));
+      // Historical mentions retain identity even when an agent cannot be selected.
+      setMentionAgents(allAgents);
 
-      if (response.success && response.data?.agents) {
-        // ADR-0079 §2: hide locked Tier-B bindings from the invocation surface.
-        // Settings → Add Agent uses a separate fetch that intentionally shows
-        // locked bindings to enable unlock.
-        const activeAgents = response.data.agents.filter(
-          (a) => a.is_active && a.visibility !== 'locked'
-        );
-        setAgents(activeAgents);
-
-        // Do NOT auto-select agent here — let AIChatPanel Effect #5 handle it.
-        // See comment above for explanation of the race condition.
-      }
+      // Do NOT auto-select agent here — let AIChatPanel Effect #5 handle it.
+      // See comment above for explanation of the race condition.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agents');
     } finally {
@@ -256,6 +247,7 @@ export function AIChatProvider({ children, spaceId }: AIChatProviderProps) {
     isOpen,
     currentAgent,
     agents,
+    mentionAgents,
     messages,
     isLoading,
     isLoadingAgents,
@@ -349,6 +341,7 @@ const stubValue: AIChatContextValue = {
   isOpen: false,
   currentAgent: null,
   agents: [],
+  mentionAgents: [],
   messages: [],
   isLoading: false,
   isLoadingAgents: false,
@@ -381,7 +374,7 @@ const stubValue: AIChatContextValue = {
   loadConversations: STUB_NOOP_ASYNC,
   selectConversation: STUB_NOOP_ASYNC,
   createNewConversation: STUB_NOOP_ASYNC,
-  deleteConversation: STUB_NOOP_ASYNC,
+  deleteConversation: async () => false,
   renameConversation: STUB_NOOP_ASYNC,
   isLoadingConversations: false,
   historyAgentFilter: null,

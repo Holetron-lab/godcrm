@@ -11,12 +11,17 @@ import pg from 'pg';
 const { Pool } = pg;
 
 // PostgreSQL connection
+// ADR-0009 §Phase 7 — read the pinned contour (backend/test/contour.js), not a
+// private DB_* alias. The previous form defaulted to `godcrm_prod` with a
+// literal password: it failed on a wrong password rather than on the guard,
+// because the boot guard only inspects POSTGRES_*. The alias is now refused
+// there too.
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  database: process.env.DB_NAME || 'godcrm_prod',
-  user: process.env.DB_USER || 'godcrm',
-  password: process.env.DB_PASSWORD || 'godcrm_dev_2026'
+  host: process.env.POSTGRES_HOST || '127.0.0.1',
+  port: parseInt(process.env.POSTGRES_PORT || '5432'),
+  database: process.env.POSTGRES_DB || 'godcrm_test',
+  user: process.env.POSTGRES_USER || 'godcrm',
+  password: process.env.POSTGRES_PASSWORD
 });
 
 const dbQuery = async (sql, params = []) => {
@@ -90,7 +95,7 @@ describe('AI Agent Tools PostgreSQL Integration', () => {
     });
 
     it('should return empty array for non-existent space', async () => {
-      const fakeSpaceId = 99999;
+      const { id: fakeSpaceId } = await dbGet("SELECT nextval(pg_get_serial_sequence('spaces', 'id')) AS id");
       
       const tables = await dbQuery(`
         SELECT ut.id, ut.name

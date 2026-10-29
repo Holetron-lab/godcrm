@@ -28,6 +28,7 @@ export function TimelineWidget({
   relationData,
   onEventClick,
   onEventUpdate,
+  onEventSave,
   onAddEvent
 }: TimelineWidgetProps) {
   // State
@@ -83,7 +84,10 @@ export function TimelineWidget({
   // Handlers
   const {
     dragState,
+    isSaving,
+    saveError,
     handleMouseDown,
+    handleKeyboardUpdate,
     connectingFrom,
     hoveredDependency,
     setHoveredDependency,
@@ -107,6 +111,7 @@ export function TimelineWidget({
     dependencyColumn,
     displayItems,
     onEventUpdate,
+    onEventSave,
     edgesMode,
     getPositionForDate,
     currentTime,
@@ -183,6 +188,9 @@ export function TimelineWidget({
         onEventUpdate={onEventUpdate}
       />
 
+      {isSaving && <p role="status" className="px-3 text-sm">Сохранение дат…</p>}
+      {saveError && <p role="alert" className="px-3 text-sm text-[var(--text-primary)]">{saveError}</p>}
+
       <TimelineBody
         timeScale={timeScale}
         timeUnits={timeUnits}
@@ -202,9 +210,11 @@ export function TimelineWidget({
         edgesMode={edgesMode}
         connectingFrom={connectingFrom}
         onMouseDown={handleMouseDown}
+        onKeyboardUpdate={handleKeyboardUpdate}
         onEdgeClick={handleEdgeClick}
         onEventClick={onEventClick}
-        onEventUpdate={onEventUpdate}
+        onEventUpdate={onEventSave ? onEventUpdate : undefined}
+        isSaving={isSaving}
         renderDependencies={renderDeps}
         timelineRef={timelineRef}
       />

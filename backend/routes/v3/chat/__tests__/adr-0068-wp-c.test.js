@@ -19,6 +19,9 @@ import express from 'express';
 import request from 'supertest';
 import { Router } from 'express';
 
+// This suite tests reply enrichment; the read ACL matrix lives in conversation-read-access.test.js.
+vi.mock('../../../../services/chat/conversation-read-access.js', () => ({ canReadConversation: vi.fn(async () => true) }));
+
 const dbGetMock = vi.fn();
 const dbRunMock = vi.fn();
 const dbAllMock = vi.fn();

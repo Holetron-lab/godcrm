@@ -1,0 +1,11 @@
+import '../../styles/index.css';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { LanguageProvider } from '@/shared/i18n/LanguageContext';
+import { ProcurementWidget } from '@/features/widgets/components/presets/procurement/ProcurementWidget';
+import type { Widget } from '@/features/widgets/types/widget.types';
+const root = document.getElementById('root');
+if (!root) throw new Error('Missing fixture root');
+const widget = { id: 1, config: { table_id: 5, procurement: { supplier_table_id: 6 } } } as Widget;
+createRoot(root).render(<BrowserRouter><QueryClientProvider client={new QueryClient()}><LanguageProvider><main><ProcurementWidget widget={widget} /></main></LanguageProvider></QueryClientProvider></BrowserRouter>);

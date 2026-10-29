@@ -8,6 +8,7 @@ import { dbGet, dbRun, dbAll, isPostgres } from '../../../database/connection.js
 import { apiLogger } from '../../../utils/logger.js';
 import { success, created, notFound, badRequest, forbidden, unauthorized, error } from '../../../utils/response.js';
 import { safeParseJSON } from './shared.js';
+import { canReadConversation } from '../../../services/chat/conversation-read-access.js';
 
 const router = Router();
 
@@ -113,13 +114,7 @@ router.get('/conversations/:conversationId', async (req, res) => {
     );
     if (!conversation) return notFound(res, 'Conversation not found');
 
-    const participant = await dbGet(
-      isPostgres()
-        ? 'SELECT * FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2'
-        : 'SELECT * FROM conversation_participants WHERE conversation_id = ? AND user_id = ?',
-      [conversationId, userId]
-    );
-    if (!participant) return forbidden(res, 'Access denied');
+    if (!await canReadConversation(req.user, conversationId, conversation)) return forbidden(res, 'Access denied');
 
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 1), 200);
     const before = req.query.before ? parseInt(req.query.before) : null;

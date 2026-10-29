@@ -9,6 +9,7 @@ const JWT_SECRET = 'test-secret-key';
 process.env.JWT_SECRET = JWT_SECRET;
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { NON_EXISTENT_ID } from '../../../tests/helpers/sentinel-ids.js';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import express from 'express';
@@ -158,7 +159,7 @@ describe('GET /api/v3/ai/agents/:spaceId', () => {
 
   it('should return empty agents array for space without agents', async () => {
     const response = await request(app)
-      .get('/api/v3/ai/agents/99999')
+      .get(`/api/v3/ai/agents/${NON_EXISTENT_ID}`)
       .set('Authorization', `Bearer ${authToken}`)
       .expect(200);
 

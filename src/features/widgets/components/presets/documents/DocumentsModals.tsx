@@ -3,7 +3,7 @@
  * Refactored: individual modals extracted to ./modals/ directory (ADR-046)
  */
 
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
 import {
   X,
@@ -28,6 +28,7 @@ import { TranslationMissingModal } from './modals/TranslationMissingModal';
 
 export function DocumentsModals() {
   const ctx = useDocumentsContext();
+  const fieldId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // === LANGUAGE DETECTION ===
@@ -124,8 +125,10 @@ export function DocumentsModals() {
                 <span className="font-medium">Загрузить Markdown</span>
               </div>
               <button
+                type="button"
+                aria-label="Закрыть загрузку Markdown"
                 onClick={() => { ctx.setShowFileUploadModal(false); ctx.setUrlInput(''); }}
-                className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)]"
+                className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -133,8 +136,18 @@ export function DocumentsModals() {
 
             <div className="p-6 space-y-4">
               {/* Drag & Drop area */}
-              <div
-                className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-[var(--border-primary)] rounded-xl hover:border-[var(--color-primary-500)] transition-colors cursor-pointer"
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,.markdown,.txt"
+                onChange={handleImportFileSelect}
+                hidden
+              />
+              <button
+                type="button"
+                aria-labelledby={`${fieldId}-choose-file`}
+                aria-describedby={`${fieldId}-drop-hint`}
+                className="w-full flex flex-col items-center justify-center py-10 border-2 border-dashed border-[var(--border-primary)] rounded-xl hover:border-[var(--color-primary-500)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary-500)] transition-colors cursor-pointer"
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={(e) => {
                   e.preventDefault();
@@ -159,22 +172,15 @@ export function DocumentsModals() {
                   }
                 }}
               >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".md,.markdown,.txt"
-                  onChange={handleImportFileSelect}
-                  className="hidden"
-                />
                 <FileUp className="w-10 h-10 text-[var(--text-tertiary)] mb-3" />
-                <p className="text-[var(--text-secondary)] text-sm mb-2">Перетащите MD файл сюда</p>
-                <button
-                  onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                <span id={`${fieldId}-drop-hint`} className="text-[var(--text-secondary)] text-sm mb-2">Перетащите MD файл сюда</span>
+                <span
+                  id={`${fieldId}-choose-file`}
                   className="px-4 py-2 rounded-lg bg-[var(--color-primary-500)] text-white text-sm font-medium"
                 >
                   Выбрать файл
-                </button>
-              </div>
+                </span>
+              </button>
 
               {/* Language selector */}
               <div className="flex items-center gap-3">
@@ -183,6 +189,8 @@ export function DocumentsModals() {
                   {(['auto', 'en', 'ru'] as const).map(lang => (
                     <button
                       key={lang}
+                      type="button"
+                      aria-pressed={ctx.importLanguage === lang}
                       onClick={() => ctx.setImportLanguage(lang)}
                       className={cn(
                         "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
@@ -206,9 +214,9 @@ export function DocumentsModals() {
 
               {/* URL input */}
               <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Загрузить по ссылке</label>
+                <label htmlFor={`${fieldId}-url`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Загрузить по ссылке</label>
                 <div className="flex gap-2">
-                  <input
+                  <input id={`${fieldId}-url`}
                     type="url"
                     value={ctx.urlInput}
                     onChange={(e) => ctx.setUrlInput(e.target.value)}
@@ -216,6 +224,7 @@ export function DocumentsModals() {
                     className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-sm focus:border-[var(--color-primary-500)] outline-none"
                   />
                   <button
+                    type="button"
                     onClick={handleUrlImport}
                     disabled={!ctx.urlInput.trim()}
                     className="px-4 py-2 rounded-lg bg-[var(--color-primary-500)] text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
@@ -253,8 +262,8 @@ export function DocumentsModals() {
               </p>
 
               <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">base_id (ключ атома)</label>
-                <input
+                <label htmlFor={`${fieldId}-key`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">base_id (ключ атома)</label>
+                <input id={`${fieldId}-key`}
                   type="text"
                   value={ctx.selectedItemForAtom.atom_key || ''}
                   onChange={(e) => ctx.setSelectedItemForAtom({
@@ -267,8 +276,8 @@ export function DocumentsModals() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Заголовок атома</label>
-                <input
+                <label htmlFor={`${fieldId}-title`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Заголовок атома</label>
+                <input id={`${fieldId}-title`}
                   type="text"
                   value={ctx.selectedItemForAtom.atom_title || ''}
                   onChange={(e) => ctx.setSelectedItemForAtom({
@@ -281,8 +290,8 @@ export function DocumentsModals() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Комментарий</label>
-                <textarea
+                <label htmlFor={`${fieldId}-comment`} className="block text-sm font-medium text-[var(--text-secondary)] mb-2">Комментарий</label>
+                <textarea id={`${fieldId}-comment`}
                   value={ctx.selectedItemForAtom.comment || ''}
                   onChange={(e) => ctx.setSelectedItemForAtom({
                     ...ctx.selectedItemForAtom!,

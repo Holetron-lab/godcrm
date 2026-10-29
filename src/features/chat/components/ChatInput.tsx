@@ -9,7 +9,7 @@
 import { useState, useCallback, useRef, KeyboardEvent } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import { Button } from '@/shared/components/ui/Button';
-import { Input } from '@/shared/components/ui/Input';
+import { getChatSendMode, useChatSendShortcut } from '@/shared/hooks/useChatSendShortcut';
 
 export interface ChatInputProps {
   onSend: (content: string) => void;
@@ -30,6 +30,7 @@ export function ChatInput({
   className = '',
 }: ChatInputProps) {
   const [value, setValue] = useState('');
+  const { preferences } = useChatSendShortcut();
   const lastSendTime = useRef<number>(0);
 
   const handleSend = useCallback(() => {
@@ -43,24 +44,29 @@ export function ChatInput({
     setValue('');
   }, [value, isSending, disabled, onSend]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return;
+    if (e.key === 'Enter' && e.shiftKey === (getChatSendMode(preferences) === 'shift-enter') && !e.altKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       handleSend();
     }
-  }, [handleSend]);
+  }, [handleSend, preferences]);
 
   return (
     <div className={`flex gap-2 px-4 py-3 border-t border-[var(--border-primary)] bg-[var(--bg-secondary)] ${className}`}>
-      <Input
+      <textarea
+        rows={2}
+        aria-label={placeholder}
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled || isSending}
-        className="flex-1"
+        className="min-w-0 flex-1 resize-none rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-primary-500)] disabled:opacity-50"
       />
       <Button
+        aria-label="Отправить сообщение"
+        title="Отправить сообщение"
         onClick={handleSend}
         disabled={!value.trim() || isSending || disabled}
         size="sm"

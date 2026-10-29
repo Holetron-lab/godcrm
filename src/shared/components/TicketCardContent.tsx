@@ -662,8 +662,9 @@ export function TicketCardContent({
       })()}
 
       {showAssignedAddSelect && onAssignedChange && createPortal(
-        <div className="fixed inset-0 z-[9998]" onClick={(e) => { e.stopPropagation(); setShowAssignedAddSelect(false); }}>
-          <div
+        <div role="presentation" className="fixed inset-0 z-[9998]" onClick={(e) => { e.stopPropagation(); setShowAssignedAddSelect(false); }}>
+          <button type="button" aria-label="Закрыть выбор исполнителя" className="absolute inset-0 h-full w-full" />
+          <div role="presentation"
             className="fixed z-[9999]"
             style={{
               top: (assignedAddBtnRef.current?.getBoundingClientRect().bottom || 0) + 4,

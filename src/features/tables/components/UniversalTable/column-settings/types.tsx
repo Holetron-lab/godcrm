@@ -11,6 +11,8 @@ export interface ColumnSettingsProps {
   rows?: Array<{ id: string; data: Record<string, unknown> }>;
   tableId?: number;
   projectId?: number;
+  // ADR-0035-A: space of the table (address settings list the space's secret key *names*)
+  spaceId?: number;
   // Для relation настроек
   relationTableId?: number | string;
   relationTableColumns?: ColumnModel[];
@@ -95,7 +97,7 @@ export function renderTypeCellPreview(
               ? 'bg-red-500 text-white'
               : variant === 'ghost'
               ? 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
-              : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)]'
+              : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-primary)]'
           }`}
         >
           <span>{icon}</span>
@@ -207,6 +209,11 @@ export function renderTypeCellPreview(
             return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
           case 'time_seconds':
             return date.toLocaleTimeString('ru-RU');
+          case 'date_short':
+            return date.toLocaleDateString('ru-RU');
+          case 'date_full':
+            return date.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' });
+          case 'date_only':
           default:
             return date.toLocaleDateString('ru-RU', { year: 'numeric', month: 'short', day: 'numeric' });
         }

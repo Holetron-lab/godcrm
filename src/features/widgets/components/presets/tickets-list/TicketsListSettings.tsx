@@ -261,7 +261,7 @@ export function TicketsListSettings({ widget, isReadOnly = false }: TicketsListS
 
   const ticketsTableId = useMemo(() => resolveTicketsTableId(widget), [widget]);
   const columnsQuery = useTableColumns(String(ticketsTableId));
-  const columns = columnsQuery.data ?? [];
+  const columns = useMemo(() => columnsQuery.data ?? [], [columnsQuery.data]);
   const ownerKind = (widget as unknown as { owner_kind?: string }).owner_kind ?? null;
   const ownerId = (widget as unknown as { owner_id?: number }).owner_id ?? null;
   const ownerIsDocument = ownerKind === 'document';
@@ -291,17 +291,17 @@ export function TicketsListSettings({ widget, isReadOnly = false }: TicketsListS
     [columns, filterColumn],
   );
   const colType = isIdFilter ? 'number' : selectedCol?.type;
-  const colConfig = (selectedCol?.config as Record<string, unknown> | undefined) || {};
+  const colConfig = selectedCol?.config as Record<string, unknown> | undefined;
   const relation: RelationConfig | null = useMemo(() => {
     if (isIdFilter) return null;
-    const raw = colConfig.relation as RelationConfig | undefined;
+    const raw = colConfig?.relation as RelationConfig | undefined;
     if (raw && raw.enabled === true && raw.tableId) return raw;
     return null;
   }, [colConfig, isIdFilter]);
   const colOptions: Array<{ value: string; label?: string; color?: string }> = useMemo(() => {
     if (isIdFilter || relation) return []; // id is a number field; relation overrides static options
     if (colType !== 'select' && colType !== 'multi-select') return [];
-    const raw = colConfig.options;
+    const raw = colConfig?.options;
     return Array.isArray(raw) ? (raw as Array<{ value: string; label?: string; color?: string }>) : [];
   }, [colType, colConfig, relation, isIdFilter]);
   const isSelectLike = colOptions.length > 0;

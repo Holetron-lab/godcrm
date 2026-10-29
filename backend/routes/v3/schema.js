@@ -70,33 +70,25 @@ router.get('/spaces/:spaceId/schema', async (req, res) => {
 
     // Get all tables in space (via projects)
     const tables = await dbAll(`
-      SELECT t.*, p.name as project_name, p.id as project_id, p.icon as project_icon
+      SELECT t.*, p.name as project_name, p.id as project_id, p.icon as project_icon,
+        (SELECT COUNT(*) FROM table_rows r WHERE r.table_id = t.id) AS row_count
       FROM universal_tables t
       JOIN projects p ON t.project_id = p.id
       WHERE p.space_id = ?
       ORDER BY t.created_at
     `, [spaceId]);
 
-    // Get columns for each table + row count + sample values
+    // Get columns for each table + sample values
     for (const table of tables) {
-      // Get columns
+      // Rows of external (data-source) tables live outside table_rows — no cheap count.
+      table.row_count = table.data_source_id ? null : Number(table.row_count) || 0;
+
+      // Same order as the universal table grid (order_index, then creation order)
       const columns = await dbAll(
-        `SELECT * FROM table_columns WHERE table_id = ? ORDER BY id`,
+        `SELECT * FROM table_columns WHERE table_id = ? ORDER BY order_index, id`,
         [table.id]
       );
-      
-      // Get row count
-      try {
-        const safeTableName = escapeIdentifier(table.name);
-        const countResult = await dbGet(
-          `SELECT COUNT(*) as count FROM ${safeTableName}`,
-          []
-        );
-        table.row_count = countResult?.count || 0;
-      } catch (e) {
-        table.row_count = 0;
-      }
-      
+
       // Get first row for sample values
       let sampleRow = null;
       try {
@@ -136,6 +128,11 @@ router.get('/spaces/:spaceId/schema', async (req, res) => {
           type: col.type,
           is_required: col.is_required,
           is_system: col.is_system,
+          order_index: col.order_index,
+          is_visible: col.is_visible,
+          is_readonly: col.is_readonly,
+          is_locked: col.is_locked,
+          is_from_source: col.is_from_source,
           config: col.config ? JSON.parse(col.config) : null,
           sample_value: sampleRow ? sampleRow[col.column_name] : undefined
         }));

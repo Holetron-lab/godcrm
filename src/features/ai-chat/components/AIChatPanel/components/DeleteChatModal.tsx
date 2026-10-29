@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * DeleteChatModal — styled confirmation for chat deletion.
  * ADR-0059 §4.2: replaces native window.confirm.
@@ -17,6 +18,7 @@ export interface DeleteChatModalProps {
 }
 
 export function DeleteChatModal({ open, chatTitle, onCancel, onConfirm }: DeleteChatModalProps) {
+  const { t } = useLanguage();
   const [pending, setPending] = useState(false);
 
   const handleConfirm = async () => {
@@ -51,8 +53,7 @@ export function DeleteChatModal({ open, chatTitle, onCancel, onConfirm }: Delete
           </div>
 
           <Dialog.Title className="text-lg font-semibold text-[var(--text-primary)]">
-            Удалить чат?
-          </Dialog.Title>
+            {t('aiChat.ui.deleteChat')}</Dialog.Title>
 
           <Dialog.Description
             id="delete-chat-modal-body"
@@ -60,11 +61,10 @@ export function DeleteChatModal({ open, chatTitle, onCancel, onConfirm }: Delete
           >
             {chatTitle ? (
               <>
-                Чат <em className="not-italic font-medium text-[var(--text-primary)]">«{chatTitle}»</em>{' '}
-                и все сообщения будут удалены без возможности восстановления.
-              </>
+                {t('columnTypes.chat.label')}<em className="not-italic font-medium text-[var(--text-primary)]">«{chatTitle}»</em>{' '}
+                {t('aiChat.ui.andAllMessagesWillBePermanentlyDeleted')}</>
             ) : (
-              <>Этот чат и все сообщения будут удалены без возможности восстановления.</>
+              <>{t('aiChat.ui.thisChatAndAllItsMessagesWillBePermanentlyDeleted')}</>
             )}
           </Dialog.Description>
 
@@ -76,8 +76,7 @@ export function DeleteChatModal({ open, chatTitle, onCancel, onConfirm }: Delete
               disabled={pending}
               className="sm:flex-1"
             >
-              Отмена
-            </Button>
+              {t('aiChat.ui.cancel')}</Button>
             <Button
               type="button"
               variant="danger"
@@ -88,10 +87,9 @@ export function DeleteChatModal({ open, chatTitle, onCancel, onConfirm }: Delete
               {pending ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Удаляю…
-                </span>
+                  {t('aiChat.ui.deleting')}</span>
               ) : (
-                'Удалить навсегда'
+                t('projects.delete.deleteForever')
               )}
             </Button>
           </div>

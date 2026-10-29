@@ -1,13 +1,15 @@
 /**
  * ADR-0040 P2 — Owner Secrets Vault UI.
  *
- * Embedded as the "Secrets" tab in EditSpaceModal (space 11 owner only).
+ * Embedded as the "Secrets" tab in EditSpaceModal (space owner or space admin).
  * Pattern mirrors ADR-0028 Phase 3 (SpaceConnectorsTab): list / add / edit /
  * reveal / delete. Backend: ticket 140012 (P1), routes /api/v3/secrets.
  *
- * Owner-only gate: non-owners see a placeholder and no API calls fire.
+ * Gate mirrors the backend: owner/admin role IN THE SPACE (canManageSpace);
+ * everyone else sees a placeholder and no API calls fire.
  */
 import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import {
@@ -18,10 +20,12 @@ import {
   Pencil,
   Plus,
   ShieldAlert,
+  Table2,
   Trash2,
 } from 'lucide-react';
 import { Modal } from '@/shared/components/ui/Modal';
 import { Input } from '@/shared/components/ui/Input';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useSpaceAccessLevel } from '@/features/spaces/hooks/useSpaceAccessLevel';
 import {
   secretsApi,
@@ -38,6 +42,7 @@ export interface SpaceSecretsTabProps {
 }
 
 export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
+  const { t } = useLanguage();
   const access = useSpaceAccessLevel(spaceId);
   const queryClient = useQueryClient();
 
@@ -49,15 +54,16 @@ export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
   const revealTimerRef = useRef<number | null>(null);
 
   const {
-    data: secrets = [],
+    data: list,
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: ['secrets', 'list'],
-    queryFn: () => secretsApi.list(),
-    enabled: access.isOwner && !access.loading,
+    queryKey: ['secrets', 'list', spaceId],
+    queryFn: () => secretsApi.list(spaceId),
+    enabled: access.canManageSpace && !access.loading,
     retry: false,
   });
+  const secrets = list?.secrets ?? [];
 
   useEffect(() => {
     return () => {
@@ -68,11 +74,11 @@ export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
   }, []);
 
   const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: ['secrets', 'list'] });
+    queryClient.invalidateQueries({ queryKey: ['secrets', 'list', spaceId] });
 
   const handleReveal = async (key: string) => {
     try {
-      const { plaintext } = await secretsApi.reveal(key);
+      const { plaintext } = await secretsApi.reveal(spaceId, key);
       setRevealedFor({ key, plaintext });
       if (revealTimerRef.current) {
         window.clearTimeout(revealTimerRef.current);
@@ -83,7 +89,7 @@ export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
       }, REVEAL_TTL_MS);
       void refetch();
     } catch (err) {
-      toast.error(extractErrorMessage(err) || 'Reveal failed');
+      toast.error(extractErrorMessage(err) || t('spaces.secrets.revealFailed'));
     }
   };
 
@@ -95,7 +101,7 @@ export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
     );
   }
 
-  if (!access.isOwner) {
+  if (!access.canManageSpace) {
     return <RestrictedPlaceholder />;
   }
 
@@ -104,18 +110,28 @@ export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm text-[var(--text-tertiary)]">
-            Зашифрованное хранилище API-ключей и токенов, доступное MCP-инструментам и агентам.
-            Каждый просмотр записывается в audit log.
+            {t('spaces.secrets.description')}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setAddOpen(true)}
-          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-[var(--color-primary-500)] hover:bg-[var(--color-primary-600)] text-white rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Добавить секрет
-        </button>
+        <div className="flex-shrink-0 flex items-center gap-2">
+          {list?.table_id != null && (
+            <Link
+              to={`/tables/${list.table_id}`}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium border border-[var(--border-primary)] hover:bg-[var(--bg-secondary)] rounded-lg transition-colors"
+            >
+              <Table2 className="w-4 h-4" />
+              {t('spaces.secrets.spaceTable')}
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-[var(--color-primary-500)] hover:bg-[var(--color-primary-600)] text-white rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            {t('spaces.secrets.add')}
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -146,6 +162,7 @@ export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
 
       {addOpen && (
         <AddSecretModal
+          spaceId={spaceId}
           existingKeys={secrets.map((s) => s.key)}
           onClose={() => setAddOpen(false)}
           onSuccess={() => {
@@ -157,6 +174,7 @@ export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
 
       {editTarget && (
         <EditSecretModal
+          spaceId={spaceId}
           target={editTarget}
           onClose={() => setEditTarget(null)}
           onSuccess={() => {
@@ -168,6 +186,7 @@ export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
 
       {deleteTarget && (
         <DeleteSecretConfirm
+          spaceId={spaceId}
           target={deleteTarget}
           onClose={() => setDeleteTarget(null)}
           onSuccess={() => {
@@ -193,15 +212,15 @@ export function SpaceSecretsTab({ spaceId }: SpaceSecretsTabProps) {
 }
 
 function RestrictedPlaceholder() {
+  const { t } = useLanguage();
   return (
     <div className="text-center py-12 bg-[var(--bg-secondary)] border border-dashed border-[var(--border-primary)] rounded-lg">
       <ShieldAlert className="w-10 h-10 text-[var(--text-tertiary)] mx-auto mb-3 opacity-60" />
       <p className="text-sm text-[var(--text-primary)] font-medium mb-1">
-        Доступ ограничен
+        {t('spaces.secrets.restricted')}
       </p>
       <p className="text-xs text-[var(--text-tertiary)] max-w-sm mx-auto">
-        Секреты пространства может просматривать и редактировать только владелец.
-        Обратитесь к нему, если нужен доступ.
+        {t('spaces.secrets.restrictedHint')}
       </p>
     </div>
   );
@@ -221,14 +240,15 @@ function ListSkeleton() {
 }
 
 function EmptyState() {
+  const { t } = useLanguage();
   return (
     <div className="text-center py-8 bg-[var(--bg-secondary)] border border-dashed border-[var(--border-primary)] rounded-lg">
       <KeyRound className="w-10 h-10 text-[var(--text-tertiary)] mx-auto mb-3 opacity-50" />
       <p className="text-sm text-[var(--text-secondary)] mb-1">
-        Секретов пока нет
+        {t('spaces.secrets.empty')}
       </p>
       <p className="text-xs text-[var(--text-tertiary)]">
-        Добавьте первый ключ — он будет зашифрован и доступен только MCP-инструментам.
+        {t('spaces.secrets.emptyHint')}
       </p>
     </div>
   );
@@ -249,6 +269,7 @@ function SecretRow({
   onDelete: () => void;
   onCollapseRevealed: () => void;
 }) {
+  const { t, language } = useLanguage();
   return (
     <div className="bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg p-3 transition-colors">
       <div className="flex items-start justify-between gap-3">
@@ -262,7 +283,7 @@ function SecretRow({
             </code>
             {secret.last_revealed_at && (
               <span className="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)] font-mono">
-                revealed {formatRelative(secret.last_revealed_at)}
+                {t('spaces.secrets.lastRevealed', { time: formatRelative(secret.last_revealed_at, language) })}
               </span>
             )}
           </div>
@@ -278,7 +299,7 @@ function SecretRow({
             type="button"
             onClick={onReveal}
             disabled={!!revealedPlaintext}
-            title="Reveal plaintext (audit logged)"
+            title={t('spaces.secrets.revealAction')}
             className="p-2 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-50"
           >
             <Eye className="w-4 h-4" />
@@ -286,7 +307,7 @@ function SecretRow({
           <button
             type="button"
             onClick={onEdit}
-            title="Edit"
+            title={t('spaces.secrets.editAction')}
             className="p-2 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           >
             <Pencil className="w-4 h-4" />
@@ -294,7 +315,7 @@ function SecretRow({
           <button
             type="button"
             onClick={onDelete}
-            title="Delete"
+            title={t('spaces.secrets.deleteAction')}
             className="p-2 rounded hover:bg-red-500/20 text-[var(--text-secondary)] hover:text-red-500"
           >
             <Trash2 className="w-4 h-4" />
@@ -319,6 +340,7 @@ function RevealedField({
   plaintext: string;
   onCollapse: () => void;
 }) {
+  const { t } = useLanguage();
   const [secondsLeft, setSecondsLeft] = useState(Math.round(REVEAL_TTL_MS / 1000));
 
   useEffect(() => {
@@ -331,9 +353,9 @@ function RevealedField({
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(plaintext);
-      toast.success('Скопировано');
+      toast.success(t('spaces.secrets.copied'));
     } catch {
-      toast.error('Не удалось скопировать');
+      toast.error(t('spaces.secrets.copyFailed'));
     }
   };
 
@@ -344,13 +366,14 @@ function RevealedField({
           type="text"
           readOnly
           value={plaintext}
+          aria-label={t('spaces.secrets.value')}
           onFocus={(e) => e.currentTarget.select()}
           className="flex-1 bg-transparent border-none outline-none text-sm font-mono text-[var(--text-primary)] select-all"
         />
         <button
           type="button"
           onClick={handleCopy}
-          title="Скопировать"
+          title={t('spaces.secrets.copy')}
           className="p-1.5 rounded hover:bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
         >
           <Copy className="w-4 h-4" />
@@ -360,7 +383,7 @@ function RevealedField({
           onClick={onCollapse}
           className="text-[10px] uppercase tracking-wide font-mono text-amber-600 dark:text-amber-400 hover:text-amber-700 px-1.5"
         >
-          скрыть · {secondsLeft}s
+          {t('spaces.secrets.hideCountdown', { seconds: secondsLeft })}
         </button>
       </div>
     </div>
@@ -368,27 +391,30 @@ function RevealedField({
 }
 
 function AddSecretModal({
+  spaceId,
   existingKeys,
   onClose,
   onSuccess,
 }: {
+  spaceId: number;
   existingKeys: string[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { t } = useLanguage();
   const [key, setKey] = useState('');
   const [description, setDescription] = useState('');
   const [plaintext, setPlaintext] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const create = useMutation({
-    mutationFn: (body: CreateSecretBody) => secretsApi.create(body),
+    mutationFn: (body: CreateSecretBody) => secretsApi.create(spaceId, body),
     onSuccess: () => {
-      toast.success('Секрет добавлен');
+      toast.success(t('spaces.secrets.created'));
       onSuccess();
     },
     onError: (err: Error) => {
-      setError(extractErrorMessage(err) || err.message || 'Ошибка');
+      setError(extractErrorMessage(err) || err.message || t('spaces.secrets.error'));
     },
   });
 
@@ -397,23 +423,23 @@ function AddSecretModal({
     const trimmedKey = key.trim();
     const trimmedDesc = description.trim();
     if (!trimmedKey) {
-      setError('Ключ обязателен');
+      setError(t('spaces.secrets.keyRequired'));
       return;
     }
     if (!SNAKE_CASE.test(trimmedKey)) {
-      setError('Ключ должен быть в snake_case (a-z, 0-9, _, начинается с буквы)');
+      setError(t('spaces.secrets.keyFormat'));
       return;
     }
     if (existingKeys.includes(trimmedKey)) {
-      setError('Ключ уже существует');
+      setError(t('spaces.secrets.keyExists'));
       return;
     }
     if (!trimmedDesc) {
-      setError('Описание обязательно');
+      setError(t('spaces.secrets.descriptionRequired'));
       return;
     }
     if (!plaintext) {
-      setError('Значение обязательно');
+      setError(t('spaces.secrets.valueRequired'));
       return;
     }
     create.mutate({ key: trimmedKey, description: trimmedDesc, plaintext });
@@ -423,16 +449,16 @@ function AddSecretModal({
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
-      title="Новый секрет"
-      description="Ключ и значение будут зашифрованы (AES-GCM). Plaintext не сохраняется в логах."
+      title={t('spaces.secrets.createTitle')}
+      description={t('spaces.secrets.createHint')}
       size="md"
       primaryAction={{
-        label: create.isPending ? 'Сохранение...' : 'Сохранить',
+        label: create.isPending ? t('common.saving') : t('common.save'),
         onClick: handleSubmit,
         disabled: create.isPending,
       }}
       secondaryAction={{
-        label: 'Отмена',
+        label: t('common.cancel'),
         variant: 'ghost',
         onClick: onClose,
       }}
@@ -445,25 +471,24 @@ function AddSecretModal({
         )}
         <Input
           id="secret-key"
-          label="Ключ"
+          label={t('spaces.secrets.key')}
           value={key}
           onChange={(e) => setKey(e.target.value)}
           placeholder="openai_api_key"
           autoComplete="off"
-          hint="snake_case, уникален в пространстве"
-          autoFocus
+          hint={t('spaces.secrets.keyHint')}
         />
         <Input
           id="secret-description"
-          label="Описание"
+          label={t('spaces.secrets.fieldDescription')}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Назначение секрета"
+          placeholder={t('spaces.secrets.descriptionPlaceholder')}
           autoComplete="off"
         />
         <div className="flex w-full flex-col gap-1 text-sm">
           <label htmlFor="secret-plaintext" className="font-medium text-[var(--text-secondary)]">
-            Значение
+            {t('spaces.secrets.value')}
           </label>
           <input
             id="secret-plaintext"
@@ -476,7 +501,7 @@ function AddSecretModal({
             className="rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-[var(--text-primary)] outline-none focus:border-[var(--color-primary-500)] focus:ring-1 focus:ring-[var(--color-primary-500)] placeholder:text-[var(--text-tertiary)]"
           />
           <span className="text-xs text-[var(--text-tertiary)]">
-            Paste из менеджера паролей работает
+            {t('spaces.secrets.pasteHint')}
           </span>
         </div>
       </div>
@@ -485,26 +510,29 @@ function AddSecretModal({
 }
 
 function EditSecretModal({
+  spaceId,
   target,
   onClose,
   onSuccess,
 }: {
+  spaceId: number;
   target: SecretSummary;
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { t } = useLanguage();
   const [description, setDescription] = useState(target.description);
   const [plaintext, setPlaintext] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const update = useMutation({
-    mutationFn: (body: UpdateSecretBody) => secretsApi.update(target.key, body),
+    mutationFn: (body: UpdateSecretBody) => secretsApi.update(spaceId, target.key, body),
     onSuccess: () => {
-      toast.success('Сохранено');
+      toast.success(t('spaces.secrets.saved'));
       onSuccess();
     },
     onError: (err: Error) => {
-      setError(extractErrorMessage(err) || err.message || 'Ошибка');
+      setError(extractErrorMessage(err) || err.message || t('spaces.secrets.error'));
     },
   });
 
@@ -512,7 +540,7 @@ function EditSecretModal({
     setError(null);
     const trimmedDesc = description.trim();
     if (!trimmedDesc) {
-      setError('Описание обязательно');
+      setError(t('spaces.secrets.descriptionRequired'));
       return;
     }
     const body: UpdateSecretBody = {};
@@ -533,16 +561,16 @@ function EditSecretModal({
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
-      title={`Редактировать: ${target.key}`}
-      description="Оставьте поле значения пустым, чтобы не менять plaintext."
+      title={t('spaces.secrets.editTitle', { key: target.key })}
+      description={t('spaces.secrets.editHint')}
       size="md"
       primaryAction={{
-        label: update.isPending ? 'Сохранение...' : 'Сохранить',
+        label: update.isPending ? t('common.saving') : t('common.save'),
         onClick: handleSubmit,
         disabled: update.isPending,
       }}
       secondaryAction={{
-        label: 'Отмена',
+        label: t('common.cancel'),
         variant: 'ghost',
         onClick: onClose,
       }}
@@ -555,22 +583,21 @@ function EditSecretModal({
         )}
         <Input
           id="secret-edit-description"
-          label="Описание"
+          label={t('spaces.secrets.fieldDescription')}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           autoComplete="off"
-          autoFocus
         />
         <div className="flex w-full flex-col gap-1 text-sm">
           <label htmlFor="secret-edit-plaintext" className="font-medium text-[var(--text-secondary)]">
-            Новое значение (опционально)
+            {t('spaces.secrets.newValue')}
           </label>
           <input
             id="secret-edit-plaintext"
             type="password"
             value={plaintext}
             onChange={(e) => setPlaintext(e.target.value)}
-            placeholder="Оставьте пустым, чтобы не менять"
+            placeholder={t('spaces.secrets.valuePlaceholder')}
             autoComplete="new-password"
             spellCheck={false}
             className="rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 font-mono text-[var(--text-primary)] outline-none focus:border-[var(--color-primary-500)] focus:ring-1 focus:ring-[var(--color-primary-500)] placeholder:text-[var(--text-tertiary)]"
@@ -582,22 +609,25 @@ function EditSecretModal({
 }
 
 function DeleteSecretConfirm({
+  spaceId,
   target,
   onClose,
   onSuccess,
 }: {
+  spaceId: number;
   target: SecretSummary;
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { t } = useLanguage();
   const remove = useMutation({
-    mutationFn: () => secretsApi.remove(target.key),
+    mutationFn: () => secretsApi.remove(spaceId, target.key),
     onSuccess: () => {
-      toast.success('Секрет удалён');
+      toast.success(t('spaces.secrets.deleted'));
       onSuccess();
     },
     onError: (err: Error) => {
-      toast.error(extractErrorMessage(err) || err.message || 'Ошибка удаления');
+      toast.error(extractErrorMessage(err) || err.message || t('spaces.secrets.deleteFailed'));
     },
   });
 
@@ -605,23 +635,22 @@ function DeleteSecretConfirm({
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
-      title="Удалить секрет?"
+      title={t('spaces.secrets.deleteTitle')}
       size="sm"
       primaryAction={{
-        label: remove.isPending ? 'Удаление...' : 'Удалить',
+        label: remove.isPending ? t('spaces.delete.deleting') : t('common.delete'),
         variant: 'danger',
         onClick: () => remove.mutate(),
         disabled: remove.isPending,
       }}
       secondaryAction={{
-        label: 'Отмена',
+        label: t('common.cancel'),
         variant: 'ghost',
         onClick: onClose,
       }}
     >
       <p className="text-sm text-[var(--text-secondary)]">
-        Ключ <code className="font-mono text-[var(--text-primary)]">{target.key}</code> будет
-        удалён. Инструменты и агенты, использующие его, начнут получать ошибку. Это действие необратимо.
+        {t('spaces.secrets.deleteWarning', { key: target.key })}
       </p>
     </Modal>
   );
@@ -636,31 +665,31 @@ function RevealConfirm({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
-      title="Показать значение?"
+      title={t('spaces.secrets.revealTitle')}
       size="sm"
       primaryAction={{
-        label: 'Показать',
+        label: t('spaces.secrets.reveal'),
         onClick: onConfirm,
       }}
       secondaryAction={{
-        label: 'Отмена',
+        label: t('common.cancel'),
         variant: 'ghost',
         onClick: onClose,
       }}
     >
       <p className="text-sm text-[var(--text-secondary)]">
-        Plaintext <code className="font-mono text-[var(--text-primary)]">{target.key}</code> будет
-        показан на 30 секунд. <strong>Каждый просмотр записывается в audit log</strong> (actor, время, ключ).
+        {t('spaces.secrets.revealWarning', { key: target.key })}
       </p>
     </Modal>
   );
 }
 
-function formatRelative(iso: string): string {
+function formatRelative(iso: string, language: string): string {
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) return iso;
   const diffMs = then - Date.now();
@@ -668,18 +697,15 @@ function formatRelative(iso: string): string {
   const min = 60_000;
   const hr = 60 * min;
   const day = 24 * hr;
-  const past = diffMs < 0;
-  if (abs < min) return past ? 'just now' : 'in <1m';
+  const formatter = new Intl.RelativeTimeFormat(language, { numeric: 'auto', style: 'short' });
+  if (abs < min) return formatter.format(0, 'second');
   if (abs < hr) {
-    const m = Math.round(abs / min);
-    return past ? `${m}m ago` : `in ${m}m`;
+    return formatter.format(Math.round(diffMs / min), 'minute');
   }
   if (abs < day) {
-    const h = Math.round(abs / hr);
-    return past ? `${h}h ago` : `in ${h}h`;
+    return formatter.format(Math.round(diffMs / hr), 'hour');
   }
-  const d = Math.round(abs / day);
-  return past ? `${d}d ago` : `in ${d}d`;
+  return formatter.format(Math.round(diffMs / day), 'day');
 }
 
 function extractErrorMessage(err: unknown): string | null {

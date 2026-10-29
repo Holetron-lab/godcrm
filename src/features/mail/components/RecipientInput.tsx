@@ -11,6 +11,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 // Same pragmatic shape check the backend send path uses (services/mail/recipients.js).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -25,7 +26,6 @@ export interface RecipientInputProps {
   onChange: (next: string[]) => void;
   disabled?: boolean;
   placeholder?: string;
-  autoFocus?: boolean;
   /** aria-label for the text field (e.g. "Кому"). */
   ariaLabel?: string;
   /** External error highlight (e.g. parent flagged an empty required field). */
@@ -33,8 +33,9 @@ export interface RecipientInputProps {
 }
 
 export function RecipientInput({
-  value, onChange, disabled = false, placeholder, autoFocus = false, ariaLabel, invalid = false,
+  value, onChange, disabled = false, placeholder, ariaLabel, invalid = false,
 }: RecipientInputProps) {
+  const { t } = useLanguage();
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -102,7 +103,6 @@ export function RecipientInput({
         'flex min-w-0 flex-1 flex-wrap items-center gap-1',
         disabled && 'opacity-60',
       )}
-      onClick={() => inputRef.current?.focus()}
     >
       {value.map((addr, idx) => {
         const bad = !isValidEmail(addr);
@@ -121,8 +121,8 @@ export function RecipientInput({
               disabled={disabled}
               title={
                 disabled
-                  ? (bad ? 'Похоже, это не адрес почты' : addr)
-                  : `${bad ? 'Похоже, это не адрес почты. ' : ''}Нажмите, чтобы изменить`
+                  ? (bad ? t('mail.recipient.invalid') : addr)
+                  : `${bad ? `${t('mail.recipient.invalid')}. ` : ''}${t('mail.recipient.clickToEdit')}`
               }
               onClick={(e) => { e.stopPropagation(); startEditing(idx); }}
               className={cn(
@@ -135,7 +135,7 @@ export function RecipientInput({
             {!disabled && (
               <button
                 type="button"
-                aria-label={`Убрать ${addr}`}
+                aria-label={t('mail.recipient.remove', { addr })}
                 onClick={(e) => { e.stopPropagation(); removeAt(idx); }}
                 className="flex-shrink-0 text-[var(--text-tertiary)] transition-colors hover:text-[var(--color-error)]"
               >
@@ -165,7 +165,6 @@ export function RecipientInput({
         placeholder={value.length ? '' : placeholder}
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
-        autoFocus={autoFocus}
         className="min-w-[8ch] flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)] disabled:cursor-not-allowed"
       />
     </div>

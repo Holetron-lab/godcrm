@@ -44,7 +44,7 @@ export function DataSourcesWidget({ widget }: PresetWidgetProps) {
   const [showWizard, setShowWizard] = useState(false);
   
   // Get workspaceId from widget config
-  const workspaceId = widget.config?.workspace_id || '1';
+  const workspaceId = String(widget.config?.workspace_id || '1');
   
   const { dataSources, loading } = useDataSources(workspaceId);
   const deleteMutation = useDeleteDataSource();
@@ -158,7 +158,7 @@ export function DataSourcesWidget({ widget }: PresetWidgetProps) {
 
               {/* Meta Info */}
               <div className="flex items-center gap-3 text-xs text-[var(--text-tertiary)] mb-2">
-                <span>Tables: {ds.tables_count || 0}</span>
+                <span>Tables: {ds.table_count || 0}</span>
                 <span>•</span>
                 <span>Last sync: {formatLastSync(ds.last_sync_at)}</span>
               </div>

@@ -97,14 +97,16 @@ export const MoveItemsModal = ({ spaceId, tree, onSuccess }: MoveItemsModalProps
         
         return (
           <div key={folder.id}>
-            <div
+            <button
+              type="button"
+              aria-pressed={isFolderSelected}
               onClick={() => {
                 setSelectedProjectId(projectId);
                 setSelectedFolderId(folderId);
               }}
               style={{ paddingLeft: `${depth * 16 + 12}px` }}
               className={`
-                flex items-center gap-2 py-2 pr-3 cursor-pointer
+                flex w-full items-center gap-2 py-2 pr-3 text-left cursor-pointer focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-primary)]
                 ${isFolderSelected 
                   ? 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]' 
                   : 'hover:bg-[var(--bg-secondary)]'
@@ -113,7 +115,7 @@ export const MoveItemsModal = ({ spaceId, tree, onSuccess }: MoveItemsModalProps
             >
               <Folder className="w-4 h-4" />
               <span className="text-sm truncate">{folder.name}</span>
-            </div>
+            </button>
             {hasSubfolders && renderFolders(folder.children, projectId, depth + 1)}
           </div>
         );
@@ -164,12 +166,8 @@ export const MoveItemsModal = ({ spaceId, tree, onSuccess }: MoveItemsModalProps
               <div key={project.id}>
                 {/* Project Row */}
                 <div
-                  onClick={() => {
-                    setSelectedProjectId(projectId);
-                    setSelectedFolderId(null);
-                  }}
                   className={`
-                    flex items-center gap-2 px-3 py-2 cursor-pointer
+                    flex items-center gap-2 pl-3 pr-3
                     ${isSelected 
                       ? 'bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]' 
                       : 'hover:bg-[var(--bg-secondary)]'
@@ -177,6 +175,9 @@ export const MoveItemsModal = ({ spaceId, tree, onSuccess }: MoveItemsModalProps
                   `}
                 >
                   <button
+                    type="button"
+                    aria-label={project.name}
+                    aria-expanded={isExpanded}
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleProjectExpand(projectId);
@@ -190,9 +191,19 @@ export const MoveItemsModal = ({ spaceId, tree, onSuccess }: MoveItemsModalProps
                     )}
                   </button>
                   
-                  <span className="text-lg">{project.icon}</span>
-                  <span className="text-sm font-medium">{project.name}</span>
-                  <span className="text-xs text-[var(--text-tertiary)]">(root)</span>
+                  <button
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => {
+                      setSelectedProjectId(projectId);
+                      setSelectedFolderId(null);
+                    }}
+                    className="flex flex-1 items-center gap-2 py-2 text-left focus-visible:ring-2 focus-visible:ring-[var(--accent-primary)]"
+                  >
+                    <span className="text-lg">{project.icon}</span>
+                    <span className="text-sm font-medium">{project.name}</span>
+                    <span className="text-xs text-[var(--text-tertiary)]">(root)</span>
+                  </button>
                 </div>
                 
                 {/* Folders - recursive render */}

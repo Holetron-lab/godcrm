@@ -16,8 +16,6 @@ import type { SpaceVisibility, SpaceVisibilityData } from '../types/space.types'
 import { SpaceSeoSettings } from './SpaceSeoSettings';
 import {
   Lock,
-  Globe,
-  Link2,
   Copy,
   Check,
   Loader2,
@@ -30,47 +28,6 @@ import {
 interface SpaceVisibilitySettingsProps {
   spaceId: number;
 }
-
-/** Visibility option configuration */
-interface VisibilityOption {
-  value: SpaceVisibility;
-  icon: typeof Lock;
-  label: string;
-  description: string;
-  iconColor: string;
-  borderColor: string;
-  bgColor: string;
-}
-
-const VISIBILITY_OPTIONS: VisibilityOption[] = [
-  {
-    value: 'internal',
-    icon: Lock,
-    label: 'Internal',
-    description: 'Only space members can access this space',
-    iconColor: 'text-amber-400',
-    borderColor: 'border-amber-500/40',
-    bgColor: 'bg-amber-500/10'
-  },
-  {
-    value: 'open',
-    icon: Globe,
-    label: 'Open',
-    description: 'All logged-in users can view this space',
-    iconColor: 'text-blue-400',
-    borderColor: 'border-blue-500/40',
-    bgColor: 'bg-blue-500/10'
-  },
-  {
-    value: 'external',
-    icon: Link2,
-    label: 'External',
-    description: 'Anyone with the link can view (read-only)',
-    iconColor: 'text-emerald-400',
-    borderColor: 'border-emerald-500/40',
-    bgColor: 'bg-emerald-500/10'
-  }
-];
 
 const SLUG_REGEX = /^[a-z0-9][a-z0-9-]{2,63}$/;
 
@@ -139,7 +96,7 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['space-visibility', spaceId] });
       queryClient.invalidateQueries({ queryKey: ['spaces'] });
-      showToast(`Visibility changed to ${data.visibility}`, 'success');
+      showToast(t('spaces.visibility.changed', { visibility: t(`spaces.visibility.${data.visibility}`) }), 'success');
       // Sync slug from server response
       if (data.public_slug) {
         setCustomSlug(data.public_slug);
@@ -147,7 +104,7 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
       }
     },
     onError: () => {
-      showToast('Failed to update visibility', 'error');
+      showToast(t('spaces.visibility.updateFailed'), 'error');
     }
   });
 
@@ -155,12 +112,12 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
     mutationFn: (pwd: string) => spacesApi.setPublicPassword(spaceId, { password: pwd }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['space-visibility', spaceId] });
-      showToast('Password set successfully', 'success');
+      showToast(t('spaces.visibility.passwordSet'), 'success');
       setPassword('');
       setShowPassword(false);
     },
     onError: () => {
-      showToast('Failed to set password', 'error');
+      showToast(t('spaces.visibility.passwordFailed'), 'error');
     }
   });
 
@@ -169,10 +126,10 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
       spacesApi.setPublicSidebarPrefs(spaceId, prefs),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['space-visibility', spaceId] });
-      showToast('Public sidebar updated', 'success');
+      showToast(t('spaces.visibility.sidebarUpdated'), 'success');
     },
     onError: () => {
-      showToast('Failed to update public sidebar', 'error');
+      showToast(t('spaces.visibility.sidebarFailed'), 'error');
     }
   });
 
@@ -180,12 +137,12 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
     mutationFn: () => spacesApi.removePublicPassword(spaceId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['space-visibility', spaceId] });
-      showToast('Password removed', 'success');
+      showToast(t('spaces.visibility.passwordRemoved'), 'success');
       setPasswordEnabled(false);
       setPassword('');
     },
     onError: () => {
-      showToast('Failed to remove password', 'error');
+      showToast(t('spaces.visibility.removePasswordFailed'), 'error');
     }
   });
 
@@ -246,9 +203,11 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
   const handleVisibilityChange = useCallback(
     (visibility: SpaceVisibility) => {
       setSelectedVisibility(visibility);
-      setVisibilityMutation.mutate(visibility);
+      setVisibilityMutation.mutate(visibility, {
+        onError: () => setSelectedVisibility(visibilityData?.visibility ?? 'internal'),
+      });
     },
-    [setVisibilityMutation]
+    [setVisibilityMutation, visibilityData?.visibility]
   );
 
   const handleSaveSlug = useCallback(() => {
@@ -276,11 +235,11 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
 
   const handleSetPassword = useCallback(() => {
     if (password.trim().length < 4) {
-      showToast('Password must be at least 4 characters', 'error');
+      showToast(t('spaces.visibility.passwordMinLength'), 'error');
       return;
     }
     setPasswordMutation.mutate(password.trim());
-  }, [password, setPasswordMutation]);
+  }, [password, setPasswordMutation, t]);
 
   // T-152458: Public URL points at the frontend route /s/:slug (NOT /api/v3/public/...).
   const publicUrl = visibilityData?.public_slug
@@ -297,24 +256,24 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
     try {
       await navigator.clipboard.writeText(publicUrl);
       setCopied(true);
-      showToast('URL copied to clipboard', 'success');
+      showToast(t('spaces.visibility.urlCopied'), 'success');
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      showToast('Failed to copy URL', 'error');
+      showToast(t('spaces.visibility.copyFailed'), 'error');
     }
-  }, [publicUrl]);
+  }, [publicUrl, t]);
 
   const handleCopyAgentUrl = useCallback(async () => {
     if (!agentUrl) return;
     try {
       await navigator.clipboard.writeText(agentUrl);
       setCopiedAgent(true);
-      showToast('URL copied to clipboard', 'success');
+      showToast(t('spaces.visibility.urlCopied'), 'success');
       setTimeout(() => setCopiedAgent(false), 2000);
     } catch {
-      showToast('Failed to copy URL', 'error');
+      showToast(t('spaces.visibility.copyFailed'), 'error');
     }
-  }, [agentUrl]);
+  }, [agentUrl, t]);
 
   const isMutating =
     setVisibilityMutation.isPending ||
@@ -335,12 +294,12 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
     return (
       <div className="flex items-center gap-2 text-red-400 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
         <AlertCircle className="w-4 h-4 shrink-0" />
-        <span className="text-sm">Failed to load visibility settings</span>
+        <span className="text-sm">{t('spaces.visibility.loadFailed')}</span>
         <button
           onClick={() => refetch()}
           className="ml-auto text-xs underline hover:no-underline"
         >
-          Retry
+          {t('spaces.visibility.retry')}
         </button>
       </div>
     );
@@ -348,82 +307,25 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="p-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-primary)]">
-        <div className="flex items-center gap-2 mb-2">
-          <ShieldCheck className="w-5 h-5 text-[var(--accent-primary)]" />
-          <h4 className="text-sm font-medium text-[var(--text-primary)]">
-            Space Visibility
-          </h4>
-          {isMutating && (
-            <Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" />
-          )}
+      <div className="space-y-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <label htmlFor={`space-visibility-${spaceId}`} className="flex items-center gap-2 text-sm font-medium text-[var(--text-primary)]">
+            <ShieldCheck aria-hidden="true" className="h-5 w-5 text-[var(--accent-primary)]" />
+            {t('spaces.visibility.title')}
+          </label>
+          <select id={`space-visibility-${spaceId}`} value={selectedVisibility}
+            disabled={isMutating} aria-describedby={`space-visibility-hint-${spaceId}`}
+            onChange={event => handleVisibilityChange(event.target.value as SpaceVisibility)}
+            className="w-full rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)] disabled:opacity-60 sm:w-48">
+            {(['internal', 'open', 'external'] as const).map(value => (
+              <option key={value} value={value}>{t(`spaces.visibility.${value}`)}</option>
+            ))}
+          </select>
         </div>
-        <p className="text-xs text-[var(--text-tertiary)]">
-          Control who can discover and access this space. Members with direct access always retain their permissions.
+        <p className="text-xs text-[var(--text-secondary)]">{t('spaces.visibility.description')}</p>
+        <p id={`space-visibility-hint-${spaceId}`} className="text-sm text-[var(--text-secondary)]">
+          {t(`spaces.visibility.${selectedVisibility}Hint`)}
         </p>
-      </div>
-
-      {/* Visibility Options */}
-      <div className="space-y-2">
-        {VISIBILITY_OPTIONS.map((option) => {
-          const Icon = option.icon;
-          const isSelected = selectedVisibility === option.value;
-
-          return (
-            <button
-              key={option.value}
-              type="button"
-              disabled={isMutating}
-              onClick={() => handleVisibilityChange(option.value)}
-              className={`w-full flex items-start gap-3 p-3 rounded-lg border transition-all text-left ${
-                isSelected
-                  ? `${option.borderColor} ${option.bgColor}`
-                  : 'border-[var(--border-primary)] bg-[var(--bg-primary)] hover:bg-[var(--bg-secondary)]'
-              } ${isMutating ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-            >
-              {/* Radio indicator */}
-              <div className="mt-0.5 shrink-0">
-                <div
-                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
-                    isSelected
-                      ? `${option.borderColor} ${option.bgColor}`
-                      : 'border-[var(--border-primary)]'
-                  }`}
-                >
-                  {isSelected && (
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        option.value === 'internal'
-                          ? 'bg-amber-400'
-                          : option.value === 'open'
-                            ? 'bg-blue-400'
-                            : 'bg-emerald-400'
-                      }`}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Icon */}
-              <Icon className={`w-5 h-5 mt-0.5 shrink-0 ${isSelected ? option.iconColor : 'text-[var(--text-tertiary)]'}`} />
-
-              {/* Text */}
-              <div className="flex-1 min-w-0">
-                <span
-                  className={`text-sm font-medium ${
-                    isSelected ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
-                  }`}
-                >
-                  {option.label}
-                </span>
-                <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
-                  {option.description}
-                </p>
-              </div>
-            </button>
-          );
-        })}
       </div>
 
       {/* External mode details */}
@@ -459,7 +361,7 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
               </div>
             ) : (
               <div className="px-3 py-2 rounded-md border border-dashed border-[var(--border-primary)] bg-[var(--bg-primary)] text-sm text-[var(--text-tertiary)] italic">
-                URL will be generated after saving
+                {t('spaces.visibility.urlPending')}
               </div>
             )}
           </div>
@@ -494,15 +396,15 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
               </div>
             ) : (
               <div className="px-3 py-2 rounded-md border border-dashed border-[var(--border-primary)] bg-[var(--bg-primary)] text-sm text-[var(--text-tertiary)] italic">
-                URL will be generated after saving
+                {t('spaces.visibility.urlPending')}
               </div>
             )}
           </div>
 
           {/* Editable slug — T-152460 */}
           <div>
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
-              Custom slug
+            <label htmlFor="space-custom-slug" className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5">
+              {t('spaces.visibility.customSlug')}
             </label>
             <div className="flex items-stretch gap-2">
               <div className="flex-1 flex items-stretch rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] overflow-hidden focus-within:border-[var(--accent-primary)] transition-colors">
@@ -559,7 +461,7 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
               </p>
             ) : (
               <p className="mt-1.5 text-xs text-[var(--text-tertiary)]">
-                Letters (a–z), numbers, and hyphens. 3–64 characters.
+                {t('spaces.visibility.slugHint')}
               </p>
             )}
           </div>
@@ -567,8 +469,8 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
           {/* Public sidebar prefs (owner-managed, applies to public viewers) */}
           <div className="space-y-3 pt-1">
             <Switch
-              label="Open sidebar by default"
-              description="When unchecked, the public viewer lands with the sidebar collapsed."
+              label={t('spaces.visibility.sidebarOpen')}
+              description={t('spaces.visibility.sidebarOpenHint')}
               checked={sidebarDefaultOpen}
               onCheckedChange={(checked) => {
                 setSidebarDefaultOpen(checked);
@@ -577,8 +479,8 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
               disabled={sidebarPrefsMutation.isPending || sidebarHidden}
             />
             <Switch
-              label="Hide menu entirely"
-              description="Use when the space has no menu-worthy projects — the hamburger and sidebar are removed."
+              label={t('spaces.visibility.sidebarHidden')}
+              description={t('spaces.visibility.sidebarHiddenHint')}
               checked={sidebarHidden}
               onCheckedChange={(checked) => {
                 setSidebarHidden(checked);
@@ -588,16 +490,17 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
             />
           </div>
 
-          {/* Password Protection */}
+          {/* {t('spaces.visibility.passwordProtection')} */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Lock className="w-4 h-4 text-[var(--text-tertiary)]" />
                 <span className="text-sm font-medium text-[var(--text-primary)]">
-                  Password Protection
+                  {t('spaces.visibility.passwordProtection')}
                 </span>
               </div>
               <Switch
+                aria-label={t('spaces.visibility.passwordProtection')}
                 checked={passwordEnabled}
                 onCheckedChange={handlePasswordToggle}
                 disabled={isMutating}
@@ -609,17 +512,18 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
                 {visibilityData?.has_password && (
                   <p className="text-xs text-emerald-400 flex items-center gap-1">
                     <Check className="w-3 h-3" />
-                    Password is currently set
+                    {t('spaces.visibility.passwordIsSet')}
                   </p>
                 )}
                 <div className="flex items-center gap-2">
                   <div className="flex-1">
                     <Input
+                      aria-label={t('spaces.visibility.passwordProtection')}
                       id="space-public-password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder={visibilityData?.has_password ? 'Enter new password...' : 'Enter password...'}
+                      placeholder={visibilityData?.has_password ? t('spaces.visibility.newPassword') : t('spaces.visibility.enterPassword')}
                       autoComplete="new-password"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -629,6 +533,7 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
                       rightAddon={
                         <button
                           type="button"
+                          aria-label={t(showPassword ? 'spaces.visibility.hidePassword' : 'spaces.visibility.showPassword')}
                           onClick={() => setShowPassword(!showPassword)}
                           className="hover:text-[var(--text-primary)] transition-colors"
                         >
@@ -650,14 +555,14 @@ export const SpaceVisibilitySettings = ({ spaceId }: SpaceVisibilitySettingsProp
                     {setPasswordMutation.isPending ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : visibilityData?.has_password ? (
-                      'Update'
+                      t('spaces.visibility.updatePassword')
                     ) : (
-                      'Set'
+                      t('spaces.visibility.setPassword')
                     )}
                   </button>
                 </div>
                 <p className="text-xs text-[var(--text-tertiary)]">
-                  Visitors will need to enter this password before viewing the space.
+                  {t('spaces.visibility.passwordHint')}
                 </p>
               </div>
             )}

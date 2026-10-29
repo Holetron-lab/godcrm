@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * Per-message inline action UI extracted from ChatMessageList.
  *
@@ -39,9 +40,10 @@ export function ChatMessageContextMenu({
   onUnpin,
   onClose,
 }: ChatMessageContextMenuProps) {
+  const { t } = useLanguage();
   const isPinned = !!message.pinned_at;
   return (
-    <div
+    <div role="presentation"
       className={cn(
         'absolute z-10 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg shadow-lg py-1 min-w-[140px]',
         isOwn ? 'right-0 top-full mt-1' : 'left-0 top-full mt-1',
@@ -52,26 +54,23 @@ export function ChatMessageContextMenu({
         onClick={() => { onReply(message); onClose(); }}
         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
       >
-        <Reply className="w-4 h-4" /> Ответить
-      </button>
+        <Reply className="w-4 h-4" /> {t('aiChat.ui.reply')}</button>
       <button
         onClick={() => { onQuote(message); onClose(); }}
         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
       >
-        <Quote className="w-4 h-4" /> Цитировать
-      </button>
+        <Quote className="w-4 h-4" /> {t('aiChat.ui.quote')}</button>
       <button
         onClick={() => { navigator.clipboard.writeText(message.content); onClose(); }}
         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
       >
-        <Copy className="w-4 h-4" /> Копировать
-      </button>
+        <Copy className="w-4 h-4" /> {t('settings.profile.referralCopy')}</button>
       {onForward && (
         <button
           onClick={() => { turn.messages.forEach((m) => onForward(m)); onClose(); }}
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
         >
-          <Forward className="w-4 h-4" /> Переслать{turn.messages.length > 1 ? ` (${turn.messages.length})` : ''}
+          <Forward className="w-4 h-4" /> {t('aiChat.ui.forward')}{turn.messages.length > 1 ? ` (${turn.messages.length})` : ''}
         </button>
       )}
       {isPinned && onUnpin && (
@@ -79,32 +78,28 @@ export function ChatMessageContextMenu({
           onClick={() => { onUnpin(message.id); onClose(); }}
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
         >
-          <PinOff className="w-4 h-4" /> Открепить
-        </button>
+          <PinOff className="w-4 h-4" /> {t('aiChat.ui.unpin')}</button>
       )}
       {!isPinned && onPin && (
         <button
           onClick={() => { onPin(message.id); onClose(); }}
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
         >
-          <Pin className="w-4 h-4" /> Закрепить
-        </button>
+          <Pin className="w-4 h-4" /> {t('aiChat.ui.pin')}</button>
       )}
       {isOwn && onEdit && (
         <button
           onClick={onClose}
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)]"
         >
-          <Edit3 className="w-4 h-4" /> Изменить
-        </button>
+          <Edit3 className="w-4 h-4" /> {t('common.edit')}</button>
       )}
       {onDelete && (
         <button
           onClick={() => { onDelete(message.id); onClose(); }}
           className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-[var(--bg-tertiary)]"
         >
-          <Trash2 className="w-4 h-4" /> Удалить
-        </button>
+          <Trash2 className="w-4 h-4" /> {t('aiChat.ui.delete')}</button>
       )}
     </div>
   );
@@ -123,6 +118,7 @@ export function ChatQuoteConfirmStrip({
   onConfirm,
   onCancel,
 }: ChatQuoteConfirmStripProps) {
+  const { t } = useLanguage();
   const trimmed = fragment.trim();
   return (
     <div
@@ -133,7 +129,7 @@ export function ChatQuoteConfirmStrip({
     >
       <Quote className="w-3 h-3 opacity-70" />
       <span className="opacity-80 truncate flex-1 italic" title={fragment}>
-        {trimmed ? `«${fragment.slice(0, 60)}»` : 'Выделите фрагмент…'}
+        {trimmed ? `«${fragment.slice(0, 60)}»` : t('aiChat.ui.selectAPassage')}
       </span>
       <button
         type="button"
@@ -145,7 +141,7 @@ export function ChatQuoteConfirmStrip({
       </button>
       <button
         type="button"
-        aria-label="Отмена"
+        aria-label={t('aiChat.ui.cancel')}
         onClick={(e) => { e.stopPropagation(); onCancel(); }}
         className="px-1 py-0.5 rounded hover:bg-black/10"
       >

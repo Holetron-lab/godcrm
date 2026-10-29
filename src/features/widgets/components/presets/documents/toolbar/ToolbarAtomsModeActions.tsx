@@ -1,8 +1,10 @@
 import { Bot } from 'lucide-react';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useDocumentsContext } from '../DocumentsContext';
 
 export function ToolbarAtomsModeActions() {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
 
   return (
     <>
@@ -11,7 +13,7 @@ export function ToolbarAtomsModeActions() {
         <button
           onClick={() => ctx.setShowAgentsModal(true)}
           className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]"
-          title="AI Агенты"
+          title={t('documents.aiAgents')}
         >
           <Bot className="w-4 h-4" />
         </button>
@@ -22,7 +24,7 @@ export function ToolbarAtomsModeActions() {
         onClick={() => ctx.setAtomsViewMode(false)}
         className="px-3 py-1.5 rounded-lg text-xs bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
       >
-        Документы
+        {t('documents.ariaLabel')}
       </button>
     </>
   );

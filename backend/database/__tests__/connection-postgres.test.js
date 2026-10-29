@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { getAdapter, destroyAdapter, AdapterFactory } from '../connection.js';
 
 // Skip if no POSTGRES_URL
-const POSTGRES_URL = process.env.POSTGRES_URL || 'postgresql://godcrm:godcrm_dev_2026@localhost:5432/godcrm';
+const POSTGRES_URL = process.env.POSTGRES_URL || 'postgresql://godcrm:CHANGE_ME_LOCAL_DB_PASSWORD@localhost:5432/godcrm';
 const runPostgresTests = process.env.TEST_POSTGRES === 'true';
 
 describe.skipIf(!runPostgresTests)('Connection with PostgreSQL', () => {

@@ -137,5 +137,5 @@ export function getPriorityIcon(priority) {
 
 export function escTg(text) {
   if (!text) return '';
-  return String(text).replace(/([_*`\[])/g, '\\$1');
+  return String(text).replace(/([_*`[])/g, '\\$1');
 }

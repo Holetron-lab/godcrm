@@ -1,0 +1,29 @@
+[Unit]
+Description=GodCRM staging-only browser worker
+Requires=godcrm-staging-browser-reaper.service docker.service
+After=godcrm-staging-browser-reaper.service docker.service
+[Service]
+Type=simple
+User=root
+Group=root
+UMask=0077
+ExecStart=/usr/bin/python3 -B /opt/godcrm-staging-browser/worker.py
+WorkingDirectory=/opt/godcrm-staging-browser
+Environment=PYTHONNOUSERSITE=1
+Environment=PYTHONPATH=
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+KillMode=control-group
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/godcrm-staging-browser /var/lib/godcrm-staging-browser
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=<DEV_IP>/32
+StandardOutput=null
+StandardError=null
+[Install]
+WantedBy=multi-user.target

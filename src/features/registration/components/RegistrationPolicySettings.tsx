@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, Loader2, Check, Info, ChevronDown } from 'lucide-react';
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -28,6 +28,7 @@ const ACCESS_LEVELS: SpaceAccessLevel[] = ['viewer', 'editor', 'admin'];
  * via the F1 endpoint; the backend evicts its 60s cache cluster-wide.
  */
 export const RegistrationPolicySettings = () => {
+  const fieldId = useId();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const [config, setConfig] = useState<RegistrationConfig>(DEFAULT_REGISTRATION_CONFIG);
@@ -106,9 +107,9 @@ export const RegistrationPolicySettings = () => {
       <div className="grid gap-4 md:grid-cols-2">
         {/* Signup mode */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-[var(--text-secondary)]">Sign-up mode</label>
+          <label htmlFor={`${fieldId}-label-0`} className="text-sm font-medium text-[var(--text-secondary)]">Sign-up mode</label>
           <div className="relative">
-            <select
+            <select id={`${fieldId}-label-0`}
               value={config.signup_mode}
               onChange={(e) => setConfig((p) => ({ ...p, signup_mode: e.target.value as SignupMode }))}
               className="w-full appearance-none rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 pr-10 text-sm text-[var(--text-primary)] focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer"
@@ -124,9 +125,9 @@ export const RegistrationPolicySettings = () => {
 
         {/* Default role */}
         <div className="space-y-2">
-          <label className="text-sm font-medium text-[var(--text-secondary)]">Default role for new sign-ups</label>
+          <label htmlFor={`${fieldId}-label-1`} className="text-sm font-medium text-[var(--text-secondary)]">Default role for new sign-ups</label>
           <div className="relative">
-            <select
+            <select id={`${fieldId}-label-1`}
               value={config.default_role}
               onChange={(e) => setConfig((p) => ({ ...p, default_role: e.target.value as DefaultRole }))}
               className="w-full appearance-none rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-2 pr-10 text-sm text-[var(--text-primary)] focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer"
@@ -141,8 +142,8 @@ export const RegistrationPolicySettings = () => {
       </div>
 
       {/* Auto-join spaces */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-[var(--text-secondary)]">Auto-join spaces</label>
+      <div role="group" aria-labelledby={`${fieldId}-label-2`} className="space-y-2">
+        <span id={`${fieldId}-label-2`} className="text-sm font-medium text-[var(--text-secondary)]">Auto-join spaces</span>
         <p className="text-xs text-[var(--text-tertiary)]">
           New users are added to the selected spaces on registration, at the chosen access level.
         </p>

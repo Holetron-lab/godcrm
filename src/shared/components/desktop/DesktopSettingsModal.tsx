@@ -242,7 +242,7 @@ export const DesktopSettingsModal = ({ isOpen, onClose }: DesktopSettingsModalPr
                 { value: 'local' as const, label: t('Локальный', 'Local'), desc: t('Встроенная версия (offline)', 'Built-in version (offline)') },
               ].map((opt) => (
                 <label key={opt.value} className="flex items-start gap-3 p-3 rounded-lg bg-[var(--bg-tertiary)] cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors">
-                  <input
+                  <input aria-label={opt.label}
                     type="radio"
                     name="loadMode"
                     value={opt.value}

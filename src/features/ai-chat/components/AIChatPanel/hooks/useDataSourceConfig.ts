@@ -16,11 +16,7 @@ interface UseDataSourceConfigParams {
   setTasksSource: (config: TasksSourceConfig | undefined) => void;
   setFilesSource: (config: FilesSourceConfig | undefined) => void;
   setFavoritesConfig: (config: FavoritesConfig | undefined) => void;
-  setDefaultAgentId: (id: number | null) => void;
-  setQuickEmojis: (emojis: string[]) => void;
 }
-
-const DEFAULT_QUICK_EMOJIS = ['👍', '❤️', '😂', '🔥', '💯', '🙏', '😍', '😮'];
 
 export function useDataSourceConfig({
   effectiveSpaceId,
@@ -29,8 +25,6 @@ export function useDataSourceConfig({
   setTasksSource,
   setFilesSource,
   setFavoritesConfig,
-  setDefaultAgentId,
-  setQuickEmojis,
 }: UseDataSourceConfigParams) {
   const queryClient = useQueryClient();
 
@@ -53,7 +47,7 @@ export function useDataSourceConfig({
         })
         .catch((err) => logger.error('[AIChatPanel] Failed to load tickets_config:', err));
     }
-  }, [effectiveSpaceId, currentSpace]);
+  }, [effectiveSpaceId, currentSpace, setTasksSource]);
 
   // Save tasksSource to server
   const saveTasksSourceToServer = useCallback(async (config: TasksSourceConfig | undefined) => {
@@ -97,7 +91,7 @@ export function useDataSourceConfig({
         })
         .catch((err) => logger.error('[AIChatPanel] Failed to load favorites_config:', err));
     }
-  }, [effectiveSpaceId, currentSpace]);
+  }, [effectiveSpaceId, currentSpace, setFavoritesConfig]);
 
   // Save favoritesConfig to server
   const saveFavoritesConfigToServer = useCallback(async (config: FavoritesConfig | undefined) => {
@@ -169,7 +163,7 @@ export function useDataSourceConfig({
         })
         .catch((err) => logger.error('[AIChatPanel] Failed to load files_config:', err));
     }
-  }, [effectiveSpaceId, currentSpace, allTablesDataMain]);
+  }, [effectiveSpaceId, currentSpace, allTablesDataMain, setFilesSource]);
 
   // Save filesSource to server
   const saveFilesSourceToServer = useCallback(async (config: FilesSourceConfig | undefined) => {
@@ -202,37 +196,9 @@ export function useDataSourceConfig({
     saveFilesSourceToServer(config);
   }, [saveFilesSourceToServer, effectiveSpaceId, setFilesSource]);
 
-  // Load default agent from space settings (handles both string and object settings)
-  useEffect(() => {
-    let spaceSettings: Record<string, unknown> | null = null;
-    if (currentSpace?.settings) {
-      if (typeof currentSpace.settings === 'string') {
-        try { spaceSettings = JSON.parse(currentSpace.settings); } catch { spaceSettings = null; }
-      } else if (typeof currentSpace.settings === 'object') {
-        spaceSettings = currentSpace.settings as Record<string, unknown>;
-      }
-    }
-    if (spaceSettings) {
-      if (spaceSettings.default_agent_id) {
-        setDefaultAgentId(Number(spaceSettings.default_agent_id));
-      } else {
-        setDefaultAgentId(null);
-      }
-      if (spaceSettings.quick_emojis && Array.isArray(spaceSettings.quick_emojis)) {
-        setQuickEmojis(spaceSettings.quick_emojis as string[]);
-      } else {
-        setQuickEmojis(DEFAULT_QUICK_EMOJIS);
-      }
-    } else {
-      setDefaultAgentId(null);
-      setQuickEmojis(DEFAULT_QUICK_EMOJIS);
-    }
-  }, [currentSpace?.id, currentSpace?.settings]);
-
   return {
     updateTasksSource,
     updateFilesSource,
     updateFavoritesConfig,
-    DEFAULT_QUICK_EMOJIS,
   };
 }

@@ -1,11 +1,14 @@
-import type { ColumnModel, ColumnConfig, TableModel, RowModel } from '../../types/table.types';
+import type { ColumnModel, ColumnConfig, TableConfig, TableModel, RowModel } from '../../types/table.types';
 import type { useRowMutations } from '../../hooks/useRowMutations';
+import type { RelationsMap } from '../../utils/resolveLens';
 
 // Type for row mutation from useRowMutations hook
 export type RowMutationType = ReturnType<typeof useRowMutations>;
 
 export interface RenderCellOptions {
   column: ColumnModel;
+  /** ADR-0035-A: all columns of the table, so an `address` cell can find its linked `geo_point` column by id. */
+  columns?: ColumnModel[];
   value: unknown;
   rowId?: string;
   rowData?: Record<string, unknown>;
@@ -16,6 +19,8 @@ export interface RenderCellOptions {
   onNavigateToRow?: (tableId: string, rowId: string, valueColumn?: string) => void;
   onAutomationTrigger?: (automationId: string, rowId: string, rowData: Record<string, unknown>) => Promise<void>;
   tableId?: number | string;
+  /** ADR-205: server lens map of this table (column_name → key → related row). */
+  relations?: RelationsMap;
 }
 
 export interface PaginationInfo {
@@ -23,12 +28,16 @@ export interface PaginationInfo {
   rowsLimit: number;
   currentPage: number;
   totalPages: number;
+  /** Total rows in the table as reported by the server (0 when unknown). */
+  totalRows: number;
   canLoadMore: boolean;
+  /** First page of the loaded window (1 unless the view started at ?page=N or jumped to a row). */
+  minLoadedPage: number;
 }
 
 export interface UniversalTableProps {
   // External data - if provided, use these instead of store
-  table?: TableModel | { id: number; name: string; displayName?: string; projectId?: number; type?: string; data_source_id?: string | null; [key: string]: unknown };
+  table?: TableModel | { id: number; name: string; displayName?: string; projectId?: number; type?: string; config?: Partial<TableConfig>; data_source_id?: string | null; [key: string]: unknown };
   columns?: ColumnModel[];
   rows?: RowModel[];
   // Filters
@@ -37,6 +46,9 @@ export interface UniversalTableProps {
   selectFilters?: Record<string, string[]>;
   dateFilters?: Record<string, { from?: string; to?: string }>;
   groupByColumn?: string | null;
+  // Column-menu shortcuts into the toolbar filters (search scope / group by); absent → items hidden
+  onSearchColumnsChange?: (columnIds: string[]) => void;
+  onGroupByColumnChange?: (columnId: string | null) => void;
   addRowModalOpen?: boolean;
   onCloseAddRowModal?: () => void;
   onPaginationChange?: (info: PaginationInfo) => void;
@@ -57,6 +69,4 @@ export interface UniversalTableProps {
   // Print path info
   spaceName?: string;
   projectName?: string;
-  // Summary bar (ADR-026)
-  showSummaryBar?: boolean;
 }

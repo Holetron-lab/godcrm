@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * NewChatDialog Component
  * ADR-024: Unified chat model — agents are just participants
@@ -70,6 +71,7 @@ export function NewChatDialog({
   onStartChat,
   onClose,
 }: NewChatDialogProps) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<SelectedParticipant[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -233,19 +235,19 @@ export function NewChatDialog({
         className="fixed inset-0 z-50 flex items-center justify-center p-4"
         role="dialog"
         aria-modal="true"
-        aria-label="Новый чат"
+        aria-label={t('aiChat.ui.newChat')}
       >
         <div className="w-full max-w-md bg-[var(--bg-secondary)] rounded-xl shadow-2xl border border-[var(--border-primary)] flex flex-col max-h-[80vh]">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-secondary)]">
             <div className="flex items-center gap-2">
               <MessageSquarePlus className="w-5 h-5 text-[var(--color-primary-500)]" />
-              <h2 className="text-base font-semibold text-[var(--text-primary)]">Новый чат</h2>
+              <h2 className="text-base font-semibold text-[var(--text-primary)]">{t('aiChat.ui.newChat')}</h2>
             </div>
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors"
-              aria-label="Закрыть"
+              aria-label={t('aiChat.ui.close')}
             >
               <X className="w-4 h-4" />
             </button>
@@ -260,14 +262,14 @@ export function NewChatDialog({
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Поиск агентов и людей..."
+                placeholder={t('aiChat.ui.searchAgentsAndPeople')}
                 className="w-full pl-8 pr-8 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]/40"
               />
               {search && (
                 <button
                   onClick={() => setSearch('')}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
-                  aria-label="Очистить поиск"
+                  aria-label={t('aiChat.ui.clearSearch')}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -297,7 +299,7 @@ export function NewChatDialog({
                   <button
                     onClick={() => removeParticipant(p.type, p.id)}
                     className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity"
-                    aria-label={`Удалить ${p.name}`}
+                    aria-label={t('aiChat.ui.removePerson', { name: p.name })}
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -320,8 +322,7 @@ export function NewChatDialog({
                     <div className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)]/50">
                       <Bot className="w-3.5 h-3.5 text-purple-400" />
                       <span className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
-                        Агенты
-                      </span>
+                        {t('aiChat.ui.agents')}</span>
                       <span className="ml-auto text-[11px] text-[var(--text-tertiary)]">
                         {filteredAgents.length}
                       </span>
@@ -342,7 +343,7 @@ export function NewChatDialog({
                             sel && "bg-purple-500/8",
                             isUnavailable && "opacity-40 cursor-not-allowed",
                           )}
-                          title={isUnavailable ? 'Агент ещё не появился в списке пользователей' : undefined}
+                          title={isUnavailable ? t('aiChat.ui.thisAgentIsNotInTheUserListYet') : undefined}
                         >
                           {/* Icon */}
                           <div className={cn(
@@ -384,8 +385,7 @@ export function NewChatDialog({
                 {/* Empty state for agents */}
                 {hasAgents && filteredAgents.length === 0 && search && (
                   <div className="px-4 py-3 text-xs text-[var(--text-tertiary)]">
-                    Агенты не найдены
-                  </div>
+                    {t('aiChat.ui.noAgentsFound')}</div>
                 )}
 
                 {/* Divider between sections */}
@@ -399,8 +399,7 @@ export function NewChatDialog({
                     <div className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-tertiary)]/50">
                       <Users className="w-3.5 h-3.5 text-blue-400" />
                       <span className="text-[11px] font-semibold text-[var(--text-tertiary)] uppercase tracking-wider">
-                        Люди
-                      </span>
+                        {t('aiChat.contacts.filterHumans')}</span>
                       <span className="ml-auto text-[11px] text-[var(--text-tertiary)]">
                         {filteredHumans.length}
                       </span>
@@ -464,15 +463,14 @@ export function NewChatDialog({
                 {/* Empty state for people */}
                 {hasHumans && filteredHumans.length === 0 && search && filteredAgents.length === 0 && (
                   <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-                    Ничего не найдено по запросу «{search}»
+                    {t('aiChat.ui.searchNoResults', { query: search })}
                   </div>
                 )}
 
                 {/* No data at all */}
                 {!hasAgents && !hasHumans && !isLoading && (
                   <div className="py-8 text-center text-sm text-[var(--text-tertiary)]">
-                    Нет доступных участников
-                  </div>
+                    {t('aiChat.ui.noParticipantsAvailable')}</div>
                 )}
               </>
             )}
@@ -482,16 +480,15 @@ export function NewChatDialog({
           <div className="px-4 py-3 border-t border-[var(--border-secondary)] flex items-center justify-between gap-3">
             <span className="text-xs text-[var(--text-tertiary)]">
               {selected.length === 0
-                ? 'Выберите участников'
-                : `Выбрано: ${selected.length}`}
+                ? t('aiChat.ui.selectParticipants')
+                : t('aiChat.ui.selectedCount', { count: selected.length })}
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
                 className="px-3 py-1.5 text-sm rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] transition-colors"
               >
-                Отмена
-              </button>
+                {t('aiChat.ui.cancel')}</button>
               <button
                 onClick={handleStartChat}
                 disabled={selected.length === 0}
@@ -503,8 +500,7 @@ export function NewChatDialog({
                 )}
               >
                 <MessageSquarePlus className="w-4 h-4" />
-                Начать чат
-              </button>
+                {t('aiChat.ui.startChat')}</button>
             </div>
           </div>
         </div>

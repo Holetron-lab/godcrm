@@ -6,9 +6,13 @@
  */
 
 import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { apiLogger } from '../../../utils/logger.js';
+import { prepareCodexWorkspace } from './codex-workspace.js';
 import { killProcessTree, trackChildProcess, untrackChildProcess } from './process-management.js';
+import { buildMcpGateEnv } from '../../connectors/mcpGate.js';
+import { buildOpsGateEnv } from '../../ops/opsGate.js';
 
 // ADR-0053 Phase C3 — absolute path to the PreToolUse hook script.
 // Computed once at module load (cli-providers.js → ../../../../scripts/).
@@ -18,6 +22,31 @@ const AGENT_PERMISSION_HOOK = resolvePath(__dirname, '../../../../scripts/agent-
 const AGENT_RESERVATION_RELEASE_HOOK = resolvePath(__dirname, '../../../../scripts/agent-reservation-release-hook.js');
 
 /**
+ * Optional per-run controls shared by the claude-code and codex adapters (additive; every
+ * existing caller passes neither and sees no change):
+ *   - `signal` (AbortSignal): aborted BEFORE spawn → reject with AbortError, nothing is spawned;
+ *     aborted AFTER spawn → the process tree is killed. Lets a short-lease caller (Neo16 turn)
+ *     cancel a run that is still preparing instead of discovering a late child.
+ *   - `permissionsFailClosed` (boolean): the run must never gain a tool through an outage —
+ *     AGENT_PERMS=bypass is refused for it (hooks are mandatory), and the PreToolUse hook is told
+ *     to deny on every degraded path (AGENT_PERMS_FAIL_CLOSED=1, see scripts/agent-permission-hook.js).
+ */
+function abortError(signal) {
+  const err = new Error(`CLI run aborted before spawn${signal?.reason ? `: ${signal.reason}` : ''}`);
+  err.name = 'AbortError';
+  err.code = 'ABORT_ERR';
+  return err;
+}
+const bypassRefused = () => new Error('AGENT_PERMS=bypass is not allowed for a fail-closed run: the permission hook is mandatory');
+/** Kill the tree when the caller aborts; detached once the child has closed. */
+function bindAbort(signal, child) {
+  if (!signal) return;
+  const onAbort = () => killProcessTree(child.pid, child);
+  signal.addEventListener('abort', onAbort, { once: true });
+  child.on('close', () => signal.removeEventListener('abort', onAbort));
+}
+
+/**
  * Execute AI request using Claude Code CLI
  * Local terminal agent with file and shell access
  * @see ADR-072: Claude Code CLI Integration
@@ -25,7 +54,8 @@ const AGENT_RESERVATION_RELEASE_HOOK = resolvePath(__dirname, '../../../../scrip
  * @returns {Promise<Object>} Execution result
  */
 export async function executeClaudeCode(params) {
-  const { model, messages, systemPrompt, maxTokens, maxTurns, onEvent, onSpawn, agentId, spaceId } = params;
+  const { model, messages, systemPrompt, maxTokens, maxTurns, onEvent, onSpawn, agentId, spaceId, jobId, signal, permissionsFailClosed } = params;
+  if (signal?.aborted) throw abortError(signal);
   const { spawn } = await import('child_process');
   const fs = await import('fs');
   const os = await import('os');
@@ -61,6 +91,14 @@ export async function executeClaudeCode(params) {
     }
   }
 
+  // MCP-kind connectors (Settings → Connectors): a gate token lands in the child
+  // env only for the agent/space the server pins while the connector is on.
+  // Never throws, never delays a turn — see services/connectors/mcpGate.js.
+  const mcpGateEnv = await buildMcpGateEnv({ agentId, spaceId, jobId });
+  // Ops profiles (diagnostics / local-qa): same contract — a token only while a
+  // live grant exists for this agent in this space. See services/ops/opsGate.js.
+  const opsGateEnv = await buildOpsGateEnv({ agentId, spaceId, jobId });
+
   return new Promise((resolve, reject) => {
     // stream-json gives us tool_use/tool_result events in real-time.
     //
@@ -76,6 +114,11 @@ export async function executeClaudeCode(params) {
     //     --dangerously-skip-permissions and skips the hook. Reserved for
     //     emergency rollback if the hook misbehaves; do NOT use under root.
     const agentPermsMode = (process.env.AGENT_PERMS || 'hook').toLowerCase();
+    const dropSystemPromptFile = () => { if (systemPromptFile) { try { fs.unlinkSync(systemPromptFile); } catch { /* ignore */ } } };
+    if (permissionsFailClosed && agentPermsMode === 'bypass') {
+      dropSystemPromptFile();
+      return reject(bypassRefused());
+    }
 
     const args = [
       '-p', '-',
@@ -170,6 +213,15 @@ export async function executeClaudeCode(params) {
     // at module load); it carries through via the {...process.env} spread above.
     if (agentId != null) childEnv.AGENT_ID = String(agentId);
     if (spaceId != null) childEnv.SPACE_ID = String(spaceId);
+    if (jobId != null) childEnv.MCP_JOB_ID = String(jobId);
+    if (permissionsFailClosed) childEnv.AGENT_PERMS_FAIL_CLOSED = '1';
+    Object.assign(childEnv, mcpGateEnv, opsGateEnv);
+
+    // Last check before the fork: an abort that raced the preparation above must not spawn.
+    if (signal?.aborted) {
+      dropSystemPromptFile();
+      return reject(abortError(signal));
+    }
 
     const child = spawn('claude', args, {
       cwd: process.cwd(),
@@ -179,21 +231,7 @@ export async function executeClaudeCode(params) {
     });
     // Unref so the parent can exit without waiting for this process group
     child.unref();
-
-    // Write prompt to stdin and close it
-    // If system prompt was written to temp file, prepend it as a structured block
-    if (child.stdin) {
-      if (systemPromptFile) {
-        // Include system prompt as part of stdin prompt (avoids CLI arg E2BIG)
-        const sysPromptContent = fs.readFileSync(systemPromptFile, 'utf-8');
-        child.stdin.write(`<system_instructions>\n${sysPromptContent}\n</system_instructions>\n\n${fullPrompt}`);
-        // Clean up temp file
-        try { fs.unlinkSync(systemPromptFile); } catch { /* ignore */ }
-      } else {
-        child.stdin.write(fullPrompt);
-      }
-      child.stdin.end();
-    }
+    bindAbort(signal, child);
 
     // Track child process for graceful shutdown
     if (child.pid) {
@@ -221,6 +259,7 @@ export async function executeClaudeCode(params) {
     // model. The `system/init` event is the CLI's own statement of what it
     // resolved — the only in-band source of truth.
     let initModel = null;
+    let stdinFailed = false;
 
     child.stdout.on('data', (chunk) => {
       buffer += chunk.toString();
@@ -281,6 +320,8 @@ export async function executeClaudeCode(params) {
         // Kill any leftover MCP children in this process group
         try { process.kill(-child.pid, 'SIGTERM'); } catch { /* group already dead */ }
       }
+
+      if (stdinFailed) return;
 
       // Parse any remaining buffer
       if (buffer.trim()) {
@@ -353,15 +394,49 @@ export async function executeClaudeCode(params) {
       });
     });
 
-    // Timeout: 30 minutes (complex tasks with sub-agents need more time)
-    const CLI_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+    // Timeout: per-agent `run_timeout_min` resolved by the caller (Bug 1552/228714);
+    // 120 min when the caller passes nothing (main default since the sub-agent timeout bump).
+    const CLI_TIMEOUT_MS = Number(params.runTimeoutMs) > 0 ? Number(params.runTimeoutMs) : 120 * 60 * 1000;
+    const timeoutMin = Math.round(CLI_TIMEOUT_MS / 60000);
     const timeout = setTimeout(() => {
-      apiLogger.warn('Claude CLI timeout reached (30 min), killing process tree');
+      apiLogger.warn(`Claude CLI timeout reached (${timeoutMin} min), killing process tree`);
       killProcessTree(child.pid, child);
-      reject(new Error('Claude CLI timeout (30 min)'));
+      reject(new Error(`Claude CLI timeout (${timeoutMin} min)`));
     }, CLI_TIMEOUT_MS);
 
     child.on('close', () => clearTimeout(timeout));
+
+    // Install lifecycle/error handlers before writing: a broken CLI can close
+    // its input before exitCode is visible, emitting EPIPE on the stream itself.
+    const failStdin = (err) => {
+      if (stdinFailed) return;
+      stdinFailed = true;
+      clearTimeout(timeout);
+      dropSystemPromptFile();
+      apiLogger.error({ err, pid: child.pid, jobId, exitCode: child.exitCode, signalCode: child.signalCode },
+        'Failed to write Claude CLI stdin');
+      reject(new Error(`Claude CLI stdin failed: ${err.message}`, { cause: err }));
+      if (child.pid && child.exitCode == null && child.signalCode == null) killProcessTree(child.pid, child);
+    };
+    if (child.stdin) {
+      child.stdin.on('error', failStdin);
+      if (child.exitCode != null || child.signalCode != null) {
+        failStdin(new Error(`Claude CLI exited before prompt delivery (code ${child.exitCode}, signal ${child.signalCode})`));
+        return;
+      }
+      try {
+        if (systemPromptFile) {
+          const sysPromptContent = fs.readFileSync(systemPromptFile, 'utf-8');
+          child.stdin.write(`<system_instructions>\n${sysPromptContent}\n</system_instructions>\n\n${fullPrompt}`);
+          dropSystemPromptFile();
+        } else {
+          child.stdin.write(fullPrompt);
+        }
+        child.stdin.end();
+      } catch (err) {
+        failStdin(err);
+      }
+    }
   });
 }
 
@@ -526,13 +601,588 @@ export async function executeCopilotCli(params) {
       });
     });
 
-    // Timeout: 30 minutes (complex tasks with sub-agents need more time)
-    const CLI_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+    // Timeout: per-agent `run_timeout_min` resolved by the caller (Bug 1552/228714);
+    // 120 min when the caller passes nothing (main default since the sub-agent timeout bump).
+    const CLI_TIMEOUT_MS = Number(params.runTimeoutMs) > 0 ? Number(params.runTimeoutMs) : 120 * 60 * 1000;
+    const timeoutMin = Math.round(CLI_TIMEOUT_MS / 60000);
     const timeout = setTimeout(() => {
-      apiLogger.warn('Copilot CLI timeout reached (30 min), killing process');
+      apiLogger.warn(`Copilot CLI timeout reached (${timeoutMin} min), killing process`);
       killProcessTree(child.pid, child);
       try { fs.unlinkSync(usageFile); } catch { /* ignore */ }
-      reject(new Error('Copilot CLI timeout (30 min)'));
+      reject(new Error(`Copilot CLI timeout (${timeoutMin} min)`));
+    }, CLI_TIMEOUT_MS);
+
+    child.on('close', () => clearTimeout(timeout));
+  });
+}
+
+/**
+ * Execute prompt via OpenAI Codex CLI (`codex exec`, package @openai/codex).
+ *
+ * Auth is the owner's ChatGPT subscription (device-auth token in
+ * ~/.codex/auth.json) — NOT an api.openai.com key, so this path never touches
+ * the vault's openai_api_key and never bills the platform account.
+ *
+ * Model: with ChatGPT auth the backend accepts exactly one id — `gpt-6-astra`
+ * (the config.toml default). Every explicit `gpt-5.x` / `gpt-6` / `*-codex` id
+ * returns 400 "not supported when using Codex with a ChatGPT account", so an
+ * unrecognised model id is dropped rather than forwarded: better the account's
+ * only working model than a guaranteed 400. CODEX_CLI_MODEL overrides.
+ *
+ * Events: `codex exec --json` emits its own JSONL vocabulary (thread.started /
+ * item.started / item.completed / turn.completed). This adapter TRANSLATES it
+ * into the Claude Code stream-json shape the three callers already handle
+ * (agent-loop, agentChatController, agentExecutionController) — so a codex
+ * agent produces the same tool_call / tool_result / thinking step messages in
+ * chat as a claude-code one, with no duplicated onEvent plumbing.
+ *
+ * Approval: headless runs use --approve-for-me. Plain `approval_policy=never`
+ * makes every MCP tool call fail with "requires approval, but approval policy
+ * is never" — i.e. an agent with no tools at all.
+ *
+ * Permissions (ADR-0053 / ADR-0181, parity with the claude-code path): Codex
+ * CLI 0.153.x ships the same hook events, wired through `-c hooks.<Event>`
+ * instead of `--settings`. Verified on this box (2026-09-07, gpt-6-astra):
+ *   - PreToolUse fires for shell (tool_name "Bash") AND for MCP calls
+ *     (tool_name "mcp__godcrm__<tool>"); a deny is honoured for both.
+ *   - Stop fires at turn end with the same {session_id, ...} payload the
+ *     reservation-release hook needs.
+ *   - hooks declared outside a trusted plugin are SKIPPED SILENTLY unless
+ *     --dangerously-bypass-hook-trust is passed. Without that flag the agent
+ *     still runs, just ungated — which is exactly the hole this closes. The
+ *     flag only waives Codex's "did a human review this hook" prompt; the hook
+ *     source is ours, pinned to an absolute path under the repo.
+ * --approve-for-me stays: it satisfies Codex's own approval requirement (MCP
+ * calls fail outright without it), and our hook now sits in front of it.
+ */
+export async function executeCodexCli(params) {
+  const { model, messages, systemPrompt, onEvent, onSpawn, agentId, spaceId, jobId, signal, permissionsFailClosed } = params;
+  if (signal?.aborted) throw abortError(signal);
+  const { spawn } = await import('child_process');
+  const fs = await import('fs');
+  const os = await import('os');
+  const path = await import('path');
+
+  const workspace = await prepareCodexWorkspace({ agentId, spaceId, jobId });
+  const codexOpsGateEnv = await buildOpsGateEnv({ agentId, spaceId, jobId });
+
+  // Build prompt with conversation history (same shape as the Claude path)
+  const nonSystemMessages = messages.filter(m => m.role !== 'system');
+  const lastMessage = nonSystemMessages[nonSystemMessages.length - 1]?.content || '';
+  const historyMessages = nonSystemMessages.slice(0, -1);
+
+  let fullPrompt = lastMessage;
+  if (historyMessages.length > 0) {
+    const historyText = historyMessages
+      .map(m => `[${m.role === 'assistant' ? 'Assistant' : 'User'}]: ${m.content}`)
+      .join('\n\n');
+    fullPrompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\n[User]: ${lastMessage}`;
+  }
+
+  // codex exec has no --system-prompt flag; the prompt goes in via stdin as a
+  // prefixed block (also keeps us clear of ARG_MAX on long agent prompts).
+  if (systemPrompt) {
+    fullPrompt = `<system_instructions>\n${systemPrompt}\n</system_instructions>\n\n${fullPrompt}`;
+  }
+
+  if (workspace) fullPrompt += `\n\n${workspace.instructions}`;
+  let workspaceCanRelease = true;
+
+  return new Promise((resolve, reject) => {
+    const lastMessageFile = path.join(
+      os.tmpdir(),
+      `codex-last-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
+    );
+
+    const args = [
+      'exec',
+      '-', // read the prompt from stdin
+      '--json',
+      '--skip-git-repo-check', // /srv/godcrm/live is a deploy artifact, not a repo
+      '--approve-for-me',
+      '--color', 'never',
+      '-o', lastMessageFile,
+    ];
+
+    if (workspace) args.push('--cd', workspace.cwd, ...workspace.writableRoots.flatMap(dir => ['--add-dir', dir]));
+
+    // ADR-0053 / ADR-0181 — same gate the claude-code path gets, same scripts.
+    // `-c key=value` parses the value as TOML, so the hook table is emitted in
+    // TOML inline syntax (JSON's `"k": v` would not parse). Paths go through
+    // JSON.stringify, which is a valid TOML basic string for our escaping needs.
+    // AGENT_PERMS=bypass drops the hooks exactly like it does for claude.
+    const agentPermsMode = (process.env.AGENT_PERMS || 'hook').toLowerCase();
+    if (permissionsFailClosed && agentPermsMode === 'bypass') return reject(bypassRefused());
+    if (agentPermsMode !== 'bypass') {
+      const cmd = (script) => JSON.stringify(`node ${script}`);
+      args.push(
+        '--dangerously-bypass-hook-trust',
+        '-c', `hooks.PreToolUse=[{matcher="*",hooks=[{type="command",command=${cmd(AGENT_PERMISSION_HOOK)}}]}]`,
+        '-c', `hooks.Stop=[{matcher="*",hooks=[{type="command",command=${cmd(AGENT_RESERVATION_RELEASE_HOOK)}}]}]`,
+      );
+    }
+
+    const codexModel = process.env.CODEX_CLI_MODEL
+      || (model && /^gpt-6-astra/i.test(model) ? model : null);
+    if (codexModel) {
+      args.push('-m', codexModel);
+    }
+
+    // Bind the CRM MCP process to this job; Codex filters inherited environment.
+    // https://learn.chatgpt.com/docs/extend/mcp?surface=cli
+    // The ops gate token (services/ops/opsGate.js) must reach the MCP process the
+    // same way: it is empty unless this agent holds a live grant in this space.
+    for (const [key, value] of Object.entries({ AGENT_ID: agentId, MCP_SPACE_ID: spaceId, MCP_JOB_ID: jobId, ...codexOpsGateEnv })) {
+      args.push('-c', `mcp_servers.godcrm.env.${key}=${JSON.stringify(String(value ?? ''))}`);
+    }
+    const codexBin = process.env.CODEX_CLI_BIN || 'codex';
+
+    apiLogger.info({
+      requestedModel: model || null,
+      passedModel: codexModel,
+      promptLen: fullPrompt.length,
+      systemPromptLength: systemPrompt ? systemPrompt.length : 0,
+      agentId: agentId ?? null,
+      spaceId: spaceId ?? null,
+      bin: codexBin,
+      workspace: workspace?.cwd ?? null,
+      workspaceBase: workspace?.baseSha ?? null,
+      permsMode: agentPermsMode,
+      hookPath: agentPermsMode === 'bypass' ? null : AGENT_PERMISSION_HOOK,
+    }, 'Spawning OpenAI Codex CLI (exec --json)');
+
+    const childEnv = { ...process.env, CI: 'true', TERM: 'dumb', NO_COLOR: '1' };
+    // Codex must not inherit this process's Claude session markers.
+    Object.keys(childEnv).forEach(key => {
+      if (key.startsWith('CLAUDE')) delete childEnv[key];
+    });
+    if (agentId != null) childEnv.AGENT_ID = String(agentId);
+    if (spaceId != null) childEnv.SPACE_ID = String(spaceId);
+    // Tells agent-permission-hook.js to speak Codex's dialect: silence on
+    // allow (Codex logs "PreToolUse Failed" on an explicit allow), JSON on deny.
+    childEnv.AGENT_HOOK_DIALECT = 'codex';
+    if (permissionsFailClosed) childEnv.AGENT_PERMS_FAIL_CLOSED = '1';
+
+    // Last check before the fork: an abort that raced the preparation above must not spawn.
+    if (signal?.aborted) return reject(abortError(signal));
+
+    const child = spawn(codexBin, args, {
+      cwd: workspace?.cwd || process.cwd(),
+      env: childEnv,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      detached: true, // process group — kill MCP children together
+    });
+    workspaceCanRelease = false;
+    child.unref();
+    bindAbort(signal, child);
+
+    if (child.stdin) {
+      child.stdin.write(fullPrompt);
+      child.stdin.end();
+    }
+
+    if (child.pid) {
+      trackChildProcess(child.pid, {
+        child,
+        label: `codex:${codexModel || 'default'}`,
+        startedAt: Date.now(),
+      });
+    }
+    if (onSpawn && child.pid) {
+      try { onSpawn(child.pid); } catch { /* ignore callback errors */ }
+    }
+
+    let buffer = '';
+    let stderr = '';
+    let lastAgentMessage = '';
+    let usage = null;
+    let turnError = null;
+
+    // ── codex JSONL → Claude stream-json translation ──
+    const emitAssistant = (block) => {
+      if (!onEvent) return;
+      try { onEvent({ type: 'assistant', message: { content: [block] } }); } catch { /* ignore */ }
+    };
+    const emitToolResult = (toolUseId, content) => {
+      if (!onEvent) return;
+      try {
+        onEvent({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: toolUseId, content }] } });
+      } catch { /* ignore */ }
+    };
+
+    const handleEvent = (event) => {
+      const item = event.item || {};
+
+      if (event.type === 'item.started') {
+        if (item.type === 'mcp_tool_call') {
+          emitAssistant({
+            type: 'tool_use', id: item.id,
+            name: item.server ? `${item.server}/${item.tool}` : item.tool,
+            input: item.arguments || {},
+          });
+        } else if (item.type === 'command_execution') {
+          emitAssistant({ type: 'tool_use', id: item.id, name: 'shell', input: { command: item.command } });
+        } else if (item.type === 'web_search') {
+          emitAssistant({ type: 'tool_use', id: item.id, name: 'web_search', input: { query: item.query } });
+        }
+        return;
+      }
+
+      if (event.type === 'item.completed') {
+        if (item.type === 'agent_message' && item.text) {
+          lastAgentMessage = item.text;
+          emitAssistant({ type: 'text', text: item.text });
+        } else if (item.type === 'reasoning' && item.text) {
+          emitAssistant({ type: 'text', text: item.text });
+        } else if (item.type === 'mcp_tool_call') {
+          const payload = item.error
+            ? `ERROR: ${typeof item.error === 'string' ? item.error : JSON.stringify(item.error)}`
+            : JSON.stringify(item.result ?? '');
+          emitToolResult(item.id, payload);
+        } else if (item.type === 'command_execution') {
+          emitToolResult(item.id, String(item.aggregated_output ?? item.stdout ?? ''));
+        }
+        return;
+      }
+
+      if (event.type === 'turn.completed' && event.usage) {
+        usage = event.usage;
+      } else if (event.type === 'turn.failed' || event.type === 'error') {
+        turnError = event.error?.message || event.message || 'Codex turn failed';
+      }
+    };
+
+    child.stdout.on('data', (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try { handleEvent(JSON.parse(line)); } catch { /* not a JSON line — ignore */ }
+      }
+    });
+
+    child.stderr.on('data', (data) => { stderr += data.toString(); });
+
+    child.on('error', (err) => {
+      try { fs.unlinkSync(lastMessageFile); } catch { /* ignore */ }
+      apiLogger.error({ err }, 'Failed to spawn Codex CLI');
+      reject(new Error(`Failed to spawn Codex CLI: ${err.message}`));
+    });
+
+    child.on('close', (code) => {
+      workspaceCanRelease = true;
+      if (child.pid) {
+        untrackChildProcess(child.pid);
+        try { process.kill(-child.pid, 'SIGTERM'); } catch { /* group already dead */ }
+      }
+
+      if (buffer.trim()) {
+        try { handleEvent(JSON.parse(buffer)); } catch { /* ignore */ }
+      }
+
+      // -o holds the agent's final message; the last agent_message event is the
+      // fallback when the file never got written (killed mid-turn).
+      let content = '';
+      try {
+        content = fs.readFileSync(lastMessageFile, 'utf-8').trim();
+      } catch { /* ignore */ }
+      try { fs.unlinkSync(lastMessageFile); } catch { /* ignore */ }
+      if (!content) content = lastAgentMessage.trim();
+
+      if (code !== 0 && !content) {
+        const detail = turnError || (stderr || '').trim() || 'No error output captured';
+        apiLogger.warn({ code, stderr: (stderr || '').trim().substring(0, 500), turnError },
+          'Codex CLI exited with non-zero code');
+        reject(new Error(`Codex CLI exited with code ${code}: ${detail}`));
+        return;
+      }
+
+      if (!content) content = 'Agent process was interrupted.';
+
+      const promptTokens = usage?.input_tokens || 0;
+      const completionTokens = usage?.output_tokens || 0;
+
+      apiLogger.info({
+        contentLength: content.length,
+        model: codexModel || 'config-default',
+        promptTokens, completionTokens,
+        cachedInputTokens: usage?.cached_input_tokens || 0,
+      }, 'Codex CLI completed');
+
+      resolve({
+        content,
+        usage: {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        },
+        // The CLI does not echo a resolved model id in --json, so this is the
+        // requested id (or the config default) — flagged as such, not a fact.
+        model: codexModel || 'gpt-6-astra',
+        requestedModel: model || null,
+        modelSource: 'requested',
+        finishReason: 'end_turn',
+        // ChatGPT subscription seat, not metered API billing.
+        costUsd: 0,
+      });
+    });
+
+    // Same rule as the Claude path (Bug 1552/228714): caller-resolved, 120 min default.
+    const CLI_TIMEOUT_MS = Number(params.runTimeoutMs) > 0 ? Number(params.runTimeoutMs) : 120 * 60 * 1000;
+    const timeoutMin = Math.round(CLI_TIMEOUT_MS / 60000);
+    const timeout = setTimeout(() => {
+      apiLogger.warn(`Codex CLI timeout reached (${timeoutMin} min), killing process tree`);
+      killProcessTree(child.pid, child);
+      try { fs.unlinkSync(lastMessageFile); } catch { /* ignore */ }
+      reject(new Error(`Codex CLI timeout (${timeoutMin} min)`));
+    }, CLI_TIMEOUT_MS);
+
+    child.on('close', () => clearTimeout(timeout));
+  }).finally(async () => {
+    if (workspace && workspaceCanRelease) await workspace.release().catch(err => {
+      apiLogger.warn({ err: err.message, workspace: workspace.cwd }, 'Codex workspace retained; cleanup failed');
+    });
+  });
+}
+
+/**
+ * Kimi Code 2.3.1 print-mode adapter; JSONL is translated to our CLI event contract.
+ * Requires verified PreToolUse + Stop hooks in KIMI_CODE_HOME/config.toml at deploy.
+ * Kimi itself fails open on hook crashes, so strict fail-closed callers are refused.
+ * https://www.kimi.com/code/docs/en/kimi-code-cli/customization/hooks.html
+ */
+const kimiMessageSchema = z.discriminatedUnion('role', [
+  z.object({ role: z.literal('assistant'), content: z.string().nullish(), tool_calls: z.array(z.object({
+    id: z.string(), function: z.object({ name: z.string(), arguments: z.string() }),
+  })).optional() }),
+  z.object({ role: z.literal('tool'), tool_call_id: z.string(), content: z.unknown() }),
+]);
+export async function executeKimiCli(params) {
+  const { model, messages, systemPrompt, maxTurns, onEvent, onSpawn, agentId, spaceId, jobId, signal, permissionsFailClosed } = params;
+  if (signal?.aborted) throw abortError(signal);
+  if (permissionsFailClosed) throw new Error('Kimi hooks cannot guarantee fail-closed execution');
+  if ((process.env.AGENT_PERMS || 'hook').toLowerCase() === 'bypass') throw new Error('Kimi permission bypass is not supported');
+  const { spawn } = await import('child_process');
+
+  // MCP-kind connectors + ops profiles — same gate contract as the other adapters.
+  const mcpGateEnv = await buildMcpGateEnv({ agentId, spaceId, jobId });
+  const opsGateEnv = await buildOpsGateEnv({ agentId, spaceId, jobId });
+
+  // Build prompt (same shape as the codex path: system instructions prefix +
+  // flat conversation history + last user message).
+  const nonSystemMessages = messages.filter(m => m.role !== 'system');
+  const lastMessage = nonSystemMessages[nonSystemMessages.length - 1]?.content || '';
+  const historyMessages = nonSystemMessages.slice(0, -1);
+
+  const buildPrompt = (hist) => {
+    let prompt = lastMessage;
+    if (hist.length > 0) {
+      const historyText = hist
+        .map(m => `[${m.role === 'assistant' ? 'Assistant' : 'User'}]: ${m.content}`)
+        .join('\n\n');
+      prompt = `<conversation_history>\n${historyText}\n</conversation_history>\n\n[User]: ${lastMessage}`;
+    }
+    if (systemPrompt) {
+      prompt = `<system_instructions>\n${systemPrompt}\n</system_instructions>\n\n${prompt}`;
+    }
+    return prompt;
+  };
+
+  // ARG_MAX guard: one argv string tops out ~128 KB; shed oldest history first.
+  const KIMI_ARGV_BUDGET = 110 * 1024;
+  let fullPrompt = buildPrompt(historyMessages);
+  let shedCount = 0;
+  while (Buffer.byteLength(fullPrompt) > KIMI_ARGV_BUDGET && shedCount < historyMessages.length) {
+    shedCount++;
+    fullPrompt = buildPrompt(historyMessages.slice(shedCount));
+  }
+  if (Buffer.byteLength(fullPrompt) > KIMI_ARGV_BUDGET) {
+    throw new Error('Kimi CLI prompt exceeds argv byte budget after shedding history');
+  } else if (shedCount > 0) {
+    apiLogger.info({ promptLength: fullPrompt.length, shedCount }, 'Kimi CLI prompt shed oldest history messages to fit argv budget');
+  }
+
+  return new Promise((resolve, reject) => {
+    const KIMI_KNOWN_ALIASES = new Set([
+      'kimi-for-coding', 'kimi-for-coding-highspeed',
+      'k3', 'k3-256k', 'k3.1-pro', 'k3.1-pro-highspeed',
+    ]);
+    const fleetModel = (process.env.KIMI_FLEET_MODEL || 'auto').trim();
+    const storedAlias = String(model || '').trim();
+    const kimiModel = fleetModel && fleetModel.toLowerCase() !== 'auto' ? fleetModel
+      : KIMI_KNOWN_ALIASES.has(storedAlias) ? `kimi-code/${storedAlias}` : storedAlias || null;
+    const kimiBin = process.env.KIMI_CLI_BIN || 'kimi';
+
+    const args = ['-p', fullPrompt, '--output-format', 'stream-json'];
+    if (kimiModel) args.push('-m', kimiModel);
+
+    apiLogger.info({
+      requestedModel: model || null,
+      passedModel: kimiModel,
+      promptLength: fullPrompt.length,
+      systemPromptLength: systemPrompt ? systemPrompt.length : 0,
+      agentId: agentId ?? null,
+      spaceId: spaceId ?? null,
+      bin: kimiBin,
+      permsMode: 'hook',
+    }, 'Spawning Kimi Code CLI (stream-json)');
+
+    const childEnv = { ...process.env, CI: 'true', TERM: 'dumb', NO_COLOR: '1' };
+    // Kimi must not inherit this process's Claude session markers.
+    Object.keys(childEnv).forEach(key => {
+      if (key.startsWith('CLAUDE')) delete childEnv[key];
+    });
+    childEnv.KIMI_CRM_MANAGED = '1';
+    childEnv.AGENT_HOOK_DIALECT = 'kimi';
+    childEnv.AGENT_PERMS_FAIL_CLOSED = '1';
+    if (agentId != null) childEnv.AGENT_ID = String(agentId);
+    if (spaceId != null) {
+      childEnv.SPACE_ID = String(spaceId);
+      childEnv.MCP_SPACE_ID = String(spaceId);
+    }
+    if (jobId != null) childEnv.MCP_JOB_ID = String(jobId);
+    if (Number(maxTurns) > 0) childEnv.KIMI_LOOP_MAX_STEPS_PER_TURN = String(Number(maxTurns));
+    Object.assign(childEnv, mcpGateEnv, opsGateEnv);
+
+    // Last check before the fork: an abort that raced the preparation above must not spawn.
+    if (signal?.aborted) return reject(abortError(signal));
+
+    const child = spawn(kimiBin, args, {
+      cwd: process.cwd(),
+      env: childEnv,
+      stdio: ['ignore', 'pipe', 'pipe'], // prompt rides argv, no stdin needed
+      detached: true, // process group — kill MCP children together
+    });
+    child.unref();
+    bindAbort(signal, child);
+
+    if (child.pid) {
+      trackChildProcess(child.pid, {
+        child,
+        label: `kimi:${kimiModel}`,
+        startedAt: Date.now(),
+      });
+    }
+    if (onSpawn && child.pid) {
+      try { onSpawn(child.pid); } catch { /* ignore callback errors */ }
+    }
+
+    let buffer = '';
+    let stderr = '';
+    let lastText = '';
+    let protocolError = false;
+
+    // ── kimi JSONL → Claude stream-json translation ──
+    const emitAssistant = (block) => {
+      if (!onEvent) return;
+      try { onEvent({ type: 'assistant', message: { content: [block] } }); } catch { /* ignore */ }
+    };
+
+    const handleEvent = (event) => {
+      if (event?.role !== 'assistant' && event?.role !== 'tool') return;
+      const parsed = kimiMessageSchema.safeParse(event);
+      if (!parsed.success) {
+        protocolError = true;
+        return;
+      }
+      event = parsed.data;
+      if (event.role === 'assistant') {
+        if (Array.isArray(event.tool_calls)) {
+          for (const tc of event.tool_calls) {
+            let input = {};
+            try { input = JSON.parse(tc.function?.arguments || '{}'); }
+            catch { input = { _raw: tc.function?.arguments }; }
+            emitAssistant({
+              type: 'tool_use',
+              id: tc.id,
+              name: tc.function?.name || 'unknown',
+              input,
+            });
+          }
+        }
+        if (typeof event.content === 'string' && event.content) {
+          lastText = event.content;
+          emitAssistant({ type: 'text', text: event.content });
+        }
+      } else if (event.role === 'tool') {
+        const content = typeof event.content === 'string'
+          ? event.content
+          : JSON.stringify(event.content ?? '');
+        try {
+          onEvent?.({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: event.tool_call_id, content }] } });
+        } catch { /* ignore callback errors */ }
+      }
+    };
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      buffer += chunk;
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try { handleEvent(JSON.parse(line)); } catch { protocolError = true; }
+      }
+    });
+
+    child.stderr.on('data', (data) => { stderr += data.toString(); });
+
+    child.on('error', (err) => {
+      apiLogger.error({ err }, 'Failed to spawn Kimi CLI');
+      reject(new Error(`Failed to spawn Kimi CLI: ${err.message}`));
+    });
+
+    child.on('close', (code) => {
+      if (child.pid) {
+        untrackChildProcess(child.pid);
+        try { process.kill(-child.pid, 'SIGTERM'); } catch { /* group already dead */ }
+      }
+
+      if (buffer.trim()) {
+        try { handleEvent(JSON.parse(buffer)); } catch { protocolError = true; }
+      }
+
+      const content = lastText.trim();
+      if (code !== 0) {
+        const stderrTrimmed = (stderr || '').trim();
+        const errorDetail = stderrTrimmed.match(/^error:.*$/im)?.[0] || stderrTrimmed;
+        apiLogger.warn({ code, stderr: stderrTrimmed.substring(0, 500) }, 'Kimi CLI exited with non-zero code');
+        reject(new Error(`Kimi CLI exited with code ${code}: ${errorDetail.substring(0, 200) || 'No error output captured'}`));
+        return;
+      }
+
+      if (!content || signal?.aborted || protocolError) {
+        reject(new Error('Kimi CLI interrupted, returned invalid events or no assistant response'));
+        return;
+      }
+
+      apiLogger.info({
+        contentLength: content.length,
+        model: kimiModel,
+      }, 'Kimi CLI completed');
+
+      resolve({
+        content,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        // The CLI does not echo a resolved model id in stream-json — this is
+        // the alias we passed, flagged as such, not a fact.
+        model: kimiModel,
+        requestedModel: model || null,
+        modelSource: 'requested',
+        finishReason: 'end_turn',
+        // Kimi subscription seat, not metered API billing.
+        costUsd: 0,
+      });
+    });
+
+    // Same rule as the other CLI paths (Bug 1552/228714): caller-resolved, 120 min default.
+    const CLI_TIMEOUT_MS = Number(params.runTimeoutMs) > 0 ? Number(params.runTimeoutMs) : 120 * 60 * 1000;
+    const timeoutMin = Math.round(CLI_TIMEOUT_MS / 60000);
+    const timeout = setTimeout(() => {
+      apiLogger.warn(`Kimi CLI timeout reached (${timeoutMin} min), killing process tree`);
+      killProcessTree(child.pid, child);
+      reject(new Error(`Kimi CLI timeout (${timeoutMin} min)`));
     }, CLI_TIMEOUT_MS);
 
     child.on('close', () => clearTimeout(timeout));

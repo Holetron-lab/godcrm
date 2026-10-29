@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import React, { useState, useCallback } from 'react';
 import {
   Wrench,
@@ -36,6 +37,7 @@ const ToolGroupAccordion: React.FC<ToolGroupAccordionProps> = ({
   fetchFullMessage,
   startExpanded = false,
 }) => {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(startExpanded);
   const [expandedResults, setExpandedResults] = useState<Record<number, boolean>>({});
   // L4: full content loaded per tool (keyed by index)
@@ -71,20 +73,22 @@ const ToolGroupAccordion: React.FC<ToolGroupAccordionProps> = ({
       {/* Summary row — hidden when startExpanded to avoid double nesting with parent toggle */}
       {!startExpanded && (
         <div className="flex items-center gap-2">
-          <div
+          <button
+            type="button"
+            aria-expanded={expanded}
             onClick={() => setExpanded(!expanded)}
-            className="cursor-pointer select-none flex items-center gap-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
+            className="rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary-500)] cursor-pointer select-none flex items-center gap-2 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
           >
             <Wrench className="w-3.5 h-3.5" />
             <span>
-              Used {tools.length} tool{tools.length !== 1 ? 's' : ''}
+              {t('aiChat.ui.toolsUsedCount', { count: tools.length })}
             </span>
             {expanded ? (
               <ChevronDown className="w-3.5 h-3.5" />
             ) : (
               <ChevronRight className="w-3.5 h-3.5" />
             )}
-          </div>
+          </button>
 
           {/* Terminal link when agent used Bash (ADR-076) */}
           {onOpenTerminal && hasBash && (
@@ -94,10 +98,10 @@ const ToolGroupAccordion: React.FC<ToolGroupAccordionProps> = ({
                 onOpenTerminal(terminalSessionId);
               }}
               className="flex items-center gap-1 text-[10px] text-green-500 hover:text-green-400 transition-colors"
-              title="Open Terminal"
+              title={t('aiChat.ui.openTerminal')}
             >
               <Terminal className="w-3 h-3" />
-              <span>Terminal</span>
+              <span>{t('aiChat.ui.terminal')}</span>
             </button>
           )}
         </div>
@@ -178,8 +182,8 @@ const ToolGroupAccordion: React.FC<ToolGroupAccordionProps> = ({
                             <Loader2 className="w-2.5 h-2.5 animate-spin" />
                           ) : null}
                           {loadingFull[idx]
-                            ? 'Loading...'
-                            : `Load full result (${Math.round((step._full_length || 0) / 1024)}KB)`}
+                            ? t('aiChat.ui.loading')
+                            : t('aiChat.ui.loadFullResult', { size: Math.round((step._full_length || 0) / 1024) })}
                         </button>
                       )}
                       {/* Expand/collapse for long results */}
@@ -188,7 +192,7 @@ const ToolGroupAccordion: React.FC<ToolGroupAccordionProps> = ({
                           onClick={() => toggleResult(idx)}
                           className="text-[10px] text-[var(--color-primary-500)] hover:text-[var(--color-primary-400)] cursor-pointer transition-colors"
                         >
-                          {isResultExpanded ? '\u2190 Свернуть' : 'Показать полностью \u2192'}
+                          {isResultExpanded ? t('aiChat.ui.collapseLabel') : t('aiChat.ui.showFullMessage')}
                         </button>
                       )}
                     </div>
@@ -208,6 +212,7 @@ const ToolGroupAccordion: React.FC<ToolGroupAccordionProps> = ({
 // ---------------------------------------------------------------------------
 
 const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ content }) => {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(content.length <= 1000);
   const trimmed = content.trim();
 
@@ -228,7 +233,7 @@ const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ content }) => {
             onClick={() => setExpanded(!expanded)}
             className="text-xs text-purple-400 hover:text-purple-300 mt-1 cursor-pointer transition-colors"
           >
-            {expanded ? 'свернуть' : 'показать ещё'}
+            {expanded ? t('aiChat.ui.collapseLabel') : t('aiChat.ui.showMore')}
           </button>
         )}
       </div>

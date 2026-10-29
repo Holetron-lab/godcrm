@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { useDocumentsContext } from '../../DocumentsContext';
@@ -12,15 +13,16 @@ interface MetadataSectionProps {
 
 export function MetadataSection({ item, tableId }: MetadataSectionProps) {
   const ctx = useDocumentsContext();
+  const fieldId = useId();
   const updateItem = useDocumentUpdate(item.id, tableId);
 
   return (
     <>
       {/* Element Type Selector */}
       <div className="space-y-1.5">
-        <label className="block text-xs font-medium text-[var(--text-secondary)]">Тип элемента</label>
+        <label htmlFor={`${fieldId}-level`} className="block text-xs font-medium text-[var(--text-secondary)]">Тип элемента</label>
         <div className="flex items-center gap-2">
-          <select
+          <select id={`${fieldId}-level`}
             value={item.level}
             disabled={ctx.isReadOnly}
             onChange={async (e) => {
@@ -49,10 +51,10 @@ export function MetadataSection({ item, tableId }: MetadataSectionProps) {
 
       {/* Comment */}
       <div>
-        <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5 flex items-center gap-1.5">
+        <label htmlFor={`${fieldId}-comment`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5 flex items-center gap-1.5">
           <MessageSquare className="w-3.5 h-3.5" /> Комментарий
         </label>
-        <textarea
+        <textarea id={`${fieldId}-comment`}
           value={item.comment || ''}
           placeholder="Не отображается в документе..."
           rows={3}

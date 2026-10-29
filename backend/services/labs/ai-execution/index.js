@@ -33,6 +33,8 @@ export {
 export {
   executeClaudeCode,
   executeCopilotCli,
+  executeCodexCli,
+  executeKimiCli,
 } from './cli-providers.js';
 
 // ─── Main Execution ──────────────────────────────────────────
@@ -43,7 +45,7 @@ export {
 
 // ─── Default Export (backward compatibility) ─────────────────
 import { executeAI, executeSimpleAI } from './execution.js';
-import { executeClaudeCode, executeCopilotCli } from './cli-providers.js';
+import { executeClaudeCode, executeCopilotCli, executeCodexCli, executeKimiCli } from './cli-providers.js';
 import { getAgentDetails, getOperatorDetails, getApiKeyForOperator } from './api-providers.js';
 
 export default {
@@ -51,6 +53,8 @@ export default {
   executeSimpleAI,
   executeClaudeCode,
   executeCopilotCli,
+  executeCodexCli,
+  executeKimiCli,
   getAgentDetails,
   getOperatorDetails,
   getApiKeyForOperator

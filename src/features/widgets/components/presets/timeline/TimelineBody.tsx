@@ -5,6 +5,7 @@ import { ChevronDown, TreeDeciduous } from 'lucide-react';
 import type { TimelineItem, TimeScale, DragState, DayInfo, TimelineRowData } from './types';
 
 interface TimelineBodyProps {
+  isSaving?: boolean;
   timeScale: TimeScale;
   timeUnits: Date[];
   totalUnits: number;
@@ -23,14 +24,16 @@ interface TimelineBodyProps {
   edgesMode: boolean;
   connectingFrom: { itemId: string; side: 'left' | 'right' } | null;
   onMouseDown: (e: React.MouseEvent, item: TimelineItem, type: 'move' | 'resize-start' | 'resize-end') => void;
+  onKeyboardUpdate: (item: TimelineItem, type: 'move' | 'resize-start' | 'resize-end', direction: -1 | 1) => void;
   onEdgeClick: (itemId: string, side: 'left' | 'right') => void;
   onEventClick?: (event: TimelineRowData, initialTab?: 'details' | 'files' | 'comments') => void;
   onEventUpdate?: (eventId: string, field: string, value: unknown) => void;
   renderDependencies: () => JSX.Element | null;
-  timelineRef: React.RefObject<HTMLDivElement | null>;
+  timelineRef: React.RefObject<HTMLDivElement>;
 }
 
 export function TimelineBody({
+  isSaving = false,
   timeScale,
   timeUnits,
   totalUnits,
@@ -49,6 +52,7 @@ export function TimelineBody({
   edgesMode,
   connectingFrom,
   onMouseDown,
+  onKeyboardUpdate,
   onEdgeClick,
   onEventClick,
   onEventUpdate,
@@ -159,8 +163,8 @@ export function TimelineBody({
               <div key={groupName}>
                 {/* Group header */}
                 {groupByColumn && groupName && (
-                  <div
-                    className="flex border-b border-[var(--border-primary)] bg-[var(--bg-tertiary)] cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors"
+                  <button type="button" aria-expanded={!isGroupCollapsed}
+                    className="w-full text-left flex border-b border-[var(--border-primary)] bg-[var(--bg-tertiary)] cursor-pointer hover:bg-[var(--bg-secondary)] transition-colors"
                     onClick={() => toggleGroup(groupName)}
                   >
                     <div className="w-48 flex-shrink-0 p-2 text-xs font-semibold text-[var(--text-primary)] sticky left-0 bg-[var(--bg-tertiary)] z-10 flex items-center gap-2">
@@ -169,7 +173,7 @@ export function TimelineBody({
                       <span className="text-[var(--text-tertiary)] font-normal">({groupItems.length})</span>
                     </div>
                     <div className="flex-1" />
-                  </div>
+                  </button>
                 )}
 
                 {/* Compact multi-lane layout */}
@@ -185,8 +189,8 @@ export function TimelineBody({
                             key={item.id}
                             className="group/item"
                           >
-                            <div
-                              className="flex items-center gap-1 px-1 py-0.5 rounded hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
+                            <button type="button"
+                              className="w-full text-left flex items-center gap-1 px-1 py-0.5 rounded hover:bg-[var(--bg-secondary)] cursor-pointer transition-colors"
                               onClick={() => onEventClick?.(item.row, 'details')}
                             >
                               <div
@@ -199,7 +203,7 @@ export function TimelineBody({
                               <span className="text-[8px] text-[var(--text-tertiary)] flex-shrink-0">
                                 {format(item.startDate, 'dd.MM')}
                               </span>
-                            </div>
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -274,7 +278,7 @@ export function TimelineBody({
                           >
                             {/* Connection circle - left */}
                             {edgesMode && !isPartialStart && (
-                              <div
+                              <button type="button" aria-label={`Связать начало: ${item.title}`}
                                 className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 cursor-pointer hover:scale-125 transition-all z-20 ${
                                   connectingFrom?.itemId === item.id && connectingFrom?.side === 'left'
                                     ? 'bg-primary-500 border-primary-500 scale-125'
@@ -292,7 +296,17 @@ export function TimelineBody({
 
                             {/* Resize handle - start */}
                             {onEventUpdate && !isPartialStart && !edgesMode && (
-                              <div
+                              <button type="button" disabled={isSaving} aria-label={`Начало на день раньше: ${item.title}`}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  if (e.detail === 0) onKeyboardUpdate(item, 'resize-start', -1);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                                    e.preventDefault();
+                                    onKeyboardUpdate(item, 'resize-start', e.key === 'ArrowLeft' ? -1 : 1);
+                                  }
+                                }}
                                 className="absolute left-0 top-0 bottom-0 w-2 cursor-w-resize hover:bg-white/30 rounded-l z-10"
                                 onMouseDown={(e) => onMouseDown(e, item, 'resize-start')}
                               />
@@ -310,11 +324,11 @@ export function TimelineBody({
                             )}
 
                             {/* Content */}
-                            <div
+                            <div role="presentation"
                               className={`absolute inset-0 flex items-center gap-1 px-1.5 overflow-hidden ${!edgesMode ? 'cursor-move' : ''}`}
                               onMouseDown={(e) => !edgesMode && onMouseDown(e, item, 'move')}
                             >
-                              <span
+                              <button type="button"
                                 className="text-[10px] font-medium flex-shrink-0 cursor-pointer hover:underline z-20"
                                 style={{ color: item.color }}
                                 onClick={(e) => {
@@ -323,7 +337,16 @@ export function TimelineBody({
                                 }}
                               >
                                 {item.title}
-                              </span>
+                              </button>
+
+                              {onEventUpdate && !edgesMode && ([-1, 1] as const).map(direction => (
+                                <button key={direction} type="button" disabled={isSaving} className="z-20 text-xs"
+                                  aria-label={`Переместить на день ${direction === -1 ? 'раньше' : 'позже'}: ${item.title}`}
+                                  onMouseDown={e => e.stopPropagation()}
+                                  onClick={e => { e.stopPropagation(); onKeyboardUpdate(item, 'move', direction); }}>
+                                  {direction === -1 ? '‹' : '›'}
+                                </button>
+                              ))}
 
                               {item.description && (
                                 <span
@@ -346,7 +369,17 @@ export function TimelineBody({
 
                             {/* Resize handle - end */}
                             {onEventUpdate && !isPartialEnd && !edgesMode && (
-                              <div
+                              <button type="button" disabled={isSaving} aria-label={`Конец на день позже: ${item.title}`}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  if (e.detail === 0) onKeyboardUpdate(item, 'resize-end', 1);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                                    e.preventDefault();
+                                    onKeyboardUpdate(item, 'resize-end', e.key === 'ArrowLeft' ? -1 : 1);
+                                  }
+                                }}
                                 className="absolute right-0 top-0 bottom-0 w-2 cursor-e-resize hover:bg-white/30 rounded-r z-10"
                                 onMouseDown={(e) => onMouseDown(e, item, 'resize-end')}
                               />
@@ -354,7 +387,7 @@ export function TimelineBody({
 
                             {/* Connection circle - right */}
                             {edgesMode && !isPartialEnd && (
-                              <div
+                              <button type="button" aria-label={`Связать конец: ${item.title}`}
                                 className={`absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 cursor-pointer hover:scale-125 transition-all z-20 ${
                                   connectingFrom?.itemId === item.id && connectingFrom?.side === 'right'
                                     ? 'bg-primary-500 border-primary-500 scale-125'

@@ -167,7 +167,11 @@ class SecretsVault {
     client.on('notification', (msg) => {
       if (msg.channel !== NOTIFY_CHANNEL) return;
       const key = msg.payload;
-      if (key && this._cache.delete(key)) {
+      if (key) {
+        // Legacy NOTIFY payload is the key: evict it in every space.
+        for (const cacheKey of this._cache.keys()) {
+          if (cacheKey.slice(cacheKey.indexOf(':') + 1) === key) this._cache.delete(cacheKey);
+        }
         log.debug({ key }, 'SecretsVault: cache evicted via NOTIFY');
       }
     });
@@ -267,25 +271,29 @@ class SecretsVault {
    * Store (or replace) a secret. Encrypts plaintext at rest.
    * @param {string} key
    * @param {string} plaintext
-   * @param {{ actor?: number, description?: string }} [meta]
+   * @param {{ actor?: number, description?: string, spaceId?: number, transaction?: object }} [meta]
    */
   async putSecret(key, plaintext, meta = {}) {
-    if (!this._adapter) throw new Error('SecretsVault.putSecret: adapter not configured');
+    const adapter = meta.transaction || this._adapter;
+    if (!adapter) throw new Error('SecretsVault.putSecret: adapter not configured');
     const blob = this._encrypt(plaintext);
     const actor = meta.actor ?? null;
+    const spaceId = meta.spaceId ?? 11;
+    const cacheKey = `${spaceId}:${key}`;
     const description = meta.description ?? null;
-    await this._adapter.query(
-      `INSERT INTO ${TABLE} (key, encrypted_payload, description, created_by, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, NOW(), NOW())
-       ON CONFLICT (key) DO UPDATE
+    await adapter.query(
+      `INSERT INTO ${TABLE} (key, encrypted_payload, description, created_by, space_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+       ON CONFLICT (space_id, key) DO UPDATE
          SET encrypted_payload = EXCLUDED.encrypted_payload,
              description       = COALESCE(EXCLUDED.description, ${TABLE}.description),
              updated_at        = NOW()`,
-      [key, JSON.stringify(blob), description, actor]
+      [key, JSON.stringify(blob), description, actor, spaceId]
     );
     // Trigger fires NOTIFY → our listener evicts. Local put-through for
     // single-process latency wins.
-    this._cachePut(key, plaintext);
+    // A transaction can still roll back. NOTIFY invalidates only after commit.
+    if (!meta.transaction) this._cachePut(cacheKey, plaintext);
   }
 
   /**
@@ -294,7 +302,8 @@ class SecretsVault {
    * @param {string} key
    * @returns {Promise<string|null>}
    */
-  async getSecret(key) {
+  async getSecret(key, { spaceId = 11, transaction } = {}) {
+    const cacheKey = `${spaceId}:${key}`;
     if (!this._initialized) {
       // Stale-singleton self-heal (ADR-0040). The vault is a process-wide module
       // singleton; it can become uninitialized out-of-band — an in-process
@@ -324,7 +333,7 @@ class SecretsVault {
 
     // Env-fallback path: NODE_ENV != production AND no master key.
     if (!this._key) {
-      if (this._allowEnvFallback && process.env.NODE_ENV !== 'production') {
+      if (spaceId === 11 && this._allowEnvFallback && process.env.NODE_ENV !== 'production') {
         if (!this._envFallbackWarned) {
           // eslint-disable-next-line no-console
           console.warn(
@@ -338,18 +347,19 @@ class SecretsVault {
       return null;
     }
 
-    const cached = this._cacheGet(key);
+    const cached = transaction ? undefined : this._cacheGet(cacheKey);
     if (cached !== undefined) return cached;
 
-    if (!this._adapter) return null;
+    const adapter = transaction || this._adapter;
+    if (!adapter) return null;
 
-    const result = await this._adapter.query(
-      `SELECT encrypted_payload FROM ${TABLE} WHERE key = $1 LIMIT 1`,
-      [key]
+    const result = await adapter.query(
+      `SELECT encrypted_payload FROM ${TABLE} WHERE key = $1 AND space_id = $2 LIMIT 1`,
+      [key, spaceId]
     );
     if (result.rowCount === 0) return null;
     const plain = this._decrypt(result.rows[0].encrypted_payload);
-    this._cachePut(key, plain);
+    if (!transaction) this._cachePut(cacheKey, plain);
     return plain;
   }
 
@@ -361,17 +371,19 @@ class SecretsVault {
   async revealSecret(key, meta = {}) {
     if (!this._adapter) throw new Error('SecretsVault.revealSecret: adapter not configured');
     const actor = meta.actor ?? null;
+    const spaceId = meta.spaceId ?? 11;
+    const cacheKey = `${spaceId}:${key}`;
     const result = await this._adapter.query(
       `UPDATE ${TABLE}
           SET last_revealed_at = NOW(),
               last_revealed_by = $2
-        WHERE key = $1
+        WHERE key = $1 AND space_id = $3
         RETURNING encrypted_payload`,
-      [key, actor]
+      [key, actor, spaceId]
     );
     if (result.rowCount === 0) return null;
     const plain = this._decrypt(result.rows[0].encrypted_payload);
-    this._cachePut(key, plain);
+    this._cachePut(cacheKey, plain);
     log.info({ key, actor }, 'SecretsVault: secret revealed');
     return plain;
   }
@@ -380,8 +392,10 @@ class SecretsVault {
   async deleteSecret(key, meta = {}) {
     if (!this._adapter) throw new Error('SecretsVault.deleteSecret: adapter not configured');
     const actor = meta.actor ?? null;
-    await this._adapter.query(`DELETE FROM ${TABLE} WHERE key = $1`, [key]);
-    this._cache.delete(key);
+    const spaceId = meta.spaceId ?? 11;
+    const cacheKey = `${spaceId}:${key}`;
+    await this._adapter.query(`DELETE FROM ${TABLE} WHERE key = $1 AND space_id = $2`, [key, spaceId]);
+    this._cache.delete(cacheKey);
     log.info({ key, actor }, 'SecretsVault: secret deleted');
   }
 }

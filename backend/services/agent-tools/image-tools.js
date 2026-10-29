@@ -8,6 +8,8 @@
 import { aiLogger } from '../../utils/logger.js';
 import { dbGet, dbRun, sqlNow } from '../../database/connection.js';
 import { getSecret } from '../secrets/getSecret.js';
+import vault from '../secrets/SecretsVault.js';
+import { generateVideo, checkVideo } from './seedance-video.js';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -130,6 +132,11 @@ async function resolveApiKey(provider, context) {
 
   // 2. Vault (ADR-0040 — was process.env.{REPLICATE,GEMINI,GOOGLE_AI}_API_KEY)
   if (provider === 'replicate') {
+    const spaceId = Number(context?.space_id ?? context?.spaceId);
+    if (Number.isSafeInteger(spaceId) && spaceId > 0) {
+      const scoped = await vault.getSecret('replicate_api_key', { spaceId });
+      if (scoped) return scoped;
+    }
     const k = await getSecret('replicate_api_key', 'REPLICATE_API_KEY');
     if (k) return k;
   }
@@ -473,6 +480,7 @@ async function replicateFetchPrediction(apiKey, predictionId) {
 // ── Tool Handlers ──────────────────────────────────────────
 
 export const imageToolHandlers = {
+  replicate_video_generate: generateVideo,
 
   /**
    * replicate_image_generate — Start an image prediction and either return
@@ -637,6 +645,7 @@ export const imageToolHandlers = {
    * the error. T-138801: replaces inline polling that exceeded MCP timeout.
    */
   async replicate_check_prediction(args, userId, context) {
+    if (args?.kind === 'video') return checkVideo(args, userId, context);
     const { prediction_id, kind = '3d', space_id, format } = args;
     if (!prediction_id) return { error: 'prediction_id is required' };
     if (!['3d', 'image'].includes(kind)) return { error: `Unknown kind: ${kind}. Expected '3d' or 'image'.` };

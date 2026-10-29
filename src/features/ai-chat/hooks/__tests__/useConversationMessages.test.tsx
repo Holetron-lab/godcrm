@@ -357,6 +357,49 @@ describe('useConversations', () => {
 // ============================================================
 // ADR-078: Incremental Polling, Backoff, Adaptive Intervals
 // ============================================================
+describe('agent_status poll — settled rows of other agents are never appended', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('appends the active status row but not a finished one missing from the cache', async () => {
+    const startedAt = new Date().toISOString();
+    mockApiClient.get.mockImplementation(async (url: string) => {
+      if (url.includes('content_types=agent_status&limit=5')) {
+        return { data: { messages: [
+          // Finished run of another agent — the backend hands it back by id.
+          { id: 5, role: 'assistant', contentType: 'agent_status', content: '', sender_name: 'Orchestrator',
+            metadata: { agent_name: 'Orchestrator', agent_row_id: 5, agent_status: 'finished', placeholder: false, started_at: startedAt } },
+          // Live placeholder of the agent that is actually running.
+          { id: 9, role: 'assistant', contentType: 'agent_status', content: '', sender_name: 'Architect',
+            metadata: { agent_name: 'Architect', agent_row_id: 7, agent_status: 'thinking', placeholder: true, started_at: startedAt } },
+        ] } };
+      }
+      if (url.includes('content_types=plan&')) {
+        return { data: { messages: [] } };
+      }
+      if (url.includes('/messages')) {
+        if (url.includes('after=')) {
+          return { data: { messages: [], hasMore: false, is_processing: true, processing_agent_name: 'Architect', processing_agent_id: 7 } };
+        }
+        return { data: { messages: [{ id: 1, role: 'user', content: 'Hello' }], hasMore: false } };
+      }
+      return { data: { id: 123, type: 'chat' } };
+    });
+
+    const { result } = renderHook(
+      () => useConversationMessages(123, { pollingInterval: 100 }),
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(result.current.messages.map(m => String(m.id))).toContain('9');
+    }, { timeout: 3000 });
+
+    expect(result.current.messages.map(m => String(m.id))).not.toContain('5');
+  }, 6000);
+});
+
 describe('ADR-078: Incremental polling with ?after parameter', () => {
   beforeEach(() => {
     vi.clearAllMocks();

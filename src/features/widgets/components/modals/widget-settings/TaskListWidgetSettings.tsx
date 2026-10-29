@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { ColumnModel } from '@/features/tables/types/table.types';
 import { useLockedFields, LOCKED_TOOLTIP_RU } from '../../../utils/lockedFieldsContext';
 import { LockedFieldBadge } from '../../LockedFieldBadge';
@@ -57,6 +58,7 @@ export function TaskListWidgetSettings({
   bddCodeColumn,
   setBddCodeColumn,
 }: TaskListSettingsProps) {
+  const fieldId = useId();
   // ADR-0005 C-4 — fields the document author has pinned via atom-level
   // settings_override are non-editable in this rail. Outside a widget-atom
   // (e.g. global widget settings) the provider is absent and isLocked()
@@ -78,25 +80,25 @@ export function TaskListWidgetSettings({
       {/* BDD mode toggle */}
       <div className="border border-[var(--border-primary)] rounded-lg p-3 bg-[var(--bg-tertiary)]">
         <label
+          htmlFor={`${fieldId}-bddMode`}
           title={bddModeLocked ? LOCKED_TOOLTIP_RU : undefined}
           className={`flex items-center gap-3 cursor-pointer ${bddModeLocked ? 'opacity-60 cursor-default' : ''}`}
         >
           <input
+            id={`${fieldId}-bddMode`}
             type="checkbox"
             checked={bddMode}
             onChange={(e) => setBddMode(e.target.checked)}
             disabled={bddModeLocked}
             className="w-4 h-4 accent-[var(--color-primary-500)] disabled:opacity-60"
           />
-          <div className="flex-1">
-            <div className="text-sm font-medium text-[var(--text-primary)]">
-              BDD-режим
-              {bddModeLocked && <LockedFieldBadge />}
-            </div>
-            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
+          <span className="flex-1 text-sm font-medium text-[var(--text-primary)]">
+            BDD-режим
+            {bddModeLocked && <LockedFieldBadge />}
+            <span className="block text-xs font-normal text-[var(--text-tertiary)] mt-0.5">
               Отображать виджет как список BDD-критериев: статус-иконки, priority-chip (must/should/could/wont), фильтры locked/unlocked/regressed.
-            </p>
-          </div>
+            </span>
+          </span>
         </label>
       </div>
 
@@ -107,10 +109,11 @@ export function TaskListWidgetSettings({
             <p className="text-xs font-medium text-[var(--text-secondary)]">Маппинг BDD-колонок</p>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-bddStatusColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Колонка статуса *{bddStatusLocked && <LockedFieldBadge />}
               </label>
               <select
+                id={`${fieldId}-bddStatusColumn`}
                 value={bddStatusColumn}
                 onChange={(e) => setBddStatusColumn(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
@@ -130,10 +133,11 @@ export function TaskListWidgetSettings({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-bddPriorityColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Колонка приоритета (MoSCoW){bddPriorityLocked && <LockedFieldBadge />}
               </label>
               <select
+                id={`${fieldId}-bddPriorityColumn`}
                 value={bddPriorityColumn}
                 onChange={(e) => setBddPriorityColumn(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
@@ -153,10 +157,11 @@ export function TaskListWidgetSettings({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-bddCodeColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Колонка кода{bddCodeLocked && <LockedFieldBadge />}
               </label>
               <select
+                id={`${fieldId}-bddCodeColumn`}
                 value={bddCodeColumn}
                 onChange={(e) => setBddCodeColumn(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
@@ -176,10 +181,11 @@ export function TaskListWidgetSettings({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-titleColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Колонка заголовка{titleColumnLocked && <LockedFieldBadge />}
               </label>
               <select
+                id={`${fieldId}-titleColumn`}
                 value={titleColumn}
                 onChange={(e) => setTitleColumn(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
@@ -200,10 +206,11 @@ export function TaskListWidgetSettings({
         <>
           {/* Task List (non-BDD) column mapping */}
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-titleColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Колонка заголовка *{titleColumnLocked && <LockedFieldBadge />}
             </label>
             <select
+              id={`${fieldId}-titleColumn`}
               value={titleColumn}
               onChange={(e) => setTitleColumn(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
@@ -220,10 +227,11 @@ export function TaskListWidgetSettings({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-descriptionColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Колонка описания{descriptionColumnLocked && <LockedFieldBadge />}
             </label>
             <select
+              id={`${fieldId}-descriptionColumn`}
               value={descriptionColumn}
               onChange={(e) => setDescriptionColumn(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
@@ -240,10 +248,11 @@ export function TaskListWidgetSettings({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-taskCompletedColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Колонка статуса выполнения{completedColumnLocked && <LockedFieldBadge />}
             </label>
             <select
+              id={`${fieldId}-taskCompletedColumn`}
               value={taskCompletedColumn}
               onChange={(e) => setTaskCompletedColumn(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
@@ -258,16 +267,17 @@ export function TaskListWidgetSettings({
               ))}
             </select>
             <p className="text-xs text-[var(--text-tertiary)] mt-1">
-              Boolean (выполнено) или select со значением "done"/"completed"
+              Boolean (выполнено) или select со значением &quot;done&quot;/&quot;completed&quot;
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-scheduledDateColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Срок от{scheduledLocked && <LockedFieldBadge />}
               </label>
               <select
+                id={`${fieldId}-scheduledDateColumn`}
                 value={scheduledDateColumn}
                 onChange={(e) => setScheduledDateColumn(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
@@ -284,10 +294,11 @@ export function TaskListWidgetSettings({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+              <label htmlFor={`${fieldId}-dueDateColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
                 Срок до{dueLocked && <LockedFieldBadge />}
               </label>
               <select
+                id={`${fieldId}-dueDateColumn`}
                 value={dueDateColumn}
                 onChange={(e) => setDueDateColumn(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"
@@ -305,10 +316,11 @@ export function TaskListWidgetSettings({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+            <label htmlFor={`${fieldId}-colorColumn`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
               Колонка цвета{colorLocked && <LockedFieldBadge />}
             </label>
             <select
+              id={`${fieldId}-colorColumn`}
               value={colorColumn}
               onChange={(e) => setColorColumn(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)] disabled:opacity-60"

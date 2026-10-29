@@ -15,6 +15,7 @@
  */
 
 import axios from 'axios';
+import { MIDJOURNEY_TOOL_DEFS, midjourneyToolHandlers } from './midjourney-tools.js';
 
 import { aiLogger } from '../../utils/logger.js';
 
@@ -23,6 +24,7 @@ const log = aiLogger.child({ module: 'connector_tools' });
 // ─── Tool definitions (OpenAI function-calling schema) ──────────────
 
 export const CONNECTOR_TOOL_DEFS = [
+  ...MIDJOURNEY_TOOL_DEFS,
   {
     type: 'function',
     requires_connector: 'figma',
@@ -214,6 +216,7 @@ async function github_get_user(_args, _userId, context) {
 }
 
 export const connectorToolHandlers = {
+  ...midjourneyToolHandlers,
   figma_get_file,
   slack_post_message,
   github_get_user,

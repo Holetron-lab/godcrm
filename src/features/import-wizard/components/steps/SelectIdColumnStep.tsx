@@ -68,39 +68,39 @@ export function SelectIdColumnStep({
 
       <div className="space-y-2">
         {tableInfo.columns.map((column) => (
-          <div
+          <button type="button" aria-pressed={selectedColumn === column.name}
             key={column.name}
             onClick={() => {
               onSelect(column.name, false);
               validateColumn(column.name);
             }}
             className={`
-              p-3 border-2 rounded-lg cursor-pointer transition-all
+              w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 text-left p-3 border-2 rounded-lg cursor-pointer transition-all
               ${selectedColumn === column.name
                 ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                 : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
               }
             `}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <span className="flex items-center justify-between">
+              <span className="flex items-center gap-3">
                 <code className="font-mono text-sm font-semibold text-gray-900 dark:text-gray-100">
                   {column.name}
                 </code>
-                <span className="text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
+                <span className="block text-xs px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">
                   {column.type}
                 </span>
                 {column.is_primary_key && (
-                  <span className="text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-400 rounded">
+                  <span className="block text-xs px-2 py-0.5 bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-400 rounded">
                     🔑 PRIMARY KEY
                   </span>
                 )}
-              </div>
+              </span>
               {selectedColumn === column.name && (
-                <span className="text-xl">✓</span>
+                <span className="block text-xl">✓</span>
               )}
-            </div>
-          </div>
+            </span>
+          </button>
         ))}
       </div>
 

@@ -1,3 +1,4 @@
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ChatInputArea — Input area with file picker, bound rows, voice, and submit.
  * Extracted from AIChatPanel.tsx JSX return (lines 4603-5054).
@@ -35,7 +36,7 @@ export interface ChatInputAreaProps {
   projectFiles: Array<{ id: string; name?: string; originalName?: string; original_name?: string; mimeType?: string; mime_type?: string; size: number }>;
   isLoadingFiles: boolean;
   tasksSource: TasksSourceConfig | undefined;
-  effectiveSpaceId: number | string | undefined;
+  effectiveSpaceId: number | undefined;
   availableMentionUsers: MentionUser[];
   availableSlashAgents: MentionUser[];
   chatPartner: { type: string; name: string } | null;
@@ -43,7 +44,7 @@ export interface ChatInputAreaProps {
   isAgentProcessing: boolean;
   stopAgent: () => void;
   handleSubmit: (e?: FormEvent) => void;
-  fileInputRef: RefObject<HTMLInputElement | null>;
+  fileInputRef: RefObject<HTMLInputElement>;
   handleFileSelect: (e: ChangeEvent<HTMLInputElement>) => void;
   // Toggles
   hasSlashCommand: boolean;
@@ -55,7 +56,7 @@ export interface ChatInputAreaProps {
   setMarkdownEnabled: (fn: (prev: boolean) => boolean) => void;
   showTerminal: boolean;
   setShowTerminal: (fn: (prev: boolean) => boolean) => void;
-  terminalFocusSessionId: string | null;
+  terminalFocusSessionId: number | undefined;
   // Voice
   isRecording: boolean;
   isTranscribing: boolean;
@@ -75,6 +76,7 @@ const getFileIcon = (type: string) => {
 };
 
 export function ChatInputArea(props: ChatInputAreaProps) {
+  const { t } = useLanguage();
   const {
     panelMode, inputValue, setInputValue, attachments, setAttachments,
     mentionedUsers, setMentionedUsers, messageBoundRows, setMessageBoundRows,
@@ -133,11 +135,9 @@ export function ChatInputArea(props: ChatInputAreaProps) {
             <div className="flex items-center border-b border-[var(--border-secondary)] bg-[var(--bg-tertiary)]">
               <div className="flex items-center flex-1">
                 <button onClick={() => setAttachTab('files')} className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-b-2', attachTab === 'files' ? 'text-[var(--color-primary-500)] border-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)] border-transparent')}>
-                  <FolderOpen className="w-3 h-3" /> Files
-                </button>
+                  <FolderOpen className="w-3 h-3" /> {t('aiChat.ui.files')}</button>
                 <button onClick={() => setAttachTab('rows')} className={cn('flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-b-2', attachTab === 'rows' ? 'text-[var(--color-primary-500)] border-[var(--color-primary-500)]' : 'text-[var(--text-tertiary)] border-transparent')}>
-                  <Link2 className="w-3 h-3" /> Rows
-                </button>
+                  <Link2 className="w-3 h-3" /> {t('aiChat.ui.rows')}</button>
               </div>
               <button onClick={() => { setShowFilePicker(prev => false as unknown as boolean); setFilesSearch(''); }} className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
                 <X className="w-3.5 h-3.5" />
@@ -150,14 +150,14 @@ export function ChatInputArea(props: ChatInputAreaProps) {
                     <span className="text-[10px] text-[var(--text-tertiary)]">{filesSource.tableIcon || '📁'} {filesSource.tableName}</span>
                     <div className="flex-1 relative">
                       <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-[var(--text-tertiary)]" />
-                      <input type="text" value={filesSearch} onChange={(e) => setFilesSearch(e.target.value)} placeholder="Search..."
+                      <input type="text" value={filesSearch} onChange={(e) => setFilesSearch(e.target.value)} placeholder={t('aiChat.ui.search')}
                         className="w-full pl-7 pr-2 py-1 text-xs rounded bg-[var(--bg-secondary)] border border-[var(--border-primary)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none" />
                     </div>
                     <button onClick={() => updateFilesSource(undefined)} className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"><Settings className="w-3 h-3" /></button>
                   </div>
                   <div className="max-h-48 overflow-y-auto">
                     {isLoadingFiles ? <div className="flex items-center justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-[var(--text-tertiary)]" /></div>
-                    : projectFiles.length === 0 ? <div className="py-4 text-center text-xs text-[var(--text-tertiary)]">No files</div>
+                    : projectFiles.length === 0 ? <div className="py-4 text-center text-xs text-[var(--text-tertiary)]">{t('aiChat.ui.noFiles')}</div>
                     : projectFiles.filter(f => !filesSearch.trim() || (f.name || f.originalName || f.original_name || '').toLowerCase().includes(filesSearch.toLowerCase())).map(file => (
                       <button key={file.id} onClick={() => {
                         if (filesSource.tableId) {
@@ -176,7 +176,7 @@ export function ChatInputArea(props: ChatInputAreaProps) {
                 </>
               ) : (
                 <div className="p-3">
-                  <div className="flex items-center gap-2 mb-2 text-xs text-[var(--text-tertiary)]"><FolderOpen className="w-3.5 h-3.5" /><span>Select file source</span></div>
+                  <div className="flex items-center gap-2 mb-2 text-xs text-[var(--text-tertiary)]"><FolderOpen className="w-3.5 h-3.5" /><span>{t('aiChat.ui.selectFileSource')}</span></div>
                   <FilesSourceInlineSelector defaultSpaceId={effectiveSpaceId} onSelect={(config) => updateFilesSource(config)} onCancel={() => setShowFilePicker(() => false as unknown as boolean)} />
                 </div>
               )
@@ -212,7 +212,7 @@ export function ChatInputArea(props: ChatInputAreaProps) {
                 <>
                   <button type="button" onClick={() => setThinkingEnabled(prev => !prev)}
                     className={cn("p-1 rounded transition-colors", thinkingEnabled ? "bg-pink-500/20 text-pink-400" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]")}
-                    title={thinkingEnabled ? "Цепочка рассуждений: ВКЛ" : "Цепочка рассуждений: ВЫКЛ"}>
+                    title={thinkingEnabled ? t('aiChat.ui.reasoningON') : t('aiChat.ui.reasoningOFF')}>
                     <Brain className="w-3.5 h-3.5" />
                   </button>
                   <button type="button" onClick={() => setAgentMode(prev => prev === 'ask' ? 'read' : prev === 'read' ? 'agent' : 'ask')}
@@ -232,11 +232,11 @@ export function ChatInputArea(props: ChatInputAreaProps) {
             </div>
           </div>
           <form onSubmit={handleSubmit} className="flex items-start p-2 pt-0">
-            <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" accept="image/*,.pdf,.txt,.md,.json,.csv" />
+            <input type="file" ref={fileInputRef} onChange={handleFileSelect} multiple className="hidden" />
             <MentionInput value={inputValue} onChange={setInputValue}
               onMention={(user) => { setMentionedUsers(prev => prev.some(u => u.id === user.id && u.type === user.type) ? prev : [...prev, user]); }}
               onSubmit={() => handleSubmit()} availableUsers={availableMentionUsers} availableAgents={availableSlashAgents}
-              placeholder={chatPartner?.type === 'agent' ? `Спросить ${chatPartner.name}...` : "Сообщение... (/ вызвать агента)"}
+              placeholder={chatPartner?.type === 'agent' ? t('aiChat.ui.askAgent', { name: chatPartner.name }) : t('aiChat.ui.messagePlaceholder')}
               disabled={isLoading} className="flex-1 min-w-0"
               inputClassName="px-2 py-1 bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] border-none focus:outline-none resize-none disabled:opacity-50 text-sm leading-5" maxRows={4} />
             <div className="flex flex-col items-center pt-1">
