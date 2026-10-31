@@ -41,11 +41,12 @@ interface DateRange {
 
 interface DashboardWidgetCardProps {
   widgetId: number;
+  isEditMode?: boolean;
   borderRadius?: number;
   isMobile?: boolean;
 }
 
-export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = false }: DashboardWidgetCardProps) {
+export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = false, isEditMode = false }: DashboardWidgetCardProps) {
   const queryClient = useQueryClient();
   const { openTaskChat, openChat, attachRowToChat, attachRowToMessage } = useAIChat();
   // ADR-0060 §"ТОТ ЖЕ" — when mounted under PublicViewProvider, the Documents
@@ -377,6 +378,7 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
       case 'table_widget':
         return (
           <TableViewWidget
+            isEditMode={isEditMode}
             tableColumns={tableColumns}
             onCellUpdate={tableControls.canConfigure ? tableControls.onCellUpdate : undefined}
             onConfigChange={tableControls.canConfigure ? tableControls.onConfigChange : undefined}
@@ -508,7 +510,7 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
       {showFilters && (
         <div className="flex-shrink-0 px-2 py-1.5 border-b border-[var(--border-secondary)]">
           <TableFilters
-            columnVisibilityControl={tableControls.canConfigure && widget ? <WidgetColumnVisibility columns={tableColumns} config={widget.config || {}} onChange={tableControls.onConfigChange} disabled={tableControls.saving} /> : undefined}
+            columnVisibilityControl={isEditMode && tableControls.canConfigure && widget ? <WidgetColumnVisibility columns={tableColumns} config={widget.config || {}} onChange={tableControls.onConfigChange} disabled={tableControls.saving} /> : undefined}
             afterAddRow={tableControls.canConfigure && widget?.config?.table_id ? <WidgetTableLink tableId={widget.config.table_id} /> : undefined}
             columns={tableColumns}
             searchQuery={searchQuery}

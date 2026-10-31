@@ -8,9 +8,11 @@ import { cn } from '@/shared/utils/cn';
 import { logger } from '@/shared/utils/logger';
 import { apiClient } from '@/shared/utils/apiClient';
 import { useDocumentsContext } from '../DocumentsContext';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 export function CreateDocumentModal() {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const fieldId = useId();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -81,7 +83,7 @@ export function CreateDocumentModal() {
     <Modal
       open={ctx.showCreateDocumentModal}
       onOpenChange={ctx.setShowCreateDocumentModal}
-      title="Новый документ"
+      title={t('documents.newDocument')}
       size="md"
       footer={
         <div className="flex items-center justify-end gap-3 w-full">
@@ -89,14 +91,14 @@ export function CreateDocumentModal() {
             onClick={() => ctx.setShowCreateDocumentModal(false)}
             className="px-4 py-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
           >
-            Отмена
+            {t('documents.createModal.cancel')}
           </button>
           <button
             onClick={handleCreate}
             disabled={!name.trim() || isSaving}
             className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
-            {isSaving ? 'Создание...' : 'Создать'}
+            {isSaving ? t('documents.createModal.creating') : t('documents.createModal.create')}
           </button>
         </div>
       }
@@ -105,7 +107,7 @@ export function CreateDocumentModal() {
       <div className="space-y-4">
         {/* Icon picker (simple) */}
         <fieldset>
-          <legend className="block text-sm font-medium mb-1.5">Иконка</legend>
+          <legend className="block text-sm font-medium mb-1.5">{t('documents.createModal.icon')}</legend>
           <div className="flex flex-wrap gap-2">
             {['📄', '📋', '📝', '📑', '📊', '📈', '🔧', '⚙️', '🎯', '💡'].map(emoji => (
               <button
@@ -125,25 +127,25 @@ export function CreateDocumentModal() {
 
         {/* Name */}
         <div>
-          <label htmlFor={`${fieldId}-name`} className="block text-sm font-medium mb-1.5">Название *</label>
+          <label htmlFor={`${fieldId}-name`} className="block text-sm font-medium mb-1.5">{t('documents.createModal.name')}</label>
           <input
             type="text"
             id={`${fieldId}-name`}
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Название документа"
+            placeholder={t('documents.createModal.namePlaceholder')}
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-sm"
           />
         </div>
 
         {/* Description */}
         <div>
-          <label htmlFor={`${fieldId}-description`} className="block text-sm font-medium mb-1.5">Описание</label>
+          <label htmlFor={`${fieldId}-description`} className="block text-sm font-medium mb-1.5">{t('documents.createModal.description')}</label>
           <textarea
             id={`${fieldId}-description`}
             value={description}
             onChange={e => setDescription(e.target.value)}
-            placeholder="Краткое описание документа"
+            placeholder={t('documents.createModal.descriptionPlaceholder')}
             rows={3}
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-sm resize-none"
           />
@@ -151,20 +153,20 @@ export function CreateDocumentModal() {
 
         {/* Category */}
         <div>
-          <label htmlFor={`${fieldId}-category`} className="block text-sm font-medium mb-1.5">Категория</label>
+          <label htmlFor={`${fieldId}-category`} className="block text-sm font-medium mb-1.5">{t('documents.createModal.category')}</label>
           <input
             type="text"
             id={`${fieldId}-category`}
             value={category}
             onChange={e => setCategory(e.target.value)}
-            placeholder="Например: ADR, Spec, Guide"
+            placeholder={t('documents.createModal.categoryPlaceholder')}
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-sm"
           />
         </div>
 
         {/* Project selector */}
         <div>
-          <label htmlFor={`${fieldId}-project`} className="block text-sm font-medium mb-1.5">Проект (опционально)</label>
+          <label htmlFor={`${fieldId}-project`} className="block text-sm font-medium mb-1.5">{t('documents.createModal.projectOptional')}</label>
           <select
             id={`${fieldId}-project`}
             value={projectId || ''}
@@ -172,7 +174,7 @@ export function CreateDocumentModal() {
             disabled={loadingProjects}
             className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-sm"
           >
-            <option value="">Без проекта</option>
+            <option value="">{t('documents.createModal.noProject')}</option>
             {projects.map(p => (
               <option key={p.id} value={p.id}>
                 {p.data.title || p.data.name || `Project #${p.id}`}
@@ -180,7 +182,7 @@ export function CreateDocumentModal() {
             ))}
           </select>
           {loadingProjects && (
-            <p className="text-xs text-[var(--text-tertiary)] mt-1">Загрузка проектов...</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">{t('documents.createModal.loadingProjects')}</p>
           )}
         </div>
       </div>

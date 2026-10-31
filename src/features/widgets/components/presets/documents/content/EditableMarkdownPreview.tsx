@@ -2,6 +2,7 @@ import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 import { useState, useRef, useEffect } from 'react';
 import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 /**
  * EditableMarkdownPreview - Renders markdown with inline editing for tables
@@ -18,6 +19,7 @@ export interface EditableMarkdownPreviewProps {
 }
 
 export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, widgetId, variables }: EditableMarkdownPreviewProps) {
+  const { t } = useLanguage();
   const authUser = useAuthStore((s) => s.user);
   const checkboxUser = authUser ? { name: authUser.name, id: Number(authUser.id) } : undefined;
   const [editingCell, setEditingCell] = useState<{ row: number; col: number } | null>(null);
@@ -135,10 +137,10 @@ export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, w
         {/* Content before table */}
         {beforeTable && (
           <div role="presentation"
-            className="mb-3 cursor-text hover:bg-[var(--bg-secondary)] rounded p-1 -m-1"
+            className="mb-3 cursor-text hover:bg-[var(--bg-secondary)] focus-within:bg-[var(--bg-secondary)] rounded p-1 -m-1"
             onClick={onEditRaw}
           >
-            {onEditRaw && <button type="button" className="text-xs underline text-[var(--text-tertiary)]">Редактировать текст</button>}
+            {onEditRaw && <button type="button" aria-label={t('documents.editText')} className="sr-only" />}
             <MarkdownPreview content={beforeTable} variables={variables} widgetId={widgetId} onContentChange={onContentChange} currentUser={checkboxUser} />
           </div>
         )}
@@ -220,10 +222,10 @@ export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, w
         {/* Content after table */}
         {afterTable && (
           <div role="presentation"
-            className="mt-3 cursor-text hover:bg-[var(--bg-secondary)] rounded p-1 -m-1"
+            className="mt-3 cursor-text hover:bg-[var(--bg-secondary)] focus-within:bg-[var(--bg-secondary)] rounded p-1 -m-1"
             onClick={onEditRaw}
           >
-            {onEditRaw && <button type="button" className="text-xs underline text-[var(--text-tertiary)]">Редактировать текст</button>}
+            {onEditRaw && <button type="button" aria-label={t('documents.editText')} className="sr-only" />}
             <MarkdownPreview content={afterTable} variables={variables} widgetId={widgetId} onContentChange={onContentChange} currentUser={checkboxUser} />
           </div>
         )}
@@ -234,17 +236,18 @@ export function EditableMarkdownPreview({ content, onContentChange, onEditRaw, w
   // No table - regular preview with click to edit
   return (
     <div role="presentation"
-      className="text-[var(--text-secondary)] cursor-text hover:bg-[var(--bg-secondary)] rounded p-2 -m-2"
+      className="text-[var(--text-secondary)] cursor-text hover:bg-[var(--bg-secondary)] focus-within:bg-[var(--bg-secondary)] rounded p-2 -m-2"
       style={{ fontSize: 'inherit' }}
       onClick={onEditRaw}
     >
       {/* Preserve this button when an async refetch replaces an empty block. */}
       {onEditRaw && (
         <button type="button"
-          className={content ? 'text-xs underline text-[var(--text-tertiary)]' : 'text-[var(--text-tertiary)] italic cursor-text'}
+          aria-label={content ? t('documents.editText') : undefined}
+          className={content ? 'sr-only' : 'text-[var(--text-tertiary)] italic cursor-text'}
           style={content ? undefined : { fontSize: '0.875em' }}
         >
-          {content ? 'Редактировать текст' : 'Нажмите чтобы редактировать...'}
+          {content ? null : 'Нажмите чтобы редактировать...'}
         </button>
       )}
       {(content || !onEditRaw) && <MarkdownPreview content={content || 'Нажмите чтобы редактировать...'} variables={variables} widgetId={widgetId} onContentChange={onContentChange} currentUser={checkboxUser} />}

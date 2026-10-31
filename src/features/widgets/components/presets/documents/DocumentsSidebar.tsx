@@ -7,6 +7,7 @@ import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/shared/utils/cn';
 import { apiClient } from '@/shared/utils/apiClient';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useDocumentsContext } from './DocumentsContext';
 import { useTicketConfig, type TicketRow } from './content/ticketUtils';
 import { tablesApi } from '@/features/tables/api/tablesApi';
@@ -24,6 +25,7 @@ import {
 
 export function DocumentsSidebar() {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const [showCategories, setShowCategories] = useState(() => {
     const saved = localStorage.getItem(CATEGORIES_VISIBLE_KEY);
     return saved === 'true';
@@ -177,7 +179,7 @@ export function DocumentsSidebar() {
       <SidebarFooterStats />
 
       {!ctx.isMobile && (
-        <div role="slider" tabIndex={0} aria-label="Ширина списка документов" aria-orientation="horizontal"
+        <div role="slider" tabIndex={0} aria-label={t('documents.documentListWidth')} aria-orientation="horizontal"
           aria-valuenow={ctx.sidebarWidth} aria-valuemin={MIN_SIDEBAR_WIDTH} aria-valuemax={MAX_SIDEBAR_WIDTH}
           onKeyDown={e => {
             if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;

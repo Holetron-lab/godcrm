@@ -3,9 +3,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useIsPublicReadOnly } from '@/features/public/PublicViewContext';
 import { showToast } from '@/shared/hooks/useToast';
 import { tablesApi } from '@/features/tables/api/tablesApi';
-import { canEditWidgetColumn } from '../components/presets/WidgetCellEditor';
 import { updateWidget } from '../api/widgetsApi';
 import type { Widget, WidgetConfig } from '../types/widget.types';
+import type { ColumnModel } from '@/features/tables/types/table.types';
+
+export function canEditWidgetColumn(column: ColumnModel) {
+  return !column.isReadonly && !column.is_primary_key && !['id', 'created_at', 'updated_at'].includes(column.name)
+    && ['text', 'textarea', 'number', 'select', 'multi-select', 'checkbox', 'email', 'url', 'phone', 'password', 'date', 'datetime', 'relation'].includes(column.type);
+}
 
 /** Shared by the dashboard and both full-page widget renderers. */
 export function useWidgetTableControls(widget?: Widget) {

@@ -2,10 +2,11 @@
 # ─────────────────────────────────────────────────────────────────────────
 # Quality Gate — Pre-deploy validation for GOD CRM frontend
 #
-# Runs three checks in order:
+# Runs four checks in order:
 #   1. TypeScript type check (tsc --noEmit)
-#   2. Quality gate tests (vitest)
-#   3. Production build (vite build)
+#   2. Frontend translation check
+#   3. Quality gate tests (vitest)
+#   4. Production build (vite build)
 #
 # Exits with non-zero if ANY step fails.
 # ─────────────────────────────────────────────────────────────────────────
@@ -45,11 +46,15 @@ run_step "File line limit (max 800)" \
 run_step "TypeScript check (tsc --noEmit)" \
   npx tsc --noEmit --project tsconfig.json
 
-# ── Step 2: Quality gate tests ─────────────────────────────────────────
+# ── Step 2: Frontend translation check ─────────────────────────────────
+run_step "Frontend translation check" \
+  node "$PROJECT_DIR/scripts/check-frontend-translations.mjs"
+
+# ── Step 3: Quality gate tests ─────────────────────────────────────────
 run_step "Quality gate tests (vitest)" \
   npx vitest run src/features/ai-chat/__tests__/quality-gates.test.ts --reporter=verbose
 
-# ── Step 3: Production build ───────────────────────────────────────────
+# ── Step 4: Production build ───────────────────────────────────────────
 run_step "Production build (vite)" \
   npx vite build
 

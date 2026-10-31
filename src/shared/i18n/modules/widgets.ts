@@ -2,6 +2,20 @@ export const widgets = {
   en: {
     newWidget: 'New module',
     createView: 'Create view',
+    tableControls: {
+      openTable: 'Open table',
+      columnVisibility: 'Widget column visibility',
+      allColumnsHidden: 'All columns are hidden. Open "Widget column visibility".',
+      sortColumn: 'Sort: {column}',
+      sortHint: 'Ascending → descending → reset',
+      columnMenu: 'Column menu: {column}',
+      hideInWidget: 'Hide in widget',
+      showHiddenColumns: 'Show {count} hidden columns',
+      hideColumns: 'Hide columns',
+      lockColumn: 'Lock column',
+      activeColumn: 'Active column',
+      editCell: 'Edit: {column}',
+    },
     types: {
       table: 'Table',
       kanban: 'Kanban',
@@ -61,6 +75,20 @@ export const widgets = {
   ru: {
     newWidget: 'Новый модуль',
     createView: 'Создать представление',
+    tableControls: {
+      openTable: 'Перейти на страницу таблицы',
+      columnVisibility: 'Видимость колонок в виджете',
+      allColumnsHidden: 'Все колонки скрыты. Откройте «Видимость колонок в виджете».',
+      sortColumn: 'Сортировка: {column}',
+      sortHint: 'По возрастанию → по убыванию → сброс',
+      columnMenu: 'Меню колонки: {column}',
+      hideInWidget: 'Скрыть в виджете',
+      showHiddenColumns: 'Показать {count} скрытых столбцов',
+      hideColumns: 'Скрыть столбцы',
+      lockColumn: 'Заблокировать колонку',
+      activeColumn: 'Активная колонка',
+      editCell: 'Редактировать: {column}',
+    },
     types: {
       table: 'Таблица',
       kanban: 'Kanban',

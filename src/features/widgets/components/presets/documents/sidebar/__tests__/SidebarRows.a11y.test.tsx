@@ -51,7 +51,7 @@ beforeEach(() => {
 
 it('opens a document with Enter/Space and keeps status, chat and attach independent inside a form', async () => {
   const user = userEvent.setup(), submit = vi.fn();
-  const { container } = render(<form onSubmit={e => { e.preventDefault(); submit(); }}><SidebarDocRow doc={doc}/></form>);
+  const { container } = render(<form onSubmit={e => { e.preventDefault(); submit(); }}><SidebarDocRow doc={doc}/></form>, { wrapper: LanguageProvider });
   const open = screen.getByRole('button', { name: 'Открыть документ Guide' });
   open.focus(); await user.keyboard('{Enter} ');
   expect(mocks.ctx.setSelectedDocumentId).toHaveBeenNthCalledWith(1, 7);
@@ -69,9 +69,15 @@ it('opens a document with Enter/Space and keeps status, chat and attach independ
 });
 
 it('keeps public document rows free of internal chat and attach actions', () => {
-  mocks.ctx.dataSource = 'public'; render(<SidebarDocRow doc={doc}/>);
+  mocks.ctx.dataSource = 'public'; render(<SidebarDocRow doc={doc}/>, { wrapper: LanguageProvider });
   expect(screen.queryByRole('button', { name: 'Open document chat' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Attach to message' })).not.toBeInTheDocument();
+});
+
+it('uses an English accessible name for opening a document', () => {
+  localStorage.setItem('god-crm-language', 'en');
+  render(<SidebarDocRow doc={doc}/>, { wrapper: LanguageProvider });
+  expect(screen.getByRole('button', { name: 'Open document Guide' })).toBeInTheDocument();
 });
 
 it('opens ticket chat with the keyboard without coupling attach or form submission', async () => {

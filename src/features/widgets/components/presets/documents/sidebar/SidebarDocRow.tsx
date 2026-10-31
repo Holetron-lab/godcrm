@@ -1,6 +1,7 @@
 import React from 'react';
 import { MessageCircle, Paperclip } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useAIChat } from '@/features/ai-chat';
 import { useDocumentsContext } from '../DocumentsContext';
 import { useDocumentChat } from '../useDocumentChat';
@@ -16,6 +17,7 @@ export function SidebarDocRow({ doc, indented = false }: SidebarDocRowProps) {
   const ctx = useDocumentsContext();
   const { openDocumentChat } = useDocumentChat();
   const { attachRowToMessage } = useAIChat();
+  const { t } = useLanguage();
 
   return (
     <div
@@ -31,7 +33,7 @@ export function SidebarDocRow({ doc, indented = false }: SidebarDocRowProps) {
           <div className="font-medium truncate flex-1">
             <button
               type="button"
-              aria-label={`Открыть документ ${doc.name}`}
+              aria-label={t('documents.openDocument', { name: doc.name })}
               onClick={() => {
                 ctx.setSelectedDocumentId(doc.id);
                 ctx.setAtomsViewMode(false);

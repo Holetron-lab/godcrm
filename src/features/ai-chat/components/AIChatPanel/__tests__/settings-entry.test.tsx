@@ -36,6 +36,13 @@ vi.mock('@/features/spaces/hooks/useSpacesQuery', () => ({ useSpacesQuery: () =>
 vi.mock('@/shared/utils/apiClient', () => ({ apiClient: { get: vi.fn().mockResolvedValue({ data: { prefs: null, participants: [] } }) } }));
 vi.mock('../../ParticipantSelector', () => ({ ParticipantSelector: () => null }));
 
+it.each([['en', 'Chat width'], ['ru', 'Ширина чата']] as const)('localizes the chat resize control in %s', (language, name) => {
+  state.isWideMode = false;
+  state.isMobile = false;
+  renderWithProviders(<AIChatPanel />, { language });
+  expect(screen.getByRole('slider', { name })).toHaveAttribute('tabindex', '0');
+});
+
 it.each([[false, false], [true, false], [false, true]])('opens inline settings (wide=%s, mobile=%s) and preserves the draft on navigation', async (isWideMode, isMobile) => {
   state.conversationId = 44;
   state.isWideMode = isWideMode;

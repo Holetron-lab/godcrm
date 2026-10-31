@@ -344,7 +344,7 @@ function WidgetGridItem({
         </div>
       )}
       
-      <DashboardWidgetCard widgetId={widget.id} borderRadius={borderRadius} isMobile={isMobile} />
+      <DashboardWidgetCard widgetId={widget.id} borderRadius={borderRadius} isMobile={isMobile} isEditMode={effectiveEditable} />
     </div>
   );
 }

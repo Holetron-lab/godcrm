@@ -84,7 +84,7 @@ export function DocumentTileView({
           <span className="text-2xl flex-shrink-0">{doc.icon || '📄'}</span>
           <h3 className="font-medium text-base truncate text-gray-900 dark:text-gray-100 flex-1">
             {onClick ? (
-              <button type="button" onClick={onClick} aria-label={`Открыть документ ${doc.name}`}
+              <button type="button" onClick={onClick} aria-label={t('documents.openDocument', { name: doc.name })}
                 className="text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-blue-500">
                 {doc.name}
               </button>
@@ -127,7 +127,7 @@ export function DocumentTileView({
 
           {onStatusChange ? (
             <select
-              aria-label="Статус документа"
+              aria-label={t('documents.documentStatus')}
               value={currentStatus?.id ?? ''}
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => {
@@ -169,7 +169,7 @@ export function DocumentTileView({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onChat(); }}
                   className="p-1.5 rounded bg-blue-500/80 text-white hover:bg-blue-600 transition-colors"
-                  title="Открыть чат"
+                  title={t('documents.openChat')}
                 >
                   <MessageCircle className="w-3.5 h-3.5" />
                 </button>
@@ -179,7 +179,7 @@ export function DocumentTileView({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onAttach(); }}
                   className="p-1.5 rounded bg-green-500/80 text-white hover:bg-green-600 transition-colors"
-                  title="Прикрепить к сообщению"
+                  title={t('documents.attachToMessage')}
                 >
                   <Paperclip className="w-3.5 h-3.5" />
                 </button>
@@ -189,7 +189,7 @@ export function DocumentTileView({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onDownload(); }}
                   className="p-1.5 rounded bg-blue-500/80 text-white hover:bg-blue-600 transition-colors"
-                  title="Скачать Markdown"
+                  title={t('documents.downloadMarkdown')}
                 >
                   <Download className="w-3.5 h-3.5" />
                 </button>
@@ -199,7 +199,7 @@ export function DocumentTileView({
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onSettings(); }}
                   className="p-1.5 rounded bg-gray-500/80 text-white hover:bg-gray-600 transition-colors"
-                  title="Редактировать документ"
+                  title={t('documents.editDocument')}
                 >
                   <Settings className="w-3.5 h-3.5" />
                 </button>
@@ -210,7 +210,7 @@ export function DocumentTileView({
                   type="button"
                   onClick={(e) => e.stopPropagation()}
                   className="p-1.5 rounded bg-red-500/80 text-white hover:bg-red-600 transition-colors"
-                  title="Удалить документ"
+                  title={t('documents.deleteDocument')}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>

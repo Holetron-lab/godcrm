@@ -1,4 +1,5 @@
 export const aiChatRU = {
+  "chatWidth": "Ширина чата",
   "discardConfigurationDraft": "Закрыть без сохранения изменений?",
   "chatDescription": "Описание чата",
   "autofillDescription": "Заполнить через саммари-агента",

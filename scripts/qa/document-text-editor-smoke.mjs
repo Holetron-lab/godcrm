@@ -14,10 +14,12 @@ try {
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
   for (const width of [1440, 390]) for (const size of [12, 20]) for (const kind of ['short', 'long']) {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.addInitScript(() => localStorage.setItem('god-crm-language', 'ru'));
     page.on('pageerror', error => process.stderr.write(`${error.stack}\n`));
     const block = page.locator('#item-1');
     const preview = block.locator('.markdown-preview p').first();
     const fixture = await openFixture({ server, page, entry: `${entry}?size=${size}&kind=${kind}&theme=${size === 12 ? 'light' : 'dark'}`, ready: preview });
+    assert.equal(await page.getByRole('button', { name: 'Редактировать текст', exact: true }).textContent(), '');
     const before = await preview.evaluate(el => {
       const css = getComputedStyle(el);
       return { fontSize: css.fontSize, fontFamily: css.fontFamily, lineHeight: css.lineHeight,

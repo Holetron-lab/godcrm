@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderWithProviders } from '@/tests/renderWithProviders';
 import type { ComponentProps } from 'react';
 import type { Widget } from '../../../types/widget.types';
 import { ProcurementWidget } from './ProcurementWidget';
@@ -19,7 +19,7 @@ const fields = ['order', 'supplier', 'expected_date', 'status', 'amount', 'paid'
 let data: Record<string, unknown>;
 function Location() { return <output aria-label="URL">{useLocation().search}</output>; }
 function mount(url = '/') {
-  return render(<MemoryRouter initialEntries={[url]}><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ProcurementWidget widget={widget} /><Location /></QueryClientProvider></MemoryRouter>);
+  return renderWithProviders(<MemoryRouter initialEntries={[url]}><ProcurementWidget widget={widget} /><Location /></MemoryRouter>);
 }
 beforeEach(() => {
   vi.clearAllMocks();

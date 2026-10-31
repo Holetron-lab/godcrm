@@ -4,6 +4,7 @@ import { useDocumentsContext } from '../../DocumentsContext';
 import { useDocumentUpdate } from '../hooks/useDocumentUpdate';
 import { transliterate } from '../utils';
 import type { DocumentItem } from '../../../../../types/documents.types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 interface AtomPreviewSectionProps {
   item: DocumentItem;
@@ -13,6 +14,7 @@ interface AtomPreviewSectionProps {
 
 export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPreviewSectionProps) {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const fieldId = useId();
   const updateItem = useDocumentUpdate(item.id, tableId);
 
@@ -34,20 +36,20 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Atom className="w-4 h-4 text-purple-400" />
-            <span className="text-sm font-medium">Атом</span>
+            <span className="text-sm font-medium">{t('documents.rightPanel.atom')}</span>
             {item.atom_ref && (
               <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-400">
-                активен
+                {t('documents.rightPanel.active')}
               </span>
             )}
           </div>
 
           <div className="space-y-3">
             <div>
-              <label htmlFor={`${fieldId}-key`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">Ключ атома</label>
+              <label htmlFor={`${fieldId}-key`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">{t('documents.rightPanel.atomKey')}</label>
               <input id={`${fieldId}-key`}
                 type="text"
-                aria-label="Ключ атома"
+                aria-label={t('documents.rightPanel.atomKey')}
                 value={ctx.allAtoms.find(atom => atom.id === item.atom_ref)?.key || ''}
                 disabled={!item.atom_ref || ctx.isReadOnly}
                 placeholder={transliterate(getParentHeading() || 'atom') + '-' + item.id}
@@ -59,11 +61,11 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
               />
             </div>
             <div>
-              <label htmlFor={`${fieldId}-title`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">Название атома</label>
+              <label htmlFor={`${fieldId}-title`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">{t('documents.rightPanel.atomName')}</label>
               <input id={`${fieldId}-title`}
                 type="text"
                 value={item.atom_title || ''}
-                placeholder={getParentHeading() || 'Заголовок атома...'}
+                placeholder={getParentHeading() || t('documents.rightPanel.atomNamePlaceholder')}
                 onChange={async (e) => {
                   await updateItem({ atom_title: e.target.value || null });
                 }}
@@ -71,10 +73,10 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
               />
             </div>
             <div>
-              <label htmlFor={`${fieldId}-comment`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">Комментарий атома</label>
+              <label htmlFor={`${fieldId}-comment`} className="block text-[10px] uppercase text-[var(--text-tertiary)] mb-1">{t('documents.rightPanel.atomComment')}</label>
               <textarea id={`${fieldId}-comment`}
                 value={item.atom_comment || ''}
-                placeholder="Описание или пометка..."
+                placeholder={t('documents.rightPanel.atomDescriptionPlaceholder')}
                 rows={2}
                 onChange={async (e) => {
                   await updateItem({ atom_comment: e.target.value || null });
@@ -91,7 +93,7 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
                 }}
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-purple-400 hover:bg-purple-500/10 border border-purple-500/30 text-xs"
               >
-                <Atom className="w-3.5 h-3.5" /> {item.atom_ref ? 'Редактировать атом' : 'Создать новый атом'}
+                <Atom className="w-3.5 h-3.5" /> {item.atom_ref ? t('documents.rightPanel.editAtom') : t('documents.rightPanel.createAtom')}
               </button>
             )}
 
@@ -100,7 +102,7 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
                 onClick={() => onOpenAtomPicker(item.id)}
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-blue-400 hover:bg-blue-500/10 border border-blue-500/30 text-xs"
               >
-                <ArrowRight className="w-3.5 h-3.5" /> Привязать существующий
+                <ArrowRight className="w-3.5 h-3.5" /> {t('documents.rightPanel.linkExisting')}
               </button>
             )}
           </div>
@@ -115,15 +117,15 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
         <div className="p-3 rounded-lg border border-purple-500/30 bg-purple-500/5">
           <div className="flex items-center gap-2 mb-3">
             <Atom className="w-4 h-4 text-purple-400" />
-            <span className="text-sm font-medium">Настройки атома</span>
+            <span className="text-sm font-medium">{t('documents.rightPanel.atomSettings')}</span>
           </div>
 
           <div className="space-y-3">
             <div>
-              <label htmlFor={`${fieldId}-key`} className="block text-[10px] uppercase text-purple-400 mb-1">Ключ атома</label>
+              <label htmlFor={`${fieldId}-key`} className="block text-[10px] uppercase text-purple-400 mb-1">{t('documents.rightPanel.atomKey')}</label>
               <input id={`${fieldId}-key`}
                 type="text"
-                aria-label="Ключ атома"
+                aria-label={t('documents.rightPanel.atomKey')}
                 value={ctx.allAtoms.find(atom => atom.id === item.atom_ref)?.key || ''}
                 disabled={!item.atom_ref || ctx.isReadOnly}
                 placeholder="unique-atom-key"
@@ -136,11 +138,11 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
             </div>
 
             <div>
-              <label htmlFor={`${fieldId}-title`} className="block text-[10px] uppercase text-purple-400 mb-1">Название</label>
+              <label htmlFor={`${fieldId}-title`} className="block text-[10px] uppercase text-purple-400 mb-1">{t('documents.rightPanel.name')}</label>
               <input id={`${fieldId}-title`}
                 type="text"
                 value={item.atom_title || ''}
-                placeholder="Название атома"
+                placeholder={t('documents.rightPanel.atomName')}
                 onChange={async (e) => {
                   await updateItem({ atom_title: e.target.value || null });
                 }}
@@ -149,10 +151,10 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
             </div>
 
             <div>
-              <label htmlFor={`${fieldId}-content`} className="block text-[10px] uppercase text-purple-400 mb-1">Содержимое ({ctx.currentLanguage.toUpperCase()})</label>
+              <label htmlFor={`${fieldId}-content`} className="block text-[10px] uppercase text-purple-400 mb-1">{t('documents.rightPanel.atomContent').replace('{language}', ctx.currentLanguage.toUpperCase())}</label>
               <textarea id={`${fieldId}-content`}
                 value={item.content || ''}
-                placeholder="Содержимое атома (Markdown)..."
+                placeholder={t('documents.rightPanel.atomContentPlaceholder')}
                 rows={6}
                 onChange={async (e) => {
                   await updateItem({ [`content_${ctx.currentLanguage}`]: e.target.value || null });
@@ -166,7 +168,7 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
         {/* Translations */}
         <div className="p-3 rounded-lg border border-blue-500/30 bg-blue-500/5">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-medium text-blue-400">Переводы</span>
+            <span className="text-xs font-medium text-blue-400">{t('documents.rightPanel.translations')}</span>
             <button
               onClick={() => {
                 ctx.setConvertToAtomItem(item);
@@ -174,7 +176,7 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
               }}
               className="px-2 py-1 rounded text-[10px] bg-blue-500/20 hover:bg-blue-500/30 text-blue-400"
             >
-              AI Перевод
+              {t('documents.rightPanel.aiTranslate')}
             </button>
           </div>
 
@@ -193,10 +195,10 @@ export function AtomPreviewSection({ item, tableId, onOpenAtomPicker }: AtomPrev
             </div>
 
             <div>
-              <label htmlFor={`${fieldId}-ru`} className="block text-[10px] uppercase text-blue-400 mb-1">Русский</label>
+              <label htmlFor={`${fieldId}-ru`} className="block text-[10px] uppercase text-blue-400 mb-1">{t('documents.rightPanel.russian')}</label>
               <textarea id={`${fieldId}-ru`}
                 value={item.content_ru || ''}
-                placeholder="Русский контент..."
+                placeholder={t('documents.rightPanel.russianContentPlaceholder')}
                 rows={3}
                 onChange={async (e) => {
                   await updateItem({ content_ru: e.target.value || null });

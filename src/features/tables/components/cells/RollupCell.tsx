@@ -22,6 +22,8 @@ interface RollupCellProps {
   rowData?: Record<string, unknown>;
   columns?: { name: string; type: string; config?: ColumnConfig }[];
   rawMode?: boolean;
+  canEditSource?: (sourceKey: string) => boolean;
+  onSourceEdit?: (sourceKey: string, source: HTMLButtonElement) => void;
 }
 
 // Replace {{variable}} placeholders and evaluate formula
@@ -72,6 +74,8 @@ export const RollupCell: React.FC<RollupCellProps> = ({
   rowData = {},
   columns = [],
   rawMode = false,
+  canEditSource,
+  onSourceEdit,
 }) => {
   const rollupConfig = config?.rollup;
   
@@ -119,10 +123,11 @@ export const RollupCell: React.FC<RollupCellProps> = ({
         </>
       ) : `${prefix}${formulaValue}${suffix}`;
       
-      return { 
-        label, 
+      return {
+        label,
         value: fullValue,
-        hasValue: !isEmpty
+        hasValue: !isEmpty,
+        sourceKey,
       };
     });
 
@@ -132,14 +137,29 @@ export const RollupCell: React.FC<RollupCellProps> = ({
 
   return (
     <div className="flex flex-col gap-0.5 py-1">
-      {displayItems.map((item, index) => (
-        <div key={index} className="flex items-center gap-1.5 text-xs">
-          <span className="text-[var(--text-tertiary)] truncate max-w-[80px]">{item.label}:</span>
+      {displayItems.map((item, index) => {
+        const content = <>
+          <span className="text-[var(--text-secondary)] truncate max-w-[80px]">{item.label}:</span>
           <span className={`font-medium ${item.hasValue ? 'text-[var(--text-primary)]' : 'text-[var(--text-tertiary)]'}`}>
             {item.value || '—'}
           </span>
-        </div>
-      ))}
+        </>;
+        const sourceKey = item.sourceKey;
+        if (sourceKey && onSourceEdit && canEditSource?.(sourceKey)) {
+          return <button
+            key={index}
+            type="button"
+            data-rollup-source={sourceKey}
+            className="flex w-full items-center gap-1.5 rounded text-left text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--text-primary)]"
+            onClick={event => {
+              event.stopPropagation();
+              // Mouse editing stays on the cell's double-click; opening earlier closes portals on the second mousedown.
+              if (event.detail === 0) onSourceEdit(sourceKey, event.currentTarget);
+            }}
+          >{content}</button>;
+        }
+        return <div key={index} data-rollup-source={item.sourceKey} className="flex items-center gap-1.5 text-xs">{content}</div>;
+      })}
     </div>
   );
 };

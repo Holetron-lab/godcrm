@@ -29,6 +29,7 @@
     "test:isolated": "npm test",
     "typecheck": "node scripts/typecheck.mjs",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "lint:i18n": "node scripts/check-frontend-translations.mjs",
     "lint:backend": "eslint backend/ --ext .js",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
@@ -128,7 +129,7 @@
   },
   "overrides": {
     "tar": "^7.5.7",
-    "follow-redirects": "^1.16.1",
+    "follow-redirects": "^1.16.2",
     "monaco-editor": {
       "dompurify": "$dompurify"
     }

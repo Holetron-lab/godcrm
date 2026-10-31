@@ -1,4 +1,5 @@
 export const aiChatEN = {
+  "chatWidth": "Chat width",
   "discardConfigurationDraft": "Close without saving changes?",
   "chatDescription": "Chat description",
   "autofillDescription": "Fill with summary agent",

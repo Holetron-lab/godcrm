@@ -341,7 +341,7 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
             Hidden in fillContainer (embed split): the host shell's divider owns
             resizing; an in-panel handle would un-glue and re-open the gap. */}
         {!isMobile && !fillContainer && (
-          <div role="slider" tabIndex={0} aria-label="Ширина чата" aria-orientation="horizontal" aria-valuenow={panelWidth} aria-valuemin={320} aria-valuemax={resize.panelMaxWidth}
+          <div role="slider" tabIndex={0} aria-label={t('aiChat.ui.chatWidth')} aria-orientation="horizontal" aria-valuenow={panelWidth} aria-valuemin={320} aria-valuemax={resize.panelMaxWidth}
             onKeyDown={resize.handleWidthResizeKeyDown}
             className="focus-visible:outline focus-visible:outline-2 w-1 cursor-ew-resize hover:bg-purple-500/50 transition-colors flex-shrink-0 touch-none"
             onMouseDown={resize.handleWidthResizeStart}

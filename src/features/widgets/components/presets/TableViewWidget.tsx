@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react';
+import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { CaptionedMedia } from '@/shared/components/CaptionedMedia';
-import { ArrowDown, ArrowUp, ArrowUpDown, EyeOff, Lock, LockOpen, MoreHorizontal, Table2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Eye, EyeOff, Lock, LockOpen, MoreVertical, Table2 } from 'lucide-react';
 import { DropdownMenu } from '@/shared/components/ui/DropdownMenu';
-import { WidgetCellEditor, canEditWidgetColumn } from './WidgetCellEditor';
+import { CellEditor } from '@/features/tables/components/UniversalTable/CellEditor';
+import { getRowColorStyle } from '@/features/tables/utils/rowColorStyle';
 import { isWidgetColumnVisible } from './WidgetColumnVisibility';
 import type { WidgetConfig } from '../../types/widget.types';
 import type { ColumnModel } from '../../../tables/types/table.types';
@@ -29,8 +30,10 @@ import {
 import { resolveAttachmentUrl } from '../../../tables/components/cells/attachmentValue';
 import { resolveLens } from '../../../tables/utils/resolveLens';
 import type { TicketRowData } from '../../hooks/useTicketData';
+import { canEditWidgetColumn } from '../../hooks/useWidgetTableControls';
 import { useIsPublicReadOnly } from '@/features/public/PublicViewContext';
 import { PublicAttachmentPlaceholder } from '@/features/public/PublicAttachmentPlaceholder';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 // Relation data map type
 type RelationDataMap = Map<string, Map<string, { label: string; color?: string }>>;
@@ -104,6 +107,8 @@ const renderCell = (
   relationData?: RelationDataMap,
   publicReadOnly = false,
   columns?: ColumnInfo[],
+  canEditRollupSource?: (sourceKey: string) => boolean,
+  onRollupSourceEdit?: (sourceKey: string, source: HTMLButtonElement) => void,
 ): ReactNode => {
   // ADR-0060 AC13: public viewer cannot resolve authenticated uploads,
   // so render a non-fetching placeholder instead of <img>/<a>.
@@ -176,7 +181,7 @@ const renderCell = (
       // Fallback for relation type without loaded data
       return <TextCell value={value} />;
     case 'rollup':
-      return <RollupCell value={value} config={config} rowData={rowData} columns={columns} />;
+      return <RollupCell value={value} config={config} rowData={rowData} columns={columns} canEditSource={canEditRollupSource} onSourceEdit={onRollupSourceEdit} />;
     case 'json':
       return config?.json?.cellView === 'table'
         ? <JsonTableCell value={value} config={config.json} />
@@ -210,6 +215,7 @@ interface TableRowHeightConfig {
 
 // Extended props for TableViewWidget
 interface TableViewWidgetProps extends PresetWidgetProps {
+  isEditMode?: boolean;
   columnsInfo?: ColumnInfo[];
   relationData?: RelationDataMap;
   tableConfig?: TableRowHeightConfig | null;
@@ -225,11 +231,60 @@ interface TableViewWidgetProps extends PresetWidgetProps {
  * Table View Widget - displays table data with beautiful column headers and typed cells
  * Now supports real column types from schema via columnsInfo prop
  */
-export function TableViewWidget({ widget, data, columnsInfo, relationData, tableConfig, onRowClick, onRowDoubleClick, onConfigChange, onCellUpdate, savingConfig, tableColumns }: TableViewWidgetProps) {
+export function TableViewWidget({ widget, data, columnsInfo, relationData, tableConfig, onRowClick, onRowDoubleClick, onConfigChange, onCellUpdate, savingConfig, tableColumns, isEditMode = false }: TableViewWidgetProps) {
+  const { t } = useLanguage();
   const publicReadOnly = useIsPublicReadOnly();
   const [sort, setSort] = useState<{ column: string; order: 'asc' | 'desc' } | null>(null);
-  const [editing, setEditing] = useState<{ rowId: string; column: string } | null>(null);
-  const canConfigure = !!onConfigChange && !publicReadOnly;
+  const [showHiddenTemporarily, setShowHiddenTemporarily] = useState(false);
+  const [editing, setEditing] = useState<{ rowId: string; column: string; containerColumn?: string } | null>(null);
+  const [draftValue, setDraftValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const savingRef = useRef(false);
+  const editingCellRef = useRef<HTMLTableCellElement | null>(null);
+  const editingSourceRef = useRef<string | null>(null);
+  const showColumnControls = isEditMode && !publicReadOnly;
+  const canConfigure = showColumnControls && !!onConfigChange;
+
+  useLayoutEffect(() => {
+    // Restore focus after unmounting the editor so Escape cannot trigger its blur-save.
+    if (editing) return;
+    const cell = editingCellRef.current;
+    const sourceKey = editingSourceRef.current;
+    const source = sourceKey
+      ? Array.from(cell?.querySelectorAll<HTMLElement>('[data-rollup-source]') ?? []).find(element => element.dataset.rollupSource === sourceKey)
+      : undefined;
+    (source ?? cell)?.focus();
+  }, [editing]);
+
+  const startEditing = (rowId: string, column: string, value: unknown, cell: HTMLTableCellElement, containerColumn?: string, sourceColumn?: string) => {
+    editingCellRef.current = cell;
+    editingSourceRef.current = sourceColumn ?? null;
+    setEditing({ rowId, column, containerColumn });
+    setDraftValue(value == null ? '' : String(value));
+    setSaveError('');
+  };
+
+  const closeEditor = () => {
+    setEditing(null);
+    setSaveError('');
+  };
+
+  const commitEdit = async (valueOverride?: string) => {
+    if (!editing || !onCellUpdate || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError('');
+    try {
+      await onCellUpdate(editing.rowId, editing.column, valueOverride !== undefined ? valueOverride : draftValue);
+      closeEditor();
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : 'Не удалось сохранить. Попробуйте ещё раз.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
 
 
   if (widget.config?.procurement) {
@@ -269,27 +324,23 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
     safeColumnsInfo.forEach(col => columnInfoMap.set(col.name, col));
   }
 
-  // Determine which columns to show:
-  // 1. If widget config has visible_columns - use those
-  // 2. Otherwise use schema order, independent of the table visibility
-  // 3. Fallback to data keys
-  let columns: string[];
-  
-  if (configVisibleColumns.length > 0) {
-    // Use widget-configured columns
-    columns = configVisibleColumns;
-  } else if (safeColumnsInfo.length > 0) {
-    // Table visibility belongs to the table, not this widget.
-    columns = [...safeColumnsInfo]
+  let columnCandidates: string[];
+  if (safeColumnsInfo.length > 0) {
+    columnCandidates = [...safeColumnsInfo]
       .sort((a, b) => (a.orderIndex ?? 999) - (b.orderIndex ?? 999))
       .map(col => col.name);
+  } else if (configVisibleColumns.length > 0) {
+    columnCandidates = configVisibleColumns;
   } else {
-    // Fallback to data keys
-    columns = Object.keys(rows[0]?.data || {})
+    columnCandidates = Object.keys(rows[0]?.data || {})
       .filter(k => !k.startsWith('_') && k !== 'id' && k !== 'table_id' && k !== 'created_at' && k !== 'updated_at');
   }
 
-  columns = columns.filter(name => isWidgetColumnVisible(config || {}, name));
+  const isColumnVisible = (name: string) => isWidgetColumnVisible(config || {}, name) && columnInfoMap.get(name)?.isVisible !== false;
+  const columns = columnCandidates.filter(isColumnVisible);
+  const hiddenColumns = columnCandidates.filter(name => !isColumnVisible(name));
+  const showHiddenColumns = showColumnControls && showHiddenTemporarily;
+  const displayedColumns = showHiddenColumns ? [...columns, ...hiddenColumns] : columns;
   const sortedRows = sort ? [...rows].sort((a, b) => {
     const left = a.data[sort.column] ?? a[sort.column];
     const right = b.data[sort.column] ?? b[sort.column];
@@ -329,52 +380,89 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
 
   return (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Keyboard users must be able to scroll the table container.
-    <div tabIndex={0} className="h-full overflow-auto rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--text-primary)]">
-      {columns.length === 0 && <p className="p-4 text-sm text-[var(--text-secondary)]">Все колонки скрыты. Откройте «Видимость колонок в виджете».</p>}
-      <table className="w-full text-sm border-collapse">
-        <thead className="sticky top-0 bg-[var(--bg-secondary)] border-b border-[var(--border-primary)]">
+    <div tabIndex={0} className="isolate h-full overflow-auto rounded-2xl border border-[var(--border-primary)] bg-[var(--bg-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--text-primary)]">
+      {columns.length === 0 && <p className="p-4 text-sm text-[var(--text-secondary)]">{t('widgets.tableControls.allColumnsHidden')}</p>}
+      <table className="w-full text-sm border-collapse border-b border-[var(--border-primary)]">
+        <thead className="sticky top-0 z-30 bg-[var(--bg-secondary)] border-b border-[var(--border-primary)]">
           <tr>
-            {columns.map((col) => {
+            {displayedColumns.map((col, columnIndex) => {
+              const isHidden = columnIndex >= columns.length;
               const type = getColumnType(col);
-              const emoji = typeEmojiMap[type] || '📝';
               const width = getColumnWidth(col);
               const displayName = getDisplayName(col);
-              
+              const appearance = getColumnConfig(col)?.appearance;
+              const indicator = appearance?.indicator;
+
               return (
-                <th
-                  key={col}
-                  aria-sort={sort?.column === col ? (sort.order === 'asc' ? 'ascending' : 'descending') : 'none'}
-                  style={width ? { width: `${width}px`, minWidth: `${width}px` } : undefined}
-                  className="px-4 py-3 text-left border-r border-[var(--border-primary)] last:border-r-0"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg" title={type}>
-                      {emoji}
-                    </span>
-                    <span className="text-xs font-semibold tracking-wide text-[var(--text-secondary)]">
-                      {displayName}
-                    </span>
-                    <button type="button" disabled={!!editing} aria-label={`Сортировка: ${displayName}`} title="По возрастанию → по убыванию → сброс" className="ml-auto p-1 rounded hover:bg-[var(--bg-tertiary)]"
-                      onClick={() => setSort(current => current?.column !== col ? { column: col, order: 'asc' } : current.order === 'asc' ? { column: col, order: 'desc' } : null)}>
-                      {sort?.column === col ? (sort.order === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} />}
-                    </button>
-                    {canConfigure && <DropdownMenu trigger={<button type="button" disabled={savingConfig || !!editing} aria-label={`Меню колонки: ${displayName}`} className="p-1 rounded hover:bg-[var(--bg-tertiary)]"><MoreHorizontal size={16} /></button>}
-                      items={[
-                        { value: 'hide', label: 'Скрыть в виджете', icon: <EyeOff size={14} />, onSelect: () => onConfigChange?.({ hidden_columns: [...(config?.hidden_columns || []), col] }) },
-                        ...(onCellUpdate && tableColumns?.some(c => c.name === col && canEditWidgetColumn(c)) && config?.actions?.edit !== false ? [{
-                          value: 'edit', label: config?.editable_columns?.includes(col) ? 'Заблокировать колонку' : 'Активная колонка',
-                          icon: config?.editable_columns?.includes(col) ? <LockOpen size={14} /> : <Lock size={14} />,
-                          active: config?.editable_columns?.includes(col),
-                          onSelect: () => onConfigChange?.({ editable_columns: config?.editable_columns?.includes(col) ? config.editable_columns.filter(name => name !== col) : [...(config?.editable_columns || []), col] }),
-                        }] : []),
-                      ]} />}
-                  </div>
-                </th>
+                <Fragment key={col}>
+                  {isHidden && columnIndex === columns.length && (
+                    <th className="sticky top-0 z-20 w-[50px] px-2 py-1" style={{ backgroundColor: 'rgba(245, 158, 11, 0.25)' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowHiddenTemporarily(false)}
+                        className="flex items-center justify-center w-7 h-7 rounded-lg text-amber-700 dark:text-amber-300 hover:bg-amber-500/30 transition"
+                        aria-label={t('widgets.tableControls.hideColumns')}
+                        title={t('widgets.tableControls.hideColumns')}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </th>
+                  )}
+                  <th
+                    aria-sort={!isHidden && sort?.column === col ? (sort.order === 'asc' ? 'ascending' : 'descending') : 'none'}
+                    style={{
+                      ...(width ? { width: `${width}px`, minWidth: `${width}px` } : {}),
+                      background: isHidden
+                        ? 'rgba(245, 158, 11, 0.1)'
+                        : appearance?.columnColor
+                          ? `linear-gradient(to right, ${appearance.columnColor}40, ${appearance.columnColor}25)`
+                          : undefined,
+                      ...(!isHidden && appearance?.columnColor ? { borderLeft: `3px solid ${appearance.columnColor}` } : {}),
+                    }}
+                    className="px-3 py-1 text-left border-r border-[var(--border-primary)] last:border-r-0"
+                  >
+                    <div className={`flex items-center gap-2 ${isHidden ? 'text-amber-700 dark:text-amber-300' : ''}`}>
+                      <span className="text-lg" title={type} style={{ color: indicator?.color ?? appearance?.color ?? 'var(--text-secondary)' }}>
+                        {indicator?.value ?? typeEmojiMap[type] ?? '📝'}
+                      </span>
+                      {appearance?.showHeader !== false && <span className="text-xs font-semibold tracking-wide text-[var(--text-secondary)]">
+                        {displayName}
+                      </span>}
+                      {showColumnControls && !isHidden && <button type="button" disabled={!!editing} aria-label={t('widgets.tableControls.sortColumn', { column: displayName })} title={t('widgets.tableControls.sortHint')} className="ml-auto p-1 rounded hover:bg-[var(--bg-tertiary)]"
+                        onClick={() => setSort(current => current?.column !== col ? { column: col, order: 'asc' } : current.order === 'asc' ? { column: col, order: 'desc' } : null)}>
+                        {sort?.column === col ? (sort.order === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />) : <ArrowUpDown size={14} />}
+                      </button>}
+                      {canConfigure && !isHidden && <DropdownMenu trigger={<button type="button" disabled={savingConfig || !!editing} aria-label={t('widgets.tableControls.columnMenu', { column: displayName })} className="p-1 rounded hover:bg-[var(--bg-tertiary)]"><MoreVertical size={16} /></button>}
+                        items={[
+                          { value: 'hide', label: t('widgets.tableControls.hideInWidget'), icon: <EyeOff size={14} />, onSelect: () => onConfigChange?.({ hidden_columns: [...(config?.hidden_columns || []), col] }) },
+                          ...(onCellUpdate && tableColumns?.some(c => c.name === col && canEditWidgetColumn(c)) && config?.actions?.edit !== false ? [{
+                            value: 'edit', label: config?.editable_columns?.includes(col) ? t('widgets.tableControls.lockColumn') : t('widgets.tableControls.activeColumn'),
+                            icon: config?.editable_columns?.includes(col) ? <LockOpen size={14} /> : <Lock size={14} />,
+                            active: config?.editable_columns?.includes(col),
+                            onSelect: () => onConfigChange?.({ editable_columns: config?.editable_columns?.includes(col) ? config.editable_columns.filter(name => name !== col) : [...(config?.editable_columns || []), col] }),
+                          }] : []),
+                        ]} />}
+                    </div>
+                  </th>
+                </Fragment>
               );
             })}
+            {showColumnControls && hiddenColumns.length > 0 && !showHiddenColumns && (
+              <th className="sticky top-0 z-20 w-[50px] px-2 py-1" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowHiddenTemporarily(true)}
+                  className="flex items-center justify-center w-7 h-7 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition"
+                  aria-label={t('widgets.tableControls.showHiddenColumns', { count: hiddenColumns.length })}
+                  title={t('widgets.tableControls.showHiddenColumns', { count: hiddenColumns.length })}
+                >
+                  <EyeOff className="h-4 w-4" />
+                </button>
+              </th>
+            )}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="bg-[var(--bg-primary)]">
           {sortedRows.map((row, idx) => (
             <tr
               key={row.id ?? idx}
@@ -388,61 +476,128 @@ export function TableViewWidget({ widget, data, columnsInfo, relationData, table
               }}
               onClick={() => onRowClick?.(row)}
               onDoubleClick={() => onRowDoubleClick?.(row)}
-              className={`border-b border-[var(--border-secondary)] last:border-none hover:bg-[var(--bg-tertiary)] transition-colors ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''}`}
+              className={`border-b border-[var(--border-secondary)] last:border-[var(--border-primary)] hover:bg-[var(--bg-tertiary)] transition-colors ${onRowClick || onRowDoubleClick ? 'cursor-pointer' : ''}`}
               style={{
                 minHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${minRowHeight}px`,
                 maxHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${maxRowHeight}px`,
                 height: fixedRowHeight ? `${fixedRowHeight}px` : undefined,
                 overflow: fixedRowHeight ? 'hidden' : undefined,
+                ...getRowColorStyle(row.data, safeColumnsInfo),
               }}
             >
-              {columns.map((col) => {
+              {displayedColumns.map((col, columnIndex) => {
+                const isHidden = columnIndex >= columns.length;
                 const value = row.data[col] ?? row[col];
                 const type = getColumnType(col);
-                const config = getColumnConfig(col);
+                const columnConfig = getColumnConfig(col);
+                const appearance = columnConfig?.appearance;
                 const width = getColumnWidth(col);
                 const schemaColumn = tableColumns?.find(c => c.name === col);
-                const active = !publicReadOnly && widget.config?.actions?.edit !== false && widget.config?.editable_columns?.includes(col) && !!onCellUpdate && !!schemaColumn && canEditWidgetColumn(schemaColumn) && row.id != null;
-                const isEditing = active && editing?.rowId === String(row.id) && editing.column === col;
-                // Prepare rowData for rollup formulas
+                const active = !isHidden && !publicReadOnly && widget.config?.actions?.edit !== false && widget.config?.editable_columns?.includes(col) && !!onCellUpdate && !!schemaColumn && canEditWidgetColumn(schemaColumn) && row.id != null;
+                const isEditing = !isHidden && editing?.rowId === String(row.id) && (editing.containerColumn ?? editing.column) === col && (editing.containerColumn ? true : active);
+                const editorColumn = isEditing ? tableColumns?.find(c => c.name === editing?.column) : schemaColumn;
                 const cellRowData = row.data || row;
-                
-                return (
-                  // Editable cells retain table semantics and support Enter/Space.
-                  // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex
-                  <td
-                    key={col}
-                    tabIndex={active ? 0 : undefined}
-                    aria-label={active ? `Редактировать: ${getDisplayName(col)}` : undefined}
-                    onClick={event => {
-                      if (!active) return;
-                      event.stopPropagation();
-                      if (editing || (event.target as HTMLElement).closest('a, button, input, textarea, select, form')) return;
-                      setEditing({ rowId: String(row.id), column: col });
-                    }}
-                    onDoubleClick={event => { if (active) event.stopPropagation(); }}
-                    onKeyDown={event => {
-                      if (!active || event.target !== event.currentTarget || editing) return;
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault(); event.stopPropagation();
-                        setEditing({ rowId: String(row.id), column: col });
-                      }
-                    }}
-                    style={{
-                      ...(width ? { width: `${width}px`, minWidth: `${width}px` } : {}),
-                      minHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${minRowHeight}px`,
-                      maxHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${maxRowHeight}px`,
-                      height: fixedRowHeight ? `${fixedRowHeight}px` : undefined,
-                      overflowY: fixedRowHeight ? 'hidden' : 'auto',
-                    }}
-                    className="px-4 py-2 border-r border-[var(--border-primary)] last:border-r-0 overflow-hidden"
-                  >
-                    {isEditing && schemaColumn ? <WidgetCellEditor column={schemaColumn} value={value}
-                      onSave={next => onCellUpdate!(String(row.id), col, next)} onClose={() => setEditing(null)} /> : renderCell(value, type, config, cellRowData, relationData, publicReadOnly, safeColumnsInfo)}
+                const canEditRollupSource = (sourceName: string) => {
+                  const sourceColumn = tableColumns?.find(c => c.name === sourceName);
+                  return Boolean(!isHidden && !publicReadOnly && widget.config?.actions?.edit !== false && widget.config?.editable_columns?.includes(sourceName) && !!onCellUpdate && !!sourceColumn && canEditWidgetColumn(sourceColumn) && row.id != null);
+                };
+                const startRollupSourceEditing = (sourceName: string, cell: HTMLTableCellElement) => {
+                  if (row.id == null) return;
+                  startEditing(String(row.id), sourceName, cellRowData[sourceName], cell, col, sourceName);
+                };
 
-                  </td>
+                return (
+                  <Fragment key={col}>
+                    {isHidden && columnIndex === columns.length && <td className="w-[50px] bg-amber-100/50 dark:bg-amber-900/30 border-l border-[var(--border-primary)]" />}
+                    {/* Editable cells retain table semantics and support Enter/Space. */}
+                    {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-noninteractive-tabindex */}
+                    <td
+                      tabIndex={active ? 0 : undefined}
+                      aria-label={active ? t('widgets.tableControls.editCell', { column: getDisplayName(col) }) : undefined}
+                      aria-busy={isEditing && saving ? true : undefined}
+                      onClick={event => {
+                        if (isEditing) {
+                          event.stopPropagation();
+                          return;
+                        }
+                        if (!active) return;
+                        event.stopPropagation();
+                        if (editing || (event.target as HTMLElement).closest('a, button, input, textarea, select, form')) return;
+                        startEditing(String(row.id), col, value, event.currentTarget);
+                      }}
+                      onDoubleClick={event => {
+                        if (editing) {
+                          event.stopPropagation();
+                          return;
+                        }
+                        if (type === 'rollup') {
+                          const sourceName = (event.target as HTMLElement).closest<HTMLElement>('[data-rollup-source]')?.dataset.rollupSource;
+                          if (!sourceName || !canEditRollupSource(sourceName)) return;
+                          event.stopPropagation();
+                          startRollupSourceEditing(sourceName, event.currentTarget);
+                          return;
+                        }
+                        if (active) event.stopPropagation();
+                      }}
+                      onKeyDown={event => {
+                        if (!active || event.target !== event.currentTarget || editing) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault(); event.stopPropagation();
+                          startEditing(String(row.id), col, value, event.currentTarget);
+                        }
+                      }}
+                      style={{
+                        ...(width ? { width: `${width}px`, minWidth: `${width}px` } : {}),
+                        minHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${minRowHeight}px`,
+                        maxHeight: fixedRowHeight ? `${fixedRowHeight}px` : `${maxRowHeight}px`,
+                        height: fixedRowHeight ? `${fixedRowHeight}px` : undefined,
+                        overflowY: fixedRowHeight ? 'hidden' : 'auto',
+                        ...(!isHidden && appearance?.columnColor ? { backgroundColor: `${appearance.columnColor}10` } : {}),
+                        color: isHidden ? undefined : appearance?.textColor || 'var(--text-primary)',
+                        fontFamily: isHidden ? undefined : appearance?.fontFamily,
+                        fontSize: isHidden ? undefined : appearance?.fontSize,
+                        fontWeight: isHidden ? undefined : appearance?.fontWeight,
+                        fontStyle: isHidden ? undefined : appearance?.fontStyle,
+                        textDecoration: isHidden ? undefined : appearance?.textDecoration,
+                        textAlign: isHidden ? undefined : appearance?.align,
+                      }}
+                      className={`${isEditing ? 'relative px-0 py-0' : 'px-4 py-2'} border-r border-[var(--border-primary)] last:border-r-0 overflow-hidden ${isHidden ? 'bg-amber-50/50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200 [&_span]:text-amber-800 dark:[&_span]:text-amber-200' : ''}`}
+                    >
+                      {isEditing && editorColumn ? (
+                        <>
+                          <div className="relative min-h-8">
+                            <CellEditor
+                              column={editorColumn}
+                              draftValue={draftValue}
+                              onDraftChange={setDraftValue}
+                              onCommitEdit={commitEdit}
+                              onCancelEdit={() => { if (!savingRef.current) closeEditor(); }}
+                              rowData={cellRowData}
+                              minRowHeight={minRowHeight}
+                              fixedRowHeight={fixedRowHeight}
+                            />
+                          </div>
+                          {saveError && <p role="alert" className="bg-[var(--bg-primary)] p-1 text-xs text-[var(--color-error)]">{saveError}</p>}
+                        </>
+                      ) : renderCell(
+                        value,
+                        type,
+                        columnConfig,
+                        cellRowData,
+                        relationData,
+                        publicReadOnly,
+                        safeColumnsInfo,
+                        canEditRollupSource,
+                        (sourceName, source) => {
+                          const cell = source.closest('td');
+                          if (cell) startRollupSourceEditing(sourceName, cell);
+                        },
+                      )}
+                    </td>
+                  </Fragment>
                 );
               })}
+              {showColumnControls && hiddenColumns.length > 0 && !showHiddenColumns && <td className="w-[50px] bg-amber-50/20 dark:bg-amber-950/10 border-l border-[var(--border-primary)]" />}
             </tr>
           ))}
         </tbody>

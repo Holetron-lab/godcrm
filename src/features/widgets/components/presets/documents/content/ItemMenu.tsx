@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Edit3, Trash2, Copy, ArrowUp, ArrowDown, ChevronDown, MoveUp, MoveDown } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
-import { LEVEL_LABELS, LEVEL_ICONS, type DocumentLevel, type DocumentItem } from '../../../../types/documents.types';
+import { LEVEL_ICONS, type DocumentLevel, type DocumentItem } from '../../../../types/documents.types';
 import { getLevelBadgeClass, addLevelTypes } from './utils';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 /**
  * ItemMenu - Dropdown menu with Portal for element actions
@@ -42,6 +43,7 @@ export function ItemMenu({
   isLast,
   showEditCopy = false
 }: ItemMenuProps) {
+  const { t } = useLanguage();
   const [addSubMenuType, setAddSubMenuType] = useState<'above' | 'below' | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -79,7 +81,7 @@ export function ItemMenu({
           className="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-tertiary)]"
         >
           <Edit3 className="w-3 h-3" />
-          Редактировать
+          {t('documents.itemMenu.edit')}
         </button>
       )}
       {showEditCopy && onCopy && (
@@ -88,7 +90,7 @@ export function ItemMenu({
           className="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-tertiary)]"
         >
           <Copy className="w-3 h-3" />
-          Копировать
+          {t('documents.itemMenu.copy')}
         </button>
       )}
       {showEditCopy && <div className="border-t border-[var(--border-secondary)] my-1" />}
@@ -100,7 +102,7 @@ export function ItemMenu({
           className="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-tertiary)]"
         >
           <MoveUp className="w-3 h-3" />
-          Переместить выше
+          {t('documents.itemMenu.moveUp')}
         </button>
       )}
       {!isLast && (
@@ -109,7 +111,7 @@ export function ItemMenu({
           className="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-[var(--bg-tertiary)]"
         >
           <MoveDown className="w-3 h-3" />
-          Переместить ниже
+          {t('documents.itemMenu.moveDown')}
         </button>
       )}
       {(!isFirst || !isLast) && <div className="border-t border-[var(--border-secondary)] my-1" />}
@@ -125,7 +127,7 @@ export function ItemMenu({
         >
           <span className="flex items-center gap-2">
             <ArrowUp className="w-3 h-3" />
-            Добавить выше
+            {t('documents.itemMenu.addAbove')}
           </span>
           <ChevronDown className="w-3 h-3 -rotate-90" />
         </button>
@@ -137,7 +139,7 @@ export function ItemMenu({
                 onClick={(e) => { e.stopPropagation(); onAddBefore(item, level); onClose(); }}
                 className="w-full px-3 py-1.5 text-left text-xs flex items-center justify-between hover:bg-[var(--bg-tertiary)]"
               >
-                <span>{LEVEL_LABELS[level]}</span>
+                <span>{t(`documents.levels.${level}`)}</span>
                 <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-mono uppercase", getLevelBadgeClass(level))}>
                   {LEVEL_ICONS[level]}
                 </span>
@@ -158,7 +160,7 @@ export function ItemMenu({
         >
           <span className="flex items-center gap-2">
             <ArrowDown className="w-3 h-3" />
-            Добавить ниже
+            {t('documents.itemMenu.addBelow')}
           </span>
           <ChevronDown className="w-3 h-3 -rotate-90" />
         </button>
@@ -170,7 +172,7 @@ export function ItemMenu({
                 onClick={(e) => { e.stopPropagation(); onAddAfter(item, level); onClose(); }}
                 className="w-full px-3 py-1.5 text-left text-xs flex items-center justify-between hover:bg-[var(--bg-tertiary)]"
               >
-                <span>{LEVEL_LABELS[level]}</span>
+                <span>{t(`documents.levels.${level}`)}</span>
                 <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-mono uppercase", getLevelBadgeClass(level))}>
                   {LEVEL_ICONS[level]}
                 </span>
@@ -186,7 +188,7 @@ export function ItemMenu({
         className="w-full px-3 py-1.5 text-left text-xs flex items-center gap-2 hover:bg-red-500/10 text-red-500"
       >
         <Trash2 className="w-3 h-3" />
-        Удалить
+        {t('documents.itemMenu.delete')}
       </button>
     </div>
   );

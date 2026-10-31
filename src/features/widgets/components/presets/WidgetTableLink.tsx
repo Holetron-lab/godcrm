@@ -1,6 +1,9 @@
-import { ArrowUpRight } from 'lucide-react';
+import { Table2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 export function WidgetTableLink({ tableId }: { tableId: number }) {
-  return <Link to={`/tables/${tableId}?mode=raw`} title="Перейти на страницу таблицы" aria-label="Перейти на страницу таблицы" className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]"><ArrowUpRight className="w-4 h-4" /></Link>;
+  const { t } = useLanguage();
+  const label = t('widgets.tableControls.openTable');
+  return <Link to={`/tables/${tableId}`} title={label} aria-label={label} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)]"><Table2 className="w-4 h-4" /></Link>;
 }

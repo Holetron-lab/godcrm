@@ -2,6 +2,9 @@ export const table = {
   en: {
     export: 'Export table',
     import: 'Import CSV',
+    importDescription: 'Add new rows and update existing ones',
+    createFromCsv: 'Create from CSV',
+    createFromCsvDescription: 'Create a new table from a CSV file',
     merge: 'Merge by ID',
     mergeDescription: 'Update existing rows by matching ID, only non-empty cells',
     duplicate: 'Duplicate table',
@@ -52,6 +55,8 @@ export const table = {
     importDescription: 'Добавление новых строк и обновление существующих',
     createFromCsv: 'Создать из CSV',
     createFromCsvDescription: 'Создать новую таблицу на основе CSV файла',
+    merge: 'Слияние по ID',
+    mergeDescription: 'Обновить существующие строки с совпадающим ID, заполняя только непустые ячейки',
     duplicate: 'Дублировать таблицу',
     delete: 'Удалить таблицу',
     searchPlaceholder: 'Поиск в таблице...',

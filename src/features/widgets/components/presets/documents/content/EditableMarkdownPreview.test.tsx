@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { LanguageProvider } from '@/shared/i18n/LanguageContext';
 import { EditableMarkdownPreview } from './EditableMarkdownPreview';
 
 vi.mock('@/features/auth/store/authStore', () => ({
@@ -12,9 +13,15 @@ vi.mock('@/shared/components/MarkdownPreview', () => ({
 const longText = 'Длинный текст ячейки, который должен переноситься и полностью помещаться в поле редактирования.';
 const content = `| Задача | Статус |\n| --- | --- |\n| ${longText} | Открыта |`;
 
+function renderPreview(onContentChange?: (newContent: string) => Promise<void>) {
+  return render(<LanguageProvider><EditableMarkdownPreview content={content} onContentChange={onContentChange} /></LanguageProvider>);
+}
+
 describe('EditableMarkdownPreview table editing', () => {
+  beforeEach(() => localStorage.setItem('god-crm-language', 'ru'));
+
   it('opens a named multiline field with the entire cell value', () => {
-    render(<EditableMarkdownPreview content={content} />);
+    renderPreview();
     fireEvent.click(screen.getByText(longText));
     const field = screen.getByRole('textbox', { name: 'Задача, строка 1' });
     expect(field.tagName).toBe('TEXTAREA');
@@ -24,7 +31,7 @@ describe('EditableMarkdownPreview table editing', () => {
 
   it('saves on Enter and flattens pasted line breaks to preserve the Markdown row', async () => {
     const onContentChange = vi.fn().mockResolvedValue(undefined);
-    render(<EditableMarkdownPreview content={content} onContentChange={onContentChange} />);
+    renderPreview(onContentChange);
     fireEvent.click(screen.getByText(longText));
     const field = screen.getByRole('textbox');
     fireEvent.change(field, { target: { value: 'Первая строка\nВторая строка' } });
@@ -39,7 +46,7 @@ describe('EditableMarkdownPreview table editing', () => {
 
   it('cancels with Escape without saving', () => {
     const onContentChange = vi.fn();
-    render(<EditableMarkdownPreview content={content} onContentChange={onContentChange} />);
+    renderPreview(onContentChange);
     fireEvent.click(screen.getByText(longText));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Изменено' } });
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' });
@@ -50,7 +57,7 @@ describe('EditableMarkdownPreview table editing', () => {
 
   it('saves on blur and supports an empty cell', async () => {
     const onContentChange = vi.fn().mockResolvedValue(undefined);
-    render(<EditableMarkdownPreview content={content} onContentChange={onContentChange} />);
+    renderPreview(onContentChange);
     fireEvent.click(screen.getByText(longText));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } });
     fireEvent.blur(screen.getByRole('textbox'));

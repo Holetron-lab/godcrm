@@ -22,6 +22,7 @@ import { AtomPreviewSection } from './sections/AtomPreviewSection';
 import { useDocumentDelete } from './hooks/useDocumentDelete';
 import { usePanelEdit } from './hooks/usePanelEdit';
 import { getLevelBadgeClass } from './constants';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 export function DocumentsRightPanel() {
   const ctx = useDocumentsContext();
@@ -62,6 +63,7 @@ function NormalModePanel({
   panelEdit: ReturnType<typeof usePanelEdit>;
 }) {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const handleDelete = useDocumentDelete(item.id, tableId);
 
   return (
@@ -70,7 +72,7 @@ function NormalModePanel({
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)] bg-[var(--bg-secondary)]">
         <div className="flex items-center gap-2">
           <Settings className="w-4 h-4 text-[var(--text-tertiary)]" />
-          <span className="font-medium text-sm">Настройки элемента</span>
+          <span className="font-medium text-sm">{t('documents.rightPanel.elementSettings')}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className={cn(
@@ -90,7 +92,7 @@ function NormalModePanel({
               ctx.setRightPanelMode('atoms');
             }}
             className="p-1.5 rounded-lg hover:bg-[var(--bg-tertiary)]"
-            title="Назад к атомам"
+            title={t('documents.rightPanel.backToAtoms')}
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -130,7 +132,7 @@ function NormalModePanel({
             onClick={() => ctx.setRightPanelOpen(false)}
             className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[var(--text-secondary)] bg-[var(--bg-tertiary)] hover:bg-[var(--bg-secondary)] text-sm border border-[var(--border-primary)]"
           >
-            <X className="w-4 h-4" /> Закрыть
+            <X className="w-4 h-4" /> {t('documents.rightPanel.close')}
           </button>
         ) : (
           <div className="flex items-center gap-2">
@@ -138,7 +140,7 @@ function NormalModePanel({
               onClick={() => ctx.setRightPanelOpen(false)}
               className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-white bg-[var(--color-primary-500)] hover:bg-[var(--color-primary-600)] text-sm"
             >
-              <Check className="w-4 h-4" /> Сохранить
+              <Check className="w-4 h-4" /> {t('documents.rightPanel.save')}
             </button>
             <button
               onClick={handleDelete}

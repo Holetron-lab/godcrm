@@ -5,6 +5,7 @@ import { useDocumentsContext } from '../../DocumentsContext';
 import { LEVEL_LABELS, LEVEL_ICONS, type DocumentLevel } from '../../../../../types/documents.types';
 import { useDocumentUpdate } from '../hooks/useDocumentUpdate';
 import type { DocumentItem } from '../../../../../types/documents.types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 interface MetadataSectionProps {
   item: DocumentItem;
@@ -13,6 +14,7 @@ interface MetadataSectionProps {
 
 export function MetadataSection({ item, tableId }: MetadataSectionProps) {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const fieldId = useId();
   const updateItem = useDocumentUpdate(item.id, tableId);
 
@@ -20,7 +22,7 @@ export function MetadataSection({ item, tableId }: MetadataSectionProps) {
     <>
       {/* Element Type Selector */}
       <div className="space-y-1.5">
-        <label htmlFor={`${fieldId}-level`} className="block text-xs font-medium text-[var(--text-secondary)]">Тип элемента</label>
+        <label htmlFor={`${fieldId}-level`} className="block text-xs font-medium text-[var(--text-secondary)]">{t('documents.rightPanel.elementType')}</label>
         <div className="flex items-center gap-2">
           <select id={`${fieldId}-level`}
             value={item.level}
@@ -38,7 +40,7 @@ export function MetadataSection({ item, tableId }: MetadataSectionProps) {
               .filter(level => level !== 'h1')
               .map(level => (
                 <option key={level} value={level}>
-                  {LEVEL_ICONS[level]} {LEVEL_LABELS[level]}
+                  {LEVEL_ICONS[level]} {t(`documents.levels.${level}`)}
                 </option>
               ))
             }
@@ -52,11 +54,11 @@ export function MetadataSection({ item, tableId }: MetadataSectionProps) {
       {/* Comment */}
       <div>
         <label htmlFor={`${fieldId}-comment`} className="block text-xs font-medium text-[var(--text-secondary)] mb-1.5 flex items-center gap-1.5">
-          <MessageSquare className="w-3.5 h-3.5" /> Комментарий
+          <MessageSquare className="w-3.5 h-3.5" /> {t('documents.rightPanel.comment')}
         </label>
         <textarea id={`${fieldId}-comment`}
           value={item.comment || ''}
-          placeholder="Не отображается в документе..."
+          placeholder={t('documents.rightPanel.commentPlaceholder')}
           rows={3}
           readOnly={ctx.isReadOnly}
           onChange={async (e) => {

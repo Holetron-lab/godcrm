@@ -1,16 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render as renderComponent, screen } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { TableViewWidget } from '../components/presets/TableViewWidget';
 import type { Widget } from '../types/widget.types';
 import { renderWithProviders } from '@/tests/renderWithProviders';
 
-const render = (element: ReactElement) => renderComponent(
-  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-    {element}
-  </QueryClientProvider>
-);
+const render = (element: ReactElement) => renderWithProviders(element);
 
 const publicView = vi.hoisted(() => ({ readonly: false }));
 vi.mock('@/features/public/PublicViewContext', () => ({ useIsPublicReadOnly: () => publicView.readonly }));

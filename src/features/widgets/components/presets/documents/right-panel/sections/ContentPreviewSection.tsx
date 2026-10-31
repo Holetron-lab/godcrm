@@ -3,6 +3,7 @@ import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
 import { useDocumentsContext } from '../../DocumentsContext';
 import { useDocumentUpdate } from '../hooks/useDocumentUpdate';
 import type { DocumentItem } from '../../../../../types/documents.types';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 
 interface ContentPreviewSectionProps {
   item: DocumentItem;
@@ -11,6 +12,7 @@ interface ContentPreviewSectionProps {
 
 export function ContentPreviewSection({ item, tableId }: ContentPreviewSectionProps) {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const updateItem = useDocumentUpdate(item.id, tableId);
 
   if (!(item.level === 'text' || item.level === 'h2' || item.level === 'h3') || !item.content) {
@@ -20,7 +22,7 @@ export function ContentPreviewSection({ item, tableId }: ContentPreviewSectionPr
   return (
     <div className="space-y-1.5">
       <p className="block text-xs font-medium text-[var(--text-secondary)] flex items-center gap-1.5">
-        <FileText className="w-3.5 h-3.5" /> Содержимое
+        <FileText className="w-3.5 h-3.5" /> {t('documents.rightPanel.content')}
       </p>
       <div className="p-2 rounded-lg bg-[var(--bg-tertiary)] overflow-hidden max-h-[120px]">
         <div className="overflow-y-auto max-h-[200px] origin-top-left" style={{ transform: 'scale(0.6)', width: '166.66%' }}>

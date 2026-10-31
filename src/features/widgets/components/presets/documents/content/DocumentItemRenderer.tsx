@@ -2,6 +2,7 @@ import { useRequestedFocus } from '@/shared/hooks/useRequestedFocus';
 import { useEffect, useRef } from 'react';
 import { MoreVertical, Atom, Ticket, Check, Scissors } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { type DocumentLevel, type DocumentItem } from '../../../../types/documents.types';
 import { useDocumentsContext } from '../DocumentsContext';
 import { ItemMenu } from './ItemMenu';
@@ -47,6 +48,7 @@ export function DocumentItemRenderer({
   variables,
 }: DocumentItemRendererProps) {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
 
   const isEditing = ctx.editingItemId === item.id;
   const isSelected = ctx.selectedItemId === item.id;
@@ -120,7 +122,7 @@ export function DocumentItemRenderer({
                 "p-1 rounded text-[var(--text-tertiary)]",
                 (isSelected || isEditing) ? "bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]" : "hover:bg-[var(--bg-tertiary)]"
               )}
-              title="Меню"
+              title={t('documents.menu')}
             >
               <MoreVertical className="w-3.5 h-3.5" />
             </button>
@@ -176,7 +178,7 @@ export function DocumentItemRenderer({
                 "p-1 rounded text-[var(--text-tertiary)]",
                 (isSelected || isEditing) ? "bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]" : "hover:bg-[var(--bg-tertiary)]"
               )}
-              title="Меню"
+              title={t('documents.menu')}
             >
               <MoreVertical className="w-3.5 h-3.5" />
             </button>
@@ -235,7 +237,7 @@ export function DocumentItemRenderer({
                 "p-1 rounded text-[var(--text-tertiary)]",
                 (isSelected || isEditing) ? "bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]" : "hover:bg-[var(--bg-tertiary)]"
               )}
-              title="Меню"
+              title={t('documents.menu')}
             >
               <MoreVertical className="w-3.5 h-3.5" />
             </button>
@@ -425,7 +427,7 @@ export function DocumentItemRenderer({
                 "p-1 rounded text-[var(--text-tertiary)]",
                 (isSelected || isEditing) ? "bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]" : "hover:bg-[var(--bg-tertiary)]"
               )}
-              title="Меню"
+              title={t('documents.menu')}
             >
               <MoreVertical className="w-3.5 h-3.5" />
             </button>
@@ -518,10 +520,10 @@ export function DocumentItemRenderer({
             {isEditing && (
               <textarea
                 ref={textEditorRef}
-                aria-label="Текст блока (Markdown)"
+                aria-label={t('documents.blockTextMarkdown')}
                 value={ctx.editingData.content || ''}
                 onChange={(e) => ctx.setEditingData({ ...ctx.editingData, content: e.target.value })}
-                placeholder="Введите текст в формате Markdown..."
+                placeholder={t('documents.markdownPlaceholder')}
                 className="absolute inset-0 block w-full h-full resize-none overflow-auto p-0 border-0 rounded bg-[var(--bg-primary)] text-[var(--text-secondary)] leading-relaxed outline outline-1 outline-[var(--color-primary-500)]"
                 style={{ fontSize: 'inherit', fontFamily: 'inherit' }}
                 onBlur={() => {
@@ -577,6 +579,7 @@ function DocumentTicketAtomItem({
   isSelected,
 }: DocumentTicketAtomItemProps) {
   const ctx = useDocumentsContext();
+  const { t } = useLanguage();
   const atomId = typeof item.atom_ref === 'number' ? item.atom_ref : null;
 
   // Parent renderer already verified this is a ticket_ref atom via the
@@ -616,7 +619,7 @@ function DocumentTicketAtomItem({
               'p-1 rounded text-[var(--text-tertiary)]',
               isSelected ? 'bg-[var(--color-primary-500)]/20 text-[var(--color-primary-500)]' : 'hover:bg-[var(--bg-tertiary)]',
             )}
-            title="Меню"
+            title={t('documents.menu')}
           >
             <MoreVertical className="w-3.5 h-3.5" />
           </button>

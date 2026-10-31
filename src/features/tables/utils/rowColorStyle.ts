@@ -12,7 +12,7 @@ import { isValidHex, getDisplayValue, type ColorValue } from './color-utils';
  */
 export function getRowColorStyle(
   rowData: Record<string, unknown>,
-  columns: ColumnModel[]
+  columns: Array<{ name: string; type: string; config?: ColumnModel['config']; id?: string }>
 ): CSSProperties {
   const colorColumn = columns.find(
     col => col.type === 'color' && col.config?.color?.applyToRow
@@ -20,7 +20,7 @@ export function getRowColorStyle(
 
   if (!colorColumn) return {};
 
-  const value = rowData[colorColumn.name] ?? rowData[colorColumn.id];
+  const value = rowData[colorColumn.name] ?? (colorColumn.id ? rowData[colorColumn.id] : undefined);
   if (!value) return {};
 
   const displayValue = getDisplayValue(value as ColorValue);

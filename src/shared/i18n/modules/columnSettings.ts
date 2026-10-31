@@ -313,6 +313,9 @@ export const columnSettings = {
       unavailable: 'Access settings unavailable',
       linkToProject: 'To configure access, link this table to a project in a space',
     },
+    cellEditor: {
+      textLabel: 'Cell text',
+    },
     geo: {
       title: 'Geo point',
       hint: 'Type coordinates straight into the cell: 55.75, 37.61, DMS or a Google Maps link. Click the pin to open the map. Pair it with an «Address» column to show a readable label.',
@@ -707,6 +710,9 @@ export const columnSettings = {
     access: {
       unavailable: 'Настройка доступа недоступна',
       linkToProject: 'Для настройки доступа необходимо привязать таблицу к проекту в пространстве',
+    },
+    cellEditor: {
+      textLabel: 'Текст ячейки',
     },
     geo: {
       title: 'Геоточка',

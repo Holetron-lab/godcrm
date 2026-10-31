@@ -94,7 +94,11 @@ export const SelectEditor = ({
   multiple = false
 }: SelectEditorProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const focusSearch = useCallback((input: HTMLInputElement | null) => {
+    searchRef.current = input;
+    input?.focus();
+  }, []);
 
   const [search, setSearch] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -186,10 +190,6 @@ export const SelectEditor = ({
     ...filteredOptions
   ];
   
-  useEffect(() => {
-    searchRef.current?.focus();
-  }, []);
-  
   // Закрытие при клике вне
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -279,7 +279,7 @@ export const SelectEditor = ({
         {/* Поиск */}
         <div className="p-2 border-b border-[var(--border-secondary)]">
           <input
-            ref={searchRef}
+            ref={focusSearch}
             type="text"
             aria-label="Поиск опций"
             value={search}

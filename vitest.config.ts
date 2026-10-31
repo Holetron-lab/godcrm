@@ -48,6 +48,8 @@ export default defineConfig({
       // found" — a permanent red entry for a script that passes. It still runs
       // in `npm test`, via scripts/__tests__/strip-test-scripts.wrapper.test.mjs.
       'scripts/strip-test-scripts.test.mjs',
+      // Standalone node:test suite; runs on the host via its Vitest wrapper.
+      'scripts/ops-runner/kimi-crm.test.mjs',
       // node:test suites run in the mandatory wrapper below, never on the host.
       // Keep these paths paired with scripts/__tests__/node-container.wrapper.test.mjs.
       'deploy-bot/mcp-preservation.test.cjs',

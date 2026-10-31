@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
 import { apiClient } from '@/shared/utils/apiClient';
 import { logger } from '@/shared/utils/logger';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { FilePreviewModal } from '@/features/files/components/FilePreviewModal';
 import type { DocumentRegistryItem, StatusOption } from '../../../../types/documents.types';
 
@@ -35,6 +36,7 @@ export function DocumentViewerModal({
   language = 'en',
   onClose,
 }: DocumentViewerModalProps) {
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const contentTableId = doc.content_table_id || doc.table_id;
   const [rows, setRows] = useState<ContentRow[]>([]);
@@ -134,10 +136,10 @@ export function DocumentViewerModal({
       type="button"
       onClick={(e) => { e.stopPropagation(); handleOpenInModule(); }}
       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-      title="Открыть в модуле документов"
+      title={t('documents.openInModuleHint')}
     >
       <ExternalLink className="w-3.5 h-3.5" />
-      <span className="hidden sm:inline">В модуль</span>
+      <span className="hidden sm:inline">{t('documents.openInModule')}</span>
     </button>
   ) : null;
 
