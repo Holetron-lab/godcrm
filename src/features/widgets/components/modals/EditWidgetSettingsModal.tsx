@@ -94,6 +94,7 @@ export function EditWidgetSettingsModal({
   const [scheduledDateColumn, setScheduledDateColumn] = useState(widget.config?.kanban?.scheduledDateColumn || '');
   const [dueDateColumn, setDueDateColumn] = useState(widget.config?.kanban?.dueDateColumn || '');
   const [colorColumn, setColorColumn] = useState(widget.config?.kanban?.colorColumn || '');
+  const [kanbanEventsTableId, setKanbanEventsTableId] = useState(String(widget.config?.kanban?.eventsTableId ?? ''));
   
   // Visible columns for card preview (on card)
   const [cardColumns, setCardColumns] = useState<string[]>(
@@ -116,7 +117,8 @@ export function EditWidgetSettingsModal({
   const [calendarTitleColumn, setCalendarTitleColumn] = useState(widget.config?.calendar?.titleColumn || '');
   const [calendarDescriptionColumn, setCalendarDescriptionColumn] = useState(widget.config?.calendar?.descriptionColumn || '');
   const [calendarColorColumn, setCalendarColorColumn] = useState(widget.config?.calendar?.colorColumn || '');
-  
+  const [calendarEventsTableId, setCalendarEventsTableId] = useState(String(widget.config?.calendar?.eventsTableId ?? ''));
+
   // Timeline-specific config
   const [startDateColumn, setStartDateColumn] = useState(widget.config?.timeline?.startDateColumn || '');
   const [endDateColumn, setEndDateColumn] = useState(widget.config?.timeline?.endDateColumn || '');
@@ -226,6 +228,7 @@ export function EditWidgetSettingsModal({
       setScheduledDateColumn(widget.config?.kanban?.scheduledDateColumn || '');
       setDueDateColumn(widget.config?.kanban?.dueDateColumn || '');
       setColorColumn(widget.config?.kanban?.colorColumn || '');
+      setKanbanEventsTableId(String(widget.config?.kanban?.eventsTableId ?? ''));
       setCardColumns(widget.config?.card_columns || []);
       setVisibleColumns(widget.config?.visible_columns || []);
       setHiddenColumns(widget.config?.hidden_columns || []);
@@ -234,6 +237,7 @@ export function EditWidgetSettingsModal({
       setCalendarTitleColumn(widget.config?.calendar?.titleColumn || '');
       setCalendarDescriptionColumn(widget.config?.calendar?.descriptionColumn || '');
       setCalendarColorColumn(widget.config?.calendar?.colorColumn || '');
+      setCalendarEventsTableId(String(widget.config?.calendar?.eventsTableId ?? ''));
       setStartDateColumn(widget.config?.timeline?.startDateColumn || '');
       setEndDateColumn(widget.config?.timeline?.endDateColumn || '');
       setTimelineTitleColumn(widget.config?.timeline?.titleColumn || '');
@@ -421,6 +425,7 @@ export function EditWidgetSettingsModal({
     scheduledDateColumn,
     dueDateColumn,
     colorColumn,
+    kanbanEventsTableId,
     taskCompletedColumn,
     bddMode,
     bddCodeColumn,
@@ -431,6 +436,7 @@ export function EditWidgetSettingsModal({
     calendarTitleColumn,
     calendarDescriptionColumn,
     calendarColorColumn,
+    calendarEventsTableId,
     startDateColumn,
     endDateColumn,
     timelineTitleColumn,
@@ -629,6 +635,9 @@ export function EditWidgetSettingsModal({
                 scheduledDateColumn, setScheduledDateColumn, dueDateColumn, setDueDateColumn,
                 colorColumn, setColorColumn, cardColumns, setCardColumns,
                 visibleColumns, setVisibleColumns, availableCardColumns, availableExpandedColumns,
+                eventsTableId: kanbanEventsTableId, setEventsTableId: setKanbanEventsTableId,
+                // ADR-209 D3: the events table lives in the project of its tickets table.
+                eventsTables: tables.filter(t => t.projectId === linkedTable?.projectId && String(t.id) !== selectedTableId),
               }}
               calendarProps={{
                 safeColumns, selectColumns, textColumns, dateColumns, allDisplayableColumns,
@@ -638,6 +647,9 @@ export function EditWidgetSettingsModal({
                 calendarTitleColumn, setCalendarTitleColumn,
                 calendarDescriptionColumn, setCalendarDescriptionColumn,
                 calendarColorColumn, setCalendarColorColumn,
+                eventsTableId: calendarEventsTableId, setEventsTableId: setCalendarEventsTableId,
+                // ADR-209 D3: the events table lives in the project of its tickets table.
+                eventsTables: tables.filter(t => t.projectId === linkedTable?.projectId && String(t.id) !== selectedTableId),
               }}
               timelineProps={{
                 safeColumns, selectColumns, textColumns, dateColumns, allDisplayableColumns,

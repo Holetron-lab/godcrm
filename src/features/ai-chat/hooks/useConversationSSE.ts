@@ -15,13 +15,14 @@
  * - Auto-reconnect with exponential backoff on disconnect
  * - Deduplication via lastMessageId tracking
  * - Auth via cookies (browser sends automatically) + query param fallback
+ * - Ticket embeds skip SSE; Bearer polling avoids credentials in the stream URL
  * - Heartbeat detection (server sends heartbeat every 15s)
  * - Cleanup on unmount / conversation change
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getAccessToken, getBaseUrlSync } from '@/shared/utils/apiClient';
+import { getAccessToken, getBaseUrlSync, isEmbedTicketMode } from '@/shared/utils/apiClient';
 import { logger } from '@/shared/utils/logger';
 import type { ChatMessage } from '../types';
 import { slugifyAgentName } from '../utils/parseInvocations';
@@ -107,8 +108,7 @@ function getStreamUrl(conversationId: number, lastMessageId: number): string {
   if (lastMessageId > 0) {
     params.set('after', String(lastMessageId));
   }
-  // For desktop app or cross-origin, pass token as query param
-  const token = getAccessToken();
+  const token = isEmbedTicketMode() ? null : getAccessToken();
   if (token) {
     params.set('token', token);
   }
@@ -296,7 +296,7 @@ export function useConversationSSE(
   /** Connect to the SSE stream */
   const connect = useCallback(() => {
     const convId = conversationIdRef.current;
-    if (!convId || !enabled) return;
+    if (!convId || !enabled || isEmbedTicketMode()) return;
 
     closeConnection();
     setConnectionState('connecting');

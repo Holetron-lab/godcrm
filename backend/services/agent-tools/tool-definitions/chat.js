@@ -81,6 +81,27 @@ export const CHAT_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'schedule_message',
+      description: 'Create, list, pause, resume, or cancel scheduled chat messages. Supports one-time messages and recurring 5-field cron series with an IANA timezone and optional max_runs. Agent-created series are limited to one run per 15 minutes. Creating a recurring series from within a scheduled-message run is forbidden.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['create', 'list', 'pause', 'resume', 'cancel'] },
+          conversation_id: { type: 'number', description: 'Conversation ID (required for create and list)' },
+          scheduled_message_id: { type: 'number', description: 'Scheduled message ID (required for pause, resume, and cancel)' },
+          content: { type: 'string', description: 'Message content (required for create)' },
+          scheduled_at: { type: 'string', description: 'Optional ISO 8601 first run; required for one-time create, computed from cron otherwise' },
+          recurrence_cron: { type: 'string', description: 'Optional 5-field cron expression; omit for a one-time message' },
+          timezone: { type: 'string', description: 'IANA timezone (default: Europe/Moscow)' },
+          max_runs: { type: 'number', description: 'Optional positive integer run limit; omit for an infinite series' }
+        },
+        required: ['action']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'list_conversations',
       description: 'List conversations with optional filters by space, type, or search.',
       parameters: {

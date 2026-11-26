@@ -92,7 +92,7 @@ describe('send_widget_message — happy path', () => {
       // 2. table_rows lookup
       .mockResolvedValueOnce({
         id: 139259,
-        data: JSON.stringify({ name: 'ADR-0031 — Row-Mutation Events', slug: 'adr-0031', icon: '📡' }),
+        data: JSON.stringify({ name: 'ADR-0031 — Row-Mutation Events', slug: 'adr-0031', icon: '📡', widget_id: 218 }),
       })
       // 3. send_chat_message — conversations lookup
       .mockResolvedValueOnce({ id: 42, space_id: 11 });
@@ -128,6 +128,7 @@ describe('send_widget_message — happy path', () => {
         table_name: 'ADRs',
         table_icon: '📡',
         row_title: 'ADR-0031 — Row-Mutation Events',
+        widget_id: 218,
         style: 'card',
       },
     });
@@ -172,5 +173,14 @@ describe('create_document return shape (ADR-0031 WP-23)', () => {
     const match = src.match(/async create_document[\s\S]*?return \{[\s\S]*?\};/);
     expect(match).toBeTruthy();
     expect(match[0]).toMatch(/registry_table_id/);
+  });
+
+  it('stores the owning widget_id on the registry row', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const src = fs.readFileSync(path.resolve(__dirname, '../../documents/createDocument.js'), 'utf8');
+    const match = src.match(/const initialData = \{[\s\S]*?\};/);
+    expect(match).toBeTruthy();
+    expect(match[0]).toMatch(/widget_id,/);
   });
 });

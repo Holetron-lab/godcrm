@@ -3,6 +3,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { ThemeProvider } from '@/shared/hooks/useTheme';
 import { LanguageProvider } from '@/shared/i18n/LanguageContext';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { isTicketEmbedRequest } from '@/features/embed/ticketEmbedConfig';
 import { StatusBarProvider } from '@/shared/components/desktop/StatusBarContext';
 
 interface AppProvidersProps {
@@ -25,7 +26,7 @@ export const AppProviders = ({ children }: AppProvidersProps) => {
   const initializeAuth = useAuthStore((state) => state.initialize);
 
   useEffect(() => {
-    void initializeAuth();
+    if (!isTicketEmbedRequest()) void initializeAuth();
   }, [initializeAuth]);
 
   return (

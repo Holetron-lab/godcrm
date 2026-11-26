@@ -278,12 +278,9 @@ export function renderRobots() {
 }
 
 // ── Express wiring ──────────────────────────────────────────────────────────
-let _templateCache = null;
-/** Read (and cache) the built SPA shell. Shared with publicDocsSeo. */
+/** Read the current built SPA shell. Shared with publicDocsSeo. */
 export function loadTemplate(clientDistPath) {
-  if (_templateCache) return _templateCache;
-  _templateCache = fs.readFileSync(path.join(clientDistPath, 'index.html'), 'utf8');
-  return _templateCache;
+  return fs.readFileSync(path.join(clientDistPath, 'index.html'), 'utf8');
 }
 export function noCache(res) {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');

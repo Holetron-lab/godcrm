@@ -5,6 +5,7 @@
  */
 
 import { AGENT_TOOLS } from '../AgentToolsService.js';
+import { resolveRemoteConnectorTools } from '../connectors/remoteConnectorRuntime.js';
 
 /**
  * Convert OpenAI-format tools to Anthropic tool format.
@@ -77,5 +78,8 @@ export async function resolveAllowedTools(agentConfig, spaceId) {
 
   const allToolNames = new Set([...toolNames, ...baseConsultingTools]);
   const filtered = AGENT_TOOLS.filter(t => t?.function?.name && allToolNames.has(t.function.name));
-  return filtered.length ? filtered : AGENT_TOOLS;
+  const remote = await resolveRemoteConnectorTools(spaceId, toolNames);
+  const known = new Set(filtered.map((tool) => tool.function.name));
+  const tools = [...filtered, ...remote.filter((tool) => !known.has(tool.function.name))];
+  return tools.length ? tools : AGENT_TOOLS;
 }

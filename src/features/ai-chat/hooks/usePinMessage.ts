@@ -8,12 +8,17 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
  * useConversationMessages is patched in place so the message bubble row AND
  * the PinnedBanner both flip immediately. The server response is idempotent;
  * 409 `pin_cap_reached` (>50/conv) rolls back without changing the cap UX.
+ *
+ * The server-side pinned list (usePinnedMessages) is kept in step: an unpin
+ * removes the row from it right away — the message may not be in the loaded
+ * history at all — and every settled mutation refetches it.
  */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
 import { showToast } from '@/shared/hooks/useToast';
 import type { ChatMessage } from '../types';
+import { pinnedMessagesQueryKey } from './usePinnedMessages';
 
 type CachePage = { messages: ChatMessage[]; hasMore: boolean; nextCursor?: number | null };
 type CacheShape = { pages: CachePage[]; pageParams: Array<number | null> };
@@ -45,6 +50,7 @@ export function usePinMessage(conversationId: number | string | null | undefined
   const { t } = useLanguage();
   const queryClient = useQueryClient();
   const queryKey = ['conversation-messages', conversationId] as const;
+  const pinnedKey = pinnedMessagesQueryKey(conversationId);
 
   // Shared optimistic helper — `nextValue` is what the cache row should look
   // like during the optimistic window. Returned context carries the snapshot
@@ -58,16 +64,23 @@ export function usePinMessage(conversationId: number | string | null | undefined
       return apiClient.delete<PinResponse>(path);
     },
     onMutate: async ({ messageId, mode }) => {
-      if (!conversationId) return { previous: undefined };
-      await queryClient.cancelQueries({ queryKey });
+      if (!conversationId) return { previous: undefined, previousPinned: undefined };
+      await Promise.all([queryClient.cancelQueries({ queryKey }), queryClient.cancelQueries({ queryKey: pinnedKey })]);
       const previous = queryClient.getQueryData<CacheShape>(queryKey);
+      const previousPinned = queryClient.getQueryData<ChatMessage[]>(pinnedKey);
       const optimisticValue = mode === 'pin' ? new Date().toISOString() : null;
       queryClient.setQueryData<CacheShape>(queryKey, (old) => patchPinnedAt(old, messageId, optimisticValue));
-      return { previous };
+      if (mode === 'unpin') {
+        queryClient.setQueryData<ChatMessage[]>(pinnedKey, (old) => old?.filter((m) => String(m.id) !== String(messageId)));
+      }
+      return { previous, previousPinned };
     },
     onError: (err, _vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(queryKey, context.previous);
+      }
+      if (context?.previousPinned) {
+        queryClient.setQueryData(pinnedKey, context.previousPinned);
       }
       // apiClient throws `new Error(rawBody)`; match 409/403 by body substring
       // (JSON.parse on partial bodies is unsafe — substring is enough here).
@@ -87,6 +100,7 @@ export function usePinMessage(conversationId: number | string | null | undefined
       const serverValue = resp?.data?.pinned_at ?? null;
       queryClient.setQueryData<CacheShape>(queryKey, (old) => patchPinnedAt(old, messageId, serverValue));
     },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: pinnedKey }),
   });
 
   // Cap-reached UX: apiClient throws `new Error(errorText)` where errorText is

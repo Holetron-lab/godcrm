@@ -17,10 +17,11 @@
 //     PUBLIC_ALLOWLIST in services/mcp/publicMcp.js, inverted because here the
 //     safe default is "record it".
 //
-//  2. ARGS ONLY, NEVER CONTEXT. `context` carries `injected_connector`
-//     (ADR-0028), which holds a live `access_token`. It must never reach the
-//     audit row. Argument keys that look like credentials are redacted on top
-//     of that, because a caller can always pass a secret as a plain argument.
+//  2. ARGS PLUS EXPLICIT SAFE CONTEXT FIELDS, NEVER THE WHOLE CONTEXT. `context`
+//     carries `injected_connector` (ADR-0028), which holds a live `access_token`.
+//     It must never reach the audit row. Only identity and Code Mode correlation
+//     fields are copied explicitly. Argument keys that look like credentials are
+//     redacted too, because a caller can pass a secret as a plain argument.
 //
 // Size is handled upstream: writeAudit()'s capDetails() enforces 2 KiB/field
 // and 8 KiB/payload, so a `write_file` content argument cannot bloat the row.
@@ -46,6 +47,7 @@ export const AUDIT_EXEMPT_TOOLS = new Set([
   'get_api_documentation',
   'get_chain_status',
   'get_conversation_messages',
+  'get_dashboard',
   'get_dashboard_widgets',
   'get_document_content',
   'get_my_tasks',
@@ -56,6 +58,7 @@ export const AUDIT_EXEMPT_TOOLS = new Set([
   'global_search',
   'list_bdd_specs',
   'list_conversations',
+  'list_dashboards',
   'list_directory',
   'list_documents',
   'list_events',
@@ -140,9 +143,11 @@ export async function auditToolCall({
   thrown,
   durationMs,
 }) {
-  if (!shouldAuditTool(toolName)) return;
-
   const ctx = context || {};
+  // ADR-206 requires every inner Code Mode call in the correlated audit trail;
+  // the read-only exemption still applies to ordinary direct calls.
+  if (!ctx.codemode && !shouldAuditTool(toolName)) return;
+
   // A handler that returns `{ error }` failed just as much as one that threw;
   // recording only thrown errors would make the trail claim success for the
   // structured-error path, which is the common one in this codebase.
@@ -168,6 +173,13 @@ export async function auditToolCall({
         error: failure ? String(failure) : null,
         duration_ms: Number.isFinite(durationMs) ? durationMs : null,
         conversation_id: ctx.conversationId ?? null,
+        ...(ctx.codemode ? {
+          codemode: {
+            run_id: ctx.codemode.run_id ?? null,
+            call_id: ctx.codemode.call_id ?? null,
+            depth: ctx.codemode.depth ?? null,
+          },
+        } : {}),
       },
     }
   );

@@ -9,6 +9,7 @@ import { enrichSkill } from './SkillEnrichmentService.js';
 import { sendMessage, sendAdminAlert } from './TelegramService.js';
 import { executeTicketRouting } from './schedule-trigger/pipeline-executors.js';
 import { notifyRowChange } from './realtime/rowEvents.js';
+import { reconcileTicketOccurrences } from './ticket-occurrences/reconcile.js';
 
 /**
  * Find automation tables (automations_list and automation_logs_list)
@@ -693,6 +694,12 @@ async function executeAutomation(automation, tableId, rowId, rowData, tables, ol
  */
 export async function fireRowCreateTriggers(tableId, rowId, rowData) {
   try {
+    await reconcileTicketOccurrences(tableId, rowId);
+  } catch (err) {
+    apiLogger.error({ err, tableId, rowId }, '[TicketOccurrences] Reconcile after row create failed');
+  }
+
+  try {
     const tables = await findAutomationTables(tableId);
     if (!tables) return;
 
@@ -727,6 +734,16 @@ export async function fireRowCreateTriggers(tableId, rowId, rowData) {
  * Non-blocking — call without await.
  */
 export async function fireRowUpdateTriggers(tableId, rowId, newData, oldData) {
+  const safeOld = oldData || {};
+  const occurrenceFields = ['repeat', 'duration', 'scheduled_date', 'due_date', 'what'];
+  if (occurrenceFields.some((field) => newData?.[field] !== safeOld[field])) {
+    try {
+      await reconcileTicketOccurrences(tableId, rowId);
+    } catch (err) {
+      apiLogger.error({ err, tableId, rowId }, '[TicketOccurrences] Reconcile after row update failed');
+    }
+  }
+
   try {
     const tables = await findAutomationTables(tableId);
     if (!tables) return;
@@ -734,7 +751,6 @@ export async function fireRowUpdateTriggers(tableId, rowId, newData, oldData) {
     const automations = await getActiveAutomations(tables.automationsTableId, tableId, 'row_update');
     if (automations.length === 0) return;
 
-    const safeOld = oldData || {};
     const matched = automations.filter(a => {
       const cfg = a.trigger_config || {};
       const field = cfg.watch_field;

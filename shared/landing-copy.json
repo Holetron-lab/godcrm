@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of the godcrm.ai landing copy. Read by src/pages/landing/LandingPage.tsx (React) and backend/services/landingSeo.js (SSR-lite for crawlers). Copy source of truth: Marketing docs 254896 (landing v3), 254978 (GEO pack §2 anchor, §4 FAQ) and 255025 (§B model swaps). Vendors are never named on this page; tab names live only in the 'Tab #N closed' series on /blog. The FAQPage JSON-LD in index.html duplicates `faq` by hand — keep both in step. v3.2 (docs 255372 §1/§2.7/§2.8, 255392 §1/§2): enemy.link is null until Closed Tab #0 ships (restore 'SEE WHICH TABS WE'VE CLOSED →'); inside.cards[].link is an optional {label, href} rendered after the body.",
+  "_comment": "Single source of the godcrm.ai landing copy. Read by src/pages/landing/LandingPage.tsx (React) and backend/services/landingSeo.js (SSR-lite for crawlers). Copy sources: Marketing docs 254896 (landing v3), 254978 (GEO pack §2 anchor, §4 FAQ), 255025 (§B model swaps), 255501 (v3.4 outside/footer/FAQ links) and 258627 (v3.5 Early Beta/Kimi). Competitor vendors are never named on this page; tab names live only in the 'Tab #N closed' series on /blog. The FAQPage JSON-LD in index.html duplicates `faq` by hand — keep both in step. v3.2 (docs 255372 §1/§2.7/§2.8, 255392 §1/§2): enemy.link is null until Closed Tab #0 ships (restore 'SEE WHICH TABS WE'VE CLOSED →'); inside.cards[].link is an optional {label, href} rendered after the body.",
   "siteUrl": "https://godcrm.ai/",
   "sourceRepoUrl": "https://godcrm.ai/git/holetron-lab/godcrm",
   "mcpEndpoint": "https://godcrm.ai/s/help/mcp",
@@ -7,7 +7,7 @@
     "kicker": "GOD CRM · A substrate for business and life",
     "h1": "Not that CRM.",
     "thesis": "GOD CRM is a substrate between any model and your business. The model thinks. The substrate remembers, permits, builds and acts.",
-    "tags": "ANY MODEL · SELF-HOSTED · BETA"
+    "tags": "ANY MODEL · SELF-HOSTED · EARLY BETA"
   },
   "enemy": {
     "title": "THE ENEMY",
@@ -49,6 +49,11 @@
     ],
     "outro": "The model underneath. Your business on top. Your tools built in between."
   },
+  "outside": {
+    "badge": "OUTSIDE THE TAB",
+    "title": "THE SUBSTRATE FOLLOWS YOU OUT OF THE BROWSER.",
+    "body": "A CRM is dead the moment people stop opening it. So this one leaves the tab. Log in with GOD CRM into your own apps: it is an OpenID provider, and the same rights and audit follow the person or the agent into every service that trusts it. The chat lives in a sidebar you can embed into any internal app: people, agents and the memory, next to the screen you are working on, with a bridge to Telegram. It runs inside Photoshop: a panel where a designer talks to an agent, sends a layer in and gets an image back, or posts it to a colleague without leaving the canvas."
+  },
   "story": {
     "title": "WHY WE BUILT IT",
     "badge": "THE SHORT VERSION",
@@ -58,7 +63,7 @@
     "modelSwapsCount": 10,
     "swapQuote": {
       "pre": "We changed the model ",
-      "post": " while running a real company on GOD CRM: Claude, Grok, OpenAI models, a few others, Gemini next. Nothing moved. The history, the rights and the memory stayed where they were, because they were never in the model."
+      "post": " while running a real company on GOD CRM: Claude, Grok, OpenAI models, Kimi and a few others. Nothing moved. The history, the rights and the memory stayed where they were, because they were never in the model."
     },
     "conclusion": "The value was in the layer under the model. We went too far, and we are giving that layer away.",
     "credit": "BUILT BY HOLETRON LTD · RUNS OUR OWN COMPANY FIRST"
@@ -151,7 +156,7 @@
   },
   "broken": {
     "title": "HONEST STATUS",
-    "badge": "BETA",
+    "badge": "EARLY BETA",
     "headline": { "pre": "What's broken ", "glow": "right now", "post": "." },
     "body": "We run our own company on this. We are not naive, and we have not been audited. Here is what we know is rough:",
     "items": [
@@ -167,11 +172,13 @@
     "items": [
       {
         "q": "How do I move AI agent memory and state from markdown files and Git to a shared database for a team?",
-        "a": "Keep the files for instructions; move state and memory into a database the agents share. In GOD CRM every agent is a user with its own passport, so writes are serialized, permissioned and logged instead of racing over the same folder. Memory is retained and recalled through MCP tools and survives model swaps. We ran our own ops from text files first and wrote down where it broke: godcrm.ai/blog/markdown-ops."
+        "a": "Keep the files for instructions; move state and memory into a database the agents share. In GOD CRM every agent is a user with its own passport, so writes are serialized, permissioned and logged instead of racing over the same folder. Memory is retained and recalled through MCP tools and survives model swaps. We ran our own ops from text files first and wrote down where it broke: godcrm.ai/blog/markdown-ops.",
+        "links": [{ "text": "godcrm.ai/blog/markdown-ops", "href": "/blog/markdown-ops" }]
       },
       {
         "q": "Is there a self-hosted CRM or operational database built for AI agents with native MCP support?",
-        "a": "GOD CRM is one: self-hosted, the whole system exposed as an MCP server, agents as first-class users with roles and scopes, no per-seat pricing. People get tables, dashboards and documents in a UI; agents get the same data over MCP and API. You can try the public read-only endpoint without an account: godcrm.ai/s/help/mcp."
+        "a": "GOD CRM is one: self-hosted, the whole system exposed as an MCP server, agents as first-class users with roles and scopes, no per-seat pricing. People get tables, dashboards and documents in a UI; agents get the same data over MCP and API. You can try the public read-only endpoint without an account: godcrm.ai/s/help/mcp.",
+        "links": [{ "text": "godcrm.ai/s/help/mcp", "href": "https://godcrm.ai/s/help/mcp" }]
       },
       {
         "q": "How do I give an LLM agent limited permissions to specific business tables, with approval and an audit log, instead of one all-or-nothing API key?",
@@ -179,7 +186,7 @@
       },
       {
         "q": "How do I switch between Claude, GPT and local models without losing business context and agent memory?",
-        "a": "Keep context, rights and memory outside the model. In GOD CRM they live in your database and are served to whichever model is plugged in; swapping the provider changes the provider and nothing else. We changed the model about ten times while running a real company on it, Claude, Grok, OpenAI models and others, with Gemini next, and the company did not notice: history, permissions and memory were never in the model to begin with."
+        "a": "Keep context, rights and memory outside the model. In GOD CRM they live in your database and are served to whichever model is plugged in; swapping the provider changes the provider and nothing else. We changed the model about ten times while running a real company on it, Claude, Grok, OpenAI models, Kimi and others, and the company did not notice: history, permissions and memory were never in the model to begin with."
       },
       {
         "q": "Is there a workspace where humans and AI agents work on the same tables and dashboards, not just an agent framework?",
@@ -195,6 +202,14 @@
   },
   "footer": {
     "copyright": "© 2026 HOLETRON LTD",
+    "links": [
+      { "label": "HLTRN.CC", "href": "https://hltrn.cc" },
+      { "label": "SOURCE", "href": "https://godcrm.ai/git/holetron-lab/godcrm" },
+      { "label": "DOCS", "href": "/s/help" },
+      { "label": "LLMS.TXT", "href": "/llms.txt" },
+      { "label": "BLOG", "href": "/blog" },
+      { "label": "TELEGRAM", "href": "https://t.me/god_crm" }
+    ],
     "lines": ["GENERATIVE ORCHESTRATION & DEVELOPMENT", "CONTEXT · RIGHTS · MEMORY", "A SUBSTRATE FOR BUSINESS AND LIFE"]
   }
 }

@@ -12,12 +12,17 @@
 // Soft cap: at most 50 pinned messages per conversation. The 51st POST
 // returns 409 `{ error: 'pin_cap_reached', cap: 50 }`. Cap is checked AFTER
 // idempotency — re-pinning an already-pinned message never trips the cap.
+//
+// GET /conversations/:id/pinned-messages lists them for the toolbar. The
+// client pages history 50 messages at a time, so a pin older than the loaded
+// pages is invisible to it without this read. Gate: same as every chat read.
 
 import {
-  dbRun, dbGet, isPostgres, apiLogger,
+  dbRun, dbGet, dbAll, isPostgres, safeJsonParse, apiLogger,
   success, error, badRequest, notFound, forbidden,
   requireAuth,
 } from './chatShared.js';
+import { canReadConversation } from '../../../services/chat/conversation-read-access.js';
 
 const PIN_CAP_PER_CONVERSATION = 50;
 
@@ -66,6 +71,45 @@ async function checkPinPermission({ messageId, userId }) {
 }
 
 export default function registerPinRoutes(router) {
+
+  // GET /conversations/:id/pinned-messages — every pinned message, newest pin
+  // first. Rows carry the same field names as GET /conversations/:id/messages
+  // so the client renders them with the message it already has loaded.
+  router.get('/conversations/:id/pinned-messages', requireAuth, async (req, res) => {
+    try {
+      const conversationId = Number(req.params.id);
+      if (!Number.isFinite(conversationId) || conversationId <= 0) {
+        return badRequest(res, 'Invalid conversation id');
+      }
+      if (!await canReadConversation(req.user, conversationId)) return forbidden(res, 'No access to this conversation');
+
+      const rows = await dbAll(
+        `SELECT m.id, m.conversation_id, m.sender_id, m.sender_type, m.role, m.content, m.content_type,
+                m.agent_id, m.metadata, m.created_at, m.pinned_at,
+                u.name AS sender_name, CASE WHEN length(u.avatar) > 2048 THEN NULL ELSE u.avatar END AS sender_avatar, u.user_type AS sender_user_type
+           FROM messages m
+           LEFT JOIN users u ON u.id = m.sender_id
+          WHERE m.conversation_id = ${isPostgres() ? '$1' : '?'}
+            AND m.pinned_at IS NOT NULL
+            AND (m.is_deleted IS NULL OR m.is_deleted = 0)
+          ORDER BY m.pinned_at DESC
+          LIMIT ${PIN_CAP_PER_CONVERSATION}`,
+        [conversationId]
+      );
+
+      const messages = rows.map(m => ({
+        ...m,
+        contentType: m.content_type || 'text',
+        senderType: m.sender_type || 'human',
+        metadata: typeof m.metadata === 'string' ? safeJsonParse(m.metadata, {}) : (m.metadata || {}),
+        timestamp: m.created_at,
+      }));
+      return success(res, { messages });
+    } catch (err) {
+      apiLogger.error({ err, conversationId: req.params.id }, 'Error listing pinned messages');
+      return error(res, 'LIST_PINNED_MESSAGES_ERROR', err.message, 500);
+    }
+  });
 
   // POST /messages/:id/pin — idempotent pin.
   // (Mounted under /api/v3/chat by index.js, so effective URL is

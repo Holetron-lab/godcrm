@@ -31,10 +31,12 @@ import { bddToolHandlers } from './bdd-tools.js';
 import { connectorToolHandlers, connectorRequirements } from './connector-tools.js';
 import { passportToolHandlers } from './passport-tools.js';
 import { opsToolHandlers } from './ops-tools.js';
+import { codemodeToolHandlers } from './codemode-tools.js';
 import { getSpaceConnector } from '../connectors/CredentialVault.js';
 import { evaluateToolGate } from './capability-gate.js';
 import { auditToolCall } from '../audit/toolAudit.js';
 import { isOwnerPrincipal, resolvePrincipal } from './principal.js';
+import { executeRemoteConnectorTool } from '../connectors/remoteConnectorRuntime.js';
 
 // ADR-165 WP-4: naturalization is an owner act. Frozen in code, not in a DB
 // row or an agent allowlist — the tools that mint and revoke agent identity
@@ -77,6 +79,7 @@ export const toolHandlers = {
   ...connectorToolHandlers,
   ...passportToolHandlers,
   ...opsToolHandlers,
+  ...codemodeToolHandlers,
 };
 
 /**
@@ -136,9 +139,6 @@ async function dispatchTool(toolName, args, userId, context) {
   }
 
   const handler = toolHandlers[toolName];
-  if (!handler) {
-    return { error: `Unknown tool: ${toolName}` };
-  }
 
   // ADR-165 WP-4: owner-only gate, checked BEFORE the capability gate and with
   // no env flag — a warn-only owner gate is a gate that does nothing, and
@@ -233,7 +233,9 @@ async function dispatchTool(toolName, args, userId, context) {
   }
 
   try {
-    return await handler(args, userId, context);
+    return handler
+      ? await handler(args, userId, context)
+      : await executeRemoteConnectorTool(toolName, args, context);
   } catch (error) {
     aiLogger.error({ err: error, toolName }, 'Tool execution error');
     return { error: error.message };

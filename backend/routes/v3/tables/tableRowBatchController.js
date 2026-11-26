@@ -13,6 +13,7 @@ import { mergeRowData } from '../../../services/mergeRowData.js';
 import { normalizeTypedCells } from '../../../services/cellNormalizers.js';
 import { checkTableAccess, requireTableWriteAccess } from './helpers.js';
 import { fireRowUpdateTriggers } from '../../../services/AutomationTriggerService.js';
+import { deleteTicketOccurrences } from '../../../services/ticket-occurrences/reconcile.js';
 import { notifyRowChanges } from '../../../services/realtime/rowEvents.js';
 
 const router = express.Router();
@@ -275,6 +276,7 @@ router.post('/tables/:tableId/rows/batch-delete', requireTableWriteAccess, async
       );
 
       await dbRun('COMMIT');
+      await deleteTicketOccurrences(tableId, rowIds);
 
       notifyRowChanges(tableId, rowIds, 'deleted', 'api');
       apiLogger.info({ deleted: result.changes }, "BATCH DELETE completed");

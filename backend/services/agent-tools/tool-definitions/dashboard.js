@@ -36,6 +36,34 @@ export const DASHBOARD_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'list_dashboards',
+      description: 'List dashboards with their project_id, space_id and user_id parents. Optionally filter by project_id OR space_id; a space filter includes dashboards belonging to its projects.',
+      parameters: {
+        type: 'object',
+        properties: {
+          project_id: { type: 'number', description: 'Project ID (mutually exclusive with space_id)' },
+          space_id: { type: 'number', description: 'Space ID, including project dashboards (mutually exclusive with project_id)' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_dashboard',
+      description: 'Get a dashboard by ID, including its project_id, space_id and user_id parents',
+      parameters: {
+        type: 'object',
+        properties: {
+          dashboard_id: { type: 'number', description: 'Dashboard ID' }
+        },
+        required: ['dashboard_id']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_dashboard_widgets',
       description: 'Get all widgets on a dashboard',
       parameters: {

@@ -2,6 +2,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/tests/renderWithProviders';
+import { apiClient } from '@/shared/utils/apiClient';
 import { DocumentViewerModal } from '../DocumentViewerModal';
 
 vi.mock('@google/model-viewer', () => ({}));
@@ -32,4 +33,20 @@ it.each([
   fireEvent.click(action);
   expect(onClose).toHaveBeenCalledOnce();
   expect(screen.getByText('Documents module')).toBeVisible();
+});
+
+it('uses the widget stored on the registry card instead of resolving another widget', async () => {
+  renderWithProviders(<MemoryRouter>
+    <Routes>
+      <Route path="/" element={<DocumentViewerModal
+        doc={{ id: 269511, name: 'Document', slug: 'document', table_id: 101205 }}
+        registryTableId={2709} widgetId={134} onClose={vi.fn()}
+      />} />
+      <Route path="/widgets/134" element={<div>Correct documents module</div>} />
+    </Routes>
+  </MemoryRouter>, { language: 'en' });
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Open in module' }));
+  expect(screen.getByText('Correct documents module')).toBeVisible();
+  expect(apiClient.get).not.toHaveBeenCalledWith('/widgets/by-registry-table/2709');
 });

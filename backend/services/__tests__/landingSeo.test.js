@@ -44,6 +44,31 @@ describe('renderLandingPage — the acceptance criterion (curl -A GPTBot gets te
     expect(html).toContain('<section id="whats-broken">');
   });
 
+  it('renders the v3.5 copy, outside block, structured FAQ links and canonical footer', () => {
+    expect(html).toContain('ANY MODEL · SELF-HOSTED · EARLY BETA');
+    expect(html).toContain('OpenAI models, Kimi and a few others');
+    expect(html).not.toContain('Gemini next');
+    expect(html).toContain('OUTSIDE THE TAB');
+    expect(html).toContain('THE SUBSTRATE FOLLOWS YOU OUT OF THE BROWSER.');
+    expect(html).toContain('Photoshop');
+    expect(html).toContain('<a href="/blog/markdown-ops">godcrm.ai/blog/markdown-ops</a>');
+    expect(html).toContain('<a href="https://godcrm.ai/s/help/mcp">godcrm.ai/s/help/mcp</a>');
+    expect(html).toContain('<a href="/llms.txt">LLMS.TXT</a>');
+    expect(html).toContain('<a href="/s/help">DOCS</a>');
+    expect(html).toContain('<a href="https://godcrm.ai/git/holetron-lab/godcrm">SOURCE</a>');
+    for (const link of copy.footer.links) {
+      expect(html).toContain(`<a href="${link.href}">${link.label}</a>`);
+    }
+  });
+
+  it('keeps FAQPage JSON-LD Q4 in sync with the shared copy', () => {
+    const indexHtml = fs.readFileSync(new URL('../../../index.html', import.meta.url), 'utf8');
+    const faqJson = [...indexHtml.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/g)]
+      .map((match) => JSON.parse(match[1]))
+      .find((json) => json['@type'] === 'FAQPage');
+    expect(faqJson.mainEntity[3].acceptedAnswer.text).toBe(copy.faq.items[3].a);
+  });
+
   it('keeps the generic head (title/description/JSON-LD) and adds only a canonical', () => {
     expect(html).toContain('<title>GOD CRM — Not that CRM.');
     expect(html).toContain('<meta name="description" content="landing description">');

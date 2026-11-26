@@ -344,6 +344,13 @@ export const UserAccessPanel = ({
           method: 'POST',
           body: JSON.stringify({ data: rowData })
         });
+
+        if (entityType === 'project') {
+          await apiClient.request(`/access/project/${entityId}/permissions`, {
+            method: 'POST',
+            body: JSON.stringify({ user_id: userId, access_level: level })
+          });
+        }
       }
       
       // Refresh the users list

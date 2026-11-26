@@ -1,12 +1,12 @@
 /**
  * NavTreeColumnRow - a table column inside the nav tree (last nesting level, no extra indent).
- * Preview is read from the same store rows the node uses; every other action is forwarded to the
- * owning TableNode through `schema-editor:column-action`, so the menu matches the node's row menu.
+ * Preview rows come in through props (the same rows the node uses) and are requested via `onLoadRows`;
+ * every other action is forwarded to the owning TableNode through `schema-editor:column-action`,
+ * so the menu matches the node's row menu.
  */
 
 import { useState } from 'react';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Key, Link, MoreVertical } from 'lucide-react';
-import { useSchemaEditorStore } from '../../store/schemaEditorStore';
 import type { ColumnData } from '../../types/schema-editor.types';
 import { DropdownMenu } from '@/shared/components/ui/DropdownMenu';
 import { useLanguage } from '@/shared/i18n/LanguageContext';
@@ -19,12 +19,12 @@ interface NavTreeColumnRowProps {
   canMoveDown: boolean;
   rowsPreview?: Record<string, unknown>[];
   rowsLoading?: boolean;
+  onLoadRows: (tableId: number) => void;
   paddingLeft: number;
 }
 
-export const NavTreeColumnRow = ({ tableId, column, canMoveUp, canMoveDown, rowsPreview, rowsLoading, paddingLeft }: NavTreeColumnRowProps) => {
+export const NavTreeColumnRow = ({ tableId, column, canMoveUp, canMoveDown, rowsPreview, rowsLoading, onLoadRows, paddingLeft }: NavTreeColumnRowProps) => {
   const { t } = useLanguage();
-  const loadTableRows = useSchemaEditorStore((state) => state.loadTableRows);
   const [isExpanded, setIsExpanded] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
 
@@ -36,7 +36,7 @@ export const NavTreeColumnRow = ({ tableId, column, canMoveUp, canMoveDown, rows
   const togglePreview = () => {
     const next = !isExpanded;
     setIsExpanded(next);
-    if (next && rowsPreview === undefined && !rowsLoading) loadTableRows(tableId);
+    if (next && rowsPreview === undefined && !rowsLoading) onLoadRows(tableId);
   };
 
   const previewData = rowsPreview || [];

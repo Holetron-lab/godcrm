@@ -1,0 +1,272 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ADR-207 W5 blueprint fingerprint > exports every supported surface, scrubs PII/secrets and installs the same tree with relation seed 1`] = `
+{
+  "agents": [],
+  "apps": [
+    {
+      "columnRefPaths": [
+        "column",
+        "filter.column",
+        "filters[].column",
+        "group_by",
+        "group_by_column",
+        "sort",
+        "sort.column",
+        "sort_by",
+        "visible_columns[]",
+        "hidden_columns[]",
+        "editable_columns[]",
+      ],
+      "config": {
+        "group_by": "status",
+        "table_id": {
+          "$table": "books",
+        },
+      },
+      "description": undefined,
+      "icon": "🧩",
+      "key": "library",
+      "order_index": 0,
+      "position": undefined,
+      "preset": "table_view",
+      "table": "books",
+      "title": "Library",
+    },
+  ],
+  "automations": [],
+  "dashboards": [
+    {
+      "description": undefined,
+      "icon": "📊",
+      "key": "library_overview",
+      "project": "main",
+      "target": "new",
+      "tiles": [
+        {
+          "columnRefPaths": [
+            "column",
+            "filter.column",
+            "filters[].column",
+            "group_by",
+            "group_by_column",
+            "sort",
+            "sort.column",
+            "sort_by",
+            "visible_columns[]",
+            "hidden_columns[]",
+            "editable_columns[]",
+          ],
+          "config": {
+            "column": "slug",
+            "filter": {
+              "column": "status",
+              "in": [
+                "open",
+              ],
+            },
+            "table_id": {
+              "$table": "books",
+            },
+          },
+          "description": undefined,
+          "icon": "🧩",
+          "key": "books_count",
+          "order_index": 0,
+          "position": undefined,
+          "preset": "number_widget",
+          "table": "books",
+          "title": "Books count",
+        },
+        {
+          "app": "library",
+          "columnRefPaths": [],
+          "config": {
+            "app_widget_id": {
+              "$app": "library",
+            },
+          },
+          "description": undefined,
+          "icon": "🧩",
+          "key": "open_library",
+          "order_index": 0,
+          "position": undefined,
+          "preset": "quick_links",
+          "title": "Open library",
+        },
+      ],
+      "title": "Library Overview",
+    },
+  ],
+  "description": undefined,
+  "icon": undefined,
+  "key": "library_fingerprint",
+  "projects": [
+    {
+      "description": undefined,
+      "icon": undefined,
+      "key": "main",
+      "title": "Library",
+    },
+    {
+      "description": undefined,
+      "icon": undefined,
+      "key": "analytics",
+      "title": "Analytics",
+    },
+  ],
+  "requires": {
+    "tables": [],
+  },
+  "schema": 2,
+  "seed": [
+    {
+      "key": [
+        "slug",
+      ],
+      "rows": [
+        {
+          "name": "Author One",
+          "slug": "author-1",
+        },
+      ],
+      "table": "authors",
+    },
+    {
+      "key": [
+        "slug",
+      ],
+      "rows": [
+        {
+          "author": "author-1",
+          "slug": "book-1",
+          "status": "open",
+        },
+      ],
+      "table": "books",
+    },
+  ],
+  "services": [
+    {
+      "allowed_tools": [
+        "send",
+      ],
+      "key": "mail",
+      "secrets": [
+        "BEARER_TOKEN",
+      ],
+      "type_slug": "custom_mcp",
+      "url": "https://mail.example.com/mcp",
+    },
+  ],
+  "sidebar": [
+    {
+      "access_level": "member",
+      "icon": "Books",
+      "is_pinned": true,
+      "order": 3,
+      "widget": "library",
+    },
+  ],
+  "tables": [
+    {
+      "columns": [
+        {
+          "column_name": "slug",
+          "config": null,
+          "display_name": "slug",
+          "order_index": 1,
+          "required": true,
+          "type": "text",
+        },
+        {
+          "column_name": "name",
+          "config": null,
+          "display_name": "name",
+          "order_index": 2,
+          "required": false,
+          "type": "text",
+        },
+        {
+          "column_name": "api_token",
+          "config": null,
+          "display_name": "api_token",
+          "order_index": 3,
+          "required": false,
+          "type": "text",
+        },
+      ],
+      "display_name": "authors",
+      "icon": null,
+      "key": "authors",
+      "name": "authors",
+      "project": "main",
+      "table_type": null,
+    },
+    {
+      "columns": [
+        {
+          "column_name": "slug",
+          "config": null,
+          "display_name": "slug",
+          "order_index": 1,
+          "required": true,
+          "type": "text",
+        },
+        {
+          "column_name": "author",
+          "config": {
+            "relation": {},
+          },
+          "display_name": "author",
+          "order_index": 2,
+          "required": false,
+          "target": "authors",
+          "type": "relation",
+        },
+        {
+          "column_name": "status",
+          "config": {
+            "options": [
+              {
+                "label": "Open",
+                "value": "open",
+              },
+            ],
+          },
+          "display_name": "status",
+          "order_index": 3,
+          "required": false,
+          "type": "select",
+        },
+      ],
+      "display_name": "books",
+      "icon": null,
+      "key": "books",
+      "name": "books",
+      "project": "main",
+      "table_type": null,
+    },
+    {
+      "columns": [
+        {
+          "column_name": "value",
+          "config": null,
+          "display_name": "value",
+          "order_index": 1,
+          "required": false,
+          "type": "number",
+        },
+      ],
+      "display_name": "metrics",
+      "icon": null,
+      "key": "metrics",
+      "name": "metrics",
+      "project": "analytics",
+      "table_type": null,
+    },
+  ],
+  "title": "Library fingerprint",
+  "version": "1.0.0",
+}
+`;

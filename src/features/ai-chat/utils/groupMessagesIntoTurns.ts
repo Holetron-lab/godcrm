@@ -36,6 +36,22 @@ const isSettledEmptyStatus = (m: ChatMessage): boolean =>
   (m.metadata as Record<string, unknown> | undefined)?.placeholder === false &&
   !(m.content || '').trim();
 
+interface MovedToMeta {
+  conversation_id?: number;
+  batch_id?: string | number;
+  moved_by?: { user_id?: number; name?: string | null; avatar?: string | null };
+}
+
+/** `metadata.moved_to` of a moved-out stub (ADR-0031 §Z), undefined for any other message. */
+const movedTo = (m: ChatMessage | undefined): MovedToMeta | undefined =>
+  m?.contentType === 'moved' ? (m.metadata as { moved_to?: MovedToMeta } | undefined)?.moved_to : undefined;
+
+/** Two stubs with the same key were left behind by the same move. */
+const moveKey = (m: ChatMessage | undefined): string | null => {
+  const to = movedTo(m);
+  return to ? `${to.batch_id ?? ''}|${to.conversation_id}|${to.moved_by?.user_id ?? ''}` : null;
+};
+
 /**
  * Groups a flat list of ChatMessages into Turn objects suitable for rendering
  * with `<ChatTurn />`.
@@ -241,12 +257,10 @@ export function groupMessagesIntoTurns(
     });
   };
 
-  /** Flush accumulated consecutive human messages into a single turn. */
-  const flushHumanMessages = () => {
-    if (currentHumanMessages.length === 0) return;
-
+  /** Reactions of a multi-message human turn, keyed per message so they don't collide. */
+  const reactionsPerMessage = (msgs: ChatMessage[]): Turn['reactions'] => {
     const reactions: Turn['reactions'] = {};
-    for (const m of currentHumanMessages) {
+    for (const m of msgs) {
       if (m.id) {
         const msgReactions = messageReactions[Number(m.id)];
         if (msgReactions) {
@@ -257,6 +271,14 @@ export function groupMessagesIntoTurns(
         }
       }
     }
+    return reactions;
+  };
+
+  /** Flush accumulated consecutive human messages into a single turn. */
+  const flushHumanMessages = () => {
+    if (currentHumanMessages.length === 0) return;
+
+    const reactions = reactionsPerMessage(currentHumanMessages);
 
     const firstMsg = currentHumanMessages[0];
     let humanSenderName = 'You';
@@ -291,6 +313,38 @@ export function groupMessagesIntoTurns(
   // merging into one human turn (it flushes the batch like any agent message).
   for (const msg of liftForeignStepGroups(messages, resolveAgent)) {
     const ct = msg.contentType;
+
+    // ── Moved-out stubs: one turn per move, whoever wrote the originals ──
+    // A stub keeps its author's role, so without this a move of a dialogue
+    // would split into one bubble per author. The turn belongs to the mover —
+    // a system event on their behalf, like row_mutation.
+    if (ct === 'moved') {
+      flushHumanMessages();
+      flushAllAgentStepBuffers();
+      flushAllAgentTextBuffers();
+      const key = moveKey(msg);
+      const lastTurn = turns[turns.length - 1];
+      if (key !== null && lastTurn && moveKey(lastTurn.messages[0]) === key) {
+        lastTurn.messages.push(msg);
+        lastTurn.reactions = reactionsPerMessage(lastTurn.messages);
+        continue;
+      }
+      const movedBy = movedTo(msg)?.moved_by;
+      turns.push({
+        id: msg.id ? `turn_moved_${msg.id}` : `turn_moved_idx_${turnCounter}`,
+        turnType: 'human',
+        senderName: movedBy?.name || msg.sender_name || 'system',
+        senderAvatar: movedBy?.avatar || undefined,
+        messages: [msg],
+        reactions: reactionsPerMessage([msg]),
+        isProcessing: false,
+        isFirstInGroup: true,
+        isLastInGroup: true,
+        isSystemEvent: true,
+      });
+      turnCounter++;
+      continue;
+    }
 
     // ── User messages: group consecutive from same sender ──
     if (msg.role === 'user') {
@@ -574,6 +628,9 @@ export function groupMessagesIntoTurns(
   // grouped bubbles with proper rounded corners and header visibility.
   // Agent turns that contain a final 'text' response break the chain — each
   // completed response (tool steps + text answer) becomes its own visual block.
+  // A move block is headed by the mover, not by a message author: it never
+  // shares a header with that person's own messages next to it.
+  const isMoveBlock = (turn: Turn) => moveKey(turn.messages[0]) !== null;
   for (let i = 0; i < turns.length; i++) {
     const prev = i > 0 ? turns[i - 1] : null;
     const next = i < turns.length - 1 ? turns[i + 1] : null;
@@ -599,12 +656,14 @@ export function groupMessagesIntoTurns(
       prev != null &&
       prev.turnType === turns[i].turnType &&
       prev.senderName === turns[i].senderName &&
+      isMoveBlock(prev) === isMoveBlock(turns[i]) &&
       !prevHasFinalText; // break chain after completed text response
 
     const sameSenderAsNext =
       next != null &&
       next.turnType === turns[i].turnType &&
       next.senderName === turns[i].senderName &&
+      isMoveBlock(next) === isMoveBlock(turns[i]) &&
       !currentHasFinalText; // break chain after completed text response
 
     turns[i].isFirstInGroup = !sameSenderAsPrev;

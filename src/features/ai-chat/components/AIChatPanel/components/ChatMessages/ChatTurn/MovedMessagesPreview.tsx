@@ -5,30 +5,24 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
  * Renders the preview body (moved-message contents) below the bubble divider
  * when a source-side ChatLinkCard is expanded. Lives outside the card itself
  * so the card stays a flat plate in the bubble's header zone.
+ *
+ * Each message is a MessagePreviewCard — the card of the pinned panel — that
+ * starts as a two-line preview and expands to the whole message on click.
  */
 import React from 'react';
 import { Loader2 } from 'lucide-react';
-import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
 import {
   useMovedMessagesPreview,
   type MovedMessagePreview,
 } from '../../../../../hooks/useMovedMessagesPreview';
+import { MessagePreviewCard } from '../../../../MessagePreviewCard';
+import { useMentionUsers } from '../../../../MentionUsersContext';
 
-const PreviewMessageBubble: React.FC<{ msg: MovedMessagePreview }> = ({ msg }) => {
-  const { t } = useLanguage();
-  const text = (msg.content || '').trim();
-  if (!text) {
-    return (
-      <div className="text-[11px] text-[var(--text-tertiary)] italic py-1">{t('aiChat.ui.noText')}</div>
-    );
-  }
-  const display = text.length > 1200 ? text.slice(0, 1200) + '…' : text;
-  return (
-    <div className="text-sm text-[var(--text-primary)] break-words py-1">
-      <MarkdownPreview content={display} />
-    </div>
-  );
-};
+// GET …/messages/by-ids returns at most this many rows per request.
+const PREVIEW_LIMIT = 50;
+
+// Agent working steps travel with a moved turn but are not messages to read.
+const STEP_CONTENT_TYPES = new Set(['thinking', 'tool_call', 'tool_result', 'agent_status', 'plan']);
 
 export interface MovedMessagesPreviewProps {
   conversationId: number;
@@ -40,7 +34,14 @@ export const MovedMessagesPreview: React.FC<MovedMessagesPreviewProps> = ({
   messageIds,
 }) => {
   const { t } = useLanguage();
+  const { getByUserId, getByAgentId } = useMentionUsers();
   const preview = useMovedMessagesPreview(conversationId, messageIds, true);
+  const [expandedIds, setExpandedIds] = React.useState<ReadonlySet<number>>(new Set());
+  const toggleExpanded = (id: number) => setExpandedIds(prev => {
+    const next = new Set(prev);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  });
 
   if (preview.isLoading) {
     return (
@@ -56,16 +57,48 @@ export const MovedMessagesPreview: React.FC<MovedMessagesPreviewProps> = ({
         {t('aiChat.ui.couldNotLoadMessages')}</div>
     );
   }
-  if (!preview.data || preview.data.length === 0) {
+  const messages = (preview.data ?? []).filter((m: MovedMessagePreview) => !STEP_CONTENT_TYPES.has(m.content_type ?? ''));
+  if (messages.length === 0) {
     return (
       <div className="py-1 text-[11px] text-[var(--text-tertiary)] italic">
         {t('aiChat.ui.messagesUnavailable')}</div>
     );
   }
   return (
-    <div className="space-y-1">
-      {preview.data.map(m => <PreviewMessageBubble key={m.id} msg={m} />)}
-    </div>
+    <>
+      <ul className="flex flex-col gap-1">
+        {messages.map(m => {
+          const agentRowId = Number(m.metadata.agent_row_id);
+          const sender = (m.sender_id != null ? getByUserId(m.sender_id) : null)
+            || (agentRowId ? getByAgentId(agentRowId) : null);
+          const expanded = expandedIds.has(m.id);
+          return (
+            <MessagePreviewCard
+              key={m.id}
+              message={{
+                id: m.id,
+                content: (m.content || '').trim() || t('aiChat.ui.noText'),
+                role: m.role ?? undefined,
+                created_at: m.created_at ?? undefined,
+                sender_name: m.sender_name ?? sender?.name,
+                sender_avatar: m.sender_avatar ?? sender?.avatar,
+                agent_icon: sender?.type === 'agent' ? sender.icon : undefined,
+                agent_color: sender?.color,
+              }}
+              expanded={expanded}
+              onOpen={() => toggleExpanded(m.id)}
+              headerLabelKey={expanded ? 'aiChat.ui.collapseSenderMessage' : 'aiChat.ui.expandSenderMessage'}
+              bodyLabelKey="aiChat.ui.expandSenderMessage"
+            />
+          );
+        })}
+      </ul>
+      {messageIds.length > PREVIEW_LIMIT && (
+        <p className="pt-1 text-[11px] text-[var(--text-tertiary)]">
+          {t('aiChat.ui.movedPreviewLimited', { shown: PREVIEW_LIMIT, total: messageIds.length })}
+        </p>
+      )}
+    </>
   );
 };
 

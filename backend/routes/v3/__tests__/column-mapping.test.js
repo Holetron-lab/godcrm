@@ -72,10 +72,10 @@ describe('ADR-069: Column Mapping API', () => {
 
     // The column-mapping route queries a 'tables' table (not universal_tables)
     // tables already exists in PG with columns: id, name, display_name, icon
-    const tableResult = await dbRun(`
+    testTableId = 100000 + (ts % 2000000000);
+    await dbRun(`
       INSERT INTO tables (id, name, display_name) VALUES ($1, $2, $3)
-    `, [90000 + (ts % 10000), `tickets_${ts}`, `Tickets ${ts}`]);
-    testTableId = tableResult.lastInsertRowid;
+    `, [testTableId, `tickets_${ts}`, `Tickets ${ts}`]);
 
     // Create Express app with routes
     app = express();
@@ -100,6 +100,10 @@ describe('ADR-069: Column Mapping API', () => {
   });
 
   afterAll(async () => {
+    await dbRun('DELETE FROM table_column_mappings WHERE table_id = ?', [testTableId]);
+    await dbRun('DELETE FROM tables WHERE id = ?', [testTableId]);
+    await dbRun('DELETE FROM projects WHERE id = ?', [testProjectId]);
+    await dbRun('DELETE FROM users WHERE id = ?', [testUserId]);
     await cleanupTestDatabase();
   });
 

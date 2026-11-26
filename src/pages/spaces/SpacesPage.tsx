@@ -9,23 +9,11 @@ import { DashboardGrid } from '@/features/widgets';
 import { AddWidgetModal } from '@/features/widgets/components/AddWidgetModal';
 import { apiClient } from '@/shared/utils/apiClient';
 import type { SpaceType } from '@/features/spaces/types/space.types';
-import { Plus, Edit, X, Search, Columns, Filter, User as UserIcon } from 'lucide-react';
+import { Plus, Edit, X, Search, Filter, User as UserIcon } from 'lucide-react';
+import { MaxColsSelector, maxColsWidth, useMaxCols } from '@/shared/components/ui/MaxColsSelector';
 
 const MAX_COLS_STORAGE_KEY = 'god-crm-spaces-maxcols';
-const MAX_COLS_OPTIONS = [4, 5, 6, 7, 8] as const;
-const DEFAULT_MAX_COLS = 6;
 const TYPE_FILTER_OPTIONS: readonly (SpaceType | 'all')[] = ['all', 'personal', 'business', 'team', 'admin'] as const;
-
-const loadMaxCols = (): number => {
-  try {
-    const raw = localStorage.getItem(MAX_COLS_STORAGE_KEY);
-    if (!raw) return DEFAULT_MAX_COLS;
-    const n = Number.parseInt(raw, 10);
-    return MAX_COLS_OPTIONS.includes(n as typeof MAX_COLS_OPTIONS[number]) ? n : DEFAULT_MAX_COLS;
-  } catch {
-    return DEFAULT_MAX_COLS;
-  }
-};
 
 /**
  * Spaces Page - главная страница после логина
@@ -44,12 +32,7 @@ const SpacesPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<SpaceType | 'all'>('all');
   const [userFilter, setUserFilter] = useState<number | 'all'>('all');
-  const [maxCols, setMaxColsState] = useState<number>(loadMaxCols);
-
-  const setMaxCols = (n: number) => {
-    setMaxColsState(n);
-    try { localStorage.setItem(MAX_COLS_STORAGE_KEY, String(n)); } catch { /* Keep the selected column count in state if browser storage cannot persist it. */ }
-  };
+  const [maxCols, setMaxCols] = useMaxCols(MAX_COLS_STORAGE_KEY);
 
   // Fetch home dashboard for Quick Access widgets
   const { data: homeDashboard } = useQuery({
@@ -98,7 +81,7 @@ const SpacesPage = () => {
 
   // Page width tracks maxCols: TARGET_SLOT_PX × N + gaps. Selector resizes
   // the entire page (Spaces grid + Quick Access + sections below).
-  const pageMaxWidthPx = maxCols * 220 + (maxCols - 1) * 16;
+  const pageMaxWidthPx = maxColsWidth(maxCols, 220);
 
   return (
     <div className="bg-[var(--bg-primary)] p-4 md:p-6">
@@ -186,26 +169,7 @@ const SpacesPage = () => {
               </select>
             </label>
 
-            <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-secondary)] px-2 py-1 text-xs text-[var(--text-tertiary)]">
-              <Columns className="h-3.5 w-3.5" />
-              <span>{t('spaces.toolbar.maxCols') || 'Max cols'}:</span>
-              <div className="flex items-center gap-0.5">
-                {MAX_COLS_OPTIONS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setMaxCols(n)}
-                    className={`min-w-[24px] rounded px-1.5 py-0.5 text-xs font-medium transition-colors ${
-                      maxCols === n
-                        ? 'bg-[var(--color-primary-500)] text-white'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <MaxColsSelector value={maxCols} onChange={setMaxCols} />
           </div>
 
           <SpacesList

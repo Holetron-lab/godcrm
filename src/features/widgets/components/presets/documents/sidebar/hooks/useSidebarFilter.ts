@@ -17,7 +17,7 @@ export function useSidebarFilter(): DocumentRegistryItem[] {
     if (ctx.searchQuery.trim()) {
       const q = ctx.searchQuery.toLowerCase();
       docs = docs.filter(doc =>
-        doc.name.toLowerCase().includes(q) ||
+        doc.name?.toLowerCase().includes(q) ||
         doc.description?.toLowerCase().includes(q) ||
         doc.category?.toLowerCase().includes(q)
       );

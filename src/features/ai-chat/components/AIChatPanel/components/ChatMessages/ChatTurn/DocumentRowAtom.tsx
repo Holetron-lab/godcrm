@@ -53,6 +53,7 @@ export interface DocumentRowAtomProps {
     table_name: string;
     table_icon?: string;
     row_title?: string;
+    widget_id?: number;
   };
   onOpenDetail: () => void;
   onOpenEdit: () => void;
@@ -160,6 +161,7 @@ export function DocumentRowAtom({
     slug: asString(data.slug) || '',
     table_id: asNumber(data.table_id) || 0,
     content_table_id: asNumber(data.content_table_id) ?? asNumber(data.table_id),
+    widget_id: asNumber(data.widget_id) ?? rowReference.widget_id,
     icon: asString(data.icon) || rowReference.table_icon || '📄',
     description: asString(data.description),
     category: asString(data.category),
@@ -307,6 +309,7 @@ export function DocumentRowAtom({
         <DocumentViewerModal
           doc={doc}
           registryTableId={tableId}
+          widgetId={doc.widget_id}
           currentStatus={currentStatus}
           onClose={() => setIsViewerOpen(false)}
         />

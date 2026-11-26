@@ -55,10 +55,12 @@ import labsRoutesV3 from './routes/v3/labs.js'; // ADR-043: MindWorkflow Integra
 import columnMappingRoutesV3 from './routes/v3/column-mapping.js'; // ADR-069: Column Mapping
 import widgetLibraryRoutesV3 from './routes/v3/widget-library.js'; // ADR-073: Widget Picker System
 import moduleInstallRoutesV3 from './routes/v3/module-install.js'; // ADR-200 W2: no-deploy module installer
+import moduleRegistryRoutesV3 from './routes/v3/module-registry.js'; // ADR-207 W4.1: registry origin lifecycle and catalog
 import ticketsRoutesV3 from './routes/v3/tickets.js'; // ADR-098: Ticket Status API
 import agentVersionsRoutesV3 from './routes/v3/agent-versions.js'; // ADR-0007-S: G1-data agent_versions write path
 import telegramRoutesV3 from './routes/v3/telegram.js'; // ADR-098: Telegram Bot integration
 import telegramNikitronRoutes from './routes/v3/telegramNikitron.js'; // NikitronBot: Telegram bot for Nikitron
+import telegramRamziRoutes from './routes/v3/telegramRamzi.js'; // Private Telegram bot for Povarenok_Ramzy
 import oauthRoutes from './routes/oauth/index.js'; // ADR-063: OIDC Provider for WorkAdventure
 import waRoutesV3 from './routes/v3/wa/index.js'; // ADR-063: WorkAdventure Admin API
 import calendarRoutesV3 from './routes/v3/calendar.js'; // Google Calendar Integration
@@ -103,7 +105,9 @@ import secretsRoutesV3 from './routes/v3/secrets.js'; // ADR-0040 Phase 1: owner
 import auditRoutesV3 from './routes/v3/audit.js'; // ADR-0066-A §C: owner-only audit chain verify
 import { getAdapter as getDbAdapter } from './database/connection.js'; // ADR-0040/ADR-0053: vault + resolver DB binding
 import agentRunDispatcherAdminRouter from './routes/v3/agentRunDispatcher.js'; // ADR-0030 Phase 2: dispatcher admin API
+import embedRoutesV3 from './routes/v3/embed.js'; // ADR-210: one-time ticket bootstrap
 import { authenticate } from './middleware/auth.js';
+import { embedFrameHeaders } from './middleware/embedFrameHeaders.js'; // ADR-210: Level-only framing carve-out
 import { requestContext } from './middleware/requestContext.js'; // ADR-0066 P0: req.requestId/spaceId/actingAs
 import uploadStatic from './middleware/uploadStatic.js';
 import { uploadsFileGuard, downloadsFileGuard } from './middleware/fileGuard.js'; // ADR-0016: Authenticated file delivery
@@ -164,6 +168,7 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.use(embedFrameHeaders);
 // Allow CORS for AI agent worker endpoints (server-to-server, external workers)
 app.use('/api/v3/ai/agents/jobs', cors());
 // ADR-064: Strict CORS — production requires explicit CORS_ORIGINS
@@ -230,6 +235,7 @@ app.post('/api/v3/plugin/login', async (req, res) => {
 // Must be BEFORE authenticated routes to avoid /api/v3 catch-all with authenticate middleware
 app.use('/api/v3/telegram', telegramRoutesV3);
 app.use('/api/v3/telegram/nikitron', telegramNikitronRoutes); // NikitronBot
+app.use('/api/v3/telegram/ramzi', telegramRamziRoutes); // Povarenok_Ramzy
 
 // Google Calendar OAuth callback (no auth — redirect from Google)
 // Token exchange happens server-side using userId from state parameter
@@ -306,7 +312,6 @@ app.use('/api/v3/content-pipeline', contentPipelineRoutesV3);
 app.use('/api/v3/public', publicRoutesV3);
 // PES Mini App (public, no auth — must be before catch-all /api/v3 authenticated routes)
 app.use('/api/v3/pes', pesAppRoutes);
-// ADR-140: Палевность Checker (public, no auth)
 
 // ADR-156 iter-5 Task 4: /api/v3/echo — smoke-test endpoint for BDD curl runner.
 // Public (no auth) by design; globalLimiter above rate-limits abuse (10k/15m in prod).
@@ -332,6 +337,11 @@ app.use('/api/v3/ops', stagingGateRouter); // same gate token, separate grants (
 // token (used by the PreToolUse hook subprocess, which has no JWT), while
 // GET /audit and /health apply JWT inside the router.
 app.use('/api/v3/agent-permissions', agentPermissionsRoutesV3);
+
+// ADR-210: ticket issue uses OIDC Basic auth; redemption uses the one-time
+// ticket itself. Both are disabled by default inside the router and must not
+// fall through to the user-JWT middleware.
+app.use('/api/v3/embed', embedRoutesV3);
 
 app.use('/api/v3/spaces', authenticate, spacesRoutesV3);
 app.use('/api/v3', authenticate, agentRunDispatcherAdminRouter); // ADR-0030 Phase 2 admin tick + health
@@ -367,6 +377,7 @@ app.use('/api/v3/labs', authenticate, labsRoutesV3); // ADR-043: MindWorkflow In
 app.use('/api/v3/column-mapping', authenticate, columnMappingRoutesV3); // ADR-069: Column Mapping
 app.use('/api/v3', authenticate, widgetLibraryRoutesV3); // ADR-073: Widget Picker System
 app.use('/api/v3/modules', authenticate, moduleInstallRoutesV3); // ADR-200 W2: blueprint install/upgrade/uninstall
+app.use('/api/v3/module-registry', authenticate, moduleRegistryRoutesV3); // ADR-207 W4.1: registry and catalog
 app.use('/api/v3', authenticate, ticketsRoutesV3); // ADR-098: Ticket Status API
 app.use('/api/v3/wa', authenticate, waRoutesV3); // ADR-063: WorkAdventure Admin API
 app.use('/api/v3/calendar', authenticate, calendarRoutesV3); // Google Calendar Integration

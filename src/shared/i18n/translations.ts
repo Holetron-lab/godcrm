@@ -45,6 +45,9 @@ import { userAccess } from './modules/userAccess';
 import { documents } from './modules/documents';
 import { aiChat } from './modules/aiChat';
 import { mail } from './modules/mail';
+import { columnMapping } from './modules/columnMapping';
+import { moduleInstall } from './modules/moduleInstall';
+import { moduleCatalog } from './modules/moduleCatalog';
 
 export const translations = {
   en: {
@@ -93,6 +96,9 @@ export const translations = {
     documents: documents.en,
     aiChat: aiChat.en,
     mail: mail.en,
+    columnMapping: columnMapping.en,
+    moduleInstall: moduleInstall.en,
+    moduleCatalog: moduleCatalog.en,
   },
   ru: {
     headerActions: headerActions.ru,
@@ -140,6 +146,9 @@ export const translations = {
     documents: documents.ru,
     aiChat: aiChat.ru,
     mail: mail.ru,
+    columnMapping: columnMapping.ru,
+    moduleInstall: moduleInstall.ru,
+    moduleCatalog: moduleCatalog.ru,
   },
 } as const;
 

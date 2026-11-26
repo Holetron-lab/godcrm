@@ -7,6 +7,7 @@ import { dbAll } from '../../../database/connection.js';
 import { AGENT_TOOLS } from '../../../services/AgentToolsService.js';
 import { apiLogger } from '../../../utils/logger.js';
 import { safeParseJSON, normalizeToolList } from './shared.js';
+import { resolveRemoteConnectorTools } from '../../../services/connectors/remoteConnectorRuntime.js';
 
 export async function resolveAiToolsTableId(spaceId) {
   const { dbGet } = await import('../../../database/connection.js');
@@ -113,7 +114,10 @@ export async function getAllowedTools(agentConfig, spaceId) {
   } else {
     const allToolNames = new Set([...toolNames, ...baseConsultingTools]);
     const filtered = AGENT_TOOLS.filter((tool) => tool?.function?.name && allToolNames.has(tool.function.name));
-    tools = filtered.length ? filtered : [...AGENT_TOOLS];
+    const known = new Set(filtered.map((tool) => tool.function.name));
+    const remote = await resolveRemoteConnectorTools(spaceId, toolNames);
+    tools = [...filtered, ...remote.filter((tool) => !known.has(tool.function.name))];
+    if (!tools.length) tools = [...AGENT_TOOLS];
   }
 
   // ADR-113: Inject manage_plan tool when planning is enabled

@@ -12,6 +12,8 @@ import type { ChatSummary } from '../../hooks/useChatSummary';
 import { useAIChat } from '../../context/AIChatContext';
 import { useAIChatPanelLogic } from './hooks/useAIChatPanelLogic';
 import { usePinMessage } from '../../hooks/usePinMessage';
+import { usePinnedMessages } from '../../hooks/usePinnedMessages';
+import { useJumpToMessage } from './hooks/useJumpToMessage';
 import { ChatPanelToolbar, ChatInfoBar } from './components/ChatHeader/ChatHeaderFull';
 import { ChatToolbar } from './components/ChatToolbar/ChatToolbar';
 import { BoundRowsStrip } from './components/BoundRowsStrip';
@@ -93,8 +95,8 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
     createNewConversation,
 
     isLoadingAIMessages, isLoadingUserMessages,
-    hasOlderMessages, isFetchingOlderMessages,
-    hasNextAIPage, isFetchingNextAIPage,
+    hasOlderMessages, isFetchingOlderMessages, fetchOlderMessages,
+    hasNextAIPage, isFetchingNextAIPage, fetchNextAIPage,
     activePollingError, activePollingStopped, activeReconnect,
     activeAgents,
     localError,
@@ -189,9 +191,12 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
   // (Pin icon next to Scheduled). State lifted into the panel so the badge
   // count + expanded toggle live alongside the rest of the toolbar state.
   const [pinnedListOpen, setPinnedListOpen] = React.useState(false);
-  const pinnedCount = React.useMemo(
-    () => displayMessages.filter(m => m.pinned_at && !m.is_deleted).length,
-    [displayMessages],
+  // Pins older than the loaded history pages come from the server list, so
+  // the badge and the banner do not depend on how far the user has scrolled.
+  const pinnedMessages = usePinnedMessages(activeConversationId, displayMessages);
+  const jumpToMessage = useJumpToMessage(
+    messagesContainerRef,
+    chatPartner?.type === 'agent' ? fetchNextAIPage : fetchOlderMessages,
   );
 
   // Perf: stable identity for the currentUser object handed to MessagesArea →
@@ -480,7 +485,7 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                 scheduledCount={scheduled.scheduledMessages?.length ?? 0}
                 onPinnedToggle={() => setPinnedListOpen(v => !v)}
                 pinnedListActive={pinnedListOpen}
-                pinnedCount={pinnedCount}
+                pinnedCount={pinnedMessages.length}
                 onAttachFile={() => logic.fileInputRef.current?.click()}
                 onAttachRow={() => {
                   logic.setShowFilePicker(prev => !prev);
@@ -516,22 +521,13 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
 
               {/* Pinned messages share the toolbar toggle and existing unpin handler. */}
               <PinnedBanner
-                messages={displayMessages as any}
+                messages={pinnedMessages}
                 open={pinnedListOpen}
                 onOpenChange={setPinnedListOpen}
-                onJump={(messageId) => {
-                  const container = messagesContainerRef.current;
-                  if (!container) return;
-                  const el = container.querySelector(
-                    `[data-message-id="${messageId}"]`,
-                  ) as HTMLElement | null;
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  }
-                }}
+                onJump={jumpToMessage}
                 activeAgents={activeAgents}
                 onForward={(messageId) => {
-                  const message = displayMessages.find(item => item.id === messageId);
+                  const message = pinnedMessages.find(item => item.id === messageId);
                   if (message) handleForwardMessage(message);
                 }}
                 onUnpin={(messageId) => handleUnpinMessage(Number(messageId))}
@@ -590,6 +586,8 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                 messages={scheduled.scheduledMessages}
                 onCancel={(id) => scheduled.cancelScheduledMessage(id)}
                 onReschedule={(id, newDate) => scheduled.editScheduledMessage({ smId: id, scheduled_at: newDate })}
+                onPause={(id) => scheduled.pauseScheduledMessage(id)}
+                onResume={(id) => scheduled.resumeScheduledMessage(id)}
                 onSendNow={async (msg) => {
                   // ADR-0031 WP-17 follow-up: hits backend send-now endpoint that
                   // reuses the cron-poller worker code path — preserves attachments,
@@ -678,9 +676,10 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
               scheduledCount={scheduled.scheduledMessages?.length ?? 0}
               isScheduling={scheduled.isScheduling}
               initialScheduleDate={editScheduleDate}
-              onScheduleMessage={async (isoDate) => {
+              onScheduleMessage={async (isoDate, series) => {
                 const convId = currentConversationId ?? userConversationId;
                 if (!convId || !inputValue.trim()) return;
+                if (!isoDate && !series) return;
                 // Upload attachments if any
                 let uploadedAttachments: Array<{ id: string; name: string; type: string; size: number; url?: string; preview?: string }> | undefined;
                 if (attachments.length > 0) {
@@ -698,7 +697,9 @@ export function AIChatPanel({ className, fillContainer = false }: AIChatPanelPro
                 await scheduled.scheduleMessage({
                   conversationId: convId,
                   content: inputValue.trim(),
-                  scheduled_at: isoDate,
+                  // ADR-208 D6: series may omit scheduled_at (backend takes the next cron tick)
+                  ...(isoDate && { scheduled_at: isoDate }),
+                  ...(series && { recurrence_cron: series.recurrence_cron, timezone: series.timezone, max_runs: series.max_runs }),
                   ...(uploadedAttachments && uploadedAttachments.length > 0 && { attachments: uploadedAttachments }),
                 });
                 setInputValue('');

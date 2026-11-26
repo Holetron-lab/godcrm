@@ -150,7 +150,7 @@ export const createRefreshToken = (user) =>
 // Middleware: Require authentication
 // ---------------------------------------------------------------------------
 export const requireAuth = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const token = req.headers.authorization?.split(' ')[1] || req.cookies?.[ACCESS_COOKIE_NAME];
 
   if (!token) {
     return respondError(res, 401, 'AUTH_REQUIRED', 'Authorization token is missing');

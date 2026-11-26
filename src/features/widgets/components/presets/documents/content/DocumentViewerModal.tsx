@@ -24,6 +24,7 @@ interface ContentRow {
 export interface DocumentViewerModalProps {
   doc: DocumentRegistryItem;
   registryTableId: number;
+  widgetId?: number;
   currentStatus?: StatusOption;
   language?: string;
   onClose: () => void;
@@ -32,6 +33,7 @@ export interface DocumentViewerModalProps {
 export function DocumentViewerModal({
   doc,
   registryTableId,
+  widgetId: storedWidgetId,
   currentStatus,
   language = 'en',
   onClose,
@@ -41,7 +43,7 @@ export function DocumentViewerModal({
   const contentTableId = doc.content_table_id || doc.table_id;
   const [rows, setRows] = useState<ContentRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [widgetId, setWidgetId] = useState<number | null>(null);
+  const [widgetId, setWidgetId] = useState<number | null>(storedWidgetId ?? null);
 
   useEffect(() => {
     if (!contentTableId) {
@@ -67,7 +69,8 @@ export function DocumentViewerModal({
   }, [contentTableId]);
 
   useEffect(() => {
-    if (!registryTableId) return;
+    setWidgetId(storedWidgetId ?? null);
+    if (storedWidgetId != null || !registryTableId) return;
     let cancelled = false;
     apiClient
       .get<{ data?: { widget_id?: number } }>(`/widgets/by-registry-table/${registryTableId}`)
@@ -80,7 +83,7 @@ export function DocumentViewerModal({
         // 404 = no widget hosts this table; button just won't render.
       });
     return () => { cancelled = true; };
-  }, [registryTableId]);
+  }, [registryTableId, storedWidgetId]);
 
   const markdown = useMemo(() => {
     const header: string[] = [`# ${doc.icon || '📄'} ${doc.name}`, ''];

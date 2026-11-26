@@ -8,6 +8,8 @@ import { useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/utils/apiClient';
 import { logger } from '@/shared/utils/logger';
+import { tablesApi } from '@/features/tables/api/tablesApi';
+import { useTablesStore } from '@/features/tables/store/tablesStore';
 import {
   CHAT_SOURCE_PRESETS,
   resolveActivePreset,
@@ -233,9 +235,36 @@ export function useBoundRowDisplay(
 
   const updateColumn = async (colName: string, value: string | number | null) => {
     try {
-      await apiClient.put(`/tables/${tableId}/rows/${rowId}`, { data: { [colName]: value } });
+      await tablesApi.updateRow(String(tableId), String(rowId), { [colName]: value });
       queryClient.invalidateQueries({ queryKey: ['row', tableId, rowId] });
-    } catch (err) {
+    } catch (error) {
+      const err = error as Error & { code?: string; details?: Record<string, unknown> };
+      if (
+        (err?.code === 'VERIFICATION_REQUIRED' || err?.code === 'VERIFICATION_IMMUTABLE') &&
+        err.details &&
+        typeof err.details === 'object'
+      ) {
+        const d = err.details as {
+          verification_column_id?: number;
+          verification_column_name?: string;
+          offending_column?: string;
+          offending_value?: string;
+        };
+        if (d.verification_column_id && d.verification_column_name) {
+          useTablesStore.getState().openVerificationGate({
+            tableId: String(tableId),
+            rowId: String(rowId),
+            verificationColumnId: d.verification_column_id,
+            verificationColumnName: d.verification_column_name,
+            offendingColumn: d.offending_column ?? colName,
+            offendingValue: d.offending_value ?? (value == null ? null : String(value)),
+            offendingPrevValue: rowData[colName] ?? null,
+            reason: err.code === 'VERIFICATION_IMMUTABLE' ? 'immutable' : 'required',
+            message: err.message || 'Verification required',
+          });
+          return;
+        }
+      }
       logger.warn('[useBoundRowDisplay] Failed to update', colName, err);
     }
   };

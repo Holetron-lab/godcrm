@@ -7,15 +7,27 @@
 import { dbRun, dbGet, dbAll } from '../database/connection.js';
 import { logger } from '../utils/logger.js';
 import { registerWidgetSafe } from './WidgetLibraryService.js';
+import { ACCESS_LEVEL_VALUES, getEffectiveRole, hasPermission } from './EffectiveRoleService.js';
 
-export const VALID_ACCESS_LEVELS = ['admin', 'member', 'viewer'];
+export const VALID_ACCESS_LEVELS = ['owner', 'admin', 'member', 'viewer'];
+
+const ROLE_BY_MODULE_ACCESS = { owner: 'owner', admin: 'admin', member: 'editor', viewer: 'viewer' };
+
+function requiredModuleRole(accessLevel) {
+  return ROLE_BY_MODULE_ACCESS[accessLevel || 'member'] || 'owner';
+}
+
+export async function hasModuleAccess(userId, spaceId, accessLevel = 'member') {
+  return hasPermission(userId, requiredModuleRole(accessLevel), { spaceId });
+}
 
 /**
  * Get all modules for a space (sidebar list)
  * @param {number} spaceId - Space ID
+ * @param {number} userId - User whose effective space role controls visibility
  * @returns {Promise<Array>} Modules with widget data
  */
-export async function getModulesBySpace(spaceId) {
+export async function getModulesBySpace(spaceId, userId) {
   const modules = await dbAll(`
     SELECT
       m.id as module_id,
@@ -44,30 +56,34 @@ export async function getModulesBySpace(spaceId) {
     WHERE m.space_id = ?
     ORDER BY m.is_pinned DESC, m.sidebar_order ASC, w.id ASC
   `, [spaceId]);
+  const { effectiveRole } = await getEffectiveRole(userId, { spaceId });
+  const effectiveValue = ACCESS_LEVEL_VALUES[effectiveRole] ?? 0;
 
-  return modules.map(row => ({
-    module_id: row.module_id,
-    widget_id: row.widget_id,
-    space_id: row.space_id,
-    sidebar_order: row.sidebar_order,
-    sidebar_icon: row.sidebar_icon,
-    access_level: row.access_level,
-    is_pinned: row.is_pinned,
-    is_default: row.is_default,
-    widget: {
-      id: row.id,
-      dashboard_id: row.dashboard_id,
-      widget_type: row.widget_type,
-      preset_name: row.preset_name,
-      title: row.title,
-      description: row.description,
-      icon: row.icon,
-      config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config,
-      position: typeof row.position === 'string' ? JSON.parse(row.position) : row.position,
-      is_visible: row.is_visible,
-      order_index: row.order_index
-    }
-  }));
+  return modules
+    .filter(row => effectiveValue >= ACCESS_LEVEL_VALUES[requiredModuleRole(row.access_level)])
+    .map(row => ({
+      module_id: row.module_id,
+      widget_id: row.widget_id,
+      space_id: row.space_id,
+      sidebar_order: row.sidebar_order,
+      sidebar_icon: row.sidebar_icon,
+      access_level: row.access_level || 'member',
+      is_pinned: row.is_pinned,
+      is_default: row.is_default,
+      widget: {
+        id: row.id,
+        dashboard_id: row.dashboard_id,
+        widget_type: row.widget_type,
+        preset_name: row.preset_name,
+        title: row.title,
+        description: row.description,
+        icon: row.icon,
+        config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config,
+        position: typeof row.position === 'string' ? JSON.parse(row.position) : row.position,
+        is_visible: row.is_visible,
+        order_index: row.order_index
+      }
+    }));
 }
 
 /**

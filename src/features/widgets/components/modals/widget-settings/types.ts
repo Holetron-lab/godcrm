@@ -1,4 +1,4 @@
-import type { ColumnModel } from '@/features/tables/types/table.types';
+import type { ColumnModel, TableModel } from '@/features/tables/types/table.types';
 
 export interface WidgetSettingsColumnProps {
   safeColumns: ColumnModel[];
@@ -32,6 +32,9 @@ export interface KanbanSettingsProps extends WidgetSettingsColumnProps {
   setVisibleColumns: (v: string[]) => void;
   availableCardColumns: ColumnModel[];
   availableExpandedColumns: ColumnModel[];
+  eventsTableId: string;
+  setEventsTableId: (v: string) => void;
+  eventsTables: TableModel[];
 }
 
 export interface CalendarSettingsProps extends WidgetSettingsColumnProps {
@@ -45,6 +48,9 @@ export interface CalendarSettingsProps extends WidgetSettingsColumnProps {
   setCalendarDescriptionColumn: (v: string) => void;
   calendarColorColumn: string;
   setCalendarColorColumn: (v: string) => void;
+  eventsTableId: string;
+  setEventsTableId: (v: string) => void;
+  eventsTables: TableModel[];
 }
 
 export interface TimelineSettingsProps extends WidgetSettingsColumnProps {

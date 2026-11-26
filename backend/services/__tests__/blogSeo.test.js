@@ -6,14 +6,34 @@
  * hermetic unit test — no combat-master access (ADR-0009).
  */
 import { describe, it, expect, vi } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 // Avoid pulling the public.js → db graph; the render fns don't use it.
 vi.mock('../../routes/v3/public.js', () => ({ fetchPublicRows: vi.fn() }));
 
 const {
   esc, safeUrl, jsonLd, renderMarkdown,
-  renderPostPage, renderIndexPage, renderSitemap, renderRobots,
+  renderPostPage, renderIndexPage, renderSitemap, renderRobots, loadTemplate,
 } = await import('../blogSeo.js');
+
+describe('loadTemplate', () => {
+  it('reads a replaced index.html instead of serving stale asset hashes', () => {
+    const dist = fs.mkdtempSync(path.join(os.tmpdir(), 'blog-seo-template-'));
+    const templatePath = path.join(dist, 'index.html');
+    try {
+      fs.writeFileSync(templatePath, '<script src="/assets/old.js"></script>');
+      expect(loadTemplate(dist)).toContain('/assets/old.js');
+
+      fs.writeFileSync(templatePath, '<script src="/assets/new.js"></script>');
+      expect(loadTemplate(dist)).toContain('/assets/new.js');
+      expect(loadTemplate(dist)).not.toContain('/assets/old.js');
+    } finally {
+      fs.rmSync(dist, { recursive: true, force: true });
+    }
+  });
+});
 
 const TEMPLATE = [
   '<!DOCTYPE html><html lang="en"><head>',

@@ -4,7 +4,7 @@ import { logger } from '@/shared/utils/logger';
 import {
   extractNotionId, extractNotionUrls, extractAllNotionIds,
   generateLocalId, isGeneratedId, getIdFromNameId,
-  toNotionKey, parseNotionRelation, isNotionRelationColumn, convertValue
+  toNotionKey, parseNotionRelation, isNotionRelationColumn
 } from './notion-utils';
 import type { CSVFileData, CSVColumnDefinition, NotionImportLogEntry } from './types';
 import { useApplyNotionTransform } from './useApplyNotionTransform';

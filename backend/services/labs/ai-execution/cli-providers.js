@@ -212,7 +212,10 @@ export async function executeClaudeCode(params) {
     // AGENT_PERMS_TOKEN already lives on process.env (set by agent-permissions route
     // at module load); it carries through via the {...process.env} spread above.
     if (agentId != null) childEnv.AGENT_ID = String(agentId);
-    if (spaceId != null) childEnv.SPACE_ID = String(spaceId);
+    if (spaceId != null) {
+      childEnv.SPACE_ID = String(spaceId);
+      childEnv.MCP_SPACE_ID = String(spaceId);
+    }
     if (jobId != null) childEnv.MCP_JOB_ID = String(jobId);
     if (permissionsFailClosed) childEnv.AGENT_PERMS_FAIL_CLOSED = '1';
     Object.assign(childEnv, mcpGateEnv, opsGateEnv);
@@ -732,7 +735,7 @@ export async function executeCodexCli(params) {
     // https://learn.chatgpt.com/docs/extend/mcp?surface=cli
     // The ops gate token (services/ops/opsGate.js) must reach the MCP process the
     // same way: it is empty unless this agent holds a live grant in this space.
-    for (const [key, value] of Object.entries({ AGENT_ID: agentId, MCP_SPACE_ID: spaceId, MCP_JOB_ID: jobId, ...codexOpsGateEnv })) {
+    for (const [key, value] of Object.entries({ AGENT_ID: agentId, SPACE_ID: spaceId, MCP_SPACE_ID: spaceId, MCP_JOB_ID: jobId, ...codexOpsGateEnv })) {
       args.push('-c', `mcp_servers.godcrm.env.${key}=${JSON.stringify(String(value ?? ''))}`);
     }
     const codexBin = process.env.CODEX_CLI_BIN || 'codex';

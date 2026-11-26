@@ -28,8 +28,24 @@ interface ParsedTime {
   hours: number;
   minutes: number;
   dayOfMonth?: number;  // 1-31
-  dayOfWeek?: number;   // 0-6 (Вс-Сб)
+  daysOfWeek?: number[]; // 0-6 (Вс-Сб), по возрастанию
 }
+
+const DAY_SHORT = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+const DAY_NAMES = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+// Неделя с понедельника — порядок кнопок и подписи
+const WEEK = [1, 2, 3, 4, 5, 6, 0];
+
+// Поле дня недели cron: «1», «1,3,5», «1-5»; 7 — тоже воскресенье
+const parseDaysOfWeek = (field: string): number[] | undefined => {
+  const days = new Set<number>();
+  for (const part of field.split(',')) {
+    const range = part.match(/^([0-7])(?:-([0-7]))?$/);
+    if (!range) continue;
+    for (let day = Number(range[1]); day <= Number(range[2] ?? range[1]); day++) days.add(day % 7);
+  }
+  return days.size > 0 ? [...days].sort((a, b) => a - b) : undefined;
+};
 
 // Парсинг cron формата: "минуты часы день_месяца месяц день_недели"
 const parseCronValue = (value: unknown): ParsedTime | null => {
@@ -37,7 +53,7 @@ const parseCronValue = (value: unknown): ParsedTime | null => {
   
   const str = String(value).trim();
   
-  // Cron формат: "30 14 15 * *" или "30 14 * * 1"
+  // Cron формат: "30 14 15 * *", "30 14 * * 1" или "30 14 * * 1,3,5"
   const cronParts = str.split(/\s+/);
   if (cronParts.length >= 5) {
     const [mins, hrs, dom, , dow] = cronParts;
@@ -49,7 +65,7 @@ const parseCronValue = (value: unknown): ParsedTime | null => {
         minutes,
         hours,
         dayOfMonth: dom !== '*' ? parseInt(dom, 10) : undefined,
-        dayOfWeek: dow !== '*' ? parseInt(dow, 10) : undefined,
+        daysOfWeek: parseDaysOfWeek(dow),
       };
     }
   }
@@ -68,9 +84,9 @@ const parseCronValue = (value: unknown): ParsedTime | null => {
 
 // Конвертация в cron формат для хранения
 const toCronFormat = (parsed: ParsedTime): string => {
-  const { minutes, hours, dayOfMonth, dayOfWeek } = parsed;
+  const { minutes, hours, dayOfMonth, daysOfWeek } = parsed;
   const dom = dayOfMonth !== undefined ? String(dayOfMonth) : '*';
-  const dow = dayOfWeek !== undefined ? String(dayOfWeek) : '*';
+  const dow = daysOfWeek?.length ? daysOfWeek.join(',') : '*';
   return `${minutes} ${hours} ${dom} * ${dow}`;
 };
 
@@ -92,21 +108,30 @@ const formatTimeDisplay = (parsed: ParsedTime, config?: TimeConfig): string => {
     return `${parsed.dayOfMonth}-е, ${timeStr}`;
   }
   
-  // День недели: "Пн, 14:30"
-  if (parsed.dayOfWeek !== undefined) {
-    const days = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-    return `${days[parsed.dayOfWeek]}, ${timeStr}`;
+  // День недели: "Пн, 14:30"; несколько дней: "пн, ср, пт 18:00"
+  if (parsed.daysOfWeek?.length === 1) {
+    return `${DAY_SHORT[parsed.daysOfWeek[0]]}, ${timeStr}`;
+  }
+  if (parsed.daysOfWeek) {
+    const days = WEEK.filter(day => parsed.daysOfWeek?.includes(day));
+    return `${days.map(day => DAY_SHORT[day].toLowerCase()).join(', ')} ${timeStr}`;
   }
   
   // Просто время: "14:30"
   return timeStr;
 };
 
+// Подпись расписания для мест вне ячейки (карточка канбана): «пн, ср, пт 18:00»
+export const formatCronLabel = (value: unknown, config?: TimeConfig): string | null => {
+  const parsed = parseCronValue(value);
+  return parsed ? formatTimeDisplay(parsed, config) : null;
+};
+
 // Определить режим из сохранённого cron
 const detectModeFromParsed = (parsed: ParsedTime | null): ScheduleMode => {
   if (!parsed) return 'time';
   if (parsed.dayOfMonth !== undefined) return 'monthly';
-  if (parsed.dayOfWeek !== undefined) return 'weekly';
+  if (parsed.daysOfWeek) return 'weekly';
   return 'time';
 };
 
@@ -126,7 +151,7 @@ export const TimeCell: React.FC<TimeCellProps> = ({
   const [hours, setHours] = useState(parsed?.hours ?? 12);
   const [minutes, setMinutes] = useState(parsed?.minutes ?? 0);
   const [dayOfMonth, setDayOfMonth] = useState(parsed?.dayOfMonth ?? 1);
-  const [dayOfWeek, setDayOfWeek] = useState(parsed?.dayOfWeek ?? 1);
+  const [daysOfWeek, setDaysOfWeek] = useState(parsed?.daysOfWeek ?? [1]);
   
   const inputRef = useRef<HTMLInputElement>(null);
   
@@ -143,7 +168,7 @@ export const TimeCell: React.FC<TimeCellProps> = ({
       setHours(newParsed.hours);
       setMinutes(newParsed.minutes);
       if (newParsed.dayOfMonth !== undefined) setDayOfMonth(newParsed.dayOfMonth);
-      if (newParsed.dayOfWeek !== undefined) setDayOfWeek(newParsed.dayOfWeek);
+      if (newParsed.daysOfWeek) setDaysOfWeek(newParsed.daysOfWeek);
       setMode(detectModeFromParsed(newParsed));
     }
   }, [value]);
@@ -168,12 +193,18 @@ export const TimeCell: React.FC<TimeCellProps> = ({
       if (mode === 'monthly') {
         result.dayOfMonth = dayOfMonth;
       } else if (mode === 'weekly') {
-        result.dayOfWeek = dayOfWeek;
+        result.daysOfWeek = daysOfWeek;
       }
       
       onSave(toCronFormat(result));
     };
     
+    // Хотя бы один день остаётся выбранным
+    const toggleDay = (day: number) => setDaysOfWeek(current => {
+      if (!current.includes(day)) return [...current, day].sort((a, b) => a - b);
+      return current.length > 1 ? current.filter(selected => selected !== day) : current;
+    });
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
       if (e.key === 'Enter') {
         handleSave();
@@ -212,6 +243,7 @@ export const TimeCell: React.FC<TimeCellProps> = ({
             </button>
             <button
               type="button"
+              id={`${fieldId}-weekly`}
               onClick={() => setMode('weekly')}
               className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
                 mode === 'weekly' 
@@ -257,23 +289,28 @@ export const TimeCell: React.FC<TimeCellProps> = ({
           </div>
         )}
         
-        {/* День недели */}
+        {/* Дни недели */}
         {mode === 'weekly' && (
           <div className="flex items-center gap-2">
             <Repeat className="w-4 h-4 text-[var(--text-tertiary)]" />
-            <select
-              value={dayOfWeek}
-              onChange={(e) => setDayOfWeek(Number(e.target.value))}
-              className="flex-1 px-2 py-1.5 rounded border border-[var(--border-primary)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-sm"
-            >
-              <option value="1">Понедельник</option>
-              <option value="2">Вторник</option>
-              <option value="3">Среда</option>
-              <option value="4">Четверг</option>
-              <option value="5">Пятница</option>
-              <option value="6">Суббота</option>
-              <option value="0">Воскресенье</option>
-            </select>
+            <div role="group" aria-labelledby={`${fieldId}-weekly`} className="flex flex-1 gap-1">
+              {WEEK.map(day => (
+                <button
+                  key={day}
+                  type="button"
+                  aria-label={DAY_NAMES[day]}
+                  aria-pressed={daysOfWeek.includes(day)}
+                  onClick={() => toggleDay(day)}
+                  className={`flex-1 px-1 py-1.5 text-xs rounded transition-colors ${
+                    daysOfWeek.includes(day)
+                      ? 'bg-[var(--color-primary-500)] text-white'
+                      : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'
+                  }`}
+                >
+                  {DAY_SHORT[day]}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         
@@ -285,7 +322,7 @@ export const TimeCell: React.FC<TimeCellProps> = ({
               hours,
               minutes,
               dayOfMonth: mode === 'monthly' ? dayOfMonth : undefined,
-              dayOfWeek: mode === 'weekly' ? dayOfWeek : undefined,
+              daysOfWeek: mode === 'weekly' ? daysOfWeek : undefined,
             }, config)}
           </span>
           {mode !== 'time' && <Repeat className="w-3 h-3 text-[var(--color-primary-500)]" />}
@@ -316,7 +353,7 @@ export const TimeCell: React.FC<TimeCellProps> = ({
   }
   
   const displayText = formatTimeDisplay(parsed, config);
-  const isRecurring = parsed.dayOfMonth !== undefined || parsed.dayOfWeek !== undefined;
+  const isRecurring = parsed.dayOfMonth !== undefined || parsed.daysOfWeek !== undefined;
   
   return (
     <div className="flex items-center gap-1.5 text-sm">

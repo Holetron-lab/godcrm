@@ -2,16 +2,24 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
 /**
  * ScheduleDatePicker — Inline datetime picker for scheduling messages.
  * WP-17: Ported from DateEditor (tables), simplified for chat use.
+ * ADR-208 D8: optional "Repeat" section (presets → cron, free-form cron, end condition, timezone).
  */
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Clock, Send, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Globe, Repeat, Send, X } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
+import type { ScheduleSeries } from '../hooks/useScheduledMessages';
+import {
+  buildCron, formatCronLabel, getBrowserTimezone, isValidTimezone, listTimezones,
+  WEEKDAY_KEYS, type RecurrenceForm, type RecurrencePreset,
+} from '../utils/scheduleRecurrence';
 
 interface ScheduleDatePickerProps {
   onSchedule: (isoDate: string) => void;
   onCancel: () => void;
   isScheduling?: boolean;
+  /** ADR-208 D8: when provided, the "Repeat" section is shown and series are submitted through it. */
+  onScheduleSeries?: (series: ScheduleSeries) => void;
 }
 
 const MONTHS_RU = ["dateSettings.months.jan", "dateSettings.months.feb", "dateSettings.months.mar", "dateSettings.months.apr", "dateSettings.months.may", "dateSettings.months.jun", "dateSettings.months.jul", "dateSettings.months.aug", "dateSettings.months.sep", "dateSettings.months.oct", "dateSettings.months.nov", "dateSettings.months.dec"];
@@ -26,8 +34,23 @@ const QUICK_OPTIONS = [
   { label: "aiChat.ui.tomorrowAt1200", getDate: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(12, 0, 0, 0); return d; } },
 ];
 
-export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: ScheduleDatePickerProps) {
-  const { t } = useLanguage();
+const PRESETS: Array<{ value: RecurrencePreset; labelKey: string }> = [
+  { value: 'none', labelKey: 'aiChat.ui.repeatNone' },
+  { value: 'daily', labelKey: 'aiChat.ui.repeatDaily' },
+  { value: 'weekdays', labelKey: 'aiChat.ui.repeatWeekdays' },
+  { value: 'weekly', labelKey: 'aiChat.ui.repeatWeekly' },
+  { value: 'monthly', labelKey: 'aiChat.ui.repeatMonthly' },
+  { value: 'cron', labelKey: 'aiChat.ui.repeatCron' },
+];
+
+const ISO_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7];
+const TZ_LIST_ID = 'schedule-timezone-options';
+
+const fieldClass = "text-xs bg-[var(--bg-tertiary)] rounded px-1.5 py-1 text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30";
+const labelClass = "text-[10px] text-[var(--text-tertiary)] uppercase font-medium";
+
+export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling, onScheduleSeries }: ScheduleDatePickerProps) {
+  const { t, language } = useLanguage();
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -35,6 +58,16 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
   const [hours, setHours] = useState(String(now.getHours()).padStart(2, '0'));
   const [minutes, setMinutes] = useState(String(Math.min(59, now.getMinutes() + 5)).padStart(2, '0'));
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // ADR-208 D8 — recurrence form (only rendered when onScheduleSeries is provided)
+  const [preset, setPreset] = useState<RecurrencePreset>('none');
+  const [weekdays, setWeekdays] = useState<number[]>([]);
+  const [monthDay, setMonthDay] = useState(String(now.getDate()));
+  const [cronText, setCronText] = useState('');
+  const [endless, setEndless] = useState(true);
+  const [maxRuns, setMaxRuns] = useState('10');
+  const [timezone, setTimezone] = useState(getBrowserTimezone);
+  const timezones = useMemo(listTimezones, []);
 
   // Close on outside click
   useEffect(() => {
@@ -74,14 +107,42 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
     setViewMonth(d.getMonth());
   };
 
-  const handleSchedule = () => {
-    if (!selectedDate) return;
-    const h = parseInt(hours) || 0;
-    const m = parseInt(minutes) || 0;
+  const hour = Math.min(23, Math.max(0, parseInt(hours) || 0));
+  const minute = Math.min(59, Math.max(0, parseInt(minutes) || 0));
+
+  const selectedInstant = (() => {
+    if (!selectedDate) return null;
     const scheduled = new Date(selectedDate);
-    scheduled.setHours(h, m, 0, 0);
-    if (scheduled.getTime() <= Date.now()) return; // Can't schedule in the past
-    onSchedule(scheduled.toISOString());
+    scheduled.setHours(hour, minute, 0, 0);
+    return scheduled;
+  })();
+  const selectedInFuture = !!selectedInstant && selectedInstant.getTime() > Date.now();
+
+  const isSeries = !!onScheduleSeries && preset !== 'none';
+  const recurrenceForm: RecurrenceForm = {
+    preset, hour, minute, weekdays,
+    monthDay: Math.min(31, Math.max(1, parseInt(monthDay) || 1)),
+    cron: cronText,
+  };
+  const cron = isSeries ? buildCron(recurrenceForm) : null;
+  const timezoneValid = isValidTimezone(timezone);
+  const maxRunsValue = endless ? null : parseInt(maxRuns);
+  const maxRunsValid = endless || (Number.isInteger(maxRunsValue) && (maxRunsValue as number) >= 1);
+  const canScheduleSeries = cron !== null && timezoneValid && maxRunsValid && (!selectedDate || selectedInFuture);
+
+  const handleSchedule = () => {
+    if (isSeries) {
+      if (!canScheduleSeries || !cron || !onScheduleSeries) return;
+      onScheduleSeries({
+        recurrence_cron: cron,
+        timezone,
+        max_runs: maxRunsValue,
+        scheduled_at: selectedInstant && selectedInFuture ? selectedInstant.toISOString() : null,
+      });
+      return;
+    }
+    if (!selectedInstant || !selectedInFuture) return; // Can't schedule in the past
+    onSchedule(selectedInstant.toISOString());
   };
 
   const handleQuickOption = (opt: typeof QUICK_OPTIONS[number]) => {
@@ -93,6 +154,9 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
     }
     onSchedule(d.toISOString());
   };
+
+  const toggleWeekday = (day: number) =>
+    setWeekdays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]);
 
   const isToday = (date: Date) => {
     const t = new Date();
@@ -110,13 +174,7 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
     return date < today;
   };
 
-  const canSchedule = selectedDate && (() => {
-    const h = parseInt(hours) || 0;
-    const m = parseInt(minutes) || 0;
-    const d = new Date(selectedDate);
-    d.setHours(h, m, 0, 0);
-    return d.getTime() > Date.now();
-  })();
+  const canSchedule = isSeries ? canScheduleSeries : selectedInFuture;
 
   return (
     <div ref={containerRef} className="mx-1 bg-[var(--bg-secondary)] border border-[var(--border-secondary)] rounded-xl shadow-xl z-50 overflow-hidden">
@@ -125,7 +183,7 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
         <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-primary)]">
           <Clock className="w-3.5 h-3.5 text-[var(--color-primary-500)]" />
           {t('aiChat.ui.scheduleSend')}</div>
-        <button onClick={onCancel} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+        <button onClick={onCancel} aria-label={t('aiChat.ui.close')} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -133,10 +191,11 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
       <div className="flex">
         {/* Quick options */}
         <div className="w-36 border-r border-[var(--border-secondary)] py-1.5">
-          <div className="px-2 py-1 text-[10px] text-[var(--text-tertiary)] uppercase font-medium">{t('aiChat.ui.quickSelection')}</div>
+          <div className={cn('px-2 py-1', labelClass)}>{t('aiChat.ui.quickSelection')}</div>
           {QUICK_OPTIONS.map((opt) => (
-            <button key={t(opt.label)} onClick={() => handleQuickOption(opt)} disabled={isScheduling}
-              className="w-full px-3 py-1.5 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors">
+            <button key={opt.label} onClick={() => handleQuickOption(opt)} disabled={isScheduling || isSeries}
+              title={isSeries ? t('aiChat.ui.quickOptionsDisabledForSeries') : undefined}
+              className="w-full px-3 py-1.5 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent">
               {t(opt.label)}
             </button>
           ))}
@@ -146,13 +205,13 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
         <div className="flex-1 p-2">
           {/* Month nav */}
           <div className="flex items-center justify-between mb-2">
-            <button onClick={() => goMonth(-1)} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+            <button onClick={() => goMonth(-1)} aria-label={t('aiChat.ui.previousMonth')} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
               <ChevronLeft className="w-4 h-4" />
             </button>
             <span className="text-xs font-medium text-[var(--text-primary)]">
               {t(MONTHS_RU[viewMonth])} {viewYear}
             </span>
-            <button onClick={() => goMonth(1)} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
+            <button onClick={() => goMonth(1)} aria-label={t('aiChat.ui.nextMonth')} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
@@ -167,7 +226,8 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
           {/* Days grid */}
           <div className="grid grid-cols-7 gap-0">
             {calendarDays.map((d, i) => (
-              <button key={i} disabled={isPast(d.date)} onClick={() => setSelectedDate(d.date)}
+              <button key={i} disabled={isPast(d.date)} onClick={() => setSelectedDate(isSelected(d.date) && isSeries ? null : d.date)}
+                aria-pressed={isSelected(d.date)}
                 className={cn(
                   "w-7 h-7 text-xs rounded-md transition-colors flex items-center justify-center",
                   d.month !== 'current' && "text-[var(--text-tertiary)]/40",
@@ -185,13 +245,13 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
           {/* Time input + schedule button */}
           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[var(--border-secondary)]">
             <Clock className="w-3.5 h-3.5 text-[var(--text-tertiary)] flex-shrink-0" />
-            <input type="text" value={hours} maxLength={2}
+            <input type="text" value={hours} maxLength={2} aria-label={t('aiChat.ui.hours')}
               onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 2); setHours(v); }}
               onBlur={() => setHours(String(Math.min(23, Math.max(0, parseInt(hours) || 0))).padStart(2, '0'))}
               className="w-8 text-center text-xs bg-[var(--bg-tertiary)] rounded px-1 py-1 text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
             />
             <span className="text-xs text-[var(--text-tertiary)]">:</span>
-            <input type="text" value={minutes} maxLength={2}
+            <input type="text" value={minutes} maxLength={2} aria-label={t('aiChat.ui.minutes')}
               onChange={(e) => { const v = e.target.value.replace(/\D/g, '').slice(0, 2); setMinutes(v); }}
               onBlur={() => setMinutes(String(Math.min(59, Math.max(0, parseInt(minutes) || 0))).padStart(2, '0'))}
               className="w-8 text-center text-xs bg-[var(--bg-tertiary)] rounded px-1 py-1 text-[var(--text-primary)] border border-[var(--border-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-primary-500)]/30"
@@ -203,12 +263,104 @@ export function ScheduleDatePicker({ onSchedule, onCancel, isScheduling }: Sched
                   ? "bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-600)]"
                   : "bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] cursor-not-allowed"
               )}>
-              <Send className="w-3 h-3" />
-              {isScheduling ? t('aiChat.ui.saving') : t('aiChat.ui.schedule')}
+              {isSeries ? <Repeat className="w-3 h-3" /> : <Send className="w-3 h-3" />}
+              {isScheduling ? t('aiChat.ui.saving') : t(isSeries ? 'aiChat.ui.scheduleSeries' : 'aiChat.ui.schedule')}
             </button>
           </div>
         </div>
       </div>
+
+      {/* ADR-208 D8 — Repeat section */}
+      {onScheduleSeries && (
+        <div className="border-t border-[var(--border-secondary)] px-3 py-2 space-y-2">
+          <div className="flex items-center gap-2">
+            <label htmlFor="schedule-repeat-preset" className={cn('flex items-center gap-1', labelClass)}>
+              <Repeat className="w-3 h-3" />
+              {t('aiChat.ui.repeat')}
+            </label>
+            <select id="schedule-repeat-preset" value={preset} onChange={(e) => setPreset(e.target.value as RecurrencePreset)}
+              className={cn(fieldClass, 'flex-1 min-w-0')}>
+              {PRESETS.map(p => <option key={p.value} value={p.value}>{t(p.labelKey)}</option>)}
+            </select>
+          </div>
+
+          {preset === 'weekly' && (
+            <div role="group" aria-label={t('aiChat.ui.repeatWeekly')} className="flex gap-1">
+              {ISO_WEEKDAYS.map(day => (
+                <button key={day} type="button" onClick={() => toggleWeekday(day)} aria-pressed={weekdays.includes(day)}
+                  className={cn("flex-1 py-1 text-[10px] rounded-md border transition-colors",
+                    weekdays.includes(day)
+                      ? "bg-[var(--color-primary-500)] text-white border-transparent"
+                      : "bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-primary)] hover:text-[var(--text-primary)]")}>
+                  {t(WEEKDAY_KEYS[day])}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {preset === 'monthly' && (
+            <div className="flex items-center gap-2">
+              <label htmlFor="schedule-month-day" className={labelClass}>{t('aiChat.ui.monthDay')}</label>
+              <input id="schedule-month-day" type="number" min={1} max={31} value={monthDay}
+                onChange={(e) => setMonthDay(e.target.value)} className={cn(fieldClass, 'w-16')} />
+            </div>
+          )}
+
+          {preset === 'cron' && (
+            <div className="space-y-1">
+              <input type="text" value={cronText} onChange={(e) => setCronText(e.target.value)}
+                aria-label={t('aiChat.ui.repeatCron')} aria-invalid={cronText.trim() !== '' && cron === null}
+                placeholder={t('aiChat.ui.cronPlaceholder')} spellCheck={false}
+                className={cn(fieldClass, 'w-full font-mono')} />
+              {cronText.trim() !== '' && cron === null && (
+                <p role="alert" className="text-[10px] text-red-400">{t('aiChat.ui.cronInvalid')}</p>
+              )}
+            </div>
+          )}
+
+          {isSeries && (
+            <>
+              <div className="flex items-center gap-2">
+                <label htmlFor="schedule-end" className={labelClass}>{t('aiChat.ui.endCondition')}</label>
+                <select id="schedule-end" value={endless ? 'never' : 'count'} onChange={(e) => setEndless(e.target.value === 'never')}
+                  className={cn(fieldClass, 'flex-1 min-w-0')}>
+                  <option value="never">{t('aiChat.ui.endNever')}</option>
+                  <option value="count">{t('aiChat.ui.endAfterRuns')}</option>
+                </select>
+                {!endless && (
+                  <input type="number" min={1} value={maxRuns} onChange={(e) => setMaxRuns(e.target.value)}
+                    aria-label={t('aiChat.ui.runsCount')} aria-invalid={!maxRunsValid}
+                    className={cn(fieldClass, 'w-16', !maxRunsValid && 'border-red-400')} />
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label htmlFor="schedule-timezone" className={cn('flex items-center gap-1', labelClass)}>
+                  <Globe className="w-3 h-3" />
+                  {t('aiChat.ui.timezone')}
+                </label>
+                <input id="schedule-timezone" type="text" list={TZ_LIST_ID} value={timezone}
+                  onChange={(e) => setTimezone(e.target.value.trim())} aria-invalid={!timezoneValid} spellCheck={false}
+                  className={cn(fieldClass, 'flex-1 min-w-0', !timezoneValid && 'border-red-400')} />
+                <datalist id={TZ_LIST_ID}>
+                  {timezones.map(tz => <option key={tz} value={tz} />)}
+                </datalist>
+              </div>
+              {!timezoneValid && <p role="alert" className="text-[10px] text-red-400">{t('aiChat.ui.timezoneInvalid')}</p>}
+
+              {cron && (
+                <p className="text-[11px] text-[var(--text-secondary)]" data-testid="recurrence-preview">
+                  <span className="text-[var(--text-primary)] font-medium">↻ {formatCronLabel(cron, t)}</span>
+                  {' · '}{timezone}
+                  {' · '}{selectedInstant && selectedInFuture
+                    ? t('aiChat.ui.firstRunAt', { date: selectedInstant.toLocaleString(language, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })
+                    : t('aiChat.ui.firstRunAuto')}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

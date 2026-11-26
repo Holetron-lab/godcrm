@@ -112,6 +112,28 @@ describe('useLaneAxis', () => {
       expect(result.current.rowsByLane.get(unassigned!.key)?.map((r) => r.id)).toEqual([3]);
     });
 
+    it('accepts a module-installed relation without an enabled flag', () => {
+      const importedColumn: LaneAxisColumn = {
+        name: 'assignee',
+        type: 'relation',
+        config: { relation: { tableId: 7, labelColumn: 'name' } },
+      };
+      const { result } = renderHook(() =>
+        useLaneAxis({ groupByColumn: importedColumn, rows, relationData, unmatchedRowMode: 'drop' }),
+      );
+      expect(result.current.kind).toBe('relation');
+      expect(result.current.lanes.map((lane) => lane.label)).toEqual(['Bob', 'Alice']);
+
+      const disabledColumn: LaneAxisColumn = {
+        ...importedColumn,
+        config: { relation: { enabled: false, tableId: 7 } },
+      };
+      const disabled = renderHook(() =>
+        useLaneAxis({ groupByColumn: disabledColumn, rows, relationData }),
+      );
+      expect(disabled.result.current.kind).toBe('text');
+    });
+
     it('falls back to relatedTableId when relation.tableId missing', () => {
       const altColumn: LaneAxisColumn = {
         name: 'assignee',

@@ -5,7 +5,7 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
  * The old collapsed "N закреплённых ▾" strip is gone: the pinned count now
  * lives solely on the toolbar Pin badge (ChatToolbar). This component only
  * renders the pinned list, and only while `open` (driven by that toolbar
- * button). Each row is a message-style card — rounded corners, accent left border,
+ * button). Each row is a MessagePreviewCard — rounded corners, accent left border,
  * sender/status header + actions, divider, and two-line Markdown preview.
  *
  * Accepts a generic `PinnedBannerItem` shape so both the new canvas
@@ -14,29 +14,14 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
  */
 
 import { useMemo, useState } from 'react';
-import { Bot, Copy, Forward, Monitor, User, X } from 'lucide-react';
-import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
+import { Copy, Forward, X } from 'lucide-react';
 import { showToast } from '@/shared/hooks/useToast';
 import type { ProcessingActiveAgent } from './AIChatPanel/components/ProcessingStatusBar';
-import { Avatar } from '@/shared/components/ui/Avatar';
+import { MessagePreviewCard, type MessagePreviewItem } from './MessagePreviewCard';
 
-export interface PinnedBannerItem {
-  id: number | string;
-  content: string;
+export interface PinnedBannerItem extends MessagePreviewItem {
   pinned_at?: string | null;
   is_deleted?: boolean;
-  /** Display label for the sender of the pinned message (e.g. "Вы", agent name). */
-  senderLabel?: string;
-  sender_id?: number;
-  role?: string;
-  timestamp?: Date | string;
-  created_at?: string;
-  sender_name?: string;
-  sender_avatar?: string;
-  agentName?: string;
-  agent_icon?: string;
-  agent_color?: string;
-  sender?: { name: string; avatar?: string };
 }
 
 export interface PinnedBannerProps {
@@ -59,7 +44,7 @@ export interface PinnedBannerProps {
 const PIN_CAP = 50;
 
 export function PinnedBanner({ messages, onJump, onUnpin, onForward, activeAgents = [], capReached, onClearCapNotice, open: openProp, onOpenChange }: PinnedBannerProps) {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [openInternal] = useState(false);
   const isControlled = openProp !== undefined;
   const open = isControlled ? !!openProp : openInternal;
@@ -96,64 +81,32 @@ export function PinnedBanner({ messages, onJump, onUnpin, onForward, activeAgent
       {open && pinned.length > 0 && (
         <ul className="max-h-[40vh] overflow-y-auto flex flex-col gap-1 p-1.5">
           {pinned.map((m) => {
-            const isSystem = m.role === 'system' || m.role === 'tool';
-            const isAgent = !isSystem && (m.role === 'assistant' || !!m.agentName || !!m.agent_icon);
-            const senderType = isSystem ? t('aiChat.ui.system') : isAgent ? t('aiChat.ui.agent') : t('aiChat.ui.person');
-            const SenderIcon = isSystem ? Monitor : isAgent ? Bot : User;
-            const senderName = m.senderLabel || m.sender_name || m.sender?.name || m.agentName || senderType;
-            const sentAt = m.timestamp || m.created_at;
-            const date = sentAt ? new Date(sentAt) : null;
-            const validDate = date && !Number.isNaN(date.getTime()) ? date : null;
-            const isActive = isAgent && activeAgents.some(agent =>
-              (!agent.inflight_status || agent.inflight_status === 'running') &&
-              (m.sender_id != null && agent.agent_user_id != null
-                ? agent.agent_user_id === m.sender_id
-                : agent.agent_name === senderName));
             const actionClass = 'flex h-7 w-7 shrink-0 items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2';
             return (
-              <li
+              <MessagePreviewCard
                 key={m.id}
-                style={{ borderLeftColor: m.agent_color || 'var(--text-tertiary)' }}
-                className="min-w-0 rounded-xl px-2 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] border-l-4 hover:bg-[var(--bg-tertiary)] transition-colors"
-              >
-                <div className="mb-2 border-b border-[var(--border-secondary)] pb-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => { onJump(m.id); setOpen(false); }}
-                    aria-label={t('aiChat.ui.jumpToSenderMessage', { name: senderName })}
-                    className="flex min-w-0 items-center gap-1 text-left text-xs focus-visible:outline focus-visible:outline-2"
-                  >
-                    <Avatar url={m.sender_avatar || m.sender?.avatar} emoji={m.agent_icon} name={senderName} color={m.agent_color} size={20} />
-                    <span role="img" aria-label={isAgent ? (isActive ? t('aiChat.ui.agentIsActive') : t('aiChat.ui.agentIsInactive')) : t('aiChat.ui.unknownStatus')}
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${isActive ? 'bg-green-500' : 'bg-[var(--text-tertiary)]'}`} />
-                    <span className="truncate font-medium text-[var(--text-primary)]" title={senderName}>{senderName}</span>
-                    <SenderIcon className="h-3 w-3 shrink-0 text-[var(--text-secondary)]" aria-label={senderType} />
-                  </button>
-                  <div className="flex shrink-0 items-center gap-0.5">
-                    {validDate && (
-                      <time dateTime={validDate.toISOString()} className="whitespace-nowrap text-[10px] tabular-nums text-[var(--text-secondary)]">
-                        {validDate.toLocaleString(language, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      </time>
-                    )}
-                    {onForward && <button type="button" onClick={() => onForward(m.id)} className={actionClass} title={t('aiChat.ui.forward')} aria-label={t('aiChat.ui.forward')}><Forward className="h-3.5 w-3.5" /></button>}
-                    <button type="button" className={actionClass} title={t('settings.profile.referralCopy')} aria-label={t('settings.profile.referralCopy')} onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(m.content);
-                        showToast(t('aiChat.ui.messageCopied'), 'success');
-                      } catch {
-                        showToast(t('aiChat.ui.couldNotCopyMessage'), 'error');
-                      }
-                    }}><Copy className="h-3.5 w-3.5" /></button>
-                    {onUnpin && <button type="button" onClick={() => onUnpin(m.id)} className={actionClass} title={t('aiChat.ui.unpin')} aria-label={t('aiChat.ui.unpin')}><X className="h-3.5 w-3.5" /></button>}
-                  </div>
-                </div>
-                <div className="relative max-h-8 overflow-hidden text-xs leading-4">
-                  <div aria-hidden="true" ref={(node) => { node?.setAttribute('inert', ''); }} className="pointer-events-none">
-                    <MarkdownPreview content={m.content} className="line-clamp-2 [&_*]:!text-xs [&_*]:!leading-4 [&_*]:!my-0 [&_*]:!py-0 [&_img]:hidden [&_button]:hidden [&_hr]:hidden" />
-                  </div>
-                  <button type="button" className="absolute inset-0 w-full focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2" aria-label={t('aiChat.ui.openSenderMessage', { name: senderName, content: m.content })} onClick={() => { onJump(m.id); setOpen(false); }} />
-                </div>
-              </li>
+                message={m}
+                onOpen={() => { onJump(m.id); setOpen(false); }}
+                headerLabelKey="aiChat.ui.jumpToSenderMessage"
+                bodyLabelKey="aiChat.ui.openSenderMessage"
+                isAgentActive={(senderName) => activeAgents.some(agent =>
+                  (!agent.inflight_status || agent.inflight_status === 'running') &&
+                  (m.sender_id != null && agent.agent_user_id != null
+                    ? agent.agent_user_id === m.sender_id
+                    : agent.agent_name === senderName))}
+                actions={<>
+                  {onForward && <button type="button" onClick={() => onForward(m.id)} className={actionClass} title={t('aiChat.ui.forward')} aria-label={t('aiChat.ui.forward')}><Forward className="h-3.5 w-3.5" /></button>}
+                  <button type="button" className={actionClass} title={t('settings.profile.referralCopy')} aria-label={t('settings.profile.referralCopy')} onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(m.content);
+                      showToast(t('aiChat.ui.messageCopied'), 'success');
+                    } catch {
+                      showToast(t('aiChat.ui.couldNotCopyMessage'), 'error');
+                    }
+                  }}><Copy className="h-3.5 w-3.5" /></button>
+                  {onUnpin && <button type="button" onClick={() => onUnpin(m.id)} className={actionClass} title={t('aiChat.ui.unpin')} aria-label={t('aiChat.ui.unpin')}><X className="h-3.5 w-3.5" /></button>}
+                </>}
+              />
             );
           })}
         </ul>

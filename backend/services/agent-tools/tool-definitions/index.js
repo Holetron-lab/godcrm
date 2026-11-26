@@ -25,6 +25,7 @@ import { PRINTER_TOOLS } from './printer.js';
 import { CONNECTOR_TOOL_DEFS } from '../connector-tools.js';
 import { PASSPORT_TOOLS } from './passport.js';
 import { OPS_TOOLS } from './ops.js';
+import { CODEMODE_TOOLS } from './codemode.js';
 
 // Build a lookup so we can reference any tool by its function name.
 const byName = Object.fromEntries(
@@ -73,6 +74,8 @@ export const AGENT_TOOLS = [
   t('list_tables'),
 
   // === DASHBOARD TOOLS ===
+  t('list_dashboards'),
+  t('get_dashboard'),
   t('create_dashboard'),
   t('get_dashboard_widgets'),
 
@@ -151,6 +154,7 @@ export const AGENT_TOOLS = [
   // === P1 — Communication & Widget Management ===
   t('send_chat_message'),
   t('send_widget_message'),
+  t('schedule_message'),
   t('list_conversations'),
   t('get_conversation_messages'),
   t('create_conversation'),
@@ -163,6 +167,8 @@ export const AGENT_TOOLS = [
   t('list_documents'),
   t('get_document_content'),
   t('create_document'),
+  t('import_document_file'),
+  t('check_document_import'),
   t('delete_document'),
   t('list_projects'),
   t('create_project'),
@@ -226,4 +232,5 @@ export const AGENT_TOOLS = [
   t('project_csv'),
   t('midjourney_image_generate'),
   t('midjourney_check_task'),
+  ...(process.env.CODEMODE_ENABLED === 'true' ? CODEMODE_TOOLS : []),
 ];

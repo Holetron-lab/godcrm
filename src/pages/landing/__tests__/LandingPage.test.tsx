@@ -31,15 +31,46 @@ describe('LandingPage — GEO pack (docs 254978 §2/§4, 255025 §B)', () => {
     expect(cards.map((d) => d.querySelector('summary h3')?.textContent)).toEqual(
       copy.faq.items.map((i) => i.q),
     );
+    expect(cards.map((d) => d.querySelector('.cap-card-body p')?.textContent)).toEqual(
+      copy.faq.items.map((i) => i.a),
+    );
     for (const card of cards) {
       expect(card.open).toBe(false);
       expect(card.querySelector('summary .cap-card-toggle')).not.toBeNull();
     }
-    for (const item of copy.faq.items) {
-      expect(within(faq as HTMLElement).getByText(item.a)).toBeInTheDocument();
-    }
     // The FAQ list is as wide as the other blocks' containers (owner, chat 3660).
     expect(faq?.querySelector('.max-w-6xl > .max-w-4xl:not(p)')).toBeNull();
+  });
+
+  it('renders the v3.5 status, Kimi and OUTSIDE THE TAB immediately after inside', () => {
+    expect(screen.getByText('ANY MODEL · SELF-HOSTED · EARLY BETA')).toBeInTheDocument();
+    expect(screen.getByText('EARLY BETA')).toBeInTheDocument();
+    expect(screen.getByText(/OpenAI models, Kimi and a few others/)).toBeInTheDocument();
+    expect(screen.queryByText(/Gemini next/)).toBeNull();
+
+    const headline = screen.getByRole('heading', {
+      name: 'THE SUBSTRATE FOLLOWS YOU OUT OF THE BROWSER.',
+    });
+    const outside = headline.closest('section');
+    expect(outside).not.toBeNull();
+    expect(outside?.previousElementSibling).toBe(document.querySelector('#inside'));
+    expect(within(outside as HTMLElement).getByText(/It runs inside Photoshop/)).toBeInTheDocument();
+  });
+
+  it('renders the structured FAQ URLs as links without changing their text', () => {
+    const faq = document.querySelector('#faq') as HTMLElement;
+    expect(within(faq).getByRole('link', { name: 'godcrm.ai/blog/markdown-ops' }))
+      .toHaveAttribute('href', '/blog/markdown-ops');
+    expect(within(faq).getByRole('link', { name: 'godcrm.ai/s/help/mcp' }))
+      .toHaveAttribute('href', 'https://godcrm.ai/s/help/mcp');
+  });
+
+  it('renders the canonical six-link footer from shared copy', () => {
+    const links = Array.from(document.querySelectorAll('footer a')).map((a) => ({
+      label: a.textContent,
+      href: a.getAttribute('href'),
+    }));
+    expect(links).toEqual(copy.footer.links);
   });
 
   it('places the category anchor as plain text at the end of UNDER THE HOOD', () => {

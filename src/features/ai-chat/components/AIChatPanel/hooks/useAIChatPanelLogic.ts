@@ -729,8 +729,10 @@ export function useAIChatPanelLogic(opts?: { fillContainer?: boolean }) {
     isLoadingAIMessages, isLoadingUserMessages,
     hasOlderMessages: !!hasOlderMessages,
     isFetchingOlderMessages: !!isFetchingOlderMessages,
+    fetchOlderMessages,
     hasNextAIPage: !!hasNextAIPage,
     isFetchingNextAIPage: !!isFetchingNextAIPage,
+    fetchNextAIPage,
     activePollingError, activePollingStopped, activeReconnect,
     // ADR-0057-A WP-A
     activeAgents,

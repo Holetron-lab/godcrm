@@ -20,6 +20,7 @@ import { Router } from 'express';
 const dbGetMock = vi.fn();
 const dbRunMock = vi.fn();
 const dbAllMock = vi.fn();
+const canReadConversationMock = vi.fn();
 
 function fakeRequireAuth(req, _res, next) {
   const id = Number(req.headers['x-test-user-id']);
@@ -40,9 +41,14 @@ vi.mock('../chatShared.js', () => ({
   dbGet: (...args) => dbGetMock(...args),
   dbAll: (...args) => dbAllMock(...args),
   isPostgres: () => true,
+  safeJsonParse: (value, fallback = null) => { try { return JSON.parse(value); } catch { return fallback; } },
   apiLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
   success, created, error, badRequest, notFound, forbidden,
   requireAuth: fakeRequireAuth,
+}));
+
+vi.mock('../../../../services/chat/conversation-read-access.js', () => ({
+  canReadConversation: (...args) => canReadConversationMock(...args),
 }));
 
 const { default: registerPinRoutes } = await import('../pinController.js');
@@ -60,6 +66,7 @@ beforeEach(() => {
   dbGetMock.mockReset();
   dbRunMock.mockReset();
   dbAllMock.mockReset();
+  canReadConversationMock.mockReset();
 });
 
 // ---------------------------------------------------------------------------
@@ -318,5 +325,61 @@ describe('ADR-0068 WP-E — direct conv permission gate', () => {
       .send();
 
     expect(res.status).toBe(200);
+  });
+});
+
+// =============================================================================
+// 6. GET /conversations/:id/pinned-messages — the toolbar list must not depend
+//    on which history pages the client happens to have loaded.
+// =============================================================================
+
+describe('GET /conversations/:id/pinned-messages', () => {
+  it('returns every pinned message of the conversation, newest pin first', async () => {
+    const app = buildApp();
+    canReadConversationMock.mockResolvedValue(true);
+    dbAllMock.mockResolvedValue([
+      { id: 12, conversation_id: 7, sender_id: 5, sender_type: 'agent', role: 'assistant', content: 'old answer',
+        content_type: null, agent_id: 3, metadata: '{"agent_name":"Architect"}', created_at: '2026-01-01T10:00:00.000Z',
+        pinned_at: '2026-09-02T10:00:00.000Z', sender_name: 'Architect', sender_avatar: null, sender_user_type: 'agent' },
+    ]);
+
+    const res = await request(app)
+      .get('/api/v3/chat/conversations/7/pinned-messages')
+      .set('x-test-user-id', '99');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.messages).toEqual([expect.objectContaining({
+      id: 12, content: 'old answer', pinned_at: '2026-09-02T10:00:00.000Z',
+      contentType: 'text', senderType: 'agent', timestamp: '2026-01-01T10:00:00.000Z',
+      sender_name: 'Architect', metadata: { agent_name: 'Architect' },
+    })]);
+
+    const [sql, params] = dbAllMock.mock.calls[0];
+    expect(sql).toMatch(/pinned_at IS NOT NULL/i);
+    expect(sql).toMatch(/is_deleted IS NULL OR m\.is_deleted = 0/i);
+    expect(sql).toMatch(/ORDER BY m\.pinned_at DESC/i);
+    expect(params).toEqual([7]);
+  });
+
+  it('returns 403 without touching messages when the caller cannot read the conversation', async () => {
+    const app = buildApp();
+    canReadConversationMock.mockResolvedValue(false);
+
+    const res = await request(app)
+      .get('/api/v3/chat/conversations/7/pinned-messages')
+      .set('x-test-user-id', '99');
+
+    expect(res.status).toBe(403);
+    expect(dbAllMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-numeric conversation id', async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .get('/api/v3/chat/conversations/abc/pinned-messages')
+      .set('x-test-user-id', '99');
+
+    expect(res.status).toBe(400);
+    expect(canReadConversationMock).not.toHaveBeenCalled();
   });
 });

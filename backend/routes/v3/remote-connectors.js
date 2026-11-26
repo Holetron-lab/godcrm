@@ -4,6 +4,7 @@ import { dbGet, withTransactionAsync } from '../../database/connection.js';
 import { getEffectiveRole } from '../../services/EffectiveRoleService.js';
 import vault from '../../services/connectors/CredentialVault.js';
 import { remoteMcpSchema, runRemoteMcp } from '../../services/connectors/remoteMcp.js';
+import { resolveRemoteConnectorSettings } from '../../services/connectors/remoteConnectorRuntime.js';
 import { isRemoteMcp } from '../../services/connectors/catalogue/remote_mcp.js';
 import { success, created, badRequest, forbidden, notFound, error } from '../../utils/response.js';
 import { apiLogger } from '../../utils/logger.js';
@@ -115,9 +116,7 @@ router.all('/spaces/:spaceId/connectors/:id/:action(*)?', async (req, res, next)
     let result;
     let ok = false;
     try {
-      const blob = typeof row.encrypted_payload === 'string' ? JSON.parse(row.encrypted_payload) : row.encrypted_payload;
-      const credentials = vault.decrypt(blob);
-      const settings = { url: definition.url, ...credentials };
+      const settings = await resolveRemoteConnectorSettings(row);
       result = call ? await runRemoteMcp(settings, call) : await runRemoteMcp(settings);
       ok = true;
     } catch {

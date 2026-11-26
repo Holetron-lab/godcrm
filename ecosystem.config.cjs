@@ -33,5 +33,20 @@ module.exports = {
       // env intentionally empty → inherit shell/PM2 parent env (JWT_SECRET, POSTGRES_*, etc.)
       env: {},
     },
+    ...(process.env.CODEMODE_ENABLED === 'true' ? [{
+      name: 'godcrm-sandbox',
+      script: 'backend/workers/sandbox-host.js',
+      cwd: '/root/production/business-crm',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      max_memory_restart: '512M',
+      restart_delay: 3000,
+      watch: false,
+      node_args: ['--no-node-snapshot'],
+      env: {
+        NODE_ENV: 'production',
+      },
+    }] : []),
   ],
 };

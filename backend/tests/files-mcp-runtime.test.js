@@ -136,4 +136,42 @@ describe('MCP uploads use the runtime-bound human initiator', () => {
     expect((await upload({ space_id: undefined, project_id: owner.projectId })).success).toBe(true);
     expect((await rows())[0].space_id).toBe(owner.spaceId);
   });
+  test('MCP stdio prefers the server-injected SPACE_ID over stale MCP_SPACE_ID', { timeout: 20000 }, async () => {
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+    const agent = await dbGet("SELECT tr.id FROM table_rows tr JOIN universal_tables ut ON tr.table_id = ut.id WHERE ut.name = 'AI Agents' ORDER BY tr.id LIMIT 1");
+    expect(agent?.id).toBeTruthy();
+    await dbRun('UPDATE agent_jobs SET agent_row_id=? WHERE id=?', [agent.id, jobId]);
+    const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: ['backend/mcp-server.js'],
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        LOG_LEVEL: 'silent',
+        AGENT_ID: String(agent.id),
+        SPACE_ID: String(owner.spaceId),
+        MCP_SPACE_ID: '11',
+        MCP_JOB_ID: String(jobId),
+        UPLOAD_PATH: root,
+      },
+    });
+    const client = new Client({ name: 'mcp-space-regression', version: '1.0.0' });
+    try {
+      await client.connect(transport);
+      const response = await client.callTool({
+        name: 'upload_file',
+        arguments: { source, space_id: owner.spaceId, visibility: 'private', description: marker },
+      });
+      const payload = JSON.parse(response.content[0].text);
+      expect(payload.error).toBeUndefined();
+      expect(payload.success).toBe(true);
+    } finally {
+      try { await client.close(); } finally {
+        await dbRun('UPDATE agent_jobs SET agent_row_id=? WHERE id=?', [owner.tableId, jobId]);
+      }
+    }
+  });
 });

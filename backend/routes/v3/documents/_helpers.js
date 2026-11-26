@@ -28,6 +28,8 @@ export async function requireEditorAccess(req, res, projectId) {
     }
   } catch (err) {
     apiLogger.error({ err, userId, projectId }, '[Documents] Error checking effective role');
+    forbidden(res, 'Unable to verify document permissions.');
+    return false;
   }
   return true;
 }

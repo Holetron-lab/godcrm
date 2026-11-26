@@ -2014,7 +2014,20 @@ CREATE TABLE public.scheduled_messages (
     sent_message_id integer,
     error_message text,
     created_at timestamp with time zone DEFAULT now(),
-    updated_at timestamp with time zone DEFAULT now()
+    updated_at timestamp with time zone DEFAULT now(),
+    recurrence_cron text,
+    timezone text DEFAULT 'Europe/Moscow'::text NOT NULL,
+    max_runs integer,
+    runs_done integer DEFAULT 0 NOT NULL,
+    last_fired_at timestamp with time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    next_attempt_at timestamp with time zone,
+    sender_type text DEFAULT 'human'::text NOT NULL,
+    agent_id integer,
+    role text DEFAULT 'user'::text NOT NULL,
+    expect_reply_from integer,
+    reply_check_at timestamp with time zone,
+    reply_retries integer DEFAULT 0 NOT NULL
 );
 
 
@@ -5015,6 +5028,13 @@ CREATE INDEX idx_runs_user ON public.monitoring_runs USING btree (user_id);
 --
 
 CREATE INDEX idx_scheduled_messages_pending ON public.scheduled_messages USING btree (scheduled_at) WHERE (status = 'pending'::text);
+
+
+--
+-- Name: idx_scheduled_messages_reply_check; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_scheduled_messages_reply_check ON public.scheduled_messages USING btree (reply_check_at) WHERE (reply_check_at IS NOT NULL);
 
 
 --

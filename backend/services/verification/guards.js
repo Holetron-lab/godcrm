@@ -16,12 +16,12 @@
 //         with { ok: false, status: 409, code: 'VERIFICATION_REQUIRED' }.
 //
 //         The guarded column may be either:
-//           - text/select  → incoming value is the slug itself (string)
-//           - relation     → incoming value is a row_id (int/string); we
-//                            resolve it to the target row's `slug` column
-//                            (cached per call). Slug column name is hard-
-//                            coded as `slug` — matches `_doc_statuses` and
-//                            ADR-0013 status-table convention.
+//           - plain text/select → incoming value is the slug itself (string)
+//           - relation or relation-backed select → incoming value is a row_id
+//                            (int/string); we resolve it to the target row's
+//                            `slug` column (cached per call). Slug column name
+//                            is hard-coded as `slug` — matches `_doc_statuses`
+//                            and ADR-0013 status-table convention.
 //
 //   Direct-write rejection: verification cells CANNOT be written via row PUT
 //         (only via /verify | /unverify endpoints). Any key in incomingData
@@ -47,12 +47,12 @@ function isStampedVerified(cell) {
 }
 
 /**
- * Resolve a row reference (int or string row_id) on a relation-typed column
- * to the target row's `slug` value. Returns the resolved slug or null if the
- * target row / slug is missing.
+ * Resolve a row reference (int or string row_id) on a relation column or a
+ * relation-backed select column to the target row's `slug` value. Returns the
+ * resolved slug or null if the target row / slug is missing.
  *
- * For non-relation columns, returns the input cast to string (so callers can
- * compare against locks_on_statuses uniformly).
+ * For other columns, returns the input cast to string (so callers can compare
+ * against locks_on_statuses uniformly).
  *
  * @param {object} args
  * @param {Map} args.cache — per-call cache: key = `${tableId}:${columnName}`
@@ -65,13 +65,12 @@ async function resolveSlugForGuardValue({ cache, colMetaByName, columnName, valu
   if (value === null || value === undefined) return null;
 
   const meta = colMetaByName.get(columnName);
-  // Unknown column or non-relation → value is already its own slug.
-  if (!meta || meta.type !== 'relation') {
+  const cfg = meta ? parseConfig(meta.config) : {};
+  const targetTableId = cfg.target_table_id || cfg.target_table || cfg.tableId || cfg.relation?.tableId;
+  const isRowReference = meta && (meta.type === 'relation' || (meta.type === 'select' && targetTableId));
+  if (!isRowReference) {
     return typeof value === 'string' ? value : String(value);
   }
-
-  const cfg = parseConfig(meta.config);
-  const targetTableId = cfg.target_table_id || cfg.target_table || cfg.tableId;
   if (!targetTableId) return null;
 
   const cacheKey = `${targetTableId}:${value}`;
@@ -148,15 +147,13 @@ export async function enforceVerificationGuards({ tableId, existingData, incomin
     const verified = isStampedVerified(cell);
 
     // C-6: block status transition to a locked value while unverified.
-    // For each incoming key:
-    //  - if the column is type=relation, resolve row_id → slug (cached) and
-    //    compare against locks_on_statuses.
-    //  - otherwise (legacy text/select), compare the raw string value.
+    // Relation and relation-backed select values resolve row_id → slug (cached);
+    // other columns compare their raw string value.
     if (locks.length > 0 && !verified) {
       for (const [k, v] of Object.entries(incomingData || {})) {
         const meta = colMetaByName.get(k);
         let candidate = null;
-        if (meta && meta.type === 'relation') {
+        if (meta) {
           candidate = await resolveSlugForGuardValue({
             cache: slugCache,
             colMetaByName,

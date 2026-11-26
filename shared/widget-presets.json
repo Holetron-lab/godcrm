@@ -44,13 +44,13 @@
         "defaultTableName": "Tickets",
         "defaultColumns": [
           {
-            "name": "title",
+            "name": "what",
             "displayName": "Title",
             "type": "text",
             "required": true
           },
           {
-            "name": "status",
+            "name": "state",
             "displayName": "Status",
             "type": "select",
             "required": true,
@@ -77,9 +77,28 @@
             "required": false
           },
           {
+            "name": "scheduled_date",
+            "displayName": "Scheduled Date",
+            "type": "datetime",
+            "required": false
+          },
+          {
             "name": "due_date",
             "displayName": "Due Date",
-            "type": "date",
+            "type": "datetime",
+            "required": false
+          },
+          {
+            "name": "repeat",
+            "displayName": "Repeat",
+            "type": "time",
+            "required": false
+          },
+          {
+            "name": "duration",
+            "displayName": "Duration",
+            "type": "number",
+            "config": { "min": 1, "suffix": " min" },
             "required": false
           }
         ],
@@ -120,6 +139,148 @@
             "required": false
           }
         ]
+      },
+      {
+        "key": "ticket_events",
+        "name": "Ticket Events Table",
+        "description": "Occurrences of one-off and recurring tickets",
+        "required": true,
+        "canCreate": true,
+        "defaultTableName": "Ticket Events",
+        "tableType": "ticket_events",
+        "defaultColumns": [
+          {
+            "name": "ticket_id",
+            "displayName": "Ticket",
+            "type": "relation",
+            "config": { "relation": { "labelColumn": "what" } },
+            "required": true
+          },
+          {
+            "name": "state",
+            "displayName": "State",
+            "type": "select",
+            "options": ["Backlog", "In Progress", "In Review", "Done"],
+            "required": false
+          },
+          {
+            "name": "original_start",
+            "displayName": "Original Start",
+            "type": "datetime",
+            "required": false
+          },
+          {
+            "name": "start_datetime",
+            "displayName": "Start",
+            "type": "datetime",
+            "required": true
+          },
+          {
+            "name": "end_datetime",
+            "displayName": "End",
+            "type": "datetime",
+            "required": false
+          },
+          {
+            "name": "is_all_day",
+            "displayName": "All Day",
+            "type": "checkbox",
+            "required": false
+          },
+          {
+            "name": "timezone",
+            "displayName": "Timezone",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "title",
+            "displayName": "Title",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "description",
+            "displayName": "Description",
+            "type": "long_text",
+            "required": false
+          },
+          {
+            "name": "location",
+            "displayName": "Location",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "attendees",
+            "displayName": "Attendees",
+            "type": "long_text",
+            "required": false
+          },
+          {
+            "name": "status",
+            "displayName": "Status",
+            "type": "select",
+            "options": ["confirmed", "tentative", "cancelled"],
+            "required": false
+          },
+          {
+            "name": "recurrence",
+            "displayName": "Recurrence",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "recurring_event_id",
+            "displayName": "Recurring Event ID",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "event_id",
+            "displayName": "Event ID",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "calendar_id",
+            "displayName": "Calendar ID",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "link",
+            "displayName": "Link",
+            "type": "url",
+            "required": false
+          },
+          {
+            "name": "google_etag",
+            "displayName": "Google ETag",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "last_synced",
+            "displayName": "Last Synced",
+            "type": "text",
+            "required": false
+          },
+          {
+            "name": "sync_direction",
+            "displayName": "Sync Direction",
+            "type": "select",
+            "options": ["google_to_crm", "crm_to_google", "bidirectional"],
+            "required": false
+          },
+          {
+            "name": "crm_modified",
+            "displayName": "CRM Modified",
+            "type": "checkbox",
+            "required": false
+          }
+        ],
+        "requiredColumns": []
       }
     ]
   },

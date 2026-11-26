@@ -1,3 +1,5 @@
+import { aiChatSchedulingRU } from './aiChatScheduling.ru';
+
 export const aiChatRU = {
   "chatWidth": "Ширина чата",
   "discardConfigurationDraft": "Закрыть без сохранения изменений?",
@@ -183,6 +185,7 @@ export const aiChatRU = {
   "created": "создано",
   "changeTime": "Изменить время",
   "sendNow": "Отправить сейчас",
+  ...aiChatSchedulingRU,
   "noPriority": "Без приоритета",
   "low": "Низкий",
   "medium": "Средний",
@@ -569,6 +572,10 @@ export const aiChatRU = {
   "selectedCount": "Выбрано: {count}",
   "jumpToSenderMessage": "Перейти к сообщению от {name}",
   "openSenderMessage": "Открыть текст сообщения от {name}: {content}",
+  "expandSenderMessage": "Развернуть сообщение от {name}",
+  "collapseSenderMessage": "Свернуть сообщение от {name}",
+  "movedPreviewLimited": "Показаны первые {shown} из {total} — остальные в чате",
+  "movedMessagesFrom": "От: {names}",
   "searchTable": "Поиск в {name}...",
   "stepCount": "Шагов: {count}",
   "stalledMinutes": "Без активности: {count} мин",
@@ -728,6 +735,7 @@ export const aiChatRU = {
   "pinLimitReached": "Достигнут лимит закреплённых (50). Открепите что-то и попробуйте снова.",
   "pinOwnerOnly": "Закреплять сообщения в этом чате может только владелец.",
   "pinFailed": "Не удалось обновить закрепление.",
+  "messageNotFoundInHistory": "Не удалось найти сообщение в истории чата",
   "translationEmpty": "Перевод не вернул данные.",
   "translationFailed": "Не удалось перевести сообщение.",
   "speechUnsupportedBrowser": "Web Speech API не поддерживается в этом браузере",

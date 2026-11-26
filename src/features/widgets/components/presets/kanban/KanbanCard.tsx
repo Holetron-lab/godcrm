@@ -12,6 +12,8 @@ import { EmojiPicker } from '@/features/tables/components/UniversalTable/EmojiPi
 import { hexToRgba, formatShortDate, isOverdue, formatDateForInput, resolveCardTitle } from './kanban-utils';
 import type { ExpandableCardProps, ColumnInfo } from './kanban-types';
 import { ExpandedFieldsSection, SystemDatesRow, CardStatusBar, AssignedUsersRow } from './KanbanCardExpanded';
+import { OccurrenceCardSection } from './KanbanOccurrence';
+import { occurrenceOf } from './occurrence-cards';
 
 export function ExpandableCard({
   item,
@@ -54,6 +56,9 @@ export function ExpandableCard({
   const priorityButtonRef = useRef<HTMLButtonElement>(null);
   const typeButtonRef = useRef<HTMLButtonElement>(null);
   const assignedButtonRef = useRef<HTMLDivElement>(null);
+
+  // A series has one card per column (ADR-209 D6); the row behind all of them is the ticket.
+  const rowId = occurrenceOf(item)?.ticketId ?? item.id;
 
   const getColumnInfo = (name: string): ColumnInfo | undefined => {
     return columnsInfo.find(c => c.name === name);
@@ -176,7 +181,7 @@ export function ExpandableCard({
   // Build tooltip with all ticket data
   const buildTooltip = (): string => {
     const parts: string[] = [];
-    parts.push(`#${item.id} — ${resolveCardTitle(item.data, cardTitleColumn)}`);
+    parts.push(`#${rowId} — ${resolveCardTitle(item.data, cardTitleColumn)}`);
     if (description) parts.push(`${t('kanban.description')}: ${String(description).slice(0, 200)}`);
     if (startDate) parts.push(`${t('kanban.startDate')}: ${formatShortDate(startDate)}`);
     if (endDate) parts.push(`${t('kanban.deadline')}: ${formatShortDate(endDate)}`);
@@ -344,6 +349,12 @@ export function ExpandableCard({
           ) : null}
         </div>
       )}
+
+      <OccurrenceCardSection
+        item={item}
+        isExpanded={isExpanded}
+        onDurationChange={onQuickEdit && getColumnInfo('duration') ? minutes => onQuickEdit('duration', minutes) : undefined}
+      />
 
       {/* ═══ ROW 3: Toolbar ═══ */}
       <div className="flex items-center gap-0.5 px-2 py-1 border-b border-[var(--border-secondary)]">
@@ -656,14 +667,14 @@ export function ExpandableCard({
         showAssignedAddSelect={showAssignedAddSelect}
         setShowAssignedAddSelect={setShowAssignedAddSelect}
         assignedButtonRef={assignedButtonRef}
-        itemId={item.id}
+        itemId={rowId}
         onQuickEdit={publicReadOnly ? undefined : onQuickEdit}
         onOpenChat={onOpenChat}
       />
 
       {/* ═══ STATUS BAR (bottom) ═══ */}
       <CardStatusBar
-        itemId={item.id}
+        itemId={rowId}
         adrLabel={adrLabel}
         adrRelTableId={adrRelTableId}
         adrValue={adrValue}

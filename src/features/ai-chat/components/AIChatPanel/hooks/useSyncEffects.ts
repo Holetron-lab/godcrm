@@ -113,15 +113,13 @@ export function useSyncEffects(params: UseSyncEffectsParams) {
     }
   }, [userConversationId, userConversationData]);
 
-  // Auto-select default agent when chat opens
+  // Auto-select the space default agent when the chat opens with nothing chosen.
+  // Only fills an empty slot: any agent the user picked (Agents panel, Contacts,
+  // opened conversation) must stay, otherwise every pick snapped back to the default.
   useEffect(() => {
-    if (!isOpen || agents.length === 0) return;
-    if (defaultAgentId) {
-      if (!currentAgent || currentAgent.id !== defaultAgentId) {
-        const defaultAgent = agents.find(a => a.id === defaultAgentId);
-        if (defaultAgent) selectAgent(defaultAgent);
-      }
-    }
+    if (!isOpen || agents.length === 0 || currentAgent || !defaultAgentId) return;
+    const defaultAgent = agents.find(a => a.id === defaultAgentId);
+    if (defaultAgent) selectAgent(defaultAgent);
   }, [isOpen, defaultAgentId, agents, currentAgent, selectAgent]);
 
   // Load agents and conversations when opened

@@ -435,7 +435,7 @@ export function CardDetailModal({
 
   const cardTitle = String(card?.data?.[effectiveTitleField] || 'Без названия');
   const rawStatus = groupByField ? card?.data?.[groupByField] : null;
-  const cardStatus = rawStatus ? String(rawStatus) : '';
+  const cardStatus = rawStatus ? String(rawStatus) : ''; 
   const statusColumn = groupByField ? cols.find(c => c.name === groupByField) : null;
   const statusColor = statusColumn && cardStatus ? getOptionColor(cardStatus, statusColumn) : undefined;
 

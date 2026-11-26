@@ -177,6 +177,7 @@ export interface ChatAttachment {
     table_name: string;
     table_icon?: string;
     row_title?: string;
+    widget_id?: number;
   };
   // ADR-0031 WP-20+21 (T-141238): present when type === 'widget_embed'.
   widgetEmbed?: WidgetEmbedConfig;

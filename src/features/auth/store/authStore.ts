@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { logger } from '@/shared/utils/logger';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { apiClient } from '@/shared/utils/apiClient';
+import { isTicketEmbedRequest } from '@/features/embed/ticketEmbedConfig';
 import { authApi } from '../api/authApi';
 import {
   AuthState,
@@ -28,6 +29,12 @@ const initialState: AuthState & { initialized: boolean } = {
   loading: false,
   error: null,
   initialized: false
+};
+
+const ticketEmbedStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
 };
 
 export const useAuthStore = create<AuthStore>()(
@@ -126,6 +133,7 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'god-crm-auth',
+      storage: createJSONStorage(() => isTicketEmbedRequest() ? ticketEmbedStorage : window.localStorage),
       partialize: (state) => ({ token: state.token, user: state.user }),
       onRehydrateStorage: () => (state) => {
         if (state?.token) {
@@ -135,3 +143,13 @@ export const useAuthStore = create<AuthStore>()(
     }
   )
 );
+
+export const setEmbedAuth = (token: string, user: AuthUser): void => {
+  apiClient.setAccessToken(token);
+  useAuthStore.setState({ user, token: null, loading: false, error: null, initialized: true });
+};
+
+export const clearEmbedAuth = (): void => {
+  apiClient.setAccessToken(null);
+  useAuthStore.setState({ user: null, token: null, loading: false, error: null, initialized: false });
+};

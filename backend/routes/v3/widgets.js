@@ -59,9 +59,10 @@ import {
   countAtomRefs
 } from '../../services/WidgetService.js';
 import { getAllPresets } from '../../widgets/presets.js';
-import { dbGet, toBool, sqlNow, sqlTrue } from '../../database/connection.js';
+import { dbAll, dbGet, toBool, sqlNow, sqlTrue } from '../../database/connection.js';
+import { getModulesBySpace, hasModuleAccess } from '../../services/ModuleService.js';
 import { apiLogger } from '../../utils/logger.js';
-import { success, created, error, badRequest, notFound, noContent } from '../../utils/response.js';
+import { success, created, error, badRequest, forbidden, notFound, noContent } from '../../utils/response.js';
 // ADR-0012 §Phase 1 — server-side ticket resolution for widgets.
 import resolveTicketsController from './widgets/resolveTicketsController.js';
 // ADR-0012 §Phase 5 (M3 backend) — single-ticket resolve for ticket_ref atoms.
@@ -121,7 +122,7 @@ router.use(resolveTicketRefController);
 
 /**
  * GET /api/v3/projects/:projectId/widgets
- * Get all widgets for a project (via its default dashboard)
+ * Get dashboard widgets and standalone apps installed into a project.
  * @swagger
  * /api/v3/projects/{projectId}/widgets:
  *   get:
@@ -144,22 +145,40 @@ router.get('/projects/:projectId/widgets', async (req, res) => {
     const { projectId } = req.params;
     const { is_module } = req.query;
 
-    // Get default dashboard for project
+    const project = await dbGet('SELECT space_id FROM projects WHERE id = ?', [projectId]);
+    if (!project) return success(res, []);
+
     const dashboard = await dbGet(
       `SELECT id FROM dashboards WHERE project_id = ? AND is_default = ${sqlTrue()} LIMIT 1`,
       [projectId]
     );
-
-    if (!dashboard) {
-      return success(res, []);
-    }
-
     const options = {};
-    if (is_module !== undefined) {
-      options.is_module = is_module === 'true';
-    }
+    if (is_module !== undefined) options.is_module = is_module === 'true';
+    const widgets = dashboard ? await getWidgetsByDashboard(dashboard.id, options) : [];
 
-    const widgets = await getWidgetsByDashboard(dashboard.id, options);
+    if (options.is_module !== false) {
+      const installations = await dbAll(
+        `SELECT module_key FROM module_installations
+         WHERE space_id = ? AND project_id = ? AND status = 'active'`,
+        [project.space_id, projectId],
+      );
+      const moduleKeys = new Set(installations.map((row) => row.module_key));
+      if (moduleKeys.size > 0) {
+        const modules = await getModulesBySpace(project.space_id, req.user.id);
+        widgets.push(...modules
+          .filter((module) => module.widget.dashboard_id == null
+            && moduleKeys.has(module.widget.config?.__module?.key))
+          .map((module) => ({
+            ...module.widget,
+            is_module: true,
+            module_id: module.module_id,
+            sidebar_order: module.sidebar_order,
+            sidebar_icon: module.sidebar_icon,
+            access_level: module.access_level,
+            is_pinned: module.is_pinned,
+          })));
+      }
+    }
 
     success(res, widgets);
   } catch (err) {
@@ -519,6 +538,13 @@ router.get('/widgets/:widgetId', async (req, res) => {
 
     if (!widget) {
       return notFound(res, 'Widget not found');
+    }
+
+    if (widget.dashboard_id == null && widget.module_id != null) {
+      const module = await dbGet('SELECT space_id, access_level FROM modules WHERE widget_id = ?', [id]);
+      if (module && !await hasModuleAccess(req.user?.id, module.space_id, module.access_level)) {
+        return forbidden(res, 'Insufficient role for this application');
+      }
     }
 
     // ADR-0003 Phase 2 (T-127903): surface atom-ref count so UI can warn

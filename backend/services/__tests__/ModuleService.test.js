@@ -221,7 +221,7 @@ describe('ModuleService - ADR-065', () => {
       await createModule({ widget_id: w1.id, space_id: spaceId, sidebar_order: 1 });
       await createModule({ widget_id: w2.id, space_id: spaceId, sidebar_order: 2 });
 
-      const modules = await getModulesBySpace(spaceId);
+      const modules = await getModulesBySpace(spaceId, userId);
 
       expect(modules).toHaveLength(2);
       expect(modules[0].sidebar_order).toBe(1);
@@ -229,7 +229,7 @@ describe('ModuleService - ADR-065', () => {
     });
 
     test('should return empty array for space with no modules', async () => {
-      const modules = await getModulesBySpace(spaceId);
+      const modules = await getModulesBySpace(spaceId, userId);
       expect(modules).toEqual([]);
     });
 
@@ -240,7 +240,7 @@ describe('ModuleService - ADR-065', () => {
       await createModule({ widget_id: w1.id, space_id: spaceId, sidebar_order: 1, is_pinned: false });
       await createModule({ widget_id: w2.id, space_id: spaceId, sidebar_order: 2, is_pinned: true });
 
-      const modules = await getModulesBySpace(spaceId);
+      const modules = await getModulesBySpace(spaceId, userId);
 
       // Pinned first
       expect(modules[0].widget.preset_name).toBe('kanban_board');
@@ -256,7 +256,7 @@ describe('ModuleService - ADR-065', () => {
       const widget = await createTestWidget(dashboardId);
       await createModule({ widget_id: widget.id, space_id: otherSpaceId });
 
-      const modules = await getModulesBySpace(spaceId);
+      const modules = await getModulesBySpace(spaceId, userId);
       expect(modules).toHaveLength(0);
     });
   });

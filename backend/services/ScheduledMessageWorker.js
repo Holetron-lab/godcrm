@@ -1,21 +1,35 @@
-/**
- * ScheduledMessageWorker (WP-17)
- * Polls scheduled_messages every 30s, sends due messages as regular chat messages.
- */
-
-import { dbRun, dbGet, dbAll, isPostgres } from '../database/connection.js';
+import {
+  dbRun, dbGet, dbAll, safeJsonParse, withTransactionAsync,
+} from '../database/connection.js';
 import { apiLogger } from '../utils/logger.js';
 import { executeAgentResponse } from '../routes/v3/chat/chatAgentExecution.js';
-import { getAutoRespondAgents, shouldAutoRespondWithAI, getDefaultAgentForConversation } from '../routes/v3/chat/chatAgentAutoRespond.js';
-import { conversationLock, parseInvocationMentions, parseInvocationCommands } from '../routes/v3/chat/chatShared.js';
-import { resolveMentionedUser, resolveAgentUser, findAiAgentByCommand, autoJoinAgentToConversation } from '../routes/v3/chat/chatAgentHelpers.js';
+import {
+  getAutoRespondAgents, shouldAutoRespondWithAI, getDefaultAgentForConversation,
+} from '../routes/v3/chat/chatAgentAutoRespond.js';
+import { conversationLock, parseInvocationMentions } from '../routes/v3/chat/chatShared.js';
+import { resolveMentionedUser, resolveAgentUser } from '../routes/v3/chat/chatAgentHelpers.js';
+import {
+  dispatchInvocationsFromContent, hasInvocationTokens,
+} from './chat/invocation-dispatcher.js';
+import { nextRun, minIntervalMinutes } from './scheduled-messages/recurrence.js';
+
+const CONFIG = {
+  pollIntervalMs: 30_000,
+  maxAttempts: 3,
+  retryBackoffMinutes: [1, 5, 15],
+  replyCheckMinutes: 10,
+  replyProcessingExtensionMinutes: 5,
+  maxReplyRetries: 1,
+  minCatchUpMs: 2 * 60_000,
+  maxCatchUpMs: 2 * 60 * 60_000,
+};
 
 let _interval = null;
-const POLL_INTERVAL_MS = 30_000; // 30 seconds
+let _tickRunning = false;
 
 export function startScheduledMessageWorker() {
-  if (_interval) return; // already running
-  _interval = setInterval(tick, POLL_INTERVAL_MS);
+  if (_interval) return;
+  _interval = setInterval(tick, CONFIG.pollIntervalMs);
   apiLogger.info('WP-17: ScheduledMessageWorker started (every 30s)');
 }
 
@@ -27,183 +41,320 @@ export function stopScheduledMessageWorker() {
   }
 }
 
-async function tick() {
+export async function tick() {
+  if (_tickRunning) return;
+  _tickRunning = true;
   try {
-    // Find all pending messages whose scheduled_at has passed
-    const dueMessages = await dbAll(
-      isPostgres()
-        ? `SELECT * FROM scheduled_messages WHERE status = 'pending' AND scheduled_at <= NOW() ORDER BY scheduled_at ASC LIMIT 50`
-        : `SELECT * FROM scheduled_messages WHERE status = 'pending' AND scheduled_at <= datetime('now') ORDER BY scheduled_at ASC LIMIT 50`
-    );
-
-    if (dueMessages.length === 0) return;
-
-    apiLogger.info({ count: dueMessages.length }, 'WP-17: Processing due scheduled messages');
-
-    for (const sm of dueMessages) {
-      try {
-        await sendScheduledMessage(sm);
-      } catch (err) {
-        apiLogger.error({ err, scheduledMessageId: sm.id }, 'WP-17: Failed to send scheduled message');
-        // Mark as failed
-        await dbRun(
-          isPostgres()
-            ? `UPDATE scheduled_messages SET status = 'failed', error_message = $1, updated_at = NOW() WHERE id = $2`
-            : `UPDATE scheduled_messages SET status = 'failed', error_message = ?, updated_at = datetime('now') WHERE id = ?`,
-          [err.message, sm.id]
-        );
-      }
-    }
+    await processDueMessages();
+    await processReplyChecks();
   } catch (err) {
     apiLogger.error({ err }, 'WP-17: ScheduledMessageWorker tick error');
+  } finally {
+    _tickRunning = false;
   }
 }
 
-export async function sendScheduledMessage(sm) {
-  const { id, conversation_id, sender_id, content, content_type, mentions, attachments, metadata } = sm;
-
-  // Insert as a regular message
-  let result;
-  const mentionsVal = typeof mentions === 'string' ? mentions : JSON.stringify(mentions || []);
-  const attachmentsVal = typeof attachments === 'string' ? attachments : JSON.stringify(attachments || []);
-  const metaObj = typeof metadata === 'string' ? JSON.parse(metadata || '{}') : (metadata || {});
-  metaObj.scheduled_message_id = id;
-  const metadataVal = JSON.stringify(metaObj);
-
-  if (isPostgres()) {
-    result = await dbRun(
-      `INSERT INTO messages (conversation_id, sender_id, role, content, content_type, mentions, attachments, metadata, created_at)
-       VALUES ($1, $2, 'user', $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, NOW())`,
-      [conversation_id, sender_id, content, content_type, mentionsVal, attachmentsVal, metadataVal]
-    );
-  } else {
-    result = await dbRun(
-      `INSERT INTO messages (conversation_id, sender_id, role, content, content_type, mentions, attachments, metadata, created_at)
-       VALUES (?, ?, 'user', ?, ?, ?, ?, ?, datetime('now'))`,
-      [conversation_id, sender_id, content, content_type, mentionsVal, attachmentsVal, metadataVal]
-    );
-  }
-
-  const messageId = result.lastInsertRowid;
-
-  // Update conversation timestamp
-  await dbRun(
-    isPostgres()
-      ? `UPDATE conversations SET updated_at = NOW() WHERE id = $1`
-      : `UPDATE conversations SET updated_at = datetime('now') WHERE id = ?`,
-    [conversation_id]
+async function processDueMessages() {
+  const dueMessages = await dbAll(
+    `SELECT * FROM scheduled_messages
+     WHERE status = 'pending' AND scheduled_at <= NOW()
+       AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
+     ORDER BY scheduled_at ASC LIMIT 50`
   );
+  if (dueMessages.length === 0) return;
 
-  // Mark scheduled message as sent
-  await dbRun(
-    isPostgres()
-      ? `UPDATE scheduled_messages SET status = 'sent', sent_message_id = $1, updated_at = NOW() WHERE id = $2`
-      : `UPDATE scheduled_messages SET status = 'sent', sent_message_id = ?, updated_at = datetime('now') WHERE id = ?`,
-    [messageId, id]
-  );
-
-  apiLogger.info({ scheduledMessageId: id, messageId, conversationId: conversation_id }, 'WP-17: Scheduled message sent');
-
-  // Trigger agents — same logic as messageController (explicit mentions + auto-respond)
-  try {
-    const convId = Number(conversation_id);
-    const convForSpaceId = await dbGet(isPostgres() ? `SELECT space_id FROM conversations WHERE id = $1` : `SELECT space_id FROM conversations WHERE id = ?`, [convId]);
-    const spaceId = convForSpaceId?.space_id || null;
-
-    // Parse explicit <<@slug>> and <</slug>> from content
-    const agentMentions = [...new Set(parseInvocationMentions(content))];
-    const rawCommands = parseInvocationCommands(content);
-    const seenCommandSlugs = new Set();
-    const agentCommands = [];
-    for (const cmd of rawCommands) {
-      if (!seenCommandSlugs.has(cmd.slug)) {
-        seenCommandSlugs.add(cmd.slug);
-        agentCommands.push(cmd);
+  apiLogger.info({ count: dueMessages.length }, 'WP-17: Processing due scheduled messages');
+  for (const sm of dueMessages) {
+    try {
+      if (await skipMissedRun(sm)) continue;
+      await sendScheduledMessage(sm);
+    } catch (err) {
+      apiLogger.error({ err, scheduledMessageId: sm.id }, 'WP-17: Failed to send scheduled message');
+      try {
+        await recordDeliveryFailure(sm, err);
+      } catch (failureErr) {
+        apiLogger.error({ err: failureErr, scheduledMessageId: sm.id }, 'WP-17: Failed to record delivery failure');
       }
     }
-    const commandSlugs = new Set(agentCommands.map(c => c.slug));
-    const mentionsFiltered = agentMentions.filter(slug => !commandSlugs.has(slug));
-    const hasExplicitTriggers = agentCommands.length > 0 || mentionsFiltered.length > 0;
+  }
+}
 
-    apiLogger.info({ scheduledMessageId: id, conversationId: convId, agentCommands, agentMentions, hasExplicitTriggers }, 'WP-17: Parsing scheduled message for agent triggers');
+async function skipMissedRun(sm) {
+  if (!sm.recurrence_cron) return false;
+  const latenessMs = Date.now() - new Date(sm.scheduled_at).getTime();
+  const periodMs = minIntervalMinutes(sm.recurrence_cron, sm.timezone) * 60_000;
+  const catchUpMs = Math.min(CONFIG.maxCatchUpMs, Math.max(CONFIG.minCatchUpMs, periodMs / 2));
+  if (latenessMs <= catchUpMs) return false;
 
-    if (hasExplicitTriggers) {
-      let anyAgentResolved = false;
+  const followingRun = nextRun(sm.recurrence_cron, sm.timezone, new Date());
+  await dbRun(
+    `UPDATE scheduled_messages
+     SET scheduled_at = ?, status = ?, error_message = 'skipped: missed window',
+         attempts = 0, next_attempt_at = NULL, updated_at = NOW()
+     WHERE id = ? AND status = 'pending'`,
+    [followingRun?.toISOString() || sm.scheduled_at, followingRun ? 'pending' : 'sent', sm.id]
+  );
+  apiLogger.warn({ scheduledMessageId: sm.id, latenessMs, catchUpMs }, 'WP-17: Skipped missed recurring run');
+  return true;
+}
 
-      for (const cmd of agentCommands) {
-        const { slug } = cmd;
-        let agent = await resolveAgentUser(slug, spaceId);
-        if (!agent) agent = await findAiAgentByCommand(slug, spaceId);
-        if (agent) {
-          anyAgentResolved = true;
-          if (agent.id) await autoJoinAgentToConversation(convId, agent.id, { source: 'command' });
-          apiLogger.info({ conversationId: convId, slug, agentName: agent.name }, 'WP-17: Triggering /command agent from scheduled message');
-          await conversationLock.withLock(convId, () =>
-            executeAgentResponse(convId, agent, sender_id, { message_content: content, invocation_type: 'command' })
-          );
-        }
-      }
+async function recordDeliveryFailure(sm, err) {
+  const attempts = Number(sm.attempts || 0) + 1;
+  if (attempts < CONFIG.maxAttempts) {
+    const delayMinutes = CONFIG.retryBackoffMinutes[attempts - 1];
+    await dbRun(
+      `UPDATE scheduled_messages
+       SET attempts = ?, next_attempt_at = NOW() + (? * INTERVAL '1 minute'),
+           error_message = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [attempts, delayMinutes, err.message, sm.id]
+    );
+    return;
+  }
 
-      for (const slug of mentionsFiltered) {
-        const resolved = await resolveMentionedUser(slug);
-        if (resolved) {
-          const { user: mentionedUser, isAgent } = resolved;
-          anyAgentResolved = true;
-          if (mentionedUser.id) await autoJoinAgentToConversation(convId, mentionedUser.id, { source: 'mention' });
-          if (isAgent) {
-            apiLogger.info({ conversationId: convId, slug, userName: mentionedUser.name }, 'WP-17: Triggering @mention agent from scheduled message');
-            await conversationLock.withLock(convId, () =>
-              executeAgentResponse(convId, mentionedUser, sender_id, { message_content: content, invocation_type: 'mention' })
-            );
-          }
-        } else {
-          const agent = await resolveAgentUser(slug, spaceId);
-          if (agent) {
-            anyAgentResolved = true;
-            if (agent.id) await autoJoinAgentToConversation(convId, agent.id, { source: 'mention' });
-            apiLogger.info({ conversationId: convId, slug, agentName: agent.name }, 'WP-17: @mention fallback to agent resolution from scheduled message');
-            await conversationLock.withLock(convId, () =>
-              executeAgentResponse(convId, agent, sender_id, { message_content: content, invocation_type: 'mention' })
-            );
-          }
-        }
-      }
+  if (!sm.recurrence_cron) {
+    await dbRun(
+      `UPDATE scheduled_messages
+       SET status = 'failed', attempts = ?, next_attempt_at = NULL,
+           error_message = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [attempts, err.message, sm.id]
+    );
+    return;
+  }
 
-      // If no explicit agents resolved, fall back to auto-respond
-      if (!anyAgentResolved) {
-        const autoRespondAgents = await getAutoRespondAgents(convId, sender_id, content);
-        for (const agent of autoRespondAgents) {
-          await conversationLock.withLock(convId, () =>
-            executeAgentResponse(convId, agent, sender_id, { message_content: content })
-          );
-        }
-      }
+  const followingRun = nextRun(sm.recurrence_cron, sm.timezone, new Date());
+  await dbRun(
+    `UPDATE scheduled_messages
+     SET status = ?, scheduled_at = ?, attempts = 0, next_attempt_at = NULL,
+         error_message = ?, updated_at = NOW()
+     WHERE id = ?`,
+    [followingRun ? 'pending' : 'sent', followingRun?.toISOString() || sm.scheduled_at, `run failed: ${err.message}`, sm.id]
+  );
+}
+
+export async function sendScheduledMessage(sm, { retryOf = null } = {}) {
+  const delivered = await withTransactionAsync(async (trx) => {
+    const current = await trx.get(
+      `SELECT * FROM scheduled_messages
+       WHERE id = ? ${retryOf === null ? "AND status = 'pending'" : "AND status IN ('pending', 'sent')"}
+       FOR UPDATE`,
+      [sm.id]
+    );
+    if (!current) return null;
+
+    const isRetry = retryOf !== null;
+    const runsDone = Number(current.runs_done || 0);
+    const followingRun = !isRetry && current.recurrence_cron
+      ? nextRun(current.recurrence_cron, current.timezone, new Date())
+      : null;
+    const metadata = safeJsonParse(current.metadata, {}) || {};
+    metadata.scheduled_message_id = current.id;
+    metadata.run_index = isRetry ? Math.max(1, runsDone) : runsDone + 1;
+    if (isRetry) metadata.retry_of = retryOf;
+
+    const mentions = typeof current.mentions === 'string'
+      ? current.mentions
+      : JSON.stringify(current.mentions || []);
+    const attachments = typeof current.attachments === 'string'
+      ? current.attachments
+      : JSON.stringify(current.attachments || []);
+    const agentId = current.agent_id ?? metadata.agent_row_id ?? null;
+
+    const result = await trx.run(
+      `INSERT INTO messages (
+         conversation_id, sender_id, sender_type, role, agent_id,
+         content, content_type, mentions, attachments, metadata, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, NOW())`,
+      [
+        current.conversation_id, current.sender_id, current.sender_type || 'human',
+        current.role || 'user', agentId, current.content, current.content_type || 'text',
+        mentions, attachments, JSON.stringify(metadata),
+      ]
+    );
+    const messageId = result.lastInsertRowid;
+
+    await trx.run(`UPDATE conversations SET updated_at = NOW() WHERE id = ?`, [current.conversation_id]);
+
+    if (isRetry) {
+      await trx.run(
+        `UPDATE scheduled_messages SET sent_message_id = ?, updated_at = NOW() WHERE id = ?`,
+        [messageId, current.id]
+      );
+    } else if (current.recurrence_cron) {
+      const completedRuns = runsDone + 1;
+      const isComplete = (current.max_runs !== null && completedRuns >= Number(current.max_runs)) || !followingRun;
+      await trx.run(
+        `UPDATE scheduled_messages
+         SET status = ?, runs_done = ?, last_fired_at = NOW(), sent_message_id = ?,
+             scheduled_at = ?, attempts = 0, next_attempt_at = NULL, error_message = NULL,
+             expect_reply_from = NULL, reply_check_at = NULL, reply_retries = 0, updated_at = NOW()
+         WHERE id = ?`,
+        [
+          isComplete ? 'sent' : 'pending', completedRuns, messageId,
+          followingRun?.toISOString() || current.scheduled_at, current.id,
+        ]
+      );
     } else {
-      // No explicit triggers — use auto-respond logic
-      const autoRespondAgents = await getAutoRespondAgents(convId, sender_id, content);
-      if (autoRespondAgents.length > 0) {
-        apiLogger.info({ conversationId: convId, agentCount: autoRespondAgents.length }, 'WP-17: Triggering auto-respond agents for scheduled message');
-        for (const agent of autoRespondAgents) {
-          await conversationLock.withLock(convId, () =>
-            executeAgentResponse(convId, agent, sender_id, { message_content: content })
-          );
-        }
-      } else {
-        const autoRespond = await shouldAutoRespondWithAI(convId, sender_id);
-        if (autoRespond) {
-          const defaultAgent = await getDefaultAgentForConversation(convId);
-          if (defaultAgent) {
-            apiLogger.info({ conversationId: convId, agentName: defaultAgent.name }, 'WP-17: Triggering default agent for scheduled message');
-            await conversationLock.withLock(convId, () =>
-              executeAgentResponse(convId, defaultAgent, sender_id, { message_content: content })
-            );
-          }
-        }
-      }
+      await trx.run(
+        `UPDATE scheduled_messages
+         SET status = 'sent', sent_message_id = ?, attempts = 0, next_attempt_at = NULL,
+             error_message = NULL, expect_reply_from = NULL, reply_check_at = NULL,
+             reply_retries = 0, updated_at = NOW()
+         WHERE id = ?`,
+        [messageId, current.id]
+      );
     }
-  } catch (agentErr) {
-    apiLogger.error({ err: agentErr, scheduledMessageId: id, conversationId: conversation_id }, 'WP-17: Agent auto-respond failed for scheduled message');
+
+    return { messageId, row: current };
+  });
+
+  if (!delivered) return null;
+  const { messageId, row } = delivered;
+  apiLogger.info({ scheduledMessageId: row.id, messageId, conversationId: row.conversation_id }, 'WP-17: Scheduled message sent');
+
+  try {
+    await triggerScheduledAgents(row, messageId, retryOf === null);
+  } catch (err) {
+    apiLogger.error({ err, scheduledMessageId: row.id, conversationId: row.conversation_id }, 'WP-17: Agent trigger failed for scheduled message');
+  }
+  return messageId;
+}
+
+async function triggerScheduledAgents(row, messageId, scheduleReplyCheck) {
+  const { id, conversation_id: conversationId, sender_id: senderId, content } = row;
+  if (hasInvocationTokens(content)) {
+    const conversation = await dbGet(`SELECT space_id FROM conversations WHERE id = ?`, [conversationId]);
+    await dispatchInvocationsFromContent({
+      conversationId: Number(conversationId),
+      content,
+      userId: senderId,
+      spaceId: conversation?.space_id || null,
+      sourceLabel: 'scheduled_message',
+      sourceMessageId: messageId,
+      sourceAgentId: row.agent_id || null,
+    });
+    if (scheduleReplyCheck) {
+      const expectedAgentId = await resolveExpectedReplyAgent(content, conversation?.space_id || null);
+      await dbRun(
+        `UPDATE scheduled_messages
+         SET expect_reply_from = ?, reply_check_at = CASE WHEN ?::integer IS NULL THEN NULL ELSE NOW() + (? * INTERVAL '1 minute') END,
+             reply_retries = 0, metadata = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [expectedAgentId, expectedAgentId, CONFIG.replyCheckMinutes, replyWaitMetadata(row, false), id]
+      );
+    }
+    return;
   }
 
-  return messageId;
+  const autoRespondAgents = await getAutoRespondAgents(Number(conversationId), senderId, content);
+  for (const agent of autoRespondAgents) {
+    await conversationLock.withLock(Number(conversationId), () =>
+      executeAgentResponse(Number(conversationId), agent, senderId, { message_content: content, trigger_message_id: messageId })
+    );
+  }
+  if (autoRespondAgents.length > 0) return;
+
+  if (await shouldAutoRespondWithAI(Number(conversationId), senderId)) {
+    const defaultAgent = await getDefaultAgentForConversation(Number(conversationId));
+    if (defaultAgent) {
+      await conversationLock.withLock(Number(conversationId), () =>
+        executeAgentResponse(Number(conversationId), defaultAgent, senderId, { message_content: content, trigger_message_id: messageId })
+      );
+    }
+  }
+}
+
+async function resolveExpectedReplyAgent(content, spaceId) {
+  for (const slug of new Set(parseInvocationMentions(content))) {
+    const resolved = await resolveMentionedUser(slug);
+    const agent = resolved?.isAgent
+      ? resolved.user
+      : (!resolved ? await resolveAgentUser(slug, spaceId) : null);
+    const agentRowId = agent?.managed_by_agent_row_id || agent?._agentConfig?.row_id;
+    if (agentRowId) return Number(agentRowId);
+  }
+  return null;
+}
+
+async function processReplyChecks() {
+  const rows = await dbAll(
+    `SELECT * FROM scheduled_messages
+     WHERE reply_check_at IS NOT NULL AND reply_check_at <= NOW()
+       AND status IN ('pending', 'sent')
+     ORDER BY reply_check_at ASC LIMIT 50`
+  );
+  for (const sm of rows) {
+    try {
+      await processReplyCheck(sm);
+    } catch (err) {
+      apiLogger.error({ err, scheduledMessageId: sm.id }, 'WP-17: Agent reply check failed');
+    }
+  }
+}
+
+async function processReplyCheck(sm) {
+  const expectedAgentId = Number(sm.expect_reply_from);
+  const reply = await dbGet(
+    `SELECT id FROM messages
+     WHERE conversation_id = ? AND id > ? AND sender_type = 'agent'
+       AND (agent_id = ? OR metadata->>'agent_row_id' = ?)
+     ORDER BY id ASC LIMIT 1`,
+    [sm.conversation_id, sm.sent_message_id, expectedAgentId, String(expectedAgentId)]
+  );
+  if (reply) {
+    await dbRun(
+      `UPDATE scheduled_messages
+       SET reply_check_at = NULL, reply_retries = 0, error_message = NULL, metadata = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [replyWaitMetadata(sm, false), sm.id]
+    );
+    return;
+  }
+
+  const conversation = await dbGet(
+    `SELECT is_processing, processing_agent_id FROM conversations WHERE id = ?`,
+    [sm.conversation_id]
+  );
+  const metadata = safeJsonParse(sm.metadata, {}) || {};
+  const isExpectedAgentProcessing = conversation?.is_processing
+    && Number(conversation.processing_agent_id) === expectedAgentId;
+  if (isExpectedAgentProcessing && !metadata.reply_wait_extended) {
+    await dbRun(
+      `UPDATE scheduled_messages
+       SET reply_check_at = NOW() + (? * INTERVAL '1 minute'), metadata = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [CONFIG.replyProcessingExtensionMinutes, replyWaitMetadata(sm, true), sm.id]
+    );
+    return;
+  }
+
+  if (Number(sm.reply_retries || 0) < CONFIG.maxReplyRetries) {
+    const retryMessageId = await sendScheduledMessage(sm, { retryOf: sm.sent_message_id });
+    if (retryMessageId === null) throw new Error('Scheduled message disappeared before reply retry');
+    await dbRun(
+      `UPDATE scheduled_messages
+       SET sent_message_id = ?, reply_retries = reply_retries + 1,
+           reply_check_at = NOW() + (? * INTERVAL '1 minute'), error_message = NULL,
+           metadata = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [retryMessageId, CONFIG.replyCheckMinutes, replyWaitMetadata(sm, false), sm.id]
+    );
+    return;
+  }
+
+  await dbRun(
+    `UPDATE scheduled_messages
+     SET reply_check_at = NULL, error_message = 'no agent reply after retry',
+         metadata = ?, updated_at = NOW()
+     WHERE id = ?`,
+    [replyWaitMetadata(sm, false), sm.id]
+  );
+}
+
+function replyWaitMetadata(sm, extended) {
+  const metadata = safeJsonParse(sm.metadata, {}) || {};
+  if (extended) metadata.reply_wait_extended = true;
+  else delete metadata.reply_wait_extended;
+  return JSON.stringify(metadata);
 }

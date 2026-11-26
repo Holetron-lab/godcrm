@@ -20,6 +20,7 @@ import path from 'path';
 import { z } from 'zod';
 import forgejoAdmin from './forgejo.js';
 import penpotAdmin from './penpot.js';
+import levelAdmin from './level.js';
 import { fileURLToPath } from 'url';
 import { dbGet, dbRun, dbAll } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
@@ -78,6 +79,7 @@ try {
 const router = express.Router();
 router.use(forgejoAdmin);
 router.use(penpotAdmin);
+router.use(levelAdmin);
 
 // In-memory store for authorization codes (in production, use Redis or database)
 const authorizationCodes = new Map();
@@ -175,8 +177,8 @@ function extractBearerToken(req) {
 }
 
 /**
- * Every refresh-token cookie value the browser sent, in header order.
- * Cookie name: godcrm_refresh (or REFRESH_COOKIE_NAME env var).
+ * Every session-token cookie value the browser sent, grouped by cookie name and
+ * in header order: godcrm_refresh (or REFRESH_COOKIE_NAME) and access_token.
  *
  * A browser that also logged in on another *.godcrm.ai host carries a
  * Domain=.godcrm.ai copy signed with that box's JWT_SECRET next to the
@@ -186,10 +188,12 @@ function extractBearerToken(req) {
  * @returns {string[]} - Cookie values (possibly empty)
  */
 function extractCookieTokens(req) {
-  const cookieName = process.env.REFRESH_COOKIE_NAME || 'godcrm_refresh';
-  const values = getCookieValues(req, cookieName);
-  if (values.length === 0 && req.cookies?.[cookieName]) return [req.cookies[cookieName]];
-  return values;
+  const cookieNames = [process.env.REFRESH_COOKIE_NAME || 'godcrm_refresh', 'access_token'];
+  return cookieNames.flatMap((cookieName) => {
+    const values = getCookieValues(req, cookieName);
+    if (values.length === 0 && req.cookies?.[cookieName]) return [req.cookies[cookieName]];
+    return values;
+  });
 }
 
 /**

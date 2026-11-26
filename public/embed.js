@@ -44,7 +44,19 @@
 
   var origin = new URL(script.src).origin;
   var space = script.getAttribute('data-space') || 'auto';
-  var frameSrc = origin + '/embed/chat?space=' + encodeURIComponent(space) + '&mode=overlay';
+  var ticketMode = script.getAttribute('data-auth') === 'ticket';
+  var clientId = script.getAttribute('data-client-id') || '';
+  var ticketUrl = script.getAttribute('data-ticket-url') || '';
+  var ticketEndpoint = null;
+  if (ticketMode) {
+    if (!clientId || !ticketUrl) return;
+    try { ticketEndpoint = new URL(ticketUrl, window.location.href); } catch (_e) { return; }
+    if (ticketEndpoint.origin !== window.location.origin) return;
+  }
+  var frameSrc = ticketMode
+    ? origin + '/embed/chat?mode=overlay&auth=ticket&client_id=' + encodeURIComponent(clientId)
+    : origin + '/embed/chat?space=' + encodeURIComponent(space) + '&mode=overlay';
+  var ticketRequestPending = false;
 
   var Z = '2147483000'; // above typical site chrome, below max (leaves headroom)
   var WIDTH_KEY = 'godcrm_embed_w';        // persisted strip width (px)
@@ -175,7 +187,8 @@
   }
   function applyLayout() {
     var wide = isOpen && isDesktop();
-    var gutter = wide ? panelW : 0;
+    var split = !ticketMode || new URL(frameSrc).searchParams.get('mode') === 'split';
+    var gutter = wide && split ? panelW : 0;
     var penpot = penpotRoot();
 
     root.style.setProperty('--godcrm-strip-w', gutter + 'px');
@@ -258,14 +271,57 @@
   if (mq.addEventListener) mq.addEventListener('change', repaint);
   else if (mq.addListener) mq.addListener(repaint);
 
-  // In-frame controls talk to this host. close → collapse the strip; mode:'split'
-  // → hand off to the true side-by-side shell. Sender origin verified.
+  function requestTicket() {
+    if (!ticketMode || ticketRequestPending || !frame || !frame.contentWindow) return;
+    ticketRequestPending = true;
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta && csrfMeta.getAttribute('content');
+    var headers = { 'Accept': 'application/json' };
+    if (csrfToken) headers['X-CSRF-TOKEN'] = csrfToken;
+    fetch(ticketEndpoint.href, {
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: headers
+    }).then(function (response) {
+      if (!response.ok) throw new Error('Ticket request failed');
+      return response.json();
+    }).then(function (payload) {
+      var ticket = payload && payload.data && payload.data.ticket;
+      if (typeof ticket !== 'string' || !ticket) throw new Error('Invalid ticket response');
+      frame.contentWindow.postMessage({
+        type: 'godcrm-embed:bootstrap', version: 1, ticket: ticket
+      }, origin);
+    }).catch(function () {
+      if (frame && frame.contentWindow) {
+        frame.contentWindow.postMessage({ type: 'godcrm-embed:bootstrap-error', version: 1 }, origin);
+      }
+    }).finally(function () {
+      ticketRequestPending = false;
+    });
+  }
+
+  // In-frame controls talk to this host. Ticket embeds switch presentation in
+  // place; legacy cookie embeds keep the standalone split shell. Origin verified.
   window.addEventListener('message', function (ev) {
     if (ev.origin !== origin || !ev.data) return;
-    if (ev.data.type === 'godcrm-embed:close') {
+    var isHandshake = ev.data.type === 'godcrm-embed:ready' || ev.data.type === 'godcrm-embed:reauth';
+    if (isHandshake) {
+      if (!ticketMode || !frame || ev.source !== frame.contentWindow || ev.data.version !== 1 || ev.data.client_id !== clientId) return;
+      requestTicket();
+    } else if (ev.data.type === 'godcrm-embed:close') {
       if (isOpen) setOpen(false, true);
-    } else if (ev.data.type === 'godcrm-embed:mode' && ev.data.mode === 'split') {
-      window.location.href = '/split';
+    } else if (ev.data.type === 'godcrm-embed:mode') {
+      if (ev.data.mode !== 'split' && ev.data.mode !== 'overlay') return;
+      if (!ticketMode) {
+        if (ev.data.mode === 'split') window.location.href = '/split';
+        return;
+      }
+      var nextFrameSrc = new URL(frameSrc);
+      nextFrameSrc.searchParams.set('mode', ev.data.mode);
+      frameSrc = nextFrameSrc.href;
+      frame.src = frameSrc;
+      setOpen(true, false);
     }
   });
 

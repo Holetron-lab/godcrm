@@ -2,6 +2,9 @@ export const common = {
   en: {
     language: 'Language',
     loading: 'Loading...',
+    loadingChat: 'Loading GOD CRM chat…',
+    retryConnection: 'Retry connection',
+    ticketSpaceAccessDenied: 'Your ticket session does not have access to its bound space.',
     cancel: 'Cancel',
     save: 'Save',
     saving: 'Saving...',
@@ -27,6 +30,9 @@ export const common = {
   ru: {
     language: 'Язык',
     loading: 'Загрузка...',
+    loadingChat: 'Загрузка чата GOD CRM…',
+    retryConnection: 'Повторить подключение',
+    ticketSpaceAccessDenied: 'У этой ticket-сессии нет доступа к привязанному пространству.',
     cancel: 'Отмена',
     save: 'Сохранить',
     saving: 'Сохранение...',

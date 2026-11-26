@@ -43,6 +43,7 @@ import structureRouter from './structure.js';
 import tasksRouter from './tasks.js';
 import researchRouter from './research.js';
 import snapshotsRouter from './snapshots.js';
+import conversionsRouter from './conversions.js';
 
 const router = express.Router();
 
@@ -69,5 +70,8 @@ router.use(researchRouter);
 
 // ADR-0016 Phase 1: Authenticated snapshot read endpoint
 router.use(snapshotsRouter);
+
+// ADR-0211: asynchronous PDF/DOCX conversion
+router.use(conversionsRouter);
 
 export default router;

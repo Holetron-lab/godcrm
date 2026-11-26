@@ -136,7 +136,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // authorization decisions now read `context.principal`, so holding the
     // channel is no longer the same as holding the owner's authority.
     const context = {
-      spaceId: parseInt(process.env.MCP_SPACE_ID || '11', 10),
+      spaceId: parseInt(process.env.SPACE_ID || process.env.MCP_SPACE_ID || '11', 10),
       source: 'mcp',
       jobId: Number(process.env.MCP_JOB_ID) || null,
       principal: { kind: 'system', label: 'mcp-system', userId: null },
@@ -183,6 +183,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // ── Start ──────────────────────────────────────────────────────
 
 async function main() {
+  const transport = new StdioServerTransport();
+  let closing = false;
+  transport.onclose = () => {
+    console.error('[godcrm-mcp] Transport closed; exiting.');
+    process.exit(0);
+  };
+  const closeTransport = () => {
+    if (closing) return;
+    closing = true;
+    transport.close().catch((err) => {
+      console.error('[godcrm-mcp] Shutdown failed:', err);
+      process.exit(1);
+    });
+  };
+  // The SDK transport does not subscribe to these events itself.
+  process.stdin.once('end', closeTransport);
+  process.stdin.once('close', closeTransport);
+
   // Initialize the SecretsVault before serving tools. Best-effort: a failure
   // here must not stop the MCP server (secret-less tools still work), but in
   // NODE_ENV=production with a missing master key init() self-exits (ADR-0040
@@ -195,7 +213,6 @@ async function main() {
     console.error('[godcrm-mcp] SecretsVault init failed — vault-backed tools degraded:', err?.message || err);
   }
 
-  const transport = new StdioServerTransport();
   await server.connect(transport);
   // Log to stderr so it doesn't interfere with stdio protocol
   console.error(`[godcrm-mcp] Server started. ${mcpTools.length} tools registered.`);

@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react';
-import { createBrowserRouter, createHashRouter, RouterProvider, useParams, useLocation, Navigate } from 'react-router-dom';
+import { createBrowserRouter, createHashRouter, RouterProvider, useLocation, Navigate } from 'react-router-dom';
 import { Layout } from '@/shared/components/layout/Layout';
 import NotFoundPage from '@/pages/NotFoundPage';
 import ErrorBoundaryPage from '@/pages/ErrorBoundaryPage';
@@ -36,7 +36,9 @@ const RawTableViewPage = lazy(() => import('@/pages/tables/RawTableViewPage'));
 const ProjectDashboardPage = lazy(() => import('@/pages/dashboards/DashboardPage').then(m => ({ default: m.DashboardPage })));
 const PersonalDashboardRedirect = lazy(() => import('@/pages/dashboards/PersonalDashboardRedirect').then(m => ({ default: m.PersonalDashboardRedirect })));
 const WidgetManagePage = lazy(() => import('@/pages/widgets/WidgetManagePage').then(m => ({ default: m.WidgetManagePage })));
-const WidgetCreatePage = lazy(() => import('@/pages/widgets/WidgetCreatePage').then(m => ({ default: m.WidgetCreatePage })));
+// ADR-207 §2.7: the module catalog took the place of the widget create wizard; old links redirect into it.
+const ModuleCatalogPage = lazy(() => import('@/pages/modules/ModuleCatalogPage').then(m => ({ default: m.ModuleCatalogPage })));
+const WidgetCreateRedirect = lazy(() => import('@/pages/modules/ModuleCatalogPage').then(m => ({ default: m.WidgetCreateRedirect })));
 const WidgetViewPage = lazy(() => import('@/pages/widgets/WidgetViewPage').then(m => ({ default: m.WidgetViewPage })));
 const UsersPage = lazy(() => import('@/pages/users/UsersPage'));
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'));
@@ -111,7 +113,10 @@ const routes = [
           { path: 'projects/:projectId/api-keys', element: <ProjectApiKeysPage /> },
           { path: 'projects/:projectId/files', element: <ProjectFilesPage /> },
           { path: 'projects/:projectId/autopilot', element: <AutopilotDashboardPage /> },
-          { path: 'projects/:projectId/widgets/create', element: <WidgetCreatePage /> },
+          { path: 'projects/:projectId/modules', element: <ModuleCatalogPage /> },
+          // The module opens as a dialog over the catalog (owner, chat 3813, 13.11.2026): same page, the id in the URL.
+          { path: 'projects/:projectId/modules/:moduleId', element: <ModuleCatalogPage /> },
+          { path: 'projects/:projectId/widgets/create', element: <WidgetCreateRedirect /> },
           { path: 'widgets/:widgetId', element: <WidgetViewPage /> },
           { path: 'widgets/:widgetId/edit', element: <WidgetManagePage /> },
           { path: 'projects/:projectId/tables', element: <TableListPage /> },

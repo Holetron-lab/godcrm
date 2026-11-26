@@ -115,3 +115,26 @@ it('reports a failed later page instead of presenting a partial member list as c
   expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load users');
   expect(screen.queryByText('Partial member')).not.toBeInTheDocument();
 });
+
+it('grants the selected role on the project when adding a member', async () => {
+  const request = vi.mocked(apiClient.request).getMockImplementation()!;
+  vi.mocked(apiClient.request).mockImplementation((url, options) => {
+    if (url === '/access/space/11/enable') return Promise.resolve({ data: { access_control: { enabled: true, users_table_id: 90, role_column_id: 'role', role_mappings: [] } } });
+    if (url === '/users') return Promise.resolve({ data: [{ id: 25, name: 'New User', email: 'new@example.test' }] });
+    if (url.startsWith('/tables/90/rows?')) return Promise.resolve({ data: { rows: [] } });
+    return request(url, options);
+  });
+
+  renderWithProviders(<UserAccessPanel entityType="project" entityId={44} spaceId={11} currentUserLevel="owner_owner" />, { language: 'en' });
+  fireEvent.click(screen.getByRole('switch', { name: 'User access management' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Users' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add' }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Default role' }), { target: { value: 'editor' } });
+  fireEvent.click(await screen.findByRole('button', { name: /New User/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add (1)' }));
+
+  await waitFor(() => expect(apiClient.request).toHaveBeenCalledWith('/access/project/44/permissions', {
+    method: 'POST',
+    body: JSON.stringify({ user_id: 25, access_level: 'editor' }),
+  }));
+});

@@ -437,6 +437,8 @@ interface SaveHandlerDeps {
   scheduledDateColumn: string;
   dueDateColumn: string;
   colorColumn: string;
+  /** ADR-209. Omitted = keep what the widget already has. */
+  kanbanEventsTableId?: string;
   taskCompletedColumn: string;
   bddMode: boolean;
   bddCodeColumn: string;
@@ -447,6 +449,8 @@ interface SaveHandlerDeps {
   calendarTitleColumn: string;
   calendarDescriptionColumn: string;
   calendarColorColumn: string;
+  /** ADR-209. Omitted = keep what the widget already has. */
+  calendarEventsTableId?: string;
   startDateColumn: string;
   endDateColumn: string;
   timelineTitleColumn: string;
@@ -511,6 +515,7 @@ export function createHandleSave(deps: SaveHandlerDeps) {
         scheduledDateColumn: deps.scheduledDateColumn || undefined,
         dueDateColumn: deps.dueDateColumn || undefined,
         colorColumn: deps.colorColumn || undefined,
+        eventsTableId: (deps.kanbanEventsTableId ?? deps.widget.config?.kanban?.eventsTableId) || undefined,
         lanes: deps.widget.config?.kanban?.lanes || [],
       };
     }
@@ -538,6 +543,7 @@ export function createHandleSave(deps: SaveHandlerDeps) {
         titleColumn: deps.calendarTitleColumn,
         descriptionColumn: deps.calendarDescriptionColumn || undefined,
         colorColumn: deps.calendarColorColumn || undefined,
+        eventsTableId: (deps.calendarEventsTableId ?? deps.widget.config?.calendar?.eventsTableId) || undefined,
       };
     }
 

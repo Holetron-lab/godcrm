@@ -4,7 +4,7 @@
  * Handles: send_chat_message, list_conversations, get_conversation_messages, create_conversation
  */
 
-import { dbGet, dbRun, dbAll, isPostgres, sqlNow } from '../../database/connection.js';
+import { dbGet, dbRun, dbAll, isPostgres, safeJsonParse, sqlNow } from '../../database/connection.js';
 import { apiLogger } from '../../utils/logger.js';
 import { parseRowData } from './data-tools.js';
 import { isMailMirror, fetchMailChipHeaders, mailChipTitle } from '../mail/mailChip.js';
@@ -14,6 +14,10 @@ import {
 import { moveMessages, MoveValidationError, MoveAuthError } from '../messageMoveService.js';
 import { spawnTicketFromCriterion, SpawnValidationError } from '../criterionTicketSpawnService.js';
 import { canAdminister } from '../EffectiveRoleService.js';
+import {
+  ScheduledMessageError, cancelScheduledMessage, createScheduledMessage,
+  listScheduledMessages, setScheduledMessageStatus,
+} from '../scheduled-messages/operations.js';
 
 // ADR-0031 WP-20+21 (T-141237): content_type + attachments[] support for MCP send_chat_message.
 const ALLOWED_MCP_CONTENT_TYPES = new Set(['text', 'widget_embed']);
@@ -88,7 +92,65 @@ async function _resolveAuthor(userId, ctx) {
   };
 }
 
+async function _isScheduledMessageRun(ctx) {
+  let triggerMessageId = ctx?.triggerMessageId || null;
+  if (!triggerMessageId && ctx?.jobId) {
+    const job = await dbGet(
+      isPostgres() ? 'SELECT trigger_message_id FROM agent_jobs WHERE id = $1' : 'SELECT trigger_message_id FROM agent_jobs WHERE id = ?',
+      [ctx.jobId]
+    );
+    triggerMessageId = job?.trigger_message_id || null;
+  }
+  if (!triggerMessageId) return false;
+  const message = await dbGet(
+    isPostgres() ? 'SELECT metadata FROM messages WHERE id = $1' : 'SELECT metadata FROM messages WHERE id = ?',
+    [triggerMessageId]
+  );
+  return Boolean(safeJsonParse(message?.metadata, {})?.scheduled_message_id);
+}
+
 export const chatToolHandlers = {
+  async schedule_message(args, userId, ctx = {}) {
+    const { action, conversation_id, scheduled_message_id } = args;
+    if (!['create', 'list', 'pause', 'resume', 'cancel'].includes(action)) {
+      return { error: 'INVALID_ACTION', message: 'action must be create, list, pause, resume, or cancel' };
+    }
+    try {
+      if (action === 'create' && args.recurrence_cron && await _isScheduledMessageRun(ctx)) {
+        return {
+          error: 'RECURSIVE_SCHEDULE_FORBIDDEN',
+          message: 'A scheduled-message run cannot create another recurring series',
+        };
+      }
+      if (['create', 'list'].includes(action) && !Number.isFinite(conversation_id)) {
+        return { error: 'INVALID_SCHEDULE', message: 'conversation_id is required (number)' };
+      }
+      if (['pause', 'resume', 'cancel'].includes(action) && !Number.isFinite(scheduled_message_id)) {
+        return { error: 'INVALID_SCHEDULE', message: 'scheduled_message_id is required (number)' };
+      }
+
+      const author = await _resolveAuthor(userId, ctx);
+      if (action === 'create') {
+        const scheduledMessage = await createScheduledMessage({ conversationId: conversation_id, input: args, author });
+        return { success: true, scheduled_message: scheduledMessage };
+      }
+      if (action === 'list') {
+        const scheduledMessages = await listScheduledMessages(conversation_id, author.senderId);
+        return { success: true, scheduled_messages: scheduledMessages, total: scheduledMessages.length };
+      }
+      if (action === 'cancel') {
+        return { success: true, ...await cancelScheduledMessage(scheduled_message_id, author.senderId) };
+      }
+      const scheduledMessage = await setScheduledMessageStatus(
+        scheduled_message_id, author.senderId, action === 'pause' ? 'paused' : 'pending'
+      );
+      return { success: true, scheduled_message: scheduledMessage };
+    } catch (err) {
+      if (err instanceof ScheduledMessageError) return { error: err.code, message: err.message };
+      throw err;
+    }
+  },
+
   async send_chat_message({ conversation_id, content, role = null, content_type = 'text', attachments = null }, userId, ctx = {}) {
     // ── ADR-0031 WP-20+21: validate content_type + attachments shape ──
     if (!ALLOWED_MCP_CONTENT_TYPES.has(content_type)) {
@@ -213,6 +275,7 @@ export const chatToolHandlers = {
         table_name: tableName,
         ...(tableIcon ? { table_icon: tableIcon } : {}),
         row_title: rowTitle,
+        ...(Number.isInteger(rowData.widget_id) && rowData.widget_id > 0 ? { widget_id: rowData.widget_id } : {}),
         // Forward-compat: renderer may consult `style` to force chip vs card.
         style,
       },

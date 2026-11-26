@@ -74,6 +74,14 @@ export const initApiUrl = async (): Promise<string> => {
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
+type EmbedReauthHandler = () => Promise<string | null>;
+let embedReauthHandler: EmbedReauthHandler | null = null;
+
+export const setEmbedReauthHandler = (handler: EmbedReauthHandler | null): void => {
+  embedReauthHandler = handler;
+};
+
+export const isEmbedTicketMode = (): boolean => embedReauthHandler !== null;
 
 const pushTokenToElectron = (token: string | null): void => {
   if (typeof window === 'undefined') return;
@@ -97,6 +105,11 @@ const parseResponse = async <T>(response: Response): Promise<T> => {
 const requestRefreshToken = async (): Promise<string | null> => {
   if (!refreshPromise) {
     refreshPromise = (async () => {
+      if (embedReauthHandler) {
+        const token = await embedReauthHandler();
+        refreshPromise = null;
+        return token;
+      }
       // ✅ v3 auth - use dynamic base URL
       const baseUrl = getBaseUrlSync();
       const response = await fetch(`${baseUrl}/auth/refresh`, {
@@ -203,6 +216,8 @@ export const setAccessToken = (token: string | null): void => {
 const apiClient = {
   setAccessToken,
   getAccessToken,
+  setEmbedReauthHandler,
+  isEmbedTicketMode,
   request: internalFetch,
   
   // Convenience methods

@@ -4,12 +4,21 @@
  */
 
 import {
-  dbRun, dbGet, dbAll, isPostgres, safeJsonParse, apiLogger,
-  success, created, error, badRequest, notFound, forbidden,
+  dbGet, isPostgres, apiLogger,
+  success, created, error, notFound, forbidden,
   requireAuth,
 } from './chatShared.js';
-import { parseAttachments } from './parseAttachments.js';
 import { sendScheduledMessage } from '../../../services/ScheduledMessageWorker.js';
+import {
+  ScheduledMessageError, cancelScheduledMessage, createScheduledMessage,
+  listScheduledMessages, setScheduledMessageStatus, updateScheduledMessage,
+} from '../../../services/scheduled-messages/operations.js';
+
+function respondError(res, err, fallbackCode, fallbackMessage) {
+  if (err instanceof ScheduledMessageError) return error(res, err.code, err.message, err.statusCode);
+  apiLogger.error({ err }, fallbackMessage);
+  return error(res, fallbackCode, err.message, 500);
+}
 
 export default function registerScheduledMessageRoutes(router) {
 
@@ -18,135 +27,50 @@ export default function registerScheduledMessageRoutes(router) {
     try {
       const { id } = req.params;
       const userId = req.user.userId;
-      const { content, content_type = 'text', mentions = [], attachments = [], metadata = {}, scheduled_at } = req.body;
-
-      if (!content || !scheduled_at) return badRequest(res, 'content and scheduled_at are required');
-
-      const scheduledDate = new Date(scheduled_at);
-      if (isNaN(scheduledDate.getTime())) return badRequest(res, 'Invalid scheduled_at date');
-      if (scheduledDate.getTime() <= Date.now()) return badRequest(res, 'scheduled_at must be in the future');
-
-      // Verify conversation exists and user is participant
-      const participant = await dbGet(
-        isPostgres()
-          ? `SELECT 1 FROM conversation_participants WHERE conversation_id = $1 AND user_id = $2`
-          : `SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND user_id = ?`,
-        [id, userId]
-      );
-      if (!participant) return notFound(res, 'Conversation not found');
-
-      const mentionsJson = JSON.stringify(mentions);
-      const attachmentsJson = JSON.stringify(attachments);
-      const metadataJson = JSON.stringify(metadata);
-
-      let result;
-      if (isPostgres()) {
-        result = await dbRun(
-          `INSERT INTO scheduled_messages (conversation_id, sender_id, content, content_type, mentions, attachments, metadata, scheduled_at)
-           VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8) RETURNING id`,
-          [id, userId, content, content_type, mentionsJson, attachmentsJson, metadataJson, scheduledDate.toISOString()]
-        );
-      } else {
-        result = await dbRun(
-          `INSERT INTO scheduled_messages (conversation_id, sender_id, content, content_type, mentions, attachments, metadata, scheduled_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [id, userId, content, content_type, mentionsJson, attachmentsJson, metadataJson, scheduledDate.toISOString()]
-        );
-      }
-
-      const row = await dbGet(
-        isPostgres() ? `SELECT * FROM scheduled_messages WHERE id = $1` : `SELECT * FROM scheduled_messages WHERE id = ?`,
-        [result.lastInsertRowid]
-      );
-
-      apiLogger.info({ conversationId: id, scheduledMessageId: row.id, scheduledAt: scheduled_at }, 'WP-17: Scheduled message created');
-      return created(res, formatRow(row));
+      const metadata = req.body.metadata || {};
+      const row = await createScheduledMessage({
+        conversationId: id,
+        input: req.body,
+        author: {
+          senderId: userId, senderType: 'human', agentId: null,
+          defaultRole: 'user', metadata: JSON.stringify(metadata),
+        },
+      });
+      apiLogger.info({ conversationId: id, scheduledMessageId: row.id, scheduledAt: row.scheduled_at }, 'WP-17: Scheduled message created');
+      return created(res, row);
     } catch (err) {
-      apiLogger.error({ err }, 'Error creating scheduled message');
-      return error(res, 'SCHEDULE_MESSAGE_ERROR', err.message, 500);
+      return respondError(res, err, 'SCHEDULE_MESSAGE_ERROR', 'Error creating scheduled message');
     }
   });
 
-  // GET /conversations/:id/scheduled-messages — List pending scheduled messages
+  // GET /conversations/:id/scheduled-messages — List pending and paused scheduled messages
   router.get('/conversations/:id/scheduled-messages', requireAuth, async (req, res) => {
     try {
-      const { id } = req.params;
-      const rows = await dbAll(
-        isPostgres()
-          ? `SELECT sm.*, u.name as sender_name, u.avatar as sender_avatar FROM scheduled_messages sm LEFT JOIN users u ON sm.sender_id = u.id WHERE sm.conversation_id = $1 AND sm.status = 'pending' ORDER BY sm.scheduled_at ASC`
-          : `SELECT sm.*, u.name as sender_name, u.avatar as sender_avatar FROM scheduled_messages sm LEFT JOIN users u ON sm.sender_id = u.id WHERE sm.conversation_id = ? AND sm.status = 'pending' ORDER BY sm.scheduled_at ASC`,
-        [id]
-      );
-      return success(res, { scheduled_messages: rows.map(formatRow) });
+      const rows = await listScheduledMessages(req.params.id, req.user.userId);
+      return success(res, { scheduled_messages: rows });
     } catch (err) {
-      apiLogger.error({ err }, 'Error listing scheduled messages');
-      return error(res, 'LIST_SCHEDULED_ERROR', err.message, 500);
+      return respondError(res, err, 'LIST_SCHEDULED_ERROR', 'Error listing scheduled messages');
     }
   });
 
   // PUT /scheduled-messages/:smId — Edit a pending scheduled message
   router.put('/scheduled-messages/:smId', requireAuth, async (req, res) => {
     try {
-      const { smId } = req.params;
-      const userId = req.user.userId;
-
-      const existing = await dbGet(
-        isPostgres() ? `SELECT * FROM scheduled_messages WHERE id = $1` : `SELECT * FROM scheduled_messages WHERE id = ?`,
-        [smId]
-      );
-      if (!existing) return notFound(res, 'Scheduled message not found');
-      if (existing.status !== 'pending') return badRequest(res, 'Can only edit pending messages');
-      if (Number(existing.sender_id) !== Number(userId)) return forbidden(res, 'Can only edit your own scheduled messages');
-
-      const { content, scheduled_at, mentions, attachments, metadata } = req.body;
-      const updates = [];
-      const params = [];
-      let paramIdx = 1;
-
-      if (content !== undefined) {
-        updates.push(isPostgres() ? `content = $${paramIdx++}` : `content = ?`);
-        params.push(content);
-      }
-      if (scheduled_at !== undefined) {
-        const d = new Date(scheduled_at);
-        if (isNaN(d.getTime())) return badRequest(res, 'Invalid scheduled_at');
-        if (d.getTime() <= Date.now()) return badRequest(res, 'scheduled_at must be in the future');
-        updates.push(isPostgres() ? `scheduled_at = $${paramIdx++}` : `scheduled_at = ?`);
-        params.push(d.toISOString());
-      }
-      if (mentions !== undefined) {
-        updates.push(isPostgres() ? `mentions = $${paramIdx++}::jsonb` : `mentions = ?`);
-        params.push(JSON.stringify(mentions));
-      }
-      if (attachments !== undefined) {
-        updates.push(isPostgres() ? `attachments = $${paramIdx++}::jsonb` : `attachments = ?`);
-        params.push(JSON.stringify(attachments));
-      }
-      if (metadata !== undefined) {
-        updates.push(isPostgres() ? `metadata = $${paramIdx++}::jsonb` : `metadata = ?`);
-        params.push(JSON.stringify(metadata));
-      }
-
-      if (updates.length === 0) return badRequest(res, 'No fields to update');
-
-      updates.push(isPostgres() ? `updated_at = NOW()` : `updated_at = datetime('now')`);
-      params.push(smId);
-
-      await dbRun(
-        `UPDATE scheduled_messages SET ${updates.join(', ')} WHERE id = ${isPostgres() ? `$${paramIdx}` : '?'}`,
-        params
-      );
-
-      const updated = await dbGet(
-        isPostgres() ? `SELECT * FROM scheduled_messages WHERE id = $1` : `SELECT * FROM scheduled_messages WHERE id = ?`,
-        [smId]
-      );
-
-      apiLogger.info({ scheduledMessageId: smId }, 'WP-17: Scheduled message updated');
-      return success(res, formatRow(updated));
+      const updated = await updateScheduledMessage(req.params.smId, req.user.userId, req.body);
+      apiLogger.info({ scheduledMessageId: req.params.smId }, 'WP-17: Scheduled message updated');
+      return success(res, updated);
     } catch (err) {
-      apiLogger.error({ err }, 'Error updating scheduled message');
-      return error(res, 'UPDATE_SCHEDULED_ERROR', err.message, 500);
+      return respondError(res, err, 'UPDATE_SCHEDULED_ERROR', 'Error updating scheduled message');
+    }
+  });
+
+  // PATCH /scheduled-messages/:smId/status — Pause or resume a scheduled message
+  router.patch('/scheduled-messages/:smId/status', requireAuth, async (req, res) => {
+    try {
+      const updated = await setScheduledMessageStatus(req.params.smId, req.user.userId, req.body.status);
+      return success(res, updated);
+    } catch (err) {
+      return respondError(res, err, 'STATUS_SCHEDULED_ERROR', 'Error changing scheduled message status');
     }
   });
 
@@ -188,44 +112,14 @@ export default function registerScheduledMessageRoutes(router) {
     }
   });
 
-  // DELETE /scheduled-messages/:smId — Cancel a pending scheduled message
+  // DELETE /scheduled-messages/:smId — Cancel a pending or paused scheduled message
   router.delete('/scheduled-messages/:smId', requireAuth, async (req, res) => {
     try {
-      const { smId } = req.params;
-      const userId = req.user.userId;
-
-      const existing = await dbGet(
-        isPostgres() ? `SELECT * FROM scheduled_messages WHERE id = $1` : `SELECT * FROM scheduled_messages WHERE id = ?`,
-        [smId]
-      );
-      if (!existing) return notFound(res, 'Scheduled message not found');
-      if (existing.status !== 'pending') return badRequest(res, 'Can only cancel pending messages');
-      if (Number(existing.sender_id) !== Number(userId)) return forbidden(res, 'Can only cancel your own scheduled messages');
-
-      await dbRun(
-        isPostgres()
-          ? `UPDATE scheduled_messages SET status = 'cancelled', updated_at = NOW() WHERE id = $1`
-          : `UPDATE scheduled_messages SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?`,
-        [smId]
-      );
-
-      apiLogger.info({ scheduledMessageId: smId }, 'WP-17: Scheduled message cancelled');
-      return success(res, { cancelled: true, id: Number(smId) });
+      const result = await cancelScheduledMessage(req.params.smId, req.user.userId);
+      apiLogger.info({ scheduledMessageId: req.params.smId }, 'WP-17: Scheduled message cancelled');
+      return success(res, result);
     } catch (err) {
-      apiLogger.error({ err }, 'Error cancelling scheduled message');
-      return error(res, 'CANCEL_SCHEDULED_ERROR', err.message, 500);
+      return respondError(res, err, 'CANCEL_SCHEDULED_ERROR', 'Error cancelling scheduled message');
     }
   });
-}
-
-function formatRow(row) {
-  return {
-    ...row,
-    id: Number(row.id),
-    conversation_id: Number(row.conversation_id),
-    sender_id: Number(row.sender_id),
-    mentions: safeJsonParse(row.mentions) || [],
-    attachments: parseAttachments(row.attachments),
-    metadata: safeJsonParse(row.metadata) || {},
-  };
 }

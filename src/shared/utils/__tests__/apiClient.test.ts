@@ -5,6 +5,7 @@ describe('apiClient', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     apiClient.setAccessToken(null);
+    apiClient.setEmbedReauthHandler(null);
   });
 
   it('attaches bearer token to requests', async () => {
@@ -51,12 +52,30 @@ describe('apiClient', () => {
     expect(apiClient.getAccessToken()).toBe('new-token');
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it('uses fresh-ticket reauth instead of cookie refresh in embed mode', async () => {
+    const reauth = vi.fn().mockResolvedValue('renewed-embed-token');
+    apiClient.setEmbedReauthHandler(reauth);
+    apiClient.setAccessToken('expired-embed-token');
+    const fetchMock = vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(new Response('', { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { ok: true } }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }));
+
+    await expect(apiClient.request('/secure')).resolves.toEqual({ data: { ok: true } });
+    expect(reauth).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toContain('/api/v3/auth/refresh');
+    expect(apiClient.getAccessToken()).toBe('renewed-embed-token');
+  });
 });
 
 describe('apiClient HTTP errors', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     apiClient.setAccessToken(null);
+    apiClient.setEmbedReauthHandler(null);
   });
 
   it.each([

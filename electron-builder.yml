@@ -29,9 +29,8 @@ linux:
   category: Office
   icon: electron/assets/icon.png
   desktop:
-    entry:
-      StartupWMClass: god-crm
-      Comment: GOD CRM Universal Workspace
+    StartupWMClass: god-crm
+    Comment: GOD CRM Universal Workspace
 
 win:
   target:

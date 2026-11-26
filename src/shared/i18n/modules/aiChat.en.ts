@@ -1,3 +1,5 @@
+import { aiChatSchedulingEN } from './aiChatScheduling.en';
+
 export const aiChatEN = {
   "chatWidth": "Chat width",
   "discardConfigurationDraft": "Close without saving changes?",
@@ -183,6 +185,7 @@ export const aiChatEN = {
   "created": "created",
   "changeTime": "Change time",
   "sendNow": "Send now",
+  ...aiChatSchedulingEN,
   "noPriority": "No priority",
   "low": "Low",
   "medium": "Medium",
@@ -569,6 +572,10 @@ export const aiChatEN = {
   "selectedCount": "Selected: {count}",
   "jumpToSenderMessage": "Go to message from {name}",
   "openSenderMessage": "Open message from {name}: {content}",
+  "expandSenderMessage": "Expand message from {name}",
+  "collapseSenderMessage": "Collapse message from {name}",
+  "movedPreviewLimited": "Showing the first {shown} of {total} — the rest are in the chat",
+  "movedMessagesFrom": "From: {names}",
   "searchTable": "Search {name}...",
   "stepCount": "Steps: {count}",
   "stalledMinutes": "Inactive for {count} min",
@@ -728,6 +735,7 @@ export const aiChatEN = {
   "pinLimitReached": "Pinned message limit reached (50). Unpin a message and try again.",
   "pinOwnerOnly": "Only the owner can pin messages in this chat.",
   "pinFailed": "Could not update the pinned message.",
+  "messageNotFoundInHistory": "Could not find the message in the chat history",
   "translationEmpty": "The translation returned no data.",
   "translationFailed": "Could not translate the message.",
   "speechUnsupportedBrowser": "This browser does not support the Web Speech API",

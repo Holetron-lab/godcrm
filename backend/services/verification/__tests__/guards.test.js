@@ -167,6 +167,50 @@ describe('enforceVerificationGuards — C-6 lock with relation-typed guard', () 
   });
 });
 
+describe('enforceVerificationGuards — C-6 lock with relation-backed select guard', () => {
+  const STATUS_SELECT_REL_COL = {
+    ...STATUS_REL_COL,
+    type: 'select',
+    config: JSON.stringify({
+      target_table_id: 7341,
+      relation: { enabled: true, tableId: '7341', valueColumn: 'id', labelColumn: 'label' },
+    }),
+  };
+
+  it('numeric target row ID resolves to a locked slug → 409', async () => {
+    dbAllMock.mockResolvedValueOnce([VER_COL, STATUS_SELECT_REL_COL]);
+    dbGetMock.mockResolvedValueOnce({ data: { slug: 'approved', label: 'Approved' } });
+
+    const r = await enforceVerificationGuards({
+      tableId: 2197,
+      existingData: { plan_verification: null, status_id: 127271 },
+      incomingData: { status_id: 127272 },
+    });
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(409);
+    expect(r.code).toBe('VERIFICATION_REQUIRED');
+    expect(r.meta.resolved_slug).toBe('approved');
+  });
+
+  it('string target row ID with nested relation metadata resolves to a locked slug → 409', async () => {
+    dbAllMock.mockResolvedValueOnce([VER_COL, {
+      ...STATUS_SELECT_REL_COL,
+      config: JSON.stringify({ relation: { enabled: true, tableId: '7341' } }),
+    }]);
+    dbGetMock.mockResolvedValueOnce({ data: { slug: 'ready', label: 'Ready' } });
+
+    const r = await enforceVerificationGuards({
+      tableId: 2197,
+      existingData: { plan_verification: null, status_id: 127271 },
+      incomingData: { status_id: '127273' },
+    });
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(409);
+    expect(r.code).toBe('VERIFICATION_REQUIRED');
+    expect(r.meta.resolved_slug).toBe('ready');
+  });
+});
+
 describe('enforceVerificationGuards — C-6 lock with text/select guard (legacy compat)', () => {
   it('incoming text status equals locked value → 409', async () => {
     const VER_TEXT = {

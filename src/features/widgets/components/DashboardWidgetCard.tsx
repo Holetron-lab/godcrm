@@ -392,9 +392,10 @@ export function DashboardWidgetCard({ widgetId, borderRadius = 12, isMobile = fa
         );
       case 'calendar_widget':
         return (
-          <CalendarWidget 
-            {...props} 
+          <CalendarWidget
+            {...props}
             columnsInfo={columnsInfo}
+            relationData={allRelationData}
             onEventClick={handleCardDoubleClick}
             onEventUpdate={handleCardFieldUpdate}
           />

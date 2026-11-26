@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useSpacesQuery } from '@/features/spaces/hooks/useSpacesQuery';
 import { useSpacesStore, useSpaces, useActiveSpaceId } from '@/features/spaces/store/spacesStore';
 import { AIChatProvider, AIChatPanel, useAIChat } from '@/features/ai-chat';
 import { showToast } from '@/shared/hooks/useToast';
 import { EmbedHeader } from './EmbedHeader';
+import { getTicketEmbedConfig, isTicketEmbedRequest } from './ticketEmbedConfig';
+import { useEmbedTicketAuth } from './useEmbedTicketAuth';
 
 /**
  * ADR-176 — Universal embeddable AI chat overlay.
@@ -68,6 +71,63 @@ function EmbedNotice({ children }: { children: React.ReactNode }) {
 
 export function EmbedChatRoute() {
   const location = useLocation();
+  if (isTicketEmbedRequest(location.pathname, location.search)) return <TicketEmbedChatRoute />;
+  return <CookieEmbedChatRoute />;
+}
+
+function TicketEmbedChatRoute() {
+  const location = useLocation();
+  const { t } = useLanguage();
+  const auth = useEmbedTicketAuth(getTicketEmbedConfig(location.search, location.pathname));
+  const mode = useMemo(
+    () => (new URLSearchParams(location.search).get('mode') === 'split' ? 'split' : 'overlay'),
+    [location.search],
+  );
+
+  if (auth.status === 'error') {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[var(--bg-primary)] p-6 text-center">
+        <div className="flex flex-col items-center gap-4">
+          <p role="alert" className="text-sm text-[var(--text-secondary)]">{auth.error}</p>
+          <button type="button" onClick={auth.retry} className="rounded-md border border-[var(--border-primary)] px-3 py-2 text-sm">
+            {t('common.retryConnection')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (auth.status !== 'ready' || !auth.session) return <EmbedNotice>{t('common.loadingChat')}</EmbedNotice>;
+  return <TicketEmbedWorkspace spaceId={auth.session.spaceId} mode={mode} />;
+}
+
+function TicketEmbedWorkspace({ spaceId, mode }: { spaceId: number; mode: 'overlay' | 'split' }) {
+  const { t } = useLanguage();
+  const { isLoading: spacesLoading, isError: spacesError } = useSpacesQuery();
+  const spaces = useSpaces();
+  const setActiveSpaceId = useSpacesStore((s) => s.setActiveSpaceId);
+  const boundSpace = spaces.find((space) => space.id === spaceId);
+
+  useEffect(() => {
+    if (boundSpace) setActiveSpaceId(spaceId);
+  }, [boundSpace, spaceId, setActiveSpaceId]);
+
+  if (spacesLoading) return <EmbedNotice>{t('common.loadingChat')}</EmbedNotice>;
+  if (spacesError || !boundSpace) {
+    return <EmbedNotice>{t('common.ticketSpaceAccessDenied')}</EmbedNotice>;
+  }
+
+  return (
+    <div className="h-screen w-screen overflow-hidden pt-14 bg-[var(--bg-primary)] text-[var(--text-primary)]">
+      <EmbedHeader spaces={[boundSpace]} activeSpaceId={spaceId} onSelectSpace={() => {}} mode={mode} />
+      <AIChatProvider spaceId={spaceId}>
+        <EmbedChatSurface />
+      </AIChatProvider>
+    </div>
+  );
+}
+
+function CookieEmbedChatRoute() {
+  const location = useLocation();
   const { user, initialized } = useAuthStore((s) => ({ user: s.user, initialized: s.initialized }));
 
   const { isLoading: spacesLoading, isError: spacesError } = useSpacesQuery();
@@ -84,8 +144,8 @@ export function EmbedChatRoute() {
     return Number.isInteger(n) ? n : null;
   }, [location.search]);
 
-  // Host presentation forwarded by the loader: ?mode=split (split.html shell) or
-  // ?mode=overlay (embed.js strip, default). Drives the header's overlay⇄split toggle.
+  // Host presentation forwarded by the loader: split reserves a page gutter;
+  // overlay floats above it. Drives the header's overlay⇄split toggle.
   const mode = useMemo(
     () => (new URLSearchParams(location.search).get('mode') === 'split' ? 'split' : 'overlay'),
     [location.search],

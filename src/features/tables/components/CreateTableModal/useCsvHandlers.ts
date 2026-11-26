@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { logger } from '@/shared/utils/logger';
 import { toSlug } from '@/shared/utils/i18n-utils';
-import { parseCSV, guessColumnType } from './csv-utils';
+import { parseCSV, guessColumnType } from '@/shared/column-mapping';
 import { excelImportApi } from '../../api/excelImportApi';
 import {
   applyExcelPreview, buildColumnDefinitions, createExcelFileEntry,

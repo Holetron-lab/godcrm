@@ -149,6 +149,30 @@ describe('auditToolCall', () => {
     expect(serialized).not.toContain('xoxb-leak');
   });
 
+  it('records only explicit Code Mode correlation fields', async () => {
+    await auditToolCall({
+      toolName: 'update_table_row', args: {}, userId: 1,
+      context: {
+        ...ctx,
+        codemode: { run_id: 'run-123', call_id: 'call-456', depth: 1 },
+        injected_connector: { access_token: 'must-not-leak' },
+      },
+      result: { ok: true },
+    });
+    expect(lastEntry().details.codemode).toEqual({ run_id: 'run-123', call_id: 'call-456', depth: 1 });
+    expect(JSON.stringify(writeAudit.mock.calls.at(-1))).not.toContain('must-not-leak');
+  });
+
+  it('audits read-only inner Code Mode calls without changing direct-call exemptions', async () => {
+    await auditToolCall({
+      toolName: 'query_table_data', args: { table_id: 1708 }, userId: 1,
+      context: { ...ctx, codemode: { run_id: 'run-read', call_id: 'call-read', depth: 1 } },
+      result: { rows: [] },
+    });
+    expect(writeAudit).toHaveBeenCalledTimes(1);
+    expect(lastEntry().details.codemode).toEqual({ run_id: 'run-read', call_id: 'call-read', depth: 1 });
+  });
+
   it('survives a missing agent context (human/system caller)', async () => {
     await auditToolCall({ toolName: 'create_table', args: {}, userId: 1, context: null, result: {} });
     expect(lastReq().agentId).toBeNull();

@@ -204,7 +204,7 @@ export async function dispatchInvocationsFromContent({
     triggered++;
     conversationLock.withLock(Number(conversationId), () =>
       executeAgentResponse(Number(conversationId), agent, userId, {
-        ...agentOptions, message_content: commandContent, invocation_type: 'command',
+        ...agentOptions, trigger_message_id: sourceMessageId, message_content: commandContent, invocation_type: 'command',
       })
     ).catch(err => {
       apiLogger.error({ err: err.message, conversationId, slug, sourceLabel }, 'ADR-117 dispatcher: /command execution failed');
@@ -244,7 +244,7 @@ export async function dispatchInvocationsFromContent({
     triggered++;
     conversationLock.withLock(Number(conversationId), () =>
       executeAgentResponse(Number(conversationId), agent, userId, {
-        ...agentOptions, message_content: content, invocation_type: 'mention',
+        ...agentOptions, trigger_message_id: sourceMessageId, message_content: content, invocation_type: 'mention',
       })
     ).catch(err => {
       apiLogger.error({ err: err.message, conversationId, slug, sourceLabel }, 'ADR-117 dispatcher: @mention execution failed');

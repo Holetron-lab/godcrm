@@ -1,7 +1,7 @@
 /**
  * Dashboard & Widget Tool Handlers
  *
- * Handles: create_dashboard, get_dashboard_widgets, create_widget
+ * Handles: list_dashboards, get_dashboard, create_dashboard, get_dashboard_widgets, create_widget
  */
 
 import { dbGet, dbRun, dbAll, sqlNow } from '../../database/connection.js';
@@ -29,6 +29,45 @@ export const dashboardToolHandlers = {
       dashboard_id: dashboard.id,
       message: `Dashboard "${name}" created`
     };
+  },
+
+  async list_dashboards({ project_id, space_id } = {}) {
+    if (project_id != null && space_id != null) {
+      return { error: 'Pass either project_id or space_id, not both' };
+    }
+
+    const filters = [];
+    const params = [];
+    if (project_id != null) {
+      filters.push('d.project_id = ?');
+      params.push(project_id);
+    } else if (space_id != null) {
+      filters.push('(d.space_id = ? OR p.space_id = ?)');
+      params.push(space_id, space_id);
+    }
+
+    const dashboards = await dbAll(`
+      SELECT d.id, d.name, d.description, d.icon, d.user_id, d.space_id, d.project_id,
+             d.is_default, d.order_index, d.created_at, d.updated_at
+      FROM dashboards d
+      LEFT JOIN projects p ON p.id = d.project_id
+      ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}
+      ORDER BY d.is_default DESC, d.order_index ASC, d.id ASC
+    `, params);
+
+    return { dashboards, total: dashboards.length };
+  },
+
+  async get_dashboard({ dashboard_id }) {
+    const dashboard = await dbGet(`
+      SELECT d.id, d.name, d.description, d.icon, d.user_id, d.space_id, d.project_id,
+             d.is_default, d.order_index, d.created_at, d.updated_at
+      FROM dashboards d
+      LEFT JOIN projects p ON p.id = d.project_id
+      WHERE d.id = ?
+    `, [dashboard_id]);
+
+    return dashboard ? { dashboard } : { error: `Dashboard ${dashboard_id} not found` };
   },
 
   async get_dashboard_widgets({ dashboard_id }) {

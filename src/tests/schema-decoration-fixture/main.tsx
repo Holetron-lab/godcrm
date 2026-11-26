@@ -5,6 +5,7 @@ import { LanguageProvider, useLanguage } from '@/shared/i18n/LanguageContext';
 import { ProjectBoundaries } from '@/features/schema-editor/components/layers/ProjectBoundaries';
 import { TableWidgetStrips } from '@/features/schema-editor/components/nodes/TableWidgetStrips';
 import { NavTreeItem } from '@/features/schema-editor/components/panels/NavTreeItem';
+import { useSchemaTreeStore } from '@/features/schema-editor/components/panels/useSchemaTreeStore';
 import { useSchemaEditorStore } from '@/features/schema-editor/store/schemaEditorStore';
 import type { TableNode, NavTreeNode } from '@/features/schema-editor/types/schema-editor.types';
 
@@ -21,6 +22,7 @@ document.documentElement.dataset.theme = new URLSearchParams(location.search).ge
 function Fixture() {
   const { t } = useLanguage();
   const showWidgets = useSchemaEditorStore(state => state.showWidgets);
+  const tree = useSchemaTreeStore();
   return <main className="p-4">
     <h1>Schema decorations</h1>
     <button type="button" onClick={() => useSchemaEditorStore.getState().toggleWidgets()}>Toggle modules</button>
@@ -33,7 +35,7 @@ function Fixture() {
     </section>
     <section aria-label="Navigation" className="max-w-lg">
       {[project, table, { ...table, id: 'widget:1', type: 'widget' as const, numericId: 1, name: widgets[0].name, displayName: widgets[0].name, presetName: 'table_view', widgetConfig: widgets[0].widgetConfig }].map(item =>
-        <NavTreeItem key={item.id} node={item} depth={0} t={t} selectedTables={new Set()} selectedProjects={new Map()} onToggleSelect={() => {}} onToggleProjectSelect={() => {}} />)}
+        <NavTreeItem key={item.id} node={item} depth={0} model={tree} t={t} selectedTables={new Set()} selectedProjects={new Map()} onToggleSelect={() => {}} onToggleProjectSelect={() => {}} />)}
     </section>
   </main>;
 }

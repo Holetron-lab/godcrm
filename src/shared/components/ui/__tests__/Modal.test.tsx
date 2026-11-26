@@ -25,6 +25,19 @@ describe('Modal', () => {
     expect(handleChange).toHaveBeenCalledWith(false);
   });
 
+  it('renders a custom header instead of the default title and description', () => {
+    render(
+      <Modal open onOpenChange={() => {}} title="Default title" description="Default description" header={<div>Custom header</div>}>
+        <p>Body</p>
+      </Modal>
+    );
+    expect(screen.getByText('Custom header')).toBeInTheDocument();
+    expect(screen.getByText('Default title')).toHaveClass('sr-only');
+    expect(screen.getByText('Default description')).toHaveClass('sr-only');
+    expect(screen.getByRole('dialog', { name: 'Default title' })).toBeInTheDocument();
+    expect(screen.getByText('Body')).toBeInTheDocument();
+  });
+
   it('applies caller layout classes to the dialog and its scroll container', () => {
     render(
       <Modal open onOpenChange={() => {}} className="max-sm:!w-screen" contentClassName="mt-0 pr-0">

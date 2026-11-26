@@ -51,9 +51,43 @@ export const PROJECT_TOOLS = [
           title: { type: 'string', description: 'Document title' },
           icon: { type: 'string', description: 'Emoji icon (default: 📄)' },
           content: { type: 'string', description: 'Initial document content — markdown preferred (# / ## / ### are parsed into h1/h2/h3 sections, --- into dividers, other lines into text sections).' },
-          status: { type: 'string', enum: ['draft', 'review', 'approved', 'ready', 'published', 'archived'], description: 'Document status slug. Resolved against _doc_statuses registry (ADR-0001 §5) → status_id relation. Default: "draft".' }
+          status: { type: 'string', enum: ['draft', 'review', 'approved', 'ready', 'published', 'archived'], description: 'Document status slug. Resolved against _doc_statuses registry (ADR-0001 §5) → status_id relation. Default: "draft".' },
+          language: { type: 'string', enum: ['en', 'ru'], description: 'Content column language. Default: "en". Russian creates content_ru when needed.' }
         },
         required: ['widget_id', 'title']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'import_document_file',
+      description: 'Start asynchronous PDF/DOCX/MD/TXT import from a file attached to the current conversation. The initiating human must have editor access to the Documents widget project. Returns an import_id without Markdown; poll with check_document_import instead of resubmitting the file.',
+      parameters: {
+        type: 'object',
+        properties: {
+          widget_id: { type: 'number', description: 'ID of the Documents widget that owns the destination store.' },
+          file_url: { type: 'string', description: 'Relative /uploads/... URL of a PDF, DOCX, MD or TXT attachment in the current conversation.' },
+          title: { type: 'string', description: 'Optional document title. Defaults to the converted title or source filename.' },
+          icon: { type: 'string', description: 'Emoji icon (default: 📄)' },
+          status: { type: 'string', enum: ['draft', 'review', 'approved', 'ready', 'published', 'archived'], description: 'Document status slug. Default: "draft".' },
+          language: { type: 'string', enum: ['auto', 'en', 'ru'], description: 'OCR and document content language. Default: "auto".' }
+        },
+        required: ['widget_id', 'file_url']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'check_document_import',
+      description: 'Check an import started by import_document_file. When conversion is ready, creates the canonical document exactly once and returns document_id, registry_table_id, table_id, atom_count, source/assets and warnings without Markdown. Pass registry_table_id and document_id to send_widget_message to chip the document.',
+      parameters: {
+        type: 'object',
+        properties: {
+          import_id: { type: 'string', description: 'UUID returned by import_document_file.' }
+        },
+        required: ['import_id']
       }
     }
   },

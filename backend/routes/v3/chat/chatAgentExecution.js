@@ -62,7 +62,7 @@ async function _resolveStatusPlaceholder(conversationId, agent, agentRowId) {
 
 /** ADR-093: Unified agent execution. */
 async function executeAgentResponse(conversationId, agent, triggeredByUserId, options = {}) {
-  const { agent_mode = 'agent', thinking_enabled = false, message_content = '', attachments = [], attachmentBaseUrl = '', invocation_type = null } = options;
+  const { agent_mode = 'agent', thinking_enabled = false, message_content = '', attachments = [], attachmentBaseUrl = '', invocation_type = null, trigger_message_id = null } = options;
   const _activityStartTime = Date.now();
   let statusMessageId = null;
 
@@ -94,6 +94,7 @@ async function executeAgentResponse(conversationId, agent, triggeredByUserId, op
       let asyncStatusMsgId = null;
       const job = await createAndDispatchJob({
         conversationId, agent, triggeredByUserId, messageContent: message_content,
+        triggerMessageId: trigger_message_id,
         options: { agent_mode, thinking_enabled, attachments, attachmentBaseUrl },
         createStatusPlaceholder: async () => {
           try { asyncStatusMsgId = await _resolveStatusPlaceholder(conversationId, agent, agentRowId); }
@@ -141,7 +142,7 @@ async function executeAgentResponse(conversationId, agent, triggeredByUserId, op
     try { statusMessageId = await _resolveStatusPlaceholder(conversationId, agent, agentRowId); }
     catch (placeholderErr) { apiLogger.error({ err: placeholderErr, conversationId }, 'Failed to create/reuse status placeholder — continuing without'); }
 
-    await triggerAgentResponse(conversationId, message_content, agent, triggeredByUserId, { agent_mode, thinking_enabled, attachments, attachmentBaseUrl, statusMessageId });
+    await triggerAgentResponse(conversationId, message_content, agent, triggeredByUserId, { agent_mode, thinking_enabled, attachments, attachmentBaseUrl, statusMessageId, trigger_message_id });
 
     logTaskCompleted(agentName || 'unknown', conversationId, { duration_ms: Date.now() - _activityStartTime });
 
@@ -170,7 +171,7 @@ async function executeAgentResponse(conversationId, agent, triggeredByUserId, op
  * Trigger agent response for a mention (async, non-blocking)
  */
 async function triggerAgentResponse(conversationId, userMessage, agent, userId, options = {}) {
-  const { agent_mode = 'agent', thinking_enabled = false, attachments = [], attachmentBaseUrl = '', statusMessageId = null } = options;
+  const { agent_mode = 'agent', thinking_enabled = false, attachments = [], attachmentBaseUrl = '', statusMessageId = null, trigger_message_id = null } = options;
   let _finalResponseText = '';
   try {
     apiLogger.info({ conversationId, agentName: agent.name, isAiAgentRow: !!agent._isAiAgentRow, agent_mode, thinking_enabled }, 'Triggering agent response');
@@ -329,6 +330,7 @@ async function triggerAgentResponse(conversationId, userMessage, agent, userId, 
         conversationId, systemPrompt, history: formattedHistory,
         userMessage: enrichedUserMessage, agentConfig, resolved, agentRowId, senderId,
         spaceId: convForSpace?.space_id || null, userId, statusMessageId,
+        triggerMessageId: trigger_message_id,
       });
 
       _finalResponseText = responseText || '';

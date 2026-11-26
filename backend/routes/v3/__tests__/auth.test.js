@@ -473,6 +473,34 @@ describe('Auth API Routes (v3) - ADR-064', () => {
       expect(res.body.data.user.email).toBe(user.email);
     });
 
+    test('should return current user with valid access token cookie', async () => {
+      const user = await createTestUser();
+      const token = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        JWT_SECRET,
+        { expiresIn: '30m' }
+      );
+
+      const res = await request(app)
+        .get('/api/v3/auth/me')
+        .set('Cookie', `access_token=${token}`)
+        .expect(200);
+
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.user.id).toBe(user.id);
+      expect(res.body.data.user.email).toBe(user.email);
+    });
+
+    test('should reject with invalid access token cookie', async () => {
+      const res = await request(app)
+        .get('/api/v3/auth/me')
+        .set('Cookie', 'access_token=invalid-token')
+        .expect(401);
+
+      expect(res.body.success).toBe(false);
+      expect(res.body.error.code).toBe('INVALID_TOKEN');
+    });
+
     test('should reject without token', async () => {
       const res = await request(app)
         .get('/api/v3/auth/me')

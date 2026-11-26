@@ -56,6 +56,7 @@ export interface DocumentRegistryItem {
   slug: string;
   table_id: number;
   content_table_id?: number;  // alias for table_id (used in some contexts)
+  widget_id?: number;
   icon?: string;
   category?: DocumentCategory | string;
   project_id?: number;  // Link to ADR Projects table (1699)

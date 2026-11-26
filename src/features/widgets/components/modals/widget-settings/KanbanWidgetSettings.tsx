@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { Trash2 } from 'lucide-react';
+import { useLanguage } from '@/shared/i18n/LanguageContext';
 import type { KanbanSettingsProps } from './types';
 
 export function KanbanWidgetSettings({
@@ -31,8 +32,12 @@ export function KanbanWidgetSettings({
   setVisibleColumns,
   availableCardColumns,
   availableExpandedColumns,
+  eventsTableId,
+  setEventsTableId,
+  eventsTables,
 }: KanbanSettingsProps) {
   const fieldId = useId();
+  const { t } = useLanguage();
 
   return (
     <>
@@ -216,6 +221,34 @@ export function KanbanWidgetSettings({
         </select>
         <p className="text-xs text-[var(--text-tertiary)] mt-1">
           Колонка для цветовой метки карточки
+        </p>
+      </div>
+
+      {/* Events table - optional second source (ADR-209) */}
+      <div>
+        <label htmlFor={`${fieldId}-events-table`} className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+          {t('kanban.eventsTable')}
+        </label>
+        <select
+          id={`${fieldId}-events-table`}
+          aria-describedby={`${fieldId}-events-table-hint`}
+          value={eventsTableId}
+          onChange={(e) => setEventsTableId(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary-500)]"
+        >
+          <option value="">{t('kanban.eventsTableNone')}</option>
+          {/* Keep a saved table selectable even when the list does not carry it. */}
+          {eventsTableId && !eventsTables.some((table) => String(table.id) === eventsTableId) && (
+            <option value={eventsTableId}>#{eventsTableId}</option>
+          )}
+          {eventsTables.map((table) => (
+            <option key={table.id} value={table.id}>
+              {table.displayName || table.name}
+            </option>
+          ))}
+        </select>
+        <p id={`${fieldId}-events-table-hint`} className="text-xs text-[var(--text-tertiary)] mt-1">
+          {t('kanban.eventsTableHint')}
         </p>
       </div>
 

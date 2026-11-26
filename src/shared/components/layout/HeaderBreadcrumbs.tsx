@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { Widget } from '@/features/widgets/types/widget.types';
+import { usePageCrumbStore } from './pageCrumbStore';
 
 interface BreadcrumbSpace {
   id: number;
@@ -40,6 +41,8 @@ export const HeaderBreadcrumbs = ({
   currentWidget,
 }: HeaderBreadcrumbsProps) => {
   const items: Array<{ icon?: string; name: string; href?: string }> = [];
+  // A page may publish its own last crumb (the module of the catalog); the crumb before it becomes a link.
+  const pageCrumb = usePageCrumbStore(state => state.crumb);
 
   // Check if we're on home/spaces page - show Home only
   const isHomePage = pathname === '/' || pathname === '/spaces';
@@ -106,6 +109,7 @@ export const HeaderBreadcrumbs = ({
         automations: { icon: '⚡', name: t('nav.automations') || 'Automations' },
         settings: { icon: '⚙️', name: t('nav.settings') || 'Settings' },
         widgets: { icon: '🧩', name: t('nav.modules') || 'Modules' },
+        modules: { icon: '🧩', name: t('moduleCatalog.title') },
         tables: { icon: '📋', name: t('nav.tables') || 'Tables' },
         dashboard: { icon: '📊', name: t('nav.dashboard') || 'Dashboard' },
         create: { icon: '➕', name: 'Create' },
@@ -113,7 +117,8 @@ export const HeaderBreadcrumbs = ({
       if (subPageLabels[subPage]) {
         items.push({
           icon: subPageLabels[subPage].icon,
-          name: subPageLabels[subPage].name
+          name: subPageLabels[subPage].name,
+          href: pageCrumb ? `/projects/${displayProject.id}/${subPage}` : undefined,
         });
       }
     }
@@ -133,6 +138,10 @@ export const HeaderBreadcrumbs = ({
         name: currentWidget.title || `Module #${currentWidgetId}`
       });
     }
+  }
+
+  if (pageCrumb) {
+    items.push({ icon: pageCrumb.icon, name: pageCrumb.name });
   }
 
   // Fallback if nothing matched (but NOT on home page)

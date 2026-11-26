@@ -1,14 +1,13 @@
 /**
- * API v3: Module installation — ADR-200 W2 + W3.
+ * API v3: Module installation — ADR-200 W2 + W3, ADR-207 W1.1–W1.4 bindings and permissions.
  *
- *   POST /api/v3/modules/install          { blueprint, space_id, project_id, dry_run }
+ *   POST /api/v3/modules/install          { blueprint, space_id, project_id, dry_run, bindings, existingWidgets }
  *   POST /api/v3/modules/:key/upgrade     { blueprint, space_id, dry_run }
  *   POST /api/v3/modules/:key/uninstall   { space_id, purge }
  *
- * This is the HTTP caller `provisionModuleTables` never had. All three verbs are
- * owner-only (ADR-200 §Security: "installation requires the space owner role") and all
- * three go through ModuleInstaller — the route parses, authorizes and maps errors, and
- * owns no install logic of its own.
+ * Install requires member for data/surface components and admin for agents, automations or
+ * services; upgrade and uninstall remain owner-only. All three verbs go through ModuleInstaller —
+ * the route parses, authorizes and maps errors, and owns no install logic of its own.
  *
  * Deviation from the ADR's sketch, deliberate: `upgrade` and `uninstall` also take
  * `space_id`. An installation is identified by (module_key, space_id), so `:key` alone
@@ -20,6 +19,9 @@
  */
 
 import express from 'express';
+import { z } from 'zod';
+import { dbGet } from '../../database/connection.js';
+import { exportProjectBlueprint, exportSpaceBlueprint } from '../../services/ModuleExportService.js';
 import {
   installModule,
   upgradeModule,
@@ -50,6 +52,7 @@ const STATUS_BY_CODE = {
   ALREADY_INSTALLED: 409,
   VERSION_DOWNGRADE: 409,
   VERSION_NOT_BUMPED: 409,
+  INSTALL_BINDINGS_CONFLICT: 409,
 };
 
 function fail(res, err, context) {
@@ -75,11 +78,111 @@ async function denyUnlessSpaceOwner(req, res, spaceId) {
   }
   const allowed = await hasPermission(userId, 'owner', { spaceId });
   if (!allowed) {
-    forbidden(res, 'Installing, upgrading or removing a module requires the space owner role');
+    forbidden(res, 'Upgrading or removing a module requires the space owner role');
     return true;
   }
   return false;
 }
+
+async function denyUnlessInstaller(req, res, spaceId) {
+  const userId = req.user?.id;
+  if (!userId) {
+    forbidden(res, 'Authentication required');
+    return true;
+  }
+  const adminRequired = ['agents', 'automations', 'services'].some(
+    section => Array.isArray(req.body.blueprint?.[section]) && req.body.blueprint[section].length > 0,
+  );
+  const requiredRole = adminRequired ? 'admin' : 'editor';
+  if (!await hasPermission(userId, requiredRole, { spaceId })) {
+    forbidden(res, adminRequired
+      ? 'Installing agents, automations or services requires the space owner or admin role'
+      : 'Installing a module requires the space member role');
+    return true;
+  }
+  return false;
+}
+
+const exportId = z.coerce.number().int().positive().max(2147483647);
+const exportFields = {
+  key: z.string().regex(/^[a-z][a-z0-9_-]*$/).optional(),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/).optional(),
+  title: z.string().trim().min(1).max(255).optional(),
+  description: z.string().max(2000).optional(),
+  icon: z.string().max(64).optional(),
+  required_table_ids: z.array(exportId).max(25).optional(),
+  seed_table_ids: z.array(exportId).max(25).optional(),
+};
+const projectExportSchema = z.object({ project_id: exportId, ...exportFields }).strict();
+const spaceExportSchema = z.object({ space_id: exportId, ...exportFields }).strict();
+
+function exportOptions(body) {
+  return {
+    key: body.key,
+    version: body.version,
+    title: body.title,
+    description: body.description,
+    icon: body.icon,
+    requiredTableIds: body.required_table_ids || [],
+    seedTableIds: body.seed_table_ids || [],
+  };
+}
+
+function parseExport(schema, body, res) {
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    badRequest(res, 'Invalid module export request', 'MODULE_EXPORT_REQUEST_INVALID');
+    return null;
+  }
+  return parsed.data;
+}
+
+async function denyUnlessExportOwner(req, res, spaceId) {
+  if (!req.user?.id) {
+    forbidden(res, 'Authentication required');
+    return true;
+  }
+  if (!await hasPermission(req.user.id, 'owner', { spaceId })) {
+    forbidden(res, 'Exporting a module fingerprint requires the space owner role');
+    return true;
+  }
+  return false;
+}
+
+function failExport(res, err, context) {
+  const status = ['PROJECT_NOT_FOUND', 'SPACE_NOT_FOUND'].includes(err.code) ? 404 : 422;
+  if (err.code) return error(res, err.code, err.message, status);
+  apiLogger.error({ err, ...context }, '[modules] export operation failed');
+  return error(res, 'MODULE_EXPORT_FAILED', 'Module export failed', 500);
+}
+
+router.post('/export/project', async (req, res) => {
+  const body = parseExport(projectExportSchema, req.body, res);
+  if (!body) return;
+  try {
+    const project = await dbGet('SELECT space_id FROM projects WHERE id = ?', [body.project_id]);
+    if (!project) return error(res, 'PROJECT_NOT_FOUND', 'Project not found', 404);
+    if (await denyUnlessExportOwner(req, res, project.space_id)) return;
+    const blueprint = await exportProjectBlueprint(body.project_id, exportOptions(body));
+    return success(res, { blueprint });
+  } catch (err) {
+    return failExport(res, err, { projectId: body.project_id });
+  }
+});
+
+router.post('/export/space', async (req, res) => {
+  const body = parseExport(spaceExportSchema, req.body, res);
+  if (!body) return;
+  try {
+    const space = await dbGet('SELECT id FROM spaces WHERE id = ?', [body.space_id]);
+    if (!space) return error(res, 'SPACE_NOT_FOUND', 'Space not found', 404);
+    if (await denyUnlessExportOwner(req, res, body.space_id)) return;
+    const blueprint = await exportSpaceBlueprint(body.space_id, exportOptions(body));
+    return success(res, { blueprint });
+  } catch (err) {
+    return failExport(res, err, { spaceId: body.space_id });
+  }
+});
 
 /**
  * POST /api/v3/modules/install
@@ -94,7 +197,7 @@ router.post('/install', async (req, res) => {
   if (!req.body?.blueprint) return badRequest(res, 'blueprint is required');
 
   try {
-    if (await denyUnlessSpaceOwner(req, res, spaceId)) return;
+    if (await denyUnlessInstaller(req, res, spaceId)) return;
 
     const result = await installModule({
       blueprint: req.body.blueprint,
@@ -102,6 +205,8 @@ router.post('/install', async (req, res) => {
       projectId,
       userId: req.user?.id ?? null,
       dryRun: req.body.dry_run === true,
+      bindings: req.body.bindings ?? null,
+      existingWidgets: req.body.existingWidgets ?? {},
     });
     return success(res, result);
   } catch (err) {

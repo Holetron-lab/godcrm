@@ -28,7 +28,7 @@ const DEFAULT_SEARXNG_FALLBACK_URL = 'http://127.0.0.1:8891';
 /**
  * Resolve the SearXNG base URL (no trailing slash). Vault first, env, default.
  */
-async function getSearxngUrl() {
+export async function getSearxngUrl() {
   let url = DEFAULT_SEARXNG_URL;
   try {
     url = (await getSecret('searxng_url', 'SEARXNG_URL')) || DEFAULT_SEARXNG_URL;
@@ -42,7 +42,7 @@ async function getSearxngUrl() {
  * Resolve the backup SearXNG base URL (no trailing slash), or '' if disabled.
  * Vault `searxng_fallback_url` / env `SEARXNG_FALLBACK_URL`, else the tunnel default.
  */
-async function getSearxngFallbackUrl() {
+export async function getSearxngFallbackUrl() {
   let url = DEFAULT_SEARXNG_FALLBACK_URL;
   try {
     const secret = await getSecret('searxng_fallback_url', 'SEARXNG_FALLBACK_URL');
@@ -254,7 +254,7 @@ async function getFirecrawlApiKey(spaceId = null) {
 }
 
 /**
- * Initialize Firecrawl client lazily
+ * Create a Firecrawl client for the two v1 endpoints used by the handlers.
  */
 async function getFirecrawlClient(spaceId = null) {
   const apiKey = await getFirecrawlApiKey(spaceId);

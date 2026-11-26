@@ -26,6 +26,7 @@ export interface ModalProps {
   onOpenChange: (open: boolean) => void;
   title?: string;
   description?: string;
+  header?: ReactNode;
   children: ReactNode;
   size?: ModalSize;
   footer?: ReactNode;
@@ -43,6 +44,7 @@ export const Modal = ({
   onOpenChange,
   title,
   description,
+  header,
   children,
   size = 'md',
   footer,
@@ -88,6 +90,14 @@ export const Modal = ({
           } : undefined}
         >
           {/* Header */}
+          {header && (
+            <>
+              <Dialog.Title className="sr-only">{title ?? 'Modal'}</Dialog.Title>
+              <Dialog.Description className="sr-only">{description ?? 'Workspace modal content'}</Dialog.Description>
+              {header}
+            </>
+          )}
+          {!header && (
           <div className="space-y-2 flex-shrink-0">
             {title ? (
               <Dialog.Title className="text-2xl font-semibold text-[var(--text-primary)]">
@@ -104,6 +114,7 @@ export const Modal = ({
               <Dialog.Description className="sr-only">Workspace modal content</Dialog.Description>
             )}
           </div>
+          )}
           
           {/* Scrollable content */}
           <div className={cn(

@@ -116,6 +116,14 @@ export function errorHandler(err, req, res, next) {
     err.isOperational = true;
   }
 
+  if (err instanceof URIError && (err.status === 400 || err.statusCode === 400)) {
+    statusCode = 400;
+    code = 'MALFORMED_URI';
+    message = 'Malformed URL encoding';
+    details = null;
+    err.isOperational = true;
+  }
+
   // Handle body-parser SyntaxError (malformed JSON in request body)
   // Mark as operational so production filter doesn't override status back to 500
   if (err.type === 'entity.parse.failed' && err instanceof SyntaxError) {

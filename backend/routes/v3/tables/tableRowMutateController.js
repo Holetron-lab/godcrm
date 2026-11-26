@@ -17,6 +17,7 @@ import { coerceDataObject } from '../../../services/agent-tools/coerceDataInput.
 import { checkTableAccess, requireTableWriteAccess } from './helpers.js';
 import { applyAtomVersioning, isAtomsV2Table, ATOMS_V2_TABLE_ID } from '../../../services/atoms-archive.js';
 import { fireRowUpdateTriggers } from '../../../services/AutomationTriggerService.js';
+import { deleteTicketOccurrences } from '../../../services/ticket-occurrences/reconcile.js';
 import { notifyRowChange } from '../../../services/realtime/rowEvents.js';
 import { emitRowMutationEvents } from '../../../services/tableMutationService.js';
 import { onDocumentTableMutation, captureDocumentContext, onDocumentStatusTransition } from '../../../services/documents/SnapshotWriter.js';
@@ -877,6 +878,7 @@ router.delete('/tables/:tableId/rows/:rowId', requireTableWriteAccess, async (re
       DELETE FROM table_rows
       WHERE id = ? AND table_id = ?
     `, [rowId, tableId]);
+    await deleteTicketOccurrences(tableId, rowId);
 
     void notifyRowChange({ tableId, rowId, action: 'deleted', source: 'api' });
 

@@ -1,5 +1,5 @@
 import { BOOL_TRUE_VALUES } from '@/shared/utils/i18n-utils';
-import { guessColumnType } from './csv-utils';
+import { guessColumnType } from '@/shared/column-mapping';
 import type {
   CSVColumnDefinition,
   CSVFileData,

@@ -279,7 +279,7 @@ export function useTicketData({ widgetId, widget: externalWidget, tableId: exter
       }
       
       // Check for relation config in multiple formats
-      if (config?.relation?.enabled && config?.relation?.tableId) {
+      if (config?.relation?.tableId && (config.relation.enabled || (col.type === 'relation' && config.relation.enabled !== false))) {
         const relTableId = Number(config.relation.tableId);
         configs.set(relTableId, {
           valueColumn: config.relation.valueColumn || 'id',
@@ -390,8 +390,10 @@ export function useTicketData({ widgetId, widget: externalWidget, tableId: exter
     const config = typeof groupColumn.config === 'string' 
       ? JSON.parse(groupColumn.config) 
       : groupColumn.config;
-    if (!config?.relation?.enabled) return null;
-    return config?.relation?.tableId || config?.relatedTableId || null;
+    const relation = config?.relation;
+    const relationEnabled = relation?.enabled || (groupColumn.type === 'relation' && relation?.enabled !== false);
+    if (!relationEnabled) return null;
+    return relation?.tableId || config?.relatedTableId || null;
   }, [groupColumn]);
   
   // Load rows from relation table (for AddColumnOptionModal)

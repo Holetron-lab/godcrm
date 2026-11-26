@@ -9,21 +9,21 @@ import copy from '../../../shared/landing-copy.json';
 // Copy source of truth: shared/landing-copy.json — the same file the backend
 // renders for crawlers (backend/services/landingSeo.js, SSR-lite for `/`).
 // Marketing docs 254896 (landing v3), 254978 (GEO §2 anchor, §4 FAQ), 255025
-// (§B model swaps). Vendors are never named on this page; tab names live only
-// in the "Tab #N closed" series on /blog.
+// (§B model swaps), 255501 (v3.4) and 258627 (v3.5). Competitor vendors are
+// never named; tab names live only in the "Tab #N closed" series on /blog.
 const SOURCE_REPO_URL = copy.sourceRepoUrl;
 const MCP_ENDPOINT = copy.mcpEndpoint;
 
 // Block 3 — the only place on the page where the letters are spelled out.
 const INSIDE = copy.inside.cards;
 
-// Block 4 — the story carries no team numbers by the owner's decision (chat
+// Block 5 — the story carries no team numbers by the owner's decision (chat
 // 3772, 2026-10-22); the only figure is `modelSwaps` (doc 255025 §B).
 
-// Block 7 — the D in G.O.D.: widgets or code, no apology either way.
+// Block 8 — the D in G.O.D.: widgets or code, no apology either way.
 const SHAPE_ROWS = copy.build.rows;
 
-// Block 8 — technical layer. Expandable cards keep the existing design; each
+// Block 9 — technical layer. Expandable cards keep the existing design; each
 // card carries the letter it serves.
 const UNDER_THE_HOOD = copy.underTheHood.cards;
 // Grid spans stay here as literal class names: Tailwind only scans
@@ -38,12 +38,18 @@ const CAP_SPAN: Record<string, string> = {
   '06': 'md:col-span-6',
 };
 
-// Block 9 — kept in step with the repository's "What's broken" section.
+// Block 10 — kept in step with the repository's "What's broken" section.
 // Max four items on the landing. Only things we have actually hit.
 const BROKEN = copy.broken.items;
 
-// Block 10 — FAQ: five prompt-shaped questions (GEO clusters, doc 254978 §4).
-const FAQ = copy.faq.items;
+type FaqItem = {
+  q: string;
+  a: string;
+  links?: Array<{ text: string; href: string }>;
+};
+
+// Block 12 — FAQ: five prompt-shaped questions (GEO clusters, doc 254978 §4).
+const FAQ: FaqItem[] = copy.faq.items;
 
 const CONNECT_SNIPPETS: Array<{ label: string; code: string }> = [
   {
@@ -73,6 +79,27 @@ const Glow = ({ h }: { h: Headline }) => (
     {h.post}
   </>
 );
+
+const FaqAnswer = ({ item }: { item: FaqItem }) => {
+  const link = item.links?.[0];
+  if (!link) return <>{item.a}</>;
+  const [before, after] = item.a.split(link.text);
+  const external = link.href.startsWith('http');
+  return (
+    <>
+      {before}
+      <a
+        href={link.href}
+        target={external ? '_blank' : undefined}
+        rel={external ? 'noopener noreferrer' : undefined}
+        className="underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--text-primary)]"
+      >
+        {link.text}
+      </a>
+      {after}
+    </>
+  );
+};
 
 const LandingThemeToggle = () => {
   const { theme, toggleTheme } = useTheme();
@@ -400,7 +427,25 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* 4. The story — why believe us */}
+      {/* 4. Outside the tab — identity, embedded chat and Photoshop */}
+      <section className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
+        <div className="brutal-grid" aria-hidden />
+        <div className="relative mx-auto max-w-6xl">
+          <div className="mb-8">
+            <span className="brutal-edge inline-block border-2 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]">
+              {copy.outside.badge}
+            </span>
+          </div>
+          <h2 className="max-w-4xl text-2xl font-black uppercase leading-[1.05] tracking-tight md:text-4xl lg:text-5xl">
+            {copy.outside.title}
+          </h2>
+          <p className="mt-8 max-w-3xl text-base leading-relaxed text-[var(--text-secondary)] md:text-lg">
+            {copy.outside.body}
+          </p>
+        </div>
+      </section>
+
+      {/* 5. The story — why believe us */}
       <section className="brutal-edge relative overflow-hidden border-t-2 bg-[var(--bg-secondary)] px-6 py-16 md:py-24">
         <div className="brutal-scanlines" aria-hidden />
         <div className="relative mx-auto max-w-6xl">
@@ -422,7 +467,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* 5. Connect your agent — public MCP, explicitly read-only */}
+      {/* 6. Connect your agent — public MCP, explicitly read-only */}
       <section
         id="connect-mcp"
         className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24"
@@ -458,7 +503,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* 6. Video — the walkthrough as recorded */}
+      {/* 7. Video — the walkthrough as recorded */}
       <section className="brutal-edge border-t-2 px-6 py-12 md:py-16">
         <div className="mx-auto max-w-5xl">
           <div className="mb-6 flex items-baseline justify-between">
@@ -483,7 +528,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* 7. Build — widgets or code, as a real <table> */}
+      {/* 8. Build — widgets or code, as a real <table> */}
       <section className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
         <div className="mx-auto max-w-6xl">
           <SectionHeader title={copy.build.title} badge={copy.build.badge} />
@@ -531,7 +576,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* 8. Under the hood — technical layer, expandable cards tagged by letter */}
+      {/* 9. Under the hood — technical layer, expandable cards tagged by letter */}
       <section className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
         <div className="brutal-grid" aria-hidden />
         <div className="relative mx-auto max-w-6xl">
@@ -575,7 +620,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* 9. What's broken — honest status */}
+      {/* 10. What's broken — honest status */}
       <section id="whats-broken" className="brutal-edge relative overflow-hidden border-t-2 bg-[var(--bg-secondary)] px-6 py-16 md:py-24">
         <div className="brutal-scanlines" aria-hidden />
         <div className="relative mx-auto max-w-6xl">
@@ -599,10 +644,10 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* 10. Building in Public — home of the "Tab #N closed" series (renders only when posts exist). */}
+      {/* 11. Building in Public — home of the "Tab #N closed" series (renders only when posts exist). */}
       <LandingNewsSection />
 
-      {/* 11. FAQ — the five prompt-shaped questions (GEO clusters). Mirrored as
+      {/* 12. FAQ — the five prompt-shaped questions (GEO clusters). Mirrored as
           FAQPage JSON-LD in index.html. */}
       <section id="faq" className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
         <div className="brutal-grid" aria-hidden />
@@ -619,7 +664,7 @@ const LandingPage = () => {
                   <h3 className="pr-10 text-lg font-black tracking-tight md:text-xl">{item.q}</h3>
                 </summary>
                 <div className="cap-card-body">
-                  <p className="text-base leading-relaxed text-[var(--text-secondary)]">{item.a}</p>
+                  <p className="text-base leading-relaxed text-[var(--text-secondary)]"><FaqAnswer item={item} /></p>
                 </div>
               </details>
             ))}
@@ -627,7 +672,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* 12. Final CTA */}
+      {/* 13. Final CTA */}
       <section className="brutal-edge relative overflow-hidden border-t-2 px-6 py-16 md:py-24">
         <div className="brutal-grid" aria-hidden />
         <div className="relative mx-auto max-w-6xl">
@@ -666,46 +711,22 @@ const LandingPage = () => {
         <div className="mx-auto max-w-6xl space-y-4 font-mono text-[10px] uppercase tracking-widest text-[var(--text-secondary)] md:text-xs">
           <p>{copy.footer.copyright}</p>
           <p className="flex flex-wrap gap-x-3 gap-y-2">
-            <a
-              href="https://hltrn.cc"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-[var(--text-primary)] transition-colors"
-            >
-              HLTRN.CC
-            </a>
-            <span aria-hidden>·</span>
-            <a
-              href={SOURCE_REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-[var(--text-primary)] transition-colors"
-            >
-              GODCRM.AI/GIT
-            </a>
-            <span aria-hidden>·</span>
-            <Link
-              to="/s/help"
-              className="hover:text-[var(--text-primary)] transition-colors"
-            >
-              KNOWLEDGE BASE
-            </Link>
-            <span aria-hidden>·</span>
-            <Link
-              to="/blog"
-              className="hover:text-[var(--text-primary)] transition-colors"
-            >
-              BLOG
-            </Link>
-            <span aria-hidden>·</span>
-            <a
-              href="https://t.me/god_crm"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-[var(--text-primary)] transition-colors"
-            >
-              TELEGRAM
-            </a>
+            {copy.footer.links.map((link, index) => {
+              const external = link.href.startsWith('http');
+              return (
+                <span key={link.href} className="contents">
+                  {index > 0 && <span aria-hidden>·</span>}
+                  <a
+                    href={link.href}
+                    target={external ? '_blank' : undefined}
+                    rel={external ? 'noopener noreferrer' : undefined}
+                    className="hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    {link.label}
+                  </a>
+                </span>
+              );
+            })}
           </p>
           <div className="brutal-edge mt-6 border-t-2 pt-4 leading-relaxed">
             <p>{copy.footer.lines[0]}</p>

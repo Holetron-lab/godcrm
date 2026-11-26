@@ -79,7 +79,8 @@ function resolveColumn(
 function detectKind(column: LaneAxisColumn | null): LaneKind {
   if (!column) return 'unknown';
   const rel = column.config?.relation;
-  if (rel?.enabled || column.config?.relatedTableId) return 'relation';
+  if (rel?.enabled || column.config?.relatedTableId
+      || (column.type === 'relation' && rel?.tableId != null && rel.enabled !== false)) return 'relation';
   if (column.type === 'multi-select' || column.type === 'multi_select') return 'multi-select';
   if (column.type === 'select') return 'select';
   return 'text';

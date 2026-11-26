@@ -169,6 +169,7 @@ export interface KanbanConfig {
   assigneeColumn?: string;     // Column for assignee
   scheduledDateColumn?: string; // Column for scheduled/start date
   dueDateColumn?: string;      // Column for due date
+  eventsTableId?: string | number; // ADR-209: `ticket_events` table, second source of the board
   lanes: KanbanLane[];         // Lane configuration
 }
 
@@ -210,6 +211,7 @@ export interface CalendarConfig {
   descriptionColumn?: string;  // Event description (shown on hover)
   colorColumn?: string;        // Event color
   allDayColumn?: string;       // All-day flag column
+  eventsTableId?: string | number; // ADR-209: `ticket_events` table, second source of the calendar
 }
 
 /**

@@ -271,7 +271,7 @@ async function main() {
   const pool = new Pool({
     host: process.env.PGHOST || 'localhost',
     user: process.env.PGUSER || 'godcrm',
-    password: process.env.PGPASSWORD || 'CHANGE_ME_LOCAL_DB_PASSWORD',
+    password: process.env.PGPASSWORD || 'godcrm_dev_2026',
     database: process.env.PGDATABASE || 'godcrm_prod',
   });
 

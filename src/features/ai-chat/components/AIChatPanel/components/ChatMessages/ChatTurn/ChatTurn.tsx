@@ -51,6 +51,13 @@ const getMovedToMessageIds = (
   return ids.length > 0 ? ids : undefined;
 };
 
+// Who wrote the messages of a move, each named once, in order of appearance.
+const getMovedSenders = (stubs: ChatMessage[]): string[] => [
+  ...new Set(stubs
+    .map(m => m.agentName || (m.metadata?.agent_name as string | undefined) || m.sender_name)
+    .filter((name): name is string => !!name)),
+];
+
 const AGENT_FALLBACK_COLOR = 'rgb(168, 85, 247)'; // purple-500 — bubble's own left stripe when no agent color
 
 // ADR-0031 §Z / WP-24: ChatLinkCard stripe color reflects the MOVER, not the
@@ -140,7 +147,12 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
   // reused by everyone viewing in that language.
   const { language } = useLanguage();
   const { getByUserId } = useMentionUsers();
-  const humanColor = getByUserId(Number(messages[0]?.sender_id))?.color || '#3b82f6';
+  // A move block (ADR-0031 §Z) holds nothing but moved-out stubs and belongs
+  // to whoever moved them, not to the author of the first stub.
+  const isSourceOnlyTurn =
+    messages.length > 0 && messages.every(m => m.contentType === 'moved');
+  const turnUserId = (isSourceOnlyTurn && getMovedBy(messages[0], 'forward')?.user_id) || messages[0]?.sender_id;
+  const humanColor = getByUserId(Number(turnUserId))?.color || '#3b82f6';
   const { translate, translatingId } = useTranslateMessage(conversationId);
   const [showOriginal, setShowOriginal] = React.useState(false);
   // The language the viewer is looking at: whatever they last picked from the
@@ -273,9 +285,8 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
   // The bubble has source-side stubs as its visible message body (current
   // behaviour: TurnBody had a "all-moved → cards only" early-return). With the
   // refactor, the body becomes either empty (collapsed) or the moved-message
-  // preview (expanded) — TurnBody is skipped entirely for these turns.
-  const isSourceOnlyTurn =
-    messages.length > 0 && messages.every(m => m.contentType === 'moved');
+  // preview (expanded) — TurnBody is skipped entirely for these turns
+  // (`isSourceOnlyTurn`, computed above).
 
   return (
     <div
@@ -319,7 +330,7 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
             isAgentActiveInChat={isAgentActiveInChat}
             onAgentNameClick={onAgentNameClick}
             senderAvatar={senderAvatar}
-            senderUserId={messages[0]?.sender_id}
+            senderUserId={turnUserId}
             conversationId={conversationId}
             isSystemEvent={isSystemEvent}
           />
@@ -342,9 +353,12 @@ export const ChatTurn: React.FC<ChatTurnProps> = React.memo(({
                   key={`moved-fwd-${g.conversationId}-${key}`}
                   conversationId={g.conversationId}
                   direction="forward"
-                  count={g.count}
+                  // The stubs of one move can span history pages; the batch
+                  // size on any stub is the size of the whole move.
+                  count={Math.max(g.count, messageIds?.length ?? 0)}
                   firstMessageId={g.firstMessageId}
                   movedBy={movedBy}
+                  senders={getMovedSenders(g.stubMessages)}
                   expandable={canExpand}
                   expanded={isExpanded}
                   onExpandToggle={() => toggleSourceExpanded(key)}

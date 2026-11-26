@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { NavTreeItem } from '../components/panels/NavTreeItem';
+import { NavTreeItem, type NavTreeItemProps } from '../components/panels/NavTreeItem';
+import { useSchemaTreeStore } from '../components/panels/useSchemaTreeStore';
 import { useSchemaEditorStore } from '../store/schemaEditorStore';
 import type { ColumnData, NavTreeNode, TableNodeData } from '../types/schema-editor.types';
 
@@ -8,14 +9,16 @@ vi.mock('@/shared/utils/apiClient', () => ({ apiClient: { get: vi.fn(), put: vi.
 vi.mock('@/shared/i18n/LanguageContext', () => ({ useLanguage: () => ({ t: (key: string) => key, language: 'en' }) }));
 
 const t = (key: string) => key;
-const column = (id: string, name: string, isPrimaryKey = false): ColumnData =>
+// The schema-editor path: the row fed from the store through the adapter.
+const StoreItem = (props: Omit<NavTreeItemProps, 'model'>) => <NavTreeItem {...props} model={useSchemaTreeStore()} />;
+const column =(id: string, name: string, isPrimaryKey = false): ColumnData =>
   ({ id, name, displayName: name.toUpperCase(), type: 'text', isPrimaryKey, isForeignKey: false, isRequired: false });
 const data: TableNodeData = { tableId: 5, name: 'bugs', displayName: 'Bugs', key: 'bugs', icon: '🐛', projectId: 1, isExternal: false,
   columns: [column('1', 'id', true), column('2', 'title')], rowsPreview: [{ id: 1, title: 'First' }] };
 const treeNode: NavTreeNode = { id: 'table:5', type: 'table', numericId: 5, name: 'bugs', displayName: 'Bugs', icon: '🐛', children: [], parentId: null };
 
 const renderItem = () => render(
-  <NavTreeItem node={treeNode} depth={1} t={t} selectedTables={new Set()} selectedProjects={new Map()} onToggleSelect={vi.fn()} onToggleProjectSelect={vi.fn()} />
+  <StoreItem node={treeNode} depth={1} t={t} selectedTables={new Set()} selectedProjects={new Map()} onToggleSelect={vi.fn()} onToggleProjectSelect={vi.fn()} />
 );
 const listen = (name: string) => {
   const spy = vi.fn();
@@ -31,7 +34,7 @@ afterEach(() => cleanup());
 
 it.each(['project', 'folder', 'table'] as const)('puts selection before expansion for a %s', (type) => {
   const node: NavTreeNode = type === 'table' ? treeNode : { ...treeNode, id: `${type}:1`, type, numericId: 1, children: [treeNode] };
-  const { container } = render(<NavTreeItem node={node} depth={1} t={t} selectedTables={new Set()} selectedProjects={new Map()} onToggleSelect={vi.fn()} onToggleProjectSelect={vi.fn()} />);
+  const { container } = render(<StoreItem node={node} depth={1} t={t} selectedTables={new Set()} selectedProjects={new Map()} onToggleSelect={vi.fn()} onToggleProjectSelect={vi.fn()} />);
   const row = container.firstElementChild?.firstElementChild;
   const buttons = row?.querySelectorAll(':scope > button');
   expect(buttons?.[0].getAttribute('title')).toBe(type === 'table' ? 'common.select' : 'schemaEditor.selection.clickToSelectParent');
@@ -88,7 +91,7 @@ it('gives a table module the table menu of its main table and no relation dot on
   const widget: NavTreeNode = { id: 'widget:9', type: 'widget', numericId: 9, name: 'Board', displayName: 'Board', icon: '🧩',
     children: [], parentId: null, widgetType: 'preset', presetName: 'table_view', mainTableId: 5 };
   render(
-    <NavTreeItem node={widget} depth={1} t={t} selectedTables={new Set()} selectedProjects={new Map()} onToggleSelect={vi.fn()} onToggleProjectSelect={vi.fn()} />
+    <StoreItem node={widget} depth={1} t={t} selectedTables={new Set()} selectedProjects={new Map()} onToggleSelect={vi.fn()} onToggleProjectSelect={vi.fn()} />
   );
   fireEvent.click(screen.getByRole('button', { name: 'schemaEditor.navMenu.actions' }));
   const items = screen.getAllByRole('menuitem').map((item) => item.textContent);

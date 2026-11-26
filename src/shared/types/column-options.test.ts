@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getColumnTypeOptions, getColumnTypeOptionsForCSV, getColumnTypeOptionsWithEmoji } from './index';
 import { cloneDefaultColumns } from '@/features/tables/components/CreateTableModal/constants';
-import { guessColumnType } from '@/features/tables/components/CreateTableModal/csv-utils';
+import { guessColumnType } from '@/shared/column-mapping';
 
 describe('available column types', () => {
   for (const language of ['en', 'ru'] as const) {

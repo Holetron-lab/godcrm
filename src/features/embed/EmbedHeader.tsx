@@ -16,8 +16,8 @@ export interface EmbedHeaderProps {
 /**
  * Ask the host page (embed.js overlay OR split.html shell) to switch presentation.
  * The chat lives in an iframe on edit.godcrm.ai; the host is on design-test — it
- * verifies our origin before acting, so '*' target is safe. embed.js handles
- * mode:'split' (→ /split); split.html handles mode:'overlay' (→ / with overlay).
+ * verifies our origin before acting, so '*' target is safe. Ticket embeds switch
+ * in place; legacy cookie embeds keep the standalone split shell navigation.
  */
 function requestMode(target: EmbedMode) {
   try {

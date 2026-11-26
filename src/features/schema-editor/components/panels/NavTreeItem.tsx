@@ -1,11 +1,11 @@
 /**
  * NavTreeItem - Single tree item component (recursive)
- * Renders project, folder, table, widget, or external-section nodes
+ * Renders project, folder, table, widget, or external-section nodes.
+ * Presentational: expansion, visibility and column data come through `model` (see SchemaTree).
  */
 
 import { useRef } from 'react';
-import { useSchemaEditorStore } from '../../store/schemaEditorStore';
-import type { NavTreeNode, TableVisibilityState, TableNode as TableFlowNode } from '../../types/schema-editor.types';
+import type { NavTreeNode, TableVisibilityState } from '../../types/schema-editor.types';
 import {
   ChevronRight,
   ChevronDown,
@@ -26,11 +26,14 @@ import { VisibilityCheckbox } from './VisibilityCheckbox';
 import { NavTreeItemContextMenu } from './NavTreeItemContextMenu';
 import { NavTreeColumnRow } from './NavTreeColumnRow';
 import { getWidgetIcon } from '../widgetIcon';
-import type { ParentSelectionState } from './navTreeTypes';
+import type { ParentSelectionState, SchemaTreeModel, SchemaTreeOverlay } from './navTreeTypes';
 
-interface NavTreeItemProps {
+export interface NavTreeItemProps {
   node: NavTreeNode;
   depth: number;
+  model: SchemaTreeModel;
+  /** Install plan (ADR-207 §2.6): replaces the editor's row chrome with the plan's state and controls. */
+  overlay?: SchemaTreeOverlay;
   t: (key: string) => string;
   selectedTables: Set<number>;
   selectedProjects: Map<number, ParentSelectionState>;
@@ -57,6 +60,8 @@ const getChildTableIds = (n: NavTreeNode): number[] => {
 export const NavTreeItem = ({
   node,
   depth,
+  model,
+  overlay,
   t,
   selectedTables,
   selectedProjects,
@@ -64,62 +69,22 @@ export const NavTreeItem = ({
   onToggleProjectSelect,
   sortMode = false,
 }: NavTreeItemProps) => {
-  const {
-    nodes,
-    tableVisibility,
-    projectVisibility,
-    folderVisibility,
-    expandedProjects,
-    expandedFolders,
-    setTableVisibility,
-    setProjectVisibility,
-    setFolderVisibility,
-    toggleProjectExpanded,
-    toggleFolderExpanded,
-  } = useSchemaEditorStore();
+  // Tables expand into their columns; under an overlay a row expands into the plan's details instead.
+  const tableColumns = node.type === 'table' && !overlay ? model.getTableColumns(node.numericId) : undefined;
+  const columns = tableColumns?.columns ?? [];
+  const details = overlay ? overlay.renderDetails(node) : null;
 
-  // Tables expand into their columns (data comes from the canvas node, so there is no extra request).
-  const tableNode = node.type === 'table'
-    ? nodes.find((n): n is TableFlowNode => n.type === 'tableNode' && n.data.tableId === node.numericId)
-    : undefined;
-  const columns = tableNode?.data.columns ?? [];
-
-  const isExpanded =
-    node.type === 'project'
-      ? expandedProjects.has(node.numericId)
-      : node.type === 'folder' || node.type === 'external-section' || node.type === 'table'
-        ? expandedFolders.has(node.id)  // Use node.id for virtual folders and tables ("table:<id>")
-        : false;
-
-  const hasChildren = node.children.length > 0 || columns.length > 0;
-
-  // Get visibility state for this node
-  const visibilityState: TableVisibilityState =
-    node.type === 'table'
-      ? (tableVisibility[node.numericId] || 'inherit')
-      : node.type === 'project'
-        ? (projectVisibility[node.numericId] || 'visible')
-        : node.type === 'folder'
-          ? (folderVisibility[node.id] || 'visible')
-          : 'inherit';
+  const isExpanded = model.isExpanded(node);
+  const hasChildren = node.children.length > 0 || columns.length > 0 || details != null;
+  const visibilityState = model.getVisibility(node);
 
   const handleToggleExpand = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (node.type === 'project') {
-      toggleProjectExpanded(node.numericId);
-    } else if (node.type === 'folder' || node.type === 'external-section' || node.type === 'table') {
-      toggleFolderExpanded(node.id);  // Use node.id for virtual folders
-    }
+    model.onToggleExpand(node);
   };
 
   const handleVisibilityChange = (newState: TableVisibilityState) => {
-    if (node.type === 'table') {
-      setTableVisibility(node.numericId, newState);
-    } else if (node.type === 'project') {
-      setProjectVisibility(node.numericId, newState);
-    } else if (node.type === 'folder') {
-      setFolderVisibility(node.id, newState);
-    }
+    model.onVisibilityChange(node, newState);
   };
 
   // Name click opens the entity settings (table → edit modal, project → edit project).
@@ -173,7 +138,7 @@ export const NavTreeItem = ({
     : 'text-gray-400 dark:text-gray-500';
 
   const showIndicator = node.type === 'table' && (node.hasEdge || node.hasPending);
-  const showContextMenuTrigger = node.type !== 'external-section';
+  const showContextMenuTrigger = node.type !== 'external-section' && !overlay;
   const WidgetIcon = node.type === 'widget' ? getWidgetIcon(node.presetName || node.widgetType, node.widgetConfig) : null;
 
   const primaryTableId = node.type === 'table' ? node.numericId
@@ -211,6 +176,7 @@ export const NavTreeItem = ({
   const nameClasses = `text-sm truncate ${
     node.type === 'project' ? 'font-medium text-[var(--text-primary)]' :
     node.type === 'folder' ? (
+      overlay ? 'font-medium text-[var(--text-primary)]' :
       node.id.includes('virtual:databases') ? 'font-medium text-yellow-500' :
       node.id.includes('virtual:internal') ? 'font-medium text-primary-500' :
       node.id.includes('virtual:synced') ? 'font-medium text-cyan-500' :
@@ -236,7 +202,7 @@ export const NavTreeItem = ({
         style={{ paddingLeft: `${rowPaddingLeft}px`, ...getRowStyle() }}
         className={`group relative flex items-center gap-1 h-7 pr-2 rounded hover:bg-[var(--bg-secondary)] cursor-pointer ${
           node.type === 'external-section' ? 'border-t border-[var(--border-secondary)] mt-2' : ''
-        } ${sortMode ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        } ${sortMode ? 'cursor-grab active:cursor-grabbing' : ''} ${overlay?.rowClassName(node) ?? ''}`}
         draggable={sortMode && node.type === 'table'}
       >
         {/* Drag handle - visible in sort mode */}
@@ -247,7 +213,7 @@ export const NavTreeItem = ({
         )}
 
         {/* Smart Selection Checkbox - for projects and folders (hidden in sort mode) */}
-        {!sortMode && (node.type === 'project' || node.type === 'folder') && (
+        {!sortMode && !overlay && (node.type === 'project' || node.type === 'folder') && (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -261,7 +227,7 @@ export const NavTreeItem = ({
         )}
 
         {/* Selection Checkbox - only for tables (hidden in sort mode) */}
-        {!sortMode && node.type === 'table' && (
+        {!sortMode && !overlay && node.type === 'table' && (
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSelect(node.numericId); }}
             className="p-0.5 rounded hover:bg-[var(--bg-tertiary)] transition-colors flex-shrink-0"
@@ -293,8 +259,8 @@ export const NavTreeItem = ({
           <div className="w-4.5" />
         )}
 
-        {/* Visibility Checkbox - for projects, folders and tables (always visible) */}
-        {(node.type === 'project' || node.type === 'table' || node.type === 'folder') && (
+        {/* Visibility Checkbox - for projects, folders and tables (always visible); plan state under an overlay */}
+        {overlay ? overlay.renderState(node) : (node.type === 'project' || node.type === 'table' || node.type === 'folder') && (
           <VisibilityCheckbox
             state={visibilityState}
             onChange={handleVisibilityChange}
@@ -303,7 +269,7 @@ export const NavTreeItem = ({
         )}
 
         {/* Icon - left side; the table emoji opens Move when held */}
-        {node.type === 'table' ? (
+        {node.type === 'table' && !overlay ? (
           <button
             type="button"
             onPointerDown={startHold}
@@ -332,7 +298,7 @@ export const NavTreeItem = ({
         )}
 
         {/* Name - a button for tables/projects (opens their settings) */}
-        {node.type === 'table' || node.type === 'project' ? (
+        {(node.type === 'table' || node.type === 'project') && !overlay ? (
           <button
             type="button"
             onClick={handleNameClick}
@@ -350,12 +316,12 @@ export const NavTreeItem = ({
         {/* ID and Key for tables - flex-1 to push badge to right */}
         {node.type === 'table' && (
           <span className="flex-1 text-[10px] text-[var(--text-secondary)] font-mono truncate">
-            #{node.numericId} • {node.name}
+            {node.numericId > 0 && `#${node.numericId} • `}{node.name}
           </span>
         )}
         {node.type === 'project' && (
           <span className="flex-1 text-[10px] text-[var(--text-secondary)] font-mono truncate">
-            #{node.numericId}
+            {node.numericId > 0 && `#${node.numericId}`}
           </span>
         )}
         {node.type === 'widget' && (
@@ -398,7 +364,7 @@ export const NavTreeItem = ({
       </div>
 
       {/* Columns of an expanded table - last nesting level, same indent as the table row */}
-      {isExpanded && node.type === 'table' && tableNode && columns.length > 0 && (
+      {isExpanded && node.type === 'table' && tableColumns && columns.length > 0 && (
         <div>
           {columns.map((column, index) => (
             <NavTreeColumnRow
@@ -407,13 +373,16 @@ export const NavTreeItem = ({
               column={column}
               canMoveUp={!column.isPrimaryKey && index > columns.findIndex((c) => !c.isPrimaryKey)}
               canMoveDown={!column.isPrimaryKey && index < columns.length - 1}
-              rowsPreview={tableNode.data.rowsPreview}
-              rowsLoading={tableNode.data.rowsLoading}
+              rowsPreview={tableColumns.rowsPreview}
+              rowsLoading={tableColumns.rowsLoading}
+              onLoadRows={model.onLoadTableRows}
               paddingLeft={rowPaddingLeft}
             />
           ))}
         </div>
       )}
+
+      {isExpanded && details}
 
       {/* Children */}
       {isExpanded && node.children.length > 0 && (
@@ -423,6 +392,8 @@ export const NavTreeItem = ({
               key={child.id}
               node={child}
               depth={depth + 1}
+              model={model}
+              overlay={overlay}
               t={t}
               selectedTables={selectedTables}
               selectedProjects={selectedProjects}

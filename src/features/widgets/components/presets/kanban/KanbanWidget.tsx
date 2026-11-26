@@ -23,7 +23,9 @@ import { DEFAULT_LANE_COLORS, hexToRgba } from './kanban-utils';
 import { ExpandableCard } from './KanbanCard';
 import { KanbanDroppableColumn } from './KanbanColumn';
 import { KanbanToolbar } from './KanbanToolbar';
-import { useLaneAxis } from '../_shared/useLaneAxis';
+import { buildLaneAxis, useLaneAxis } from '../_shared/useLaneAxis';
+import { OccurrenceBoardContext, type OccurrenceBoard } from './KanbanOccurrence';
+import { useOccurrenceSource } from './useOccurrenceSource';
 import type { KanbanWidgetProps, KanbanCardData, FieldValue } from './kanban-types';
 
 /**
@@ -150,10 +152,29 @@ export function KanbanWidget(props: KanbanWidgetProps) {
     () => columnsInfo.find((c) => c.name === groupByColumn),
     [columnsInfo, groupByColumn],
   );
+
+  // ADR-209 D6 — events table as a second source: a series gets one card per
+  // column in which it has occurrences. Off without `kanban.eventsTableId`,
+  // under a public read-only scope, and when the board is not grouped by status.
+  const eventsTableId = !publicReadOnly && config.kanban?.eventsTableId ? String(config.kanban.eventsTableId) : null;
+  const statusColumn = config.kanban?.statusColumn || config.statusColumn || 'state';
+  const knownStates = useMemo(() => {
+    if (!eventsTableId) return undefined;
+    const seeded = buildLaneAxis({ groupByColumn: groupByColumnInfo ?? groupByColumn, columnsInfo, rows: [], relationData }).laneByKey;
+    return seeded.size > 0 ? new Set(seeded.keys()) : undefined;
+  }, [eventsTableId, groupByColumnInfo, groupByColumn, columnsInfo, relationData]);
+  const occurrences = useOccurrenceSource({
+    eventsTableId,
+    tickets: data,
+    stateColumn: groupByColumn === statusColumn ? groupByColumn : null,
+    knownStates,
+  });
+  const ticketIdOf = (cardId: string) => occurrences.metaByCardId.get(cardId)?.ticketId ?? cardId;
+
   const laneAxis = useLaneAxis<KanbanCardData>({
     groupByColumn: groupByColumnInfo ?? groupByColumn,
     columnsInfo,
-    rows: data || [],
+    rows: eventsTableId ? occurrences.cards : data || [],
     relationData,
     unmatchedRowMode: 'drop',
   });
@@ -239,6 +260,16 @@ export function KanbanWidget(props: KanbanWidgetProps) {
     }
     return laneAxis.lanes.map((lane) => ({ value: lane.key, label: lane.label, color: lane.color }));
   }, [groupByOverride, columnOptions, laneAxis]);
+
+  const occurrenceBoard = useMemo((): OccurrenceBoard | null => (eventsTableId ? {
+    byTicket: occurrences.byTicket,
+    selected: occurrences.selected,
+    toggleSelected: occurrences.toggleSelected,
+    states: new Map(allColumns.map((column, index) => [
+      column.value,
+      { label: column.label, color: column.color || DEFAULT_LANE_COLORS[index % DEFAULT_LANE_COLORS.length] },
+    ])),
+  } : null), [eventsTableId, occurrences.byTicket, occurrences.selected, occurrences.toggleSelected, allColumns]);
 
   // Filter columns based on active status filters
   const filteredColumns = !groupByOverride && activeStatusFilters && activeStatusFilters.length > 0
@@ -333,6 +364,15 @@ export function KanbanWidget(props: KanbanWidgetProps) {
       }
     }
 
+    // A card of a series moves its occurrences, never the ticket itself.
+    const occurrence = occurrences.metaByCardId.get(cardId);
+    if (occurrence) {
+      if (fromColumn && fromColumn !== toColumn && allColumns.some(column => column.value === toColumn)) {
+        void occurrences.move(occurrence, toColumn);
+      }
+      return;
+    }
+
     if (fromColumn && fromColumn !== toColumn && onMoveCard) {
       logger.debug('Moving card', { cardId, fromColumn, toColumn });
       onMoveCard(cardId, toColumn);
@@ -341,11 +381,18 @@ export function KanbanWidget(props: KanbanWidgetProps) {
 
   const handleQuickEdit = (cardId: string, field: string, value: FieldValue) => {
     if (onCardUpdate) {
-      onCardUpdate(cardId, field, value);
+      onCardUpdate(ticketIdOf(cardId), field, value);
     }
   };
 
+  // Callbacks of a series card get the ticket row and its id, not the per-column card.
+  const toTicket = (card: KanbanCardData) => {
+    const occurrence = occurrences.metaByCardId.get(String(card.id));
+    return (occurrence && data?.find(row => String(row.id) === occurrence.ticketId)) || card;
+  };
+
   return (
+    <OccurrenceBoardContext.Provider value={occurrenceBoard}>
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
@@ -366,7 +413,7 @@ export function KanbanWidget(props: KanbanWidgetProps) {
           onAddColumn={onAddColumn}
           onAddStatusRow={onAddStatusRow}
           groupRelationTableId={groupRelationTableId}
-          onRefresh={onRefresh}
+          onRefresh={onRefresh && eventsTableId ? () => { onRefresh(); void occurrences.refetch(); } : onRefresh}
           onPrint={onPrint}
           onSettings={onSettings}
           groupByColumn={groupByColumn}
@@ -438,11 +485,11 @@ export function KanbanWidget(props: KanbanWidgetProps) {
               columnsInfo={columnsInfo}
               relationData={relationData}
               onToggleCardExpanded={toggleCardExpanded}
-              onCardDoubleClick={onCardDoubleClick}
-              onOpenRowChat={onOpenRowChat}
-              onAttachRowToMessage={onAttachRowToMessage}
+              onCardDoubleClick={onCardDoubleClick && ((card, tab) => onCardDoubleClick(toTicket(card), tab))}
+              onOpenRowChat={onOpenRowChat && (cardId => onOpenRowChat(ticketIdOf(cardId)))}
+              onAttachRowToMessage={onAttachRowToMessage && (cardId => onAttachRowToMessage(ticketIdOf(cardId)))}
               onQuickEdit={handleQuickEdit}
-              onDeleteCard={onDeleteCard}
+              onDeleteCard={onDeleteCard && (cardId => onDeleteCard(ticketIdOf(cardId)))}
               onAddCard={onAddCard}
               subGroupColumn={subGroupColumn}
               translations={cardTranslations}
@@ -484,5 +531,6 @@ export function KanbanWidget(props: KanbanWidgetProps) {
         ) : null}
       </DragOverlay>
     </DndContext>
+    </OccurrenceBoardContext.Provider>
   );
 }

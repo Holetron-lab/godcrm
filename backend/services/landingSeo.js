@@ -49,8 +49,15 @@ const section = (id, title, inner) =>
 
 const cards = (items, render) => items.map(render).join('');
 
+const faqAnswer = (item) => {
+  const link = item.links?.[0];
+  if (!link) return esc(item.a);
+  const [before, after] = item.a.split(link.text);
+  return `${esc(before)}<a href="${esc(link.href)}">${esc(link.text)}</a>${esc(after)}`;
+};
+
 export function renderLandingBody(copy) {
-  const { hero, enemy, inside, story, connect, build, underTheHood, broken, faq, finalCta, footer } = copy;
+  const { hero, enemy, inside, outside, story, connect, build, underTheHood, broken, faq, finalCta, footer } = copy;
   const swapQuote = `${story.swapQuote.pre}${story.modelSwaps}${story.swapQuote.post}`;
   const ctaLinks = `<p><a href="${esc(copy.sourceRepoUrl)}">Self-host GOD CRM</a> · <a href="/s/help">Read the docs</a></p>`;
 
@@ -64,6 +71,7 @@ export function renderLandingBody(copy) {
       + cards(inside.cards, (c) => `<article><h3>${esc(c.num)} ${esc(c.label)}</h3><p>${esc(c.body)}</p>`
         + (c.link ? `<p><a href="${esc(c.link.href)}">${esc(c.link.label)}</a></p>` : '') + '</article>')
       + `<p>${esc(inside.outro)}</p>`)
+    + `<section><p>${esc(outside.badge)}</p><h2>${esc(outside.title)}</h2><p>${esc(outside.body)}</p></section>`
     + section('', story.title,
       `<p>${headline(story.headline)}</p><p>${esc(story.body)}</p>`
       + `<p>${esc(swapQuote)} ${esc(story.conclusion)}</p><p>${esc(story.credit)}</p>`)
@@ -88,11 +96,11 @@ export function renderLandingBody(copy) {
       + '</ul>')
     + section('faq', faq.title,
       `<p>${headline(faq.headline)}</p><dl>`
-      + cards(faq.items, (i) => `<dt>${esc(i.q)}</dt><dd>${esc(i.a)}</dd>`)
+      + cards(faq.items, (i) => `<dt>${esc(i.q)}</dt><dd>${faqAnswer(i)}</dd>`)
       + '</dl>')
     + section('', finalCta.title,
       `<p>${headline(finalCta.headline)}</p><p>${esc(finalCta.body)}</p>${ctaLinks}`)
-    + `<footer><p>${esc(footer.copyright)}</p>${cards(footer.lines, (l) => `<p>${esc(l)}</p>`)}<p><a href="/blog">Blog</a></p></footer>`
+    + `<footer><p>${esc(footer.copyright)}</p><p>${footer.links.map((link) => `<a href="${esc(link.href)}">${esc(link.label)}</a>`).join(' · ')}</p>${cards(footer.lines, (l) => `<p>${esc(l)}</p>`)}</footer>`
     + '</main>';
 }
 

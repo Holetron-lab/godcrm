@@ -163,6 +163,7 @@ describe('OIDC Provider - ADR-063', () => {
       const CALLBACK = 'https://play.workadventure.localhost/oauth/callback';
       const query = { client_id: 'workadventure', redirect_uri: CALLBACK, response_type: 'code', scope: 'openid', state: 's1' };
       const refreshCookie = (secret) => jwt.sign({ id: testUser.id, type: 'refresh' }, secret, { expiresIn: '1h' });
+      const accessCookie = (secret) => jwt.sign({ id: testUser.id, email: testUser.email }, secret, { expiresIn: '1h' });
       const domainClears = (res) =>
         (res.headers['set-cookie'] || []).filter((c) => /Domain=\.godcrm\.ai/i.test(c) && /Expires=Thu, 01 Jan 1970/.test(c));
       let savedCookieDomain;
@@ -173,6 +174,33 @@ describe('OIDC Provider - ADR-063', () => {
       });
       afterEach(() => {
         if (savedCookieDomain !== undefined) process.env.COOKIE_DOMAIN = savedCookieDomain;
+      });
+
+      test('only an access_token cookie → authorization code without a login redirect', async () => {
+        const response = await request(app)
+          .get('/oauth/authorize')
+          .set('Host', 'app.godcrm.ai')
+          .set('Cookie', `access_token=${accessCookie(TEST_JWT_SECRET)}`)
+          .query(query)
+          .expect(302);
+        expect(response.headers.location).toContain(CALLBACK);
+        expect(response.headers.location).toContain('code=');
+        expect(response.headers.location).toContain('state=s1');
+        expect(domainClears(response)).toHaveLength(0);
+      });
+
+      test('foreign access_token first, own access_token second → authorization code and parent-domain copies evicted', async () => {
+        const response = await request(app)
+          .get('/oauth/authorize')
+          .set('Host', 'app.godcrm.ai')
+          .set('Cookie', `access_token=${accessCookie(FOREIGN_SECRET)}; access_token=${accessCookie(TEST_JWT_SECRET)}`)
+          .query(query)
+          .expect(302);
+        expect(response.headers.location).toContain(CALLBACK);
+        expect(response.headers.location).toContain('code=');
+        const clears = domainClears(response);
+        expect(clears.some((c) => c.startsWith('godcrm_refresh=;'))).toBe(true);
+        expect(clears.some((c) => c.startsWith('access_token=;'))).toBe(true);
       });
 
       test('foreign cookie first, own cookie second → authorization code and parent-domain copies evicted', async () => {
@@ -268,6 +296,39 @@ describe('OIDC Provider - ADR-063', () => {
       expect(tokenResponse.body.token_type).toBe('Bearer');
       expect(tokenResponse.body.expires_in).toBeGreaterThan(0);
       expect(tokenResponse.body.id_token).toBeDefined();
+    });
+
+    test('ID token email_verified follows the persisted user state', async () => {
+      const issueIdToken = async () => {
+        const sessionToken = jwt.sign({ id: testUser.id }, TEST_JWT_SECRET, { expiresIn: '1h' });
+        const authResponse = await request(app)
+          .get('/oauth/authorize')
+          .set('Authorization', `Bearer ${sessionToken}`)
+          .query({
+            client_id: 'workadventure',
+            redirect_uri: 'https://play.workadventure.localhost/oauth/callback',
+            response_type: 'code',
+            scope: 'openid email',
+            state: 'email-verification-state'
+          });
+        const code = new URL(authResponse.headers.location).searchParams.get('code');
+        const tokenResponse = await request(app)
+          .post('/oauth/token')
+          .send({
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: 'https://play.workadventure.localhost/oauth/callback',
+            client_id: 'workadventure',
+            client_secret: 'wa-secret-123'
+          })
+          .expect(200);
+        return jwt.decode(tokenResponse.body.id_token);
+      };
+
+      await dbRun('UPDATE users SET email_verified = 0 WHERE id = ?', [testUser.id]);
+      expect((await issueIdToken()).email_verified).toBe(false);
+      await dbRun('UPDATE users SET email_verified = 1 WHERE id = ?', [testUser.id]);
+      expect((await issueIdToken()).email_verified).toBe(true);
     });
 
     test('should return error for invalid code', async () => {

@@ -16,7 +16,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   X, Send, Paperclip, Loader2, Plus, Search, Link2, FolderOpen, Mic, Square,
   ImageIcon, FileText, File, Forward, Clock, Bold, Italic,
-  Strikethrough, Code, Smile, Type, ListTodo, Table as TableIcon, ArrowRightLeft,
+  Strikethrough, Code, Smile, Type, ListTodo, Table as TableIcon, ArrowRightLeft, Repeat,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/shared/utils/cn';
@@ -28,6 +28,8 @@ import type { TasksSourceConfig, FilesSourceConfig } from '../../AIChatPanel.typ
 import type { FavoritesConfig, AttachTabId } from '../types';
 import type { ChatMessage } from '../../../types';
 import { ScheduleDatePicker } from './ScheduleDatePicker';
+import type { ScheduleSeries } from '../hooks/useScheduledMessages';
+import { formatCronLabel } from '../utils/scheduleRecurrence';
 import { QuoteChipStrip } from './QuoteChipStrip';
 import { ImageDraftAttachment } from './ImageDraftAttachment';
 import { AudioDraftAttachment } from './AudioDraftAttachment';
@@ -133,7 +135,8 @@ interface InputAreaProps {
   scheduledActive?: boolean;
   setScheduledActive?: (v: boolean | ((prev: boolean) => boolean)) => void;
   scheduledCount?: number;
-  onScheduleMessage?: (isoDate: string) => Promise<void>;
+  /** ADR-208 D8: `series` is set for recurring messages; `isoDate` may then be null (first run = next cron tick). */
+  onScheduleMessage?: (isoDate: string | null, series?: ScheduleSeries | null) => Promise<void>;
   isScheduling?: boolean;
   initialScheduleDate?: string | null;
 }
@@ -169,6 +172,10 @@ export function InputArea(props: InputAreaProps) {
   const [isUploadingToSource, setIsUploadingToSource] = useState(false);
   // Pending schedule: when set, Send becomes "Schedule Send"
   const [pendingScheduleDate, setPendingScheduleDate] = useState<string | null>(null);
+  // ADR-208 D8: pending recurrence chosen in the picker (null = one-time)
+  const [pendingSeries, setPendingSeries] = useState<ScheduleSeries | null>(null);
+  const hasPendingSchedule = !!pendingScheduleDate || !!pendingSeries;
+  const clearPendingSchedule = () => { setPendingScheduleDate(null); setPendingSeries(null); };
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sourceUploadInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
@@ -251,9 +258,10 @@ export function InputArea(props: InputAreaProps) {
   const handleActualSubmit = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
     if (isRecording || isTranscribing) return;
-    if (pendingScheduleDate && onScheduleMessage) {
-      onScheduleMessage(pendingScheduleDate).then(() => {
+    if ((pendingScheduleDate || pendingSeries) && onScheduleMessage) {
+      onScheduleMessage(pendingScheduleDate, pendingSeries).then(() => {
         setPendingScheduleDate(null);
+        setPendingSeries(null);
       });
       return;
     }
@@ -266,7 +274,7 @@ export function InputArea(props: InputAreaProps) {
       }
     }
     handleSubmit(e);
-  }, [isRecording, isTranscribing, pendingScheduleDate, onScheduleMessage, handleSubmit, moveMessages, currentConversationId, onMoveAttempt]);
+  }, [isRecording, isTranscribing, pendingScheduleDate, pendingSeries, onScheduleMessage, handleSubmit, moveMessages, currentConversationId, onMoveAttempt]);
 
   if (panelMode === 'fullscreen') return null;
 
@@ -310,6 +318,12 @@ export function InputArea(props: InputAreaProps) {
     if (isTomorrow) return t('aiChat.ui.tomorrowAt', { time });
     return d.toLocaleString(language, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
+
+  // ADR-208 D8: pending badge text — "↻ daily at 09:00" for a series, otherwise the one-time date
+  const pendingScheduleLabel = pendingSeries
+    ? `↻ ${formatCronLabel(pendingSeries.recurrence_cron, t)}${pendingScheduleDate ? ` · ${formatPendingDate(pendingScheduleDate)}` : ''}`
+    : pendingScheduleDate ? formatPendingDate(pendingScheduleDate) : '';
+  const PendingIcon = pendingSeries ? Repeat : Clock;
 
   const hasContent = inputValue.trim() || attachments.length > 0;
 
@@ -559,6 +573,12 @@ export function InputArea(props: InputAreaProps) {
             isScheduling={isScheduling}
             onSchedule={(isoDate) => {
               setPendingScheduleDate(isoDate);
+              setPendingSeries(null);
+              setShowSchedulePicker(false);
+            }}
+            onScheduleSeries={(series) => {
+              setPendingSeries(series);
+              setPendingScheduleDate(series.scheduled_at);
               setShowSchedulePicker(false);
             }}
             onCancel={() => setShowSchedulePicker(false)}
@@ -621,11 +641,11 @@ export function InputArea(props: InputAreaProps) {
                 <div className="flex-1" />
 
                 {/* ── Pending schedule date display ── */}
-                {pendingScheduleDate && (
+                {hasPendingSchedule && (
                   <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-400 text-[11px] font-medium">
-                    <Clock className="w-3 h-3" />
-                    <span>{formatPendingDate(pendingScheduleDate)}</span>
-                    <button type="button" onClick={() => setPendingScheduleDate(null)}
+                    <PendingIcon className="w-3 h-3" />
+                    <span>{pendingScheduleLabel}</span>
+                    <button type="button" onClick={clearPendingSchedule}
                       className="text-amber-400/60 hover:text-red-400 transition-colors">
                       <X className="w-2.5 h-2.5" />
                     </button>
@@ -634,7 +654,7 @@ export function InputArea(props: InputAreaProps) {
 
                 {/* ── Schedule ── */}
                 <TBtn icon={<Clock className="w-3.5 h-3.5" />} label={t('aiChat.ui.scheduleMessage')}
-                  active={showSchedulePicker || !!pendingScheduleDate}
+                  active={showSchedulePicker || hasPendingSchedule}
                   onClick={() => { setShowSchedulePicker(prev => !prev); setShowEmojiPicker(false); }} />
               </div>
             </div>
@@ -707,11 +727,11 @@ export function InputArea(props: InputAreaProps) {
                 maxRows={4} />
 
               {/* Pending schedule indicator (below textarea) */}
-              {pendingScheduleDate && !showToolbar && (
+              {hasPendingSchedule && !showToolbar && (
                 <div className="flex items-center gap-1.5 px-2 pb-0.5">
-                  <Clock className="w-3 h-3 text-amber-400" />
-                  <span className="text-[11px] text-amber-400 font-medium">{formatPendingDate(pendingScheduleDate)}</span>
-                  <button type="button" onClick={() => setPendingScheduleDate(null)}
+                  <PendingIcon className="w-3 h-3 text-amber-400" />
+                  <span className="text-[11px] text-amber-400 font-medium">{pendingScheduleLabel}</span>
+                  <button type="button" onClick={clearPendingSchedule}
                     className="text-amber-400/60 hover:text-red-400 transition-colors">
                     <X className="w-2.5 h-2.5" />
                   </button>
@@ -741,14 +761,14 @@ export function InputArea(props: InputAreaProps) {
                   <Square className="w-4 h-4 fill-current" />
                 </button>
               ) : (
-                <button type="submit" aria-label={t('aiChat.ui.send')} disabled={isLoading || isRecording || isTranscribing || (!hasContent && !pendingScheduleDate && moveMessages.length === 0)}
+                <button type="submit" aria-label={t('aiChat.ui.send')} disabled={isLoading || isRecording || isTranscribing || (!hasContent && !hasPendingSchedule && moveMessages.length === 0)}
                   className={cn('p-1 rounded-lg transition-colors',
-                    isLoading || isRecording || isTranscribing || (!hasContent && !pendingScheduleDate && moveMessages.length === 0)
+                    isLoading || isRecording || isTranscribing || (!hasContent && !hasPendingSchedule && moveMessages.length === 0)
                       ? 'text-[var(--text-tertiary)] cursor-not-allowed'
-                      : pendingScheduleDate
+                      : hasPendingSchedule
                         ? 'bg-amber-500 text-white hover:bg-amber-600'
                         : 'bg-[var(--color-primary-500)] text-white hover:bg-[var(--color-primary-600)]')}>
-                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : pendingScheduleDate ? <Clock className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : hasPendingSchedule ? <PendingIcon className="w-4 h-4" /> : <Send className="w-4 h-4" />}
                 </button>
               )}
               {isRecording ? (

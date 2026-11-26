@@ -35,6 +35,7 @@ afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
 
@@ -44,6 +45,17 @@ async function start(extra = {}) {
   await vi.waitFor(() => expect(h.spawn).toHaveBeenCalled());
   return { result };
 }
+
+it('passes the current job space to MCP instead of an inherited static space', async () => {
+  vi.stubEnv('MCP_SPACE_ID', '11');
+  const { result } = await start({ agentId: 42, spaceId: 7833, jobId: 99 });
+  expect(h.spawn.mock.lastCall[2].env).toMatchObject({
+    AGENT_ID: '42', SPACE_ID: '7833', MCP_SPACE_ID: '7833', MCP_JOB_ID: '99',
+  });
+  child.stdout.emit('data', JSON.stringify({ type: 'result', result: 'done' }) + '\n');
+  child.emit('close', 0);
+  expect(await result).toMatchObject({ content: 'done' });
+});
 
 it('rejects and logs asynchronous stdin EPIPE without throwing into the server', async () => {
   const { result } = await start();

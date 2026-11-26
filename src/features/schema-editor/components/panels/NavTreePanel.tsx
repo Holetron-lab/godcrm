@@ -13,7 +13,8 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
 import { useSpacesQuery } from '@/features/spaces/hooks/useSpacesQuery';
 import { SpaceManagerModal } from '@/features/space-manager';
 import { CreateProjectModal } from '@/features/projects/components/CreateProjectModal';
-import { NavTreeItem } from './NavTreeItem';
+import { SchemaTree } from './SchemaTree';
+import { useSchemaTreeStore } from './useSchemaTreeStore';
 import { NavTreeToolbar } from './NavTreeToolbar';
 import { CreateFolderModal } from './CreateFolderModal';
 import { useNavTreeData } from './useNavTreeData';
@@ -53,6 +54,7 @@ export const NavTreePanel = ({ className = '', onClose }: NavTreePanelProps) => 
     handleToggleSelect,
     handleToggleProjectSelect,
   } = useProjectSelection();
+  const treeModel = useSchemaTreeStore();
   const { panelRef, panelWidth, setPanelWidth, isResizing, handleMouseDown } = usePanelResize();
 
   const handleExpandAll = useCallback(() => {
@@ -168,35 +170,16 @@ export const NavTreePanel = ({ className = '', onClose }: NavTreePanelProps) => 
             {t('schemaEditor.noTables')}
           </div>
         ) : (
-          <>
-            {navTree.map((node) => (
-              <NavTreeItem
-                key={node.id}
-                node={node}
-                depth={0}
-                t={t}
-                selectedTables={selectedTables}
-                selectedProjects={selectedProjects}
-                onToggleSelect={handleToggleSelect}
-                onToggleProjectSelect={handleToggleProjectSelect}
-                sortMode={sortMode}
-              />
-            ))}
-
-            {/* External Tables Section */}
-            {externalTables.length > 0 && (
-              <NavTreeItem
-                node={externalSectionNode}
-                depth={0}
-                t={t}
-                selectedTables={selectedTables}
-                selectedProjects={selectedProjects}
-                onToggleSelect={handleToggleSelect}
-                onToggleProjectSelect={handleToggleProjectSelect}
-                sortMode={sortMode}
-              />
-            )}
-          </>
+          <SchemaTree
+            nodes={externalTables.length > 0 ? [...navTree, externalSectionNode] : navTree}
+            model={treeModel}
+            t={t}
+            selectedTables={selectedTables}
+            selectedProjects={selectedProjects}
+            onToggleSelect={handleToggleSelect}
+            onToggleProjectSelect={handleToggleProjectSelect}
+            sortMode={sortMode}
+          />
         )}
       </div>
 

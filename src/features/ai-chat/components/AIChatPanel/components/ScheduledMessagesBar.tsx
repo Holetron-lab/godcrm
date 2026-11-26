@@ -3,13 +3,16 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
  * ScheduledMessagesBar — Compact scheduled-message list opened from the toolbar.
  * Flat notification-style rows preserve reschedule, edit, send and cancel actions.
  * WP-17: Scheduled messages feature.
+ * ADR-208 D8: series badge (cron · next run · runs counter), pause/resume, last-error tooltip.
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Clock, X, ChevronLeft, ChevronRight, Send, Play, Pencil, User, Bot } from 'lucide-react';
+import { Clock, X, ChevronLeft, ChevronRight, Send, Play, Pause, PlayCircle, Pencil, User, Bot, Repeat, AlertTriangle } from 'lucide-react';
 import { cn } from '@/shared/utils/cn';
 import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
+import { Tooltip } from '@/shared/components/ui/Tooltip';
 import type { ScheduledMessage } from '../hooks/useScheduledMessages';
+import { formatCronLabel } from '../utils/scheduleRecurrence';
 
 interface ScheduledMessagesBarProps {
   messages: ScheduledMessage[];
@@ -17,6 +20,10 @@ interface ScheduledMessagesBarProps {
   onReschedule?: (id: number, newDate: string) => void;
   onSendNow?: (msg: ScheduledMessage) => void;
   onEdit?: (msg: ScheduledMessage) => void;
+  /** ADR-208 D8: pause a pending series. */
+  onPause?: (id: number) => void;
+  /** ADR-208 D8: resume a paused series (backend recomputes the next run). */
+  onResume?: (id: number) => void;
 }
 
 function formatScheduledTime(iso: string, language: string, t: (key: string, params?: Record<string, unknown>) => string): string {
@@ -186,7 +193,9 @@ function InlineDatePicker({ currentDate, onSave, onClose }: {
   );
 }
 
-export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendNow, onEdit }: ScheduledMessagesBarProps) {
+const actionClass = "flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-secondary)] transition-colors";
+
+export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendNow, onEdit, onPause, onResume }: ScheduledMessagesBarProps) {
   const { t, language } = useLanguage();
   const [editingId, setEditingId] = useState<number | null>(null);
   // Live countdown — re-render every 30s so the timer ticks
@@ -203,14 +212,18 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
     <div className="flex-shrink-0 border-t border-[var(--border-secondary)] bg-[var(--bg-tertiary)]">
       <ul aria-label={t('aiChat.ui.scheduledMessages')} className="max-h-64 overflow-y-auto p-1.5 space-y-1.5">
         {messages.map((msg) => {
-          // Determine sender type for badge
-          const senderType: 'human' | 'agent' = msg.metadata?.sender_type === 'agent' ? 'agent' : 'human';
+          // Determine sender type for badge (D6 column first, WP-17 metadata as fallback)
+          const senderType: 'human' | 'agent' = (msg.sender_type ?? msg.metadata?.sender_type) === 'agent' ? 'agent' : 'human';
+          const isSeries = !!msg.recurrence_cron;
+          const isPaused = msg.status === 'paused';
+          const nextRunAt = msg.next_run_at ?? msg.scheduled_at;
+          const seriesLabel = isSeries ? formatCronLabel(msg.recurrence_cron as string, t) : null;
 
           return (
           <li
             key={msg.id}
             className="relative group/scheduled bg-[var(--bg-secondary)] border border-[var(--border-primary)] shadow-lg"
-            style={{ boxShadow: 'inset 4px 0 0 0 rgb(245, 158, 11)' }}
+            style={{ boxShadow: `inset 4px 0 0 0 ${isPaused ? 'rgb(148, 163, 184)' : 'rgb(245, 158, 11)'}` }}
           >
             <div className="px-3 py-2.5">
               {/* Sender and creation time */}
@@ -230,6 +243,16 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
                 <span className="text-xs font-medium text-[var(--text-primary)] truncate">
                   {msg.sender_name || t('aiChat.ui.you')}
                 </span>
+
+                {/* ADR-208: last run error as tooltip */}
+                {msg.error_message && (
+                  <Tooltip label={t('aiChat.ui.lastError', { message: msg.error_message })}>
+                    <button type="button" aria-label={t('aiChat.ui.lastError', { message: msg.error_message })}
+                      className="p-0.5 text-red-400 hover:text-red-300">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                    </button>
+                  </Tooltip>
+                )}
 
                 <span className="flex-1" />
                 <span className="text-[10px] text-[var(--text-secondary)] flex-shrink-0">
@@ -260,40 +283,75 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
 
               {/* Footer: time badge + actions (same 10px style as TurnFooter) */}
               <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] text-[var(--text-secondary)]">
-                {/* Yellow time badge — clickable to reschedule */}
+                {/* Time / series badge — clickable to reschedule the (next) run while pending */}
                 <button
-                  onClick={(e) => { e.stopPropagation(); setEditingId(editingId === msg.id ? null : msg.id); }}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-[var(--text-primary)] hover:bg-amber-500/25 transition-colors cursor-pointer"
-                  title={t('aiChat.ui.changeTime')}
+                  onClick={(e) => { e.stopPropagation(); if (!isPaused) setEditingId(editingId === msg.id ? null : msg.id); }}
+                  disabled={isPaused}
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[var(--text-primary)] transition-colors",
+                    isPaused ? "bg-slate-500/15 cursor-default" : "bg-amber-500/15 hover:bg-amber-500/25 cursor-pointer"
+                  )}
+                  title={isSeries ? t('aiChat.ui.seriesTimezone', { timezone: msg.timezone ?? '' }) : t('aiChat.ui.changeTime')}
+                  data-testid={isSeries ? 'series-badge' : 'schedule-badge'}
                 >
-                  <Clock className="w-3 h-3" />
-                  <span className="text-[10px] font-medium">
-                    {formatScheduledTime(msg.scheduled_at, language, t)}
-                  </span>
-                  <span className="text-[10px]">
-                    — {formatAbsoluteTime(msg.scheduled_at, language)}
-                  </span>
+                  {isSeries ? <Repeat className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                  {isSeries ? (
+                    <span className="text-[10px] font-medium">
+                      {seriesLabel}
+                      {' · '}{isPaused ? t('aiChat.ui.seriesPausedBadge') : t('aiChat.ui.nextRun', { when: formatScheduledTime(nextRunAt, language, t) })}
+                      {' · '}{msg.runs_done ?? 0}/{msg.max_runs ?? '∞'}
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-[10px] font-medium">
+                        {formatScheduledTime(msg.scheduled_at, language, t)}
+                      </span>
+                      <span className="text-[10px]">
+                        — {formatAbsoluteTime(msg.scheduled_at, language)}
+                      </span>
+                    </>
+                  )}
                 </button>
 
                 <span className="flex-1" />
 
-                {/* Edit — load into input */}
-                {onEdit && (
+                {/* Pause / resume (series only) */}
+                {isSeries && !isPaused && onPause && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onPause(msg.id); }}
+                    className={cn(actionClass, 'hover:text-amber-400 hover:bg-amber-500/10')}
+                    title={t('aiChat.ui.pauseSeries')} aria-label={t('aiChat.ui.pauseSeries')}
+                  >
+                    <Pause className="w-3 h-3" />
+                  </button>
+                )}
+                {isSeries && isPaused && onResume && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onResume(msg.id); }}
+                    className={cn(actionClass, 'hover:text-green-400 hover:bg-green-500/10')}
+                    title={t('aiChat.ui.resumeSeries')} aria-label={t('aiChat.ui.resumeSeries')}
+                  >
+                    <PlayCircle className="w-3 h-3" />
+                  </button>
+                )}
+
+                {/* Edit — load into input (one-time messages only: editing cancels the row) */}
+                {onEdit && !isSeries && !isPaused && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onEdit(msg); }}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-secondary)] hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                    title={t('dashboardPage.edit')}
+                    className={cn(actionClass, 'hover:text-blue-400 hover:bg-blue-500/10')}
+                    title={t('dashboardPage.edit')} aria-label={t('dashboardPage.edit')}
                   >
                     <Pencil className="w-3 h-3" />
                   </button>
                 )}
 
-                {/* Send now */}
-                {onSendNow && (
+                {/* Send now (backend rejects paused rows with 409) */}
+                {onSendNow && !isPaused && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onSendNow(msg); }}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-secondary)] hover:text-green-400 hover:bg-green-500/10 transition-colors"
-                    title={t('aiChat.ui.sendNow')}
+                    className={cn(actionClass, 'hover:text-green-400 hover:bg-green-500/10')}
+                    title={t('aiChat.ui.sendNow')} aria-label={t('aiChat.ui.sendNow')}
                   >
                     <Play className="w-3 h-3 fill-current" />
                   </button>
@@ -302,8 +360,8 @@ export function ScheduledMessagesBar({ messages, onCancel, onReschedule, onSendN
                 {/* Cancel */}
                 <button
                   onClick={(e) => { e.stopPropagation(); onCancel(msg.id); }}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-[var(--text-secondary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  title={t('schemaEditor.undo')}
+                  className={cn(actionClass, 'hover:text-red-400 hover:bg-red-500/10')}
+                  title={t('schemaEditor.undo')} aria-label={t('schemaEditor.undo')}
                 >
                   <X className="w-3 h-3" />
                 </button>

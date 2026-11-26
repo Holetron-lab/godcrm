@@ -8,7 +8,12 @@ import {
 } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar, Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { useIsPublicReadOnly } from '@/features/public/PublicViewContext';
 import type { PresetWidgetProps } from '../../types/widget.types';
+import type { OccurrenceEvent } from './_shared/ticket-events';
+import { buildLaneAxis, type LaneAxisColumn, type RelationDataMap } from './_shared/useLaneAxis';
+import { useTicketEvents } from './_shared/useTicketEvents';
+import { calendarOccurrences, type CalendarOccurrence } from './calendar-occurrences';
 
 // Column info for color mapping
 interface ColumnInfo {
@@ -35,6 +40,8 @@ interface ColorOption {
 
 interface CalendarWidgetProps extends PresetWidgetProps {
   columnsInfo?: ColumnInfo[];
+  /** Resolves the colours of a relation status column (ADR-209 D7). */
+  relationData?: RelationDataMap;
   onEventClick?: (event: CalendarEventData, initialTab?: 'details' | 'files' | 'comments') => void;
   onEventUpdate?: (eventId: string, field: string, value: unknown) => void;
   onAddEvent?: (date: Date) => void;
@@ -72,20 +79,43 @@ const hashString = (str: string): number => {
   return Math.abs(hash);
 };
 
+// Status column of the tickets pack; its name is fixed by the pack (ADR-209 D4).
+const STATE_COLUMN = 'state';
+const NO_ROWS: PresetWidgetProps['data'] = [];
+
 /**
  * CalendarWidget - displays data as a calendar with drag & drop support
  * 
  * Events are placed on dates based on dateColumn from config.
  * Supports single-day and multi-day events with color coding.
+ *
+ * ADR-209 D7 — with `calendar.eventsTableId` the events table is a second
+ * source: a series is drawn as its occurrences. Off without it and under a
+ * public read-only scope; the calendar is then unchanged.
  */
-export function CalendarWidget({ 
+export function CalendarWidget(props: CalendarWidgetProps) {
+  const publicReadOnly = useIsPublicReadOnly();
+  const eventsTableId = props.widget.config.calendar?.eventsTableId;
+  return eventsTableId && !publicReadOnly
+    ? <CalendarWithOccurrences {...props} eventsTableId={String(eventsTableId)} />
+    : <CalendarView {...props} />;
+}
+
+function CalendarWithOccurrences({ eventsTableId, ...props }: CalendarWidgetProps & { eventsTableId: string }) {
+  const { events } = useTicketEvents(eventsTableId, props.data ?? NO_ROWS);
+  return <CalendarView {...props} occurrenceEvents={events} />;
+}
+
+function CalendarView({
   widget, 
   data,
   columnsInfo = [],
+  relationData,
+  occurrenceEvents,
   onEventClick,
   onEventUpdate,
   onAddEvent
-}: CalendarWidgetProps) {
+}: CalendarWidgetProps & { occurrenceEvents?: OccurrenceEvent[] }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [draggedEvent, setDraggedEvent] = useState<any>(null);
@@ -219,6 +249,20 @@ export function CalendarWidget({
     return getDefaultColor(hashString(String(colorValue)));
   };
 
+  // ADR-209 D7 — occurrences per ticket and the status colours they are drawn in.
+  const occurrencesByTicket = useMemo(
+    () => (occurrenceEvents && data ? calendarOccurrences(data, occurrenceEvents, STATE_COLUMN) : null),
+    [occurrenceEvents, data],
+  );
+  const stateLanes = useMemo(
+    () => (occurrenceEvents
+      ? buildLaneAxis({ groupByColumn: STATE_COLUMN, columnsInfo: columnsInfo as LaneAxisColumn[], rows: [], relationData }).laneByKey
+      : null),
+    [occurrenceEvents, columnsInfo, relationData],
+  );
+  const getOccurrenceColor = (state: string): string =>
+    stateLanes?.get(state)?.color || getDefaultColor(hashString(state));
+
   // Group events by date
   const eventsByDate = useMemo(() => {
     if (!data) return new Map<string, any[]>();
@@ -228,6 +272,25 @@ export function CalendarWidget({
     const map = new Map<string, any[]>();
     
     data.forEach((row, rowIndex) => {
+      const occurrences = occurrencesByTicket?.get(String(row.id));
+      occurrences?.entries.forEach((occurrence) => {
+        if (!map.has(occurrence.day)) {
+          map.set(occurrence.day, []);
+        }
+        map.get(occurrence.day)!.push({
+          ...row,
+          _occurrence: occurrence,
+          _isFirstDay: true,
+          _isLastDay: true,
+          _isMultiDay: false,
+          _dayIndex: 0,
+          _totalDays: 1,
+          _rowIndex: rowIndex
+        });
+      });
+      // A series is drawn as its occurrences, not as a strip over its window.
+      if (occurrences?.replacesTicket) return;
+
       const dateValue = row.data?.[dateColumn];
       if (!dateValue) {
         // Try to find any date column
@@ -253,6 +316,8 @@ export function CalendarWidget({
         for (let i = 0; i <= Math.min(daysDiff, 30); i++) { // Limit to 30 days max
           const day = addDays(startDate, i);
           const key = format(day, 'yyyy-MM-dd');
+          // The event of a one-off ticket stands in for the ticket on its day.
+          if (occurrences?.entries.some((occurrence) => occurrence.day === key)) continue;
           
           if (!map.has(key)) {
             map.set(key, []);
@@ -273,7 +338,7 @@ export function CalendarWidget({
     });
     
     return map;
-  }, [data, dateColumn, endDateColumn]);
+  }, [data, dateColumn, endDateColumn, occurrencesByTicket]);
 
   // Calculate days to display (including padding days from prev/next month)
   const calendarDays = useMemo(() => {
@@ -458,7 +523,14 @@ export function CalendarWidget({
                 {/* Events - smart display: 2 lines if few events, 1 line if many */}
                 <div className="relative pointer-events-none space-y-px overflow-hidden flex-1">
                   {visibleEvents.map((event, idx) => {
-                    const eventColor = getEventColor(event, event._rowIndex || idx);
+                    const occurrence: CalendarOccurrence | undefined = event._occurrence;
+                    const eventColor = occurrence
+                      ? getOccurrenceColor(occurrence.state)
+                      : getEventColor(event, event._rowIndex || idx);
+                    // «18:00–19:00 Английский» for an occurrence, the bare title otherwise
+                    const timePrefix = occurrence?.time ? `${occurrence.time} ` : '';
+                    const eventLabel = `${timePrefix}${event.data?.[titleColumn] || 'Untitled'}`;
+                    const eventTooltip = `${eventLabel}${descriptionColumn && event.data?.[descriptionColumn] ? `\n${event.data[descriptionColumn]}` : ''}`;
                     const isMultiDay = event._isMultiDay;
                     const isFirstDay = event._isFirstDay;
                     const isLastDay = event._isLastDay;
@@ -467,12 +539,13 @@ export function CalendarWidget({
                     
                     return (
                       <button
-                        key={`${event.id || idx}-${event._dayIndex || 0}`}
+                        key={`${event.id || idx}-${event._dayIndex || 0}${occurrence ? `-${occurrence.eventId}` : ''}`}
                         type="button"
-                        aria-label={String(event.data?.[titleColumn] || 'Untitled')}
+                        aria-label={eventLabel}
                         aria-disabled={!onEventClick}
                         tabIndex={onEventClick ? 0 : -1}
-                        draggable={!!onEventUpdate}
+                        // ponytail: an occurrence is moved by editing its ticket; dragging it would rewrite the ticket's date
+                        draggable={!!onEventUpdate && !occurrence}
                         onDragStart={(e) => handleDragStart(e, event)}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -492,9 +565,10 @@ export function CalendarWidget({
                           borderLeft: isFirstDay || !isMultiDay ? `2px solid ${eventColor}` : 'none',
                           color: eventColor,
                         }}
-                        title={`${event.data?.[titleColumn] || 'Untitled'}${descriptionColumn && event.data?.[descriptionColumn] ? `\n${event.data[descriptionColumn]}` : ''}`}
+                        title={eventTooltip}
                       >
                         <span className={`${useCompactMode ? 'line-clamp-1' : 'line-clamp-2'} font-medium break-words`}>
+                          {timePrefix}
                           {isFirstDay || !isMultiDay 
                             ? (event.data?.[titleColumn] || 'Untitled')
                             : '→'

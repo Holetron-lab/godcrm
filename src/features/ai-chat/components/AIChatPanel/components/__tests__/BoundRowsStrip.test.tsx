@@ -16,10 +16,15 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/tests/renderWithProviders';
 import { apiClient } from '@/shared/utils/apiClient';
+import { tablesApi } from '@/features/tables/api/tablesApi';
+import { useTablesStore } from '@/features/tables/store/tablesStore';
 import { BoundRowsStrip } from '../BoundRowsStrip';
 
 vi.mock('@/shared/utils/apiClient', () => ({
   apiClient: { request: vi.fn(), get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() }
+}));
+vi.mock('@/features/tables/api/tablesApi', () => ({
+  tablesApi: { updateRow: vi.fn() }
 }));
 
 const TASKS_ROWS = [
@@ -156,4 +161,45 @@ describe('BoundRowsStrip — parent-owned bound rows', () => {
     expect(setShowBoundRowsBar).toHaveBeenCalledWith(true);
     expect(within(row.closest('button')!).queryByText('привязано')).not.toBeInTheDocument();
   }, 10000);
+
+  it('opens the verification gate when a bound-row status change requires TOTP', async () => {
+    useTablesStore.setState({ verificationGate: null });
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/tables/1/rows/1') {
+        return { data: { row: { id: 1, data: { title: 'Task One', status_id: 1 } } } };
+      }
+      if (url === '/tables/1/columns') {
+        return { data: [{ name: 'status_id', column_type: 'relation', config: { target_table_id: 2 } }] };
+      }
+      if (url === '/tables/2/rows?limit=200') {
+        return { data: { rows: [
+          { id: 1, data: { label: 'Draft', slug: 'draft' } },
+          { id: 2, data: { label: 'Review', slug: 'review' } }
+        ] } };
+      }
+      return { data: [] };
+    });
+    vi.mocked(tablesApi.updateRow).mockRejectedValueOnce(Object.assign(new Error('Verification required'), {
+      code: 'VERIFICATION_REQUIRED',
+      details: { verification_column_id: 4, verification_column_name: 'verified' }
+    }));
+
+    renderStrip({ boundRows: [ROW_ONE] });
+    fireEvent.click(screen.getByRole('button', { name: 'Task One' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Draft' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+
+    await waitFor(() => expect(tablesApi.updateRow).toHaveBeenCalledExactlyOnceWith('1', '1', { status_id: 2 }));
+    await waitFor(() => expect(useTablesStore.getState().verificationGate).toEqual({
+      tableId: '1',
+      rowId: '1',
+      verificationColumnId: 4,
+      verificationColumnName: 'verified',
+      offendingColumn: 'status_id',
+      offendingValue: '2',
+      offendingPrevValue: 1,
+      reason: 'required',
+      message: 'Verification required'
+    }));
+  });
 });

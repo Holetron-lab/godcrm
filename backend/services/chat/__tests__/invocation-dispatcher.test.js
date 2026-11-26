@@ -134,6 +134,7 @@ describe('resolveCommandContent — main_instruction prefixes the task, never re
       await dispatch('<</frontend-qa>> проверь /login на devcrm', 'http', 77);
       const opts = executeAgentResponse.mock.calls[0][3];
       expect(opts.invocation_type).toBe('command');
+      expect(opts.trigger_message_id).toBe(77);
       expect(opts.message_content).toBe('Ты QA.\n\n<</frontend-qa>> проверь /login на devcrm');
     } finally {
       QA._agentConfig = {};

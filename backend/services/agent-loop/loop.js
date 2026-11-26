@@ -66,13 +66,14 @@ async function _maybeDispatchFromThinking(content, dispatchCtx) {
  * @param {number|null} params.spaceId - Space ID for tool context injection
  * @param {number|null} params.userId - Triggering user ID for tool context
  * @param {number|null} [params.statusMessageId] - Pre-created placeholder message ID for status updates
+ * @param {number|null} [params.triggerMessageId] - Message that started this run, for schedule provenance
  * @returns {Promise<string|null>} Final text response or null
  */
 export async function agentLoop(params) {
   const {
     conversationId, systemPrompt, history, userMessage, agentConfig,
     resolved, agentRowId, senderId, spaceId, userId, statusMessageId,
-    ticketData,
+    ticketData, triggerMessageId = null,
     budget: budgetOverride,
   } = params;
 
@@ -694,9 +695,10 @@ export async function agentLoop(params) {
         const _toolStart = Date.now();
         const result = sanitizeToolResult(await executeTool(toolName, args, userId, {
           conversationId, agentName: agentConfig.name, agentId: agentRowId,
-          ticketData,
+          ticketData, triggerMessageId,
           // ADR-165 WP-1: agent capability scope for the executeTool() gate.
           allowedTools,
+          counters,
         }));
 
         // ADR-0061 P0: tool_call counter ticks AFTER each successful execution.
@@ -1000,9 +1002,10 @@ export async function agentLoop(params) {
         const _toolStartOAI = Date.now();
         const result = sanitizeToolResult(await executeTool(toolName, args, userId, {
           conversationId, agentName: agentConfig.name, agentId: agentRowId,
-          ticketData,
+          ticketData, triggerMessageId,
           // ADR-165 WP-1: agent capability scope for the executeTool() gate.
           allowedTools,
+          counters,
         }));
 
         // ADR-0061 P0: tool_call counter ticks AFTER each successful execution.

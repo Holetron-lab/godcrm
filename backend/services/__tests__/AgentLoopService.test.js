@@ -869,9 +869,12 @@ describe('ADR-095: AgentLoopService', () => {
             senderId: 99,
             spaceId: 11,
             userId: 1,
+            triggerMessageId: 123456,
           });
 
           expect(result).toBe('Your workspace has 5 tables.');
+          expect(mockExecuteTool).toHaveBeenCalledWith('get_workspace_info', { space_id: 11 }, 1,
+            expect.objectContaining({ triggerMessageId: 123456 }));
 
           // Verify step messages were saved:
           // 1. thinking message ("Let me check the workspace.")

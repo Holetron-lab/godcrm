@@ -11,6 +11,7 @@ import { useLanguage } from '@/shared/i18n/LanguageContext';
  *   │  ╭───╮  Перенесено · <mover name> · <when>           │  ← header
  *   ├──────────────────────────────────────────────────────┤
  *   │  ⋄ <Chat title>                                      │  ← tiny inline icon + title
+ *   │  От: <author>, <author> +N                           │  ← whose messages were moved (source side)
  *   │  🔗 <linked row title> · <table name>                │  ← linked-row chip (if any)
  *   │  #<id> · Группа · 6 уч. · 9 мая    3 сообщ. ▼ Показать │  ← combined meta + totals + toggle
  *   └──────────────────────────────────────────────────────┘
@@ -62,6 +63,8 @@ export interface ChatLinkCardProps {
   count?: number;
   /** Actor who performed the move (from metadata.moved_by). */
   movedBy?: ChatLinkCardMovedBy;
+  /** Authors of the moved messages, in order of appearance. */
+  senders?: string[];
   /** Show chevron toggle (host renders the expanded preview separately). */
   expandable?: boolean;
   /** Controlled expanded state for the chevron icon. */
@@ -149,6 +152,9 @@ const pluralRu = (n: number, one: string, few: string, many: string): string => 
 
 const formatParticipants = (n: number, t: (key: string, params?: Record<string, unknown>) => string): string => t('aiChat.ui.participantCount', { count: n });
 
+// Enough to name the people in a typical dialogue; the rest collapse into "+N".
+const SENDERS_SHOWN = 3;
+
 const formatMovedCount = (n: number, t: (key: string, params?: Record<string, unknown>) => string): string => t('aiChat.ui.messageCount', { count: n });
 
 // ─── Subcomponents (gray plates) ──────────────────────────────────────────────
@@ -182,6 +188,7 @@ const ChatLinkCard: React.FC<ChatLinkCardProps> = ({
   firstMessageId,
   count,
   movedBy,
+  senders = [],
   expandable,
   expanded,
   onExpandToggle,
@@ -225,6 +232,8 @@ const ChatLinkCard: React.FC<ChatLinkCardProps> = ({
   if (participantsTotal > 0) metaParts.push(formatParticipants(participantsTotal, t));
   if (createdAtLabel) metaParts.push(createdAtLabel);
   const metaLine = metaParts.join(' · ');
+  const hiddenSenders = senders.length - SENDERS_SHOWN;
+  const sendersLine = senders.slice(0, SENDERS_SHOWN).join(', ') + (hiddenSenders > 0 ? ` +${hiddenSenders}` : '');
 
   const handleNavigate = () => {
     onClick?.(conversationId, firstMessageId);
@@ -275,6 +284,12 @@ const ChatLinkCard: React.FC<ChatLinkCardProps> = ({
           </span>
         </div>
 
+        {sendersLine && (
+          <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5" title={senders.join(', ')}>
+            {t('aiChat.ui.movedMessagesFrom', { names: sendersLine })}
+          </div>
+        )}
+
         {/* Bound row chip (if any) */}
         {data.bound_row && (data.bound_row.title || data.bound_row.row_id) && (
           <div className="text-[10px] text-blue-400 truncate mt-0.5">
@@ -297,7 +312,7 @@ const ChatLinkCard: React.FC<ChatLinkCardProps> = ({
         >
           {metaLine}
         </button>
-        <span className="text-[10px] text-[var(--text-tertiary)] truncate flex-shrink-0">
+        <span className="text-[11px] font-medium text-[var(--text-secondary)] truncate flex-shrink-0">
           {formatMovedCount(movedCount, t)}
         </span>
         {expandable && (
