@@ -216,6 +216,7 @@ export const AGENT_TOOLS = [
   // === ADR-0028 Phase 4 — connector-backed tools ===
   t('figma_get_file'),
   t('slack_post_message'),
+  t('telegram_send_message'),
   t('github_get_user'),
 
   // === ADR-164 Phase 2 — agent passport lifecycle ===

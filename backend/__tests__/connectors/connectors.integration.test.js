@@ -81,7 +81,7 @@ describe('Connector catalogue', () => {
     const slugs = listConnectorTypes().map((t) => t.slug).sort();
     expect(slugs).toEqual([
       'blender_mcp', 'custom_api_key', 'custom_blender_mcp', 'custom_godcrm_mcp', 'custom_mcp',
-      'custom_oauth2', 'figma', 'github', 'google', 'imap', 'midjourney', 'notion', 'slack',
+      'custom_oauth2', 'figma', 'github', 'google', 'imap', 'midjourney', 'notion', 'slack', 'telegram',
     ]);
   });
 

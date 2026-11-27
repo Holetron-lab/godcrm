@@ -37,6 +37,7 @@ import custom_api_key from './custom_api_key.js';
 import blender_mcp from './blender_mcp.js';
 import { remoteMcpTypes } from './remote_mcp.js';
 import midjourney from './midjourney.js';
+import telegram from './telegram.js';
 
 /** @type {Map<string, ConnectorType>} */
 const CATALOGUE = new Map([
@@ -51,6 +52,7 @@ const CATALOGUE = new Map([
   [blender_mcp.slug, blender_mcp],
   ...remoteMcpTypes.map((type) => [type.slug, type]),
   [midjourney.slug, midjourney],
+  [telegram.slug, telegram],
 ]);
 
 /**

@@ -15,6 +15,7 @@
  */
 
 import axios from 'axios';
+import { z } from 'zod';
 import { MIDJOURNEY_TOOL_DEFS, midjourneyToolHandlers } from './midjourney-tools.js';
 
 import { aiLogger } from '../../utils/logger.js';
@@ -82,6 +83,35 @@ export const CONNECTOR_TOOL_DEFS = [
         'via the active GitHub connector in the current space. Smoke test for ' +
         'GitHub connector wiring.',
       parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    requires_connector: 'telegram',
+    function: {
+      name: 'telegram_send_message',
+      description:
+        'Send a text message using the active Telegram bot connector in the current space. ' +
+        'Uses the connector default chat when chat_id is omitted.',
+      parameters: {
+        type: 'object',
+        properties: {
+          chat_id: {
+            type: ['string', 'number'],
+            description: 'Target chat ID or @channel username. Optional when the connector has a default chat.',
+          },
+          text: {
+            type: 'string',
+            description: 'Message text, 1–4096 characters after Telegram entity parsing.',
+          },
+          parse_mode: {
+            type: 'string',
+            enum: ['Markdown', 'MarkdownV2', 'HTML'],
+            description: 'Optional Telegram entity parsing mode. Leave unset for plain text.',
+          },
+        },
+        required: ['text'],
+      },
     },
   },
 ];
@@ -184,6 +214,59 @@ async function slack_post_message(args, _userId, context) {
   }
 }
 
+const telegramMessageSchema = z.object({
+  chat_id: z.union([z.string().trim().min(1).max(256), z.number().int()]),
+  text: z.string().min(1).max(4096),
+  parse_mode: z.enum(['Markdown', 'MarkdownV2', 'HTML']).optional(),
+}).strict();
+
+const telegramSentMessageSchema = z.object({
+  message_id: z.number().int(),
+  date: z.number().int().optional(),
+  chat: z.object({ id: z.union([z.string(), z.number().int()]) }).passthrough().optional(),
+}).passthrough();
+
+async function telegram_send_message(args, _userId, context) {
+  const inj = getInjected(context, 'telegram');
+  if (!inj) return { error: 'connector_not_injected', expected: 'telegram' };
+  const parsed = telegramMessageSchema.safeParse({
+    ...(args && typeof args === 'object' ? args : {}),
+    chat_id: args?.chat_id ?? inj.custom_fields?.default_chat_id,
+  });
+  if (!parsed.success) {
+    return { error: 'bad_args', message: 'text and chat_id (or a connector default chat) are required', details: parsed.error.flatten() };
+  }
+  const payload = {
+    chat_id: parsed.data.chat_id,
+    text: parsed.data.text,
+    ...(parsed.data.parse_mode ? { parse_mode: parsed.data.parse_mode } : {}),
+  };
+  try {
+    const { data } = await axios.post(`https://api.telegram.org/bot${inj.access_token}/sendMessage`, payload, {
+      timeout: 10_000,
+      validateStatus: () => true,
+    });
+    if (!data?.ok) {
+      return {
+        error: `telegram_api_${data?.error_code || 'failed'}`,
+        message: typeof data?.description === 'string' ? data.description.slice(0, 500) : 'Telegram API request failed',
+      };
+    }
+    const message = telegramSentMessageSchema.safeParse(data.result);
+    if (!message.success) return { error: 'telegram_invalid_response' };
+    return {
+      ok: true,
+      message_id: message.data.message_id,
+      chat_id: message.data.chat?.id ?? parsed.data.chat_id,
+      date: message.data.date,
+      account_label: inj.account_label,
+    };
+  } catch {
+    log.warn({ chatId: parsed.data.chat_id }, 'telegram_send_message request failed');
+    return { error: 'telegram_request_failed', message: 'Telegram request failed' };
+  }
+}
+
 async function github_get_user(_args, _userId, context) {
   const inj = getInjected(context, 'github');
   if (!inj) return { error: 'connector_not_injected', expected: 'github' };
@@ -219,6 +302,7 @@ export const connectorToolHandlers = {
   ...midjourneyToolHandlers,
   figma_get_file,
   slack_post_message,
+  telegram_send_message,
   github_get_user,
 };
 
