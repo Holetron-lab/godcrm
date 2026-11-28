@@ -74,7 +74,7 @@ and load into the new one.
   install needs that once, to build the schema. After first boot set
   `MEMORY_RUN_MIGRATIONS=false` in `.env` and run upgrades deliberately, after
   a backup.
-- **The memory image is large** (~6 GB) and pulls on first start.
+- **The memory image is large** (~6 GB) and builds from the pinned source on first start.
 
 ## Configuration
 
@@ -94,6 +94,44 @@ likely change:
 > those instead of `.env`: wrong database, wrong secret, no error. `install.sh`
 > checks for this and stops; if you start compose by hand, run it from a clean
 > shell.
+
+## Demo bundle: CRM + RCLL + mail
+
+For a new demo host, run `./install.sh` and choose **standalone** memory. Then
+review the mail settings in `.env` and start every selected component together:
+
+```bash
+./bundle-up.sh
+./verify.sh
+```
+
+RCLL `standalone` keeps its database and migrations outside the CRM database.
+There is no published RCLL container release: Compose builds the API-only image
+from the pinned `MEMORY_SOURCE` commit. The first build is large and slow, so
+run it before recording an installation demo. With no LLM key, memory still
+supports retain/recall but automatic write-time classification is disabled.
+
+The optional mail layer uses Docker Mailserver with persistent account, state,
+configuration and Maildir volumes. It is disabled by default. To enable it, set
+`MAIL_ENABLED=1`, `MAIL_DOMAIN` and `MAIL_HOSTNAME` in `.env`, then run:
+
+```bash
+./bundle-up.sh
+./mail-account.sh smb.digital@example.com
+./verify.sh
+```
+
+The account command prompts for the password interactively; never pass it in the
+command line. Initially mail ports bind to `127.0.0.1` and use a self-signed
+certificate for local setup only. Public delivery requires a separate DNS,
+firewall and TLS check: publish ports 25/465/587/993, set
+`MAIL_BIND_IP=0.0.0.0` and `MAIL_SSL_TYPE=letsencrypt`, then prove SMTP and IMAP
+delivery before adding the CRM connector. Do not point an existing production
+mail domain at the new host during rehearsal.
+
+See [MIGRATION.md](./MIGRATION.md) before moving existing spaces. The legacy
+space export is explicitly partial and must not be represented as a lossless
+migration of widgets, events, files, chats, connectors or RCLL data.
 
 ## Common commands
 

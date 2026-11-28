@@ -114,6 +114,15 @@ services:
   # topology Ring 0 runs.
   memory-embedded:
     image: ${MEMORY_IMAGE:?set MEMORY_IMAGE in .env}
+    build:
+      context: ${MEMORY_SOURCE:-https://godcrm.ai/git/holetron-lab/fleet-memory.git#81ef52ca01e60a72bb18462b3d520cf437801a1e}
+      dockerfile: docker/standalone/Dockerfile
+      target: api-only
+      args:
+        INCLUDE_API: "true"
+        INCLUDE_CP: "false"
+        INCLUDE_LOCAL_MODELS: "true"
+        PRELOAD_ML_MODELS: "true"
     profiles: ["memory-embedded"]
     restart: unless-stopped
     depends_on:
@@ -140,6 +149,15 @@ services:
   # Own database, own volume. The CRM database is never touched by memory DDL.
   memory-standalone:
     image: ${MEMORY_IMAGE:?set MEMORY_IMAGE in .env}
+    build:
+      context: ${MEMORY_SOURCE:-https://godcrm.ai/git/holetron-lab/fleet-memory.git#81ef52ca01e60a72bb18462b3d520cf437801a1e}
+      dockerfile: docker/standalone/Dockerfile
+      target: api-only
+      args:
+        INCLUDE_API: "true"
+        INCLUDE_CP: "false"
+        INCLUDE_LOCAL_MODELS: "true"
+        PRELOAD_ML_MODELS: "true"
     profiles: ["memory-standalone"]
     restart: unless-stopped
     depends_on:

@@ -98,17 +98,16 @@ if [ "$MEMORY_MODE" = "none" ]; then
 else
   PROFILE_ARGS=(--profile "memory-${MEMORY_MODE}")
 
-  # The memory image must actually exist before we promise a working install.
-  # A missing image is an honest error here instead of a container that never
-  # comes up while the CRM reports healthy.
+  # Prefer an existing image; otherwise Compose builds the pinned source.
   MEMORY_IMAGE="$(envget MEMORY_IMAGE)"
   [ -n "$MEMORY_IMAGE" ] || die "❌ MEMORY_IMAGE is empty in .env — set it or choose 'none'."
-  if ! docker manifest inspect "$MEMORY_IMAGE" >/dev/null 2>&1; then
-    warn "⚠ Cannot reach ${MEMORY_IMAGE} (not published, or not logged in to the registry)."
-    warn "  Memory would fail to start. Build the image yourself and set MEMORY_IMAGE,"
-    warn "  or choose 'none' for now."
-    read -r -p "Continue anyway? [y/N] " goon
-    case "${goon:-N}" in [yY]|[yY][eE][sS]) : ;; *) die "❌ Aborted — nothing was started." ;; esac
+  if docker image inspect "$MEMORY_IMAGE" >/dev/null 2>&1; then
+    say "✓ Memory image is already available locally: ${MEMORY_IMAGE}"
+  elif docker manifest inspect "$MEMORY_IMAGE" >/dev/null 2>&1; then
+    say "✓ Memory image is available in its registry: ${MEMORY_IMAGE}"
+  else
+    warn "ℹ ${MEMORY_IMAGE} is not available locally or in a registry."
+    warn "  Compose will build it from the pinned MEMORY_SOURCE commit."
   fi
 
   # An LLM key is used for classification on WRITE only; the read path never
@@ -129,7 +128,7 @@ else
   else
     say "✓ Memory: standalone — its own database and volume."
   fi
-  warn "→ The memory image is large (~6 GB) and pulls on first start."
+  warn "→ The memory image is large (~6 GB) and builds from the pinned source on first start."
 fi
 
 # --- build & start ---
